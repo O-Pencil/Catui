@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.8] - 2026-04-26
+
+### Added
+- feat(team): harness psyche presets dashboard and subagent hooks
+- feat: show session resume hint on exit
+- feat: add zai provider support with search and auto thinking level
+- feat(sal): add legacy-schema fallback for tool_trace on PGRST204 drift
+- feat(sal): add bounded tool trace analytics
+- feat(update): add confirmation dialog before auto-update on startup
+- feat(sal): avoid blocking startup with async eval maintenance
+- feat(sal): add build metadata to eval runs
+
+### Fixed
+- fix(sal): harden eval reporting and gate ab sidecars
+- fix(sal): disable stale cleanup by default
+
+### Changed
+- refactor(footer): extract renderContextProgressBar with clamp-safe handling
+
+### Documentation
+- docs(sal): sync P2 eval/types.ts description with tool_trace event type
+
+
 ## [1.13.7] - 2026-04-25
 
 ### Added
