@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -239,3 +239,152 @@ test("team-runtime: recovered implementer worktree can be terminated after reloa
 		rmSync(storageDir, { recursive: true, force: true });
 	}
 });
+
+test("team-runtime: harness send creates checkpoint and advances phase", async () => {
+	const repoDir = createTempDir("nanopencil-team-harness-repo-");
+	const storageDir = createTempDir("nanopencil-team-harness-state-");
+
+	try {
+		initGitRepo(repoDir);
+		const runtime = new TeamRuntime({ storageDir });
+		(runtime as any).worktreeManager = {
+			createGitWorktree: async (): Promise<WorkspacePath> => ({
+				path: repoDir,
+				type: "worktree",
+			}),
+			dispose: async (): Promise<void> => {},
+		};
+		(runtime as any).subAgentRuntime = {
+			spawn: async (spec: { cwd: string; exitHook?: (result: SubAgentResult) => Promise<void> }) => ({
+				id: "harness-handle",
+				status: "running",
+				async result(): Promise<SubAgentResult> {
+					writeHarnessFeatureList(spec.cwd, "Original feature", false);
+					writeFileSync(join(spec.cwd, "implemented.txt"), "done\n", "utf-8");
+					const result = { success: true, response: "initialized" };
+					await spec.exitHook?.(result);
+					return result;
+				},
+				async abort(): Promise<void> {},
+				async terminate(): Promise<void> {},
+			}),
+			terminateAll: async () => {},
+		};
+
+		const teammate = await runtime.spawn({
+			role: "implementer",
+			name: "builder",
+			baseCwd: repoDir,
+			harnessEnabled: true,
+		});
+		assert.equal(teammate.mode, "execute");
+
+		const result = await runtime.send("builder", "build it");
+		assert.equal(result.success, true);
+		const updated = runtime.getTeammate("builder");
+		assert.equal(updated?.harness?.phase, "coding");
+		assert.equal(updated?.harness?.passedFeatures, 0);
+		assert.ok(updated?.harness?.lastCheckpointCommit);
+		assert.match(
+			execFileSync("git", ["log", "--oneline", "-1"], { cwd: repoDir, encoding: "utf-8" }),
+			/harness: init checkpoint/,
+		);
+	} finally {
+		rmSync(repoDir, { recursive: true, force: true });
+		rmSync(storageDir, { recursive: true, force: true });
+	}
+});
+
+test("team-runtime: harness violation is quarantined and reverted", async () => {
+	const repoDir = createTempDir("nanopencil-team-harness-revert-repo-");
+	const storageDir = createTempDir("nanopencil-team-harness-revert-state-");
+
+	try {
+		initGitRepo(repoDir);
+		const runtime = new TeamRuntime({ storageDir });
+		(runtime as any).worktreeManager = {
+			createGitWorktree: async (): Promise<WorkspacePath> => ({
+				path: repoDir,
+				type: "worktree",
+			}),
+			dispose: async (): Promise<void> => {},
+		};
+
+		let turn = 0;
+		(runtime as any).subAgentRuntime = {
+			spawn: async (spec: { cwd: string; exitHook?: (result: SubAgentResult) => Promise<void> }) => ({
+				id: `harness-handle-${turn}`,
+				status: "running",
+				async result(): Promise<SubAgentResult> {
+					turn++;
+					writeHarnessFeatureList(spec.cwd, turn === 1 ? "Original feature" : "Tampered feature", false);
+					const result = { success: true, response: `turn ${turn}` };
+					await spec.exitHook?.(result);
+					return result;
+				},
+				async abort(): Promise<void> {},
+				async terminate(): Promise<void> {},
+			}),
+			terminateAll: async () => {},
+		};
+
+		await runtime.spawn({
+			role: "implementer",
+			name: "builder",
+			baseCwd: repoDir,
+			harnessEnabled: true,
+		});
+		await runtime.send("builder", "init");
+		await runtime.send("builder", "tamper");
+
+		const updated = runtime.getTeammate("builder");
+		assert.equal(updated?.harness?.phase, "fix");
+		assert.ok(updated?.harness?.lastRevertCommit);
+		assert.match(readFileSync(join(repoDir, ".nanopencil-harness", "feature_list.json"), "utf-8"), /Original feature/);
+		assert.match(
+			execFileSync("git", ["log", "--oneline", "-1"], { cwd: repoDir, encoding: "utf-8" }),
+			/Revert "harness: quarantine invalid turn"/,
+		);
+	} finally {
+		rmSync(repoDir, { recursive: true, force: true });
+		rmSync(storageDir, { recursive: true, force: true });
+	}
+});
+
+function initGitRepo(repoDir: string): void {
+	writeFileSync(join(repoDir, "tracked.txt"), "base\n", "utf-8");
+	execFileSync("git", ["init"], { cwd: repoDir, stdio: "ignore" });
+	execFileSync("git", ["config", "user.name", "Test User"], { cwd: repoDir, stdio: "ignore" });
+	execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repoDir, stdio: "ignore" });
+	execFileSync("git", ["add", "tracked.txt"], { cwd: repoDir, stdio: "ignore" });
+	execFileSync("git", ["commit", "-m", "init"], { cwd: repoDir, stdio: "ignore" });
+}
+
+function writeHarnessFeatureList(cwd: string, description: string, passes: boolean): void {
+	const harnessDir = join(cwd, ".nanopencil-harness");
+	mkdirSync(harnessDir, { recursive: true });
+	writeFileSync(
+		join(harnessDir, "feature_list.json"),
+		JSON.stringify(
+			{
+				version: 1,
+				generatedAt: "2026-04-26T00:00:00.000Z",
+				taskDescription: "test task",
+				features: [
+					{
+						id: "F001",
+						category: "functional",
+						description,
+						steps: ["check output"],
+						passes,
+						priority: 1,
+					},
+				],
+			},
+			null,
+			2,
+		),
+		"utf-8",
+	);
+	writeFileSync(join(harnessDir, "progress.txt"), `Feature: ${description}\n`, "utf-8");
+}

@@ -1,5 +1,5 @@
 /**
- * [WHO]: TeammateRole, TeammateMode, TeammateStatus, TeammateIdentity, TeammateMessage, PersistedTeammate, TeamSpawnSpec, TeamSendResult
+ * [WHO]: TeammateRole, TeammateMode, HarnessState, PsycheWeights, PersistedTeammate, TeamSpawnSpec, TeamSendResult
  * [FROM]: No external deps
  * [TO]: Consumed by team-state-store.ts, team-runtime.ts, team-parser.ts, index.ts
  * [HERE]: extensions/defaults/team/team-types.ts - shared type surface for team extension (Phase B M1)
@@ -11,9 +11,10 @@
  * - reviewer: read-only review/audit
  * - implementer: sandboxed write in isolated worktree
  * - planner: read-only, produces plans
+ * - verifier: read-only verification with stricter quality constraints
  * - generic: read-only by default, caller supplies mode
  */
-export type TeammateRole = "researcher" | "reviewer" | "implementer" | "planner" | "generic";
+export type TeammateRole = "researcher" | "reviewer" | "implementer" | "planner" | "verifier" | "generic";
 
 /**
  * Teammate operating mode. Controls the permission envelope.
@@ -33,6 +34,51 @@ export type TeammateMode = "research" | "plan" | "execute" | "review";
  * - error: last turn failed
  */
 export type TeammateStatus = "idle" | "running" | "stopped" | "terminated" | "error";
+
+/** Harness phase for long-running teammate work. */
+export type HarnessPhase = "init" | "coding" | "verify" | "fix" | "complete";
+
+/** Three-layer psyche weights used by phase-aware prompts. */
+export interface PsycheWeights {
+  id: number;
+  ego: number;
+  superego: number;
+}
+
+/** Built-in team presets. */
+export type PresetName = "solo" | "duo" | "squad";
+
+/** Feature tracked by the harness protocol. */
+export interface HarnessFeature {
+  id: string;
+  category: "functional" | "visual" | "performance" | "integration";
+  description: string;
+  steps: string[];
+  passes: boolean;
+  priority: number;
+}
+
+/** Durable harness state attached to a teammate. */
+export interface HarnessState {
+  enabled: boolean;
+  phase: HarnessPhase;
+  featureListPath: string;
+  progressPath: string;
+  initScriptPath: string;
+  totalFeatures: number;
+  passedFeatures: number;
+  currentFeature: string | null;
+  lastVerifyReport: string | null;
+  cycleCount: number;
+  featureSnapshot: Omit<HarnessFeature, "passes">[];
+  /** Git commit that existed before the current harness turn began */
+  preTurnCommit: string | null;
+  /** Last commit created by the harness checkpoint flow */
+  lastCheckpointCommit: string | null;
+  /** Last commit created to revert a failed/violating turn */
+  lastRevertCommit: string | null;
+  lastEvent?: string;
+}
 
 /** Stable identity for a teammate, assigned at spawn time. */
 export interface TeammateIdentity {
@@ -82,6 +128,12 @@ export interface PersistedTeammate {
   lastActiveAt: number;
   /** Last error message if status = error */
   lastError?: string;
+  /** Optional long-running task harness state */
+  harness?: HarnessState;
+  /** Last computed psyche weights for status/UI rendering */
+  psyche?: PsycheWeights;
+  /** Optional static psyche tuning from presets or spawn configuration */
+  psycheOverrides?: Partial<PsycheWeights>;
 }
 
 /** Input for spawning a new teammate. */
@@ -94,6 +146,10 @@ export interface TeamSpawnSpec {
   mode?: TeammateMode;
   /** Base cwd for the teammate (usually the main session cwd) */
   baseCwd: string;
+  /** Enable Anthropic-style long-running harness protocol for this teammate */
+  harnessEnabled?: boolean;
+  /** Optional static psyche tuning for this teammate */
+  psycheOverrides?: Partial<PsycheWeights>;
 }
 
 /** Result of a /team:send call. */

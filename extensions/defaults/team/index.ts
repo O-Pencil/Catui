@@ -1,14 +1,18 @@
 /**
- * [WHO]: AgentTeam extension, registers /team commands for persistent teammates
- * [FROM]: Depends on @pencil-agent/tui, core/extensions/types, ./team-runtime, ./team-parser, ./team-types
+ * [WHO]: AgentTeam extension, registers /team commands for persistent teammates, harness status, psyche status, dashboard widget
+ * [FROM]: Depends on @pencil-agent/tui, core/extensions/types, ./team-runtime, ./team-parser, ./team-types, ./team-harness, ./team-presets, ./team-dashboard
  * [TO]: Consumed by builtin-extensions.ts as default extension
  * [HERE]: extensions/defaults/team/index.ts - AgentTeam extension entry point
  *
  * Commands:
  *   /team                      - List teammates
- *   /team:spawn <role> [--name <id>] - Create teammate
+ *   /team:spawn <role> [--name <id>] [--harness] - Create teammate
+ *   /team:preset <solo|duo|squad> <task> - Create preset team
  *   /team:send <name> <message>      - Send message to teammate
  *   /team:status [<name>]            - Show status
+ *   /team:progress [<name>]          - Show harness progress
+ *   /team:psyche [<name>]            - Show psyche weights
+ *   /team:dashboard                  - Toggle dashboard widget
  *   /team:stop <name>                - Stop teammate turn
  *   /team:terminate <name>           - Destroy teammate
  *   /team:approve <request-id>       - Approve permission request
@@ -20,11 +24,17 @@ import type { ExtensionAPI } from "../../../core/extensions/types.js";
 import { TeamRuntime } from "./team-runtime.js";
 import { buildTeamHelp, parseTeamCommand } from "./team-parser.js";
 import type { PersistedTeammate } from "./team-types.js";
+import { executePreset, formatPresetResult } from "./team-presets.js";
+import { formatHarnessProgress } from "./team-harness.js";
+import { formatPsycheWeights } from "./team-psyche.js";
+import { renderTeamDashboard, renderTeamFooterStatus } from "./team-dashboard.js";
 
 const TEAM_MESSAGE_TYPE = "team";
 
 // Global runtime instance
 let runtime: TeamRuntime | null = null;
+let dashboardVisible = false;
+let dashboardAutoHideTimer: ReturnType<typeof setTimeout> | undefined;
 
 function getRuntime(): TeamRuntime {
 	if (!runtime) {
@@ -38,7 +48,16 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 	await teamRuntime.load();
 
 	api.on("session_shutdown", async () => {
+		if (dashboardAutoHideTimer) {
+			clearTimeout(dashboardAutoHideTimer);
+			dashboardAutoHideTimer = undefined;
+		}
 		await teamRuntime.dispose();
+	});
+
+	api.on("session_ready", (_event, ctx) => {
+		teamRuntime.setSoulManager(ctx.getSoulManager());
+		updateTeamUi(ctx, teamRuntime);
 	});
 
 	// Register message renderer
@@ -70,6 +89,10 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 		"team:terminate",
 		"team:approve",
 		"team:mode",
+		"team:preset",
+		"team:dashboard",
+		"team:progress",
+		"team:psyche",
 	] as const;
 
 	for (const commandName of commandNames) {
@@ -121,6 +144,7 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 								role: parsed.role,
 								name: parsed.name,
 								baseCwd: ctx.cwd,
+								harnessEnabled: parsed.harnessEnabled,
 							});
 
 							const lines = [
@@ -129,6 +153,7 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 								`  Role: ${teammate.identity.role}`,
 								`  Mode: ${teammate.mode}`,
 								`  Status: ${teammate.status}`,
+								...(teammate.harness?.enabled ? [`  Harness: ${teammate.harness.phase}`] : []),
 								...(teammate.worktreePath ? [`  Worktree: ${teammate.worktreePath}`] : []),
 							];
 
@@ -137,6 +162,7 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 								content: lines.join("\n"),
 								display: true,
 							});
+							updateTeamUi(ctx, teamRuntime);
 						} catch (error: unknown) {
 							const message = error instanceof Error ? error.message : String(error);
 							ctx.ui.notify(`Failed to spawn teammate: ${message}`, "error");
@@ -160,6 +186,7 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 
 						try {
 							const result = await teamRuntime.send(parsed.target, parsed.message, model);
+							updateTeamUi(ctx, teamRuntime);
 
 							if (result.success) {
 								const lines = [
@@ -217,6 +244,7 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 						}
 
 						const success = await teamRuntime.stop(parsed.target);
+						updateTeamUi(ctx, teamRuntime);
 						if (success) {
 							api.sendMessage({
 								customType: TEAM_MESSAGE_TYPE,
@@ -236,6 +264,7 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 						}
 
 						const success = await teamRuntime.terminate(parsed.target);
+						updateTeamUi(ctx, teamRuntime);
 						if (success) {
 							api.sendMessage({
 								customType: TEAM_MESSAGE_TYPE,
@@ -255,6 +284,7 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 						}
 
 						const result = await teamRuntime.setMode(parsed.target, parsed.mode);
+						updateTeamUi(ctx, teamRuntime);
 						if (!result.ok) {
 							ctx.ui.notify(`Teammate "${parsed.target}" not found`, "error");
 							break;
@@ -320,6 +350,90 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 						}
 						break;
 					}
+
+					case "preset": {
+						if (!parsed.presetName || !parsed.taskDescription) {
+							ctx.ui.notify("Usage: /team:preset <solo|duo|squad> <task>", "error");
+							return;
+						}
+
+						api.sendMessage({
+							customType: TEAM_MESSAGE_TYPE,
+							content: `Creating "${parsed.presetName}" preset...`,
+							display: true,
+						});
+
+						try {
+							const result = await executePreset(
+								teamRuntime,
+								parsed.presetName,
+								parsed.taskDescription,
+								ctx.cwd,
+								(ctx as any).model,
+							);
+							api.sendMessage({
+								customType: TEAM_MESSAGE_TYPE,
+								content: formatPresetResult(result).join("\n"),
+								display: true,
+							});
+							updateTeamUi(ctx, teamRuntime);
+						} catch (error: unknown) {
+							const message = error instanceof Error ? error.message : String(error);
+							ctx.ui.notify(`Failed to execute preset: ${message}`, "error");
+						}
+						break;
+					}
+
+					case "progress": {
+						const teammates = parsed.target
+							? [teamRuntime.getTeammate(parsed.target)].filter((t): t is PersistedTeammate => Boolean(t))
+							: teamRuntime.getAllTeammates();
+						if (parsed.target && teammates.length === 0) {
+							ctx.ui.notify(`Teammate "${parsed.target}" not found`, "error");
+							return;
+						}
+						const lines = teammates.flatMap((teammate) => [
+							`Teammate: ${teammate.identity.name}`,
+							...formatHarnessProgress(teammate.harness),
+							"",
+						]);
+						api.sendMessage({
+							customType: TEAM_MESSAGE_TYPE,
+							content: lines.join("\n").trimEnd(),
+							display: true,
+						});
+						break;
+					}
+
+					case "psyche": {
+						const teammates = parsed.target
+							? [teamRuntime.getTeammate(parsed.target)].filter((t): t is PersistedTeammate => Boolean(t))
+							: teamRuntime.getAllTeammates();
+						if (parsed.target && teammates.length === 0) {
+							ctx.ui.notify(`Teammate "${parsed.target}" not found`, "error");
+							return;
+						}
+						const lines = teammates.map(
+							(teammate) => `${teammate.identity.name}: ${formatPsycheWeights(teammate.psyche)}`,
+						);
+						api.sendMessage({
+							customType: TEAM_MESSAGE_TYPE,
+							content: lines.join("\n"),
+							display: true,
+						});
+						break;
+					}
+
+					case "dashboard": {
+						dashboardVisible = !dashboardVisible;
+						updateTeamUi(ctx, teamRuntime);
+						api.sendMessage({
+							customType: TEAM_MESSAGE_TYPE,
+							content: `Team dashboard ${dashboardVisible ? "enabled" : "disabled"}.`,
+							display: true,
+						});
+						break;
+					}
 				}
 			},
 		});
@@ -342,6 +456,14 @@ function getCommandDescription(commandName: string): string {
 			return "Approve a permission request";
 		case "team:mode":
 			return "Switch teammate mode (/team:mode <name> <plan|execute|review>)";
+		case "team:preset":
+			return "Create teammates from a preset";
+		case "team:dashboard":
+			return "Toggle the team dashboard";
+		case "team:progress":
+			return "Show harness progress";
+		case "team:psyche":
+			return "Show psyche weights";
 		default:
 			return "AgentTeam management";
 	}
@@ -359,7 +481,8 @@ function formatTeammateList(teammates: PersistedTeammate[]): string[] {
 
 	for (const t of teammates) {
 		const statusIcon = getStatusIcon(t.status);
-		lines.push(`${statusIcon} ${t.identity.name} (${t.identity.role}) - ${t.mode} mode`);
+		const harness = t.harness?.enabled ? ` | harness:${t.harness.phase} ${t.harness.passedFeatures}/${t.harness.totalFeatures}` : "";
+		lines.push(`${statusIcon} ${t.identity.name} (${t.identity.role}) - ${t.mode} mode${harness}`);
 	}
 
 	return lines;
@@ -388,9 +511,40 @@ function formatTeammateStatus(teammate: PersistedTeammate): string[] {
 		lines.push(`  Last Error: ${teammate.lastError}`);
 	}
 
+	if (teammate.harness?.enabled) {
+		lines.push(...formatHarnessProgress(teammate.harness).map((line) => `  ${line}`));
+	}
+	if (teammate.psyche) {
+		lines.push(`  ${formatPsycheWeights(teammate.psyche)}`);
+	}
+
 	lines.push(`  Messages: ${teammate.messages.length}`);
 
 	return lines;
+}
+
+function updateTeamUi(
+	ctx: { ui: { setStatus(key: string, text: string | undefined): void; setWidget(key: string, content: string[] | undefined): void } },
+	teamRuntime: TeamRuntime,
+): void {
+	const teammates = teamRuntime.getAllTeammates();
+	const hasRunning = teammates.some((teammate) => teammate.status === "running");
+	if (dashboardAutoHideTimer) {
+		clearTimeout(dashboardAutoHideTimer);
+		dashboardAutoHideTimer = undefined;
+	}
+
+	ctx.ui.setStatus("team", renderTeamFooterStatus(teammates));
+	ctx.ui.setWidget(
+		"team-dashboard",
+		dashboardVisible || hasRunning || teammates.length > 0 ? renderTeamDashboard(teammates) : undefined,
+	);
+	if (!dashboardVisible && !hasRunning && teammates.length > 0) {
+		dashboardAutoHideTimer = setTimeout(() => {
+			ctx.ui.setWidget("team-dashboard", undefined);
+			dashboardAutoHideTimer = undefined;
+		}, 30_000);
+	}
 }
 
 function getStatusIcon(status: PersistedTeammate["status"]): string {

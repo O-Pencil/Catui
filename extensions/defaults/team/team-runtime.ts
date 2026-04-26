@@ -26,6 +26,15 @@ import { TeamStateStore } from "./team-state-store.js";
 import { PermissionStore } from "./team-permissions.js";
 import { TeamMailbox } from "./team-mailbox.js";
 import { TeamTranscriptWriter } from "./team-transcript.js";
+import {
+	beginHarnessTurn,
+	buildHarnessInstructions,
+	createInitialHarnessState,
+	ensureHarnessFiles,
+	inspectHarnessExit,
+	prepareContextFiles,
+} from "./team-harness.js";
+import { buildPsychePrompt, computePsycheWeights, type SoulTraits } from "./team-psyche.js";
 import type {
 	PersistedTeammate,
 	TeammateIdentity,
@@ -67,6 +76,7 @@ export class TeamRuntime {
 	private teammates: Map<string, RuntimeTeammate> = new Map();
 	private loaded = false;
 	private nameCounter = 0;
+	private soulManager: unknown;
 
 	constructor(options: TeamRuntimeOptions = {}) {
 		this.store = new TeamStateStore(options.storageDir);
@@ -85,6 +95,11 @@ export class TeamRuntime {
 	/** Mailbox — used by index.ts for live observation. */
 	getMailbox(): TeamMailbox {
 		return this.mailbox;
+	}
+
+	/** Soul manager from the session, used to tune psyche weights when available. */
+	setSoulManager(soulManager: unknown | undefined): void {
+		this.soulManager = soulManager;
 	}
 
 	/**
@@ -162,7 +177,8 @@ export class TeamRuntime {
 			createdAt: Date.now(),
 		};
 
-		const mode: TeammateMode = spec.mode ?? this.getDefaultModeForRole(spec.role);
+		const mode: TeammateMode =
+			spec.mode ?? (spec.harnessEnabled && spec.role === "implementer" ? "execute" : this.getDefaultModeForRole(spec.role));
 
 		const state: PersistedTeammate = {
 			identity,
@@ -175,7 +191,14 @@ export class TeamRuntime {
 			worktreeBranch: undefined,
 			messages: [],
 			lastActiveAt: Date.now(),
+			psycheOverrides: spec.psycheOverrides,
 		};
+		if (spec.harnessEnabled) {
+			state.harness = createInitialHarnessState();
+		}
+		if (spec.psycheOverrides || spec.role === "verifier") {
+			state.psyche = computePsycheWeights("verify", spec.role, undefined, spec.psycheOverrides);
+		}
 
 		const teammate: RuntimeTeammate = {
 			state,
@@ -251,7 +274,10 @@ export class TeamRuntime {
 			content: message,
 		});
 
-		const prompt = this.buildPrompt(teammate.state);
+		const harnessContext = await this.prepareHarnessTurn(teammate, message);
+		const prompt = harnessContext
+			? [this.buildPrompt(teammate.state), harnessContext.psychePrompt, harnessContext.harnessInstructions].join("\n\n")
+			: this.buildPrompt(teammate.state);
 		const tools = this.selectTools(teammate.state.mode, teammate.state.cwd);
 
 		try {
@@ -261,6 +287,25 @@ export class TeamRuntime {
 				cwd: teammate.state.cwd,
 				signal: turnAbortController.signal,
 				model,
+				contextFiles: harnessContext?.contextFiles,
+				exitHook: harnessContext
+					? async (result) => {
+							if (!teammate.state.harness) return;
+							const exit = await inspectHarnessExit(teammate.state.harness, teammate.state.cwd, result);
+							teammate.state.harness = exit.harness;
+							this.mailbox.post({
+								teammateId: teammate.state.identity.id,
+								teammateName: teammate.state.identity.name,
+								type: "task_result",
+								direction: "teammate_to_leader",
+								payload: {
+									success: exit.violations.length === 0,
+									content: exit.event,
+									error: exit.violations.length ? exit.violations.join("; ") : undefined,
+								},
+							});
+						}
+					: undefined,
 			};
 
 			const handle = await this.subAgentRuntime.spawn(spec);
@@ -599,6 +644,8 @@ export class TeamRuntime {
 				return "research";
 			case "reviewer":
 				return "review";
+			case "verifier":
+				return "review";
 			case "implementer":
 				return "plan";
 			case "planner":
@@ -639,6 +686,55 @@ export class TeamRuntime {
 
 		lines.push("", "Respond to the leader's last message in your current mode.");
 		return lines.join("\n");
+	}
+
+	private async prepareHarnessTurn(
+		teammate: RuntimeTeammate,
+		taskDescription: string,
+	): Promise<
+		| {
+				psychePrompt: string;
+				harnessInstructions: string;
+				contextFiles: string[];
+		  }
+		| undefined
+	> {
+		const harness = teammate.state.harness;
+		if (!harness?.enabled) return undefined;
+
+		await ensureHarnessFiles(harness, teammate.state.cwd, taskDescription);
+		teammate.state.harness = await beginHarnessTurn(harness, teammate.state.cwd);
+		const soulTraits = await this.getSoulTraits();
+		const weights = computePsycheWeights(
+			teammate.state.harness.phase,
+			teammate.state.identity.role,
+			soulTraits,
+			teammate.state.psycheOverrides,
+		);
+		teammate.state.psyche = weights;
+		const psychePrompt = buildPsychePrompt(weights, teammate.state.harness.phase, teammate.state);
+		const harnessInstructions = await buildHarnessInstructions(teammate.state.harness, teammate.state.cwd, taskDescription);
+		return {
+			psychePrompt,
+			harnessInstructions,
+			contextFiles: prepareContextFiles(teammate.state.harness),
+		};
+	}
+
+	private async getSoulTraits(): Promise<SoulTraits | undefined> {
+		const manager = this.soulManager as
+			| {
+					getProfile?: () => unknown | Promise<unknown>;
+			  }
+			| undefined;
+		if (!manager?.getProfile) return undefined;
+
+		try {
+			const profile = (await manager.getProfile()) as { personality?: SoulTraits } | undefined;
+			return profile?.personality;
+		} catch {
+			return undefined;
+		}
 	}
 
 	private selectTools(mode: TeammateMode, cwd: string): Tool[] {

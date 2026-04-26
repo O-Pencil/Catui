@@ -3,11 +3,15 @@
 > P2 | Parent: ../CLAUDE.md
 
 Member List
-- index.ts: AgentTeam extension entry, /team:/team:spawn/:send/:status/:stop/:terminate/:approve/:mode commands, TEAM_MESSAGE_TYPE renderer
-- team-types.ts: TeammateRole/TeammateMode/TeammateStatus/TeammateIdentity/TeammateMessage/PersistedTeammate/TeamSpawnSpec/TeamSendResult types
+- index.ts: AgentTeam extension entry, /team:/team:spawn/:preset/:send/:status/:progress/:psyche/:dashboard/:stop/:terminate/:approve/:mode commands, TEAM_MESSAGE_TYPE renderer, footer/widget updates
+- team-types.ts: TeammateRole/TeammateMode/TeammateStatus/HarnessState/PsycheWeights/TeammateIdentity/TeammateMessage/PersistedTeammate/TeamSpawnSpec/TeamSendResult types
 - team-state-store.ts: TeamStateStore class - durable teammate persistence via JSON files in <agentDir>/teams/
-- team-parser.ts: Team command parser - parseTeamCommand/buildTeamHelp for /team:* subcommands
-- team-runtime.ts: TeamRuntime class - teammate registry, lifecycle, mailbox + permission + transcript wiring; uses SubAgentRuntime for agent spawning
+- team-parser.ts: Team command parser - parseTeamCommand/buildTeamHelp for /team:* subcommands, preset/progress/psyche/dashboard parsing, --harness spawn flag
+- team-runtime.ts: TeamRuntime class - teammate registry, lifecycle, harness/psyche prompt injection, harness implementer execute default, mailbox + permission + transcript wiring; uses SubAgentRuntime for agent spawning
+- team-psyche.ts: Psyche prompt layer - phase/role/soul weighted Id/Ego/Superego prompt construction
+- team-harness.ts: Harness protocol helpers - harness file defaults, phase instructions, context file selection, feature-list validation, git checkpoint/revert, phase progression
+- team-presets.ts: Preset definitions and executor - solo/duo/squad teammate spawning and optional solo autostart
+- team-dashboard.ts: Text dashboard/status rendering - card layout, psyche/progress bars, footer status summary
 - team-permissions.ts: PermissionStore - pending permission request queue, approve/deny, path allowlists (B.4)
 - team-mailbox.ts: TeamMailbox - typed in-memory append-only message log for leader↔teammate (B.3)
 - team-transcript.ts: TeamTranscriptWriter - per-teammate JSONL transcripts under <storageDir>/transcripts/ (B.7)
@@ -32,9 +36,13 @@ This extension implements the Phase B "true AgentTeam" per the refactor plan:
 | Command | Description |
 |---------|-------------|
 | `/team` | List all teammates |
-| `/team:spawn <role> [--name <id>]` | Create a persistent teammate |
+| `/team:spawn <role> [--name <id>] [--harness]` | Create a persistent teammate |
+| `/team:preset <solo\|duo\|squad> <task>` | Create teammates from a preset |
 | `/team:send <name> <message>` | Send message to a teammate |
 | `/team:status [<name>]` | Show team or teammate status |
+| `/team:progress [<name>]` | Show harness progress |
+| `/team:psyche [<name>]` | Show psyche weights |
+| `/team:dashboard` | Toggle the text dashboard widget |
 | `/team:stop <name>` | Stop teammate's current turn |
 | `/team:terminate <name>` | Destroy a teammate |
 | `/team:approve <request-id>` | Approve a permission request (TODO) |
@@ -46,6 +54,7 @@ This extension implements the Phase B "true AgentTeam" per the refactor plan:
 - `reviewer`: Read-only review/audit
 - `implementer`: Sandboxed write in isolated worktree
 - `planner`: Read-only plan production
+- `verifier`: Read-only strict verification/review
 - `generic`: Read-only by default
 
 ## Modes

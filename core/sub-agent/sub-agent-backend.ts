@@ -7,6 +7,8 @@
 
 import { createAgentSession, type CreateAgentSessionOptions } from "../runtime/sdk.js";
 import type { SubAgentBackend, SubAgentHandle, SubAgentSpec, SubAgentResult } from "./sub-agent-types.js";
+import { readFile } from "node:fs/promises";
+import { isAbsolute, resolve } from "node:path";
 
 /**
  * In-process SubAgent backend.
@@ -15,6 +17,7 @@ import type { SubAgentBackend, SubAgentHandle, SubAgentSpec, SubAgentResult } fr
 export class InProcessSubAgentBackend implements SubAgentBackend {
   async spawn(spec: SubAgentSpec): Promise<SubAgentHandle> {
     const id = crypto.randomUUID();
+    const prompt = await buildPromptWithContextFiles(spec);
 
     // Create an internal AbortController that can be triggered by external signal or timeout
     const internalAbortController = new AbortController();
@@ -68,7 +71,7 @@ export class InProcessSubAgentBackend implements SubAgentBackend {
     // Start the prompt
     const promptPromise = (async () => {
       try {
-        await session.prompt(spec.prompt, {
+        await session.prompt(prompt, {
           images: spec.images,
         });
         status = "done";
@@ -98,6 +101,17 @@ export class InProcessSubAgentBackend implements SubAgentBackend {
           };
         }
       } finally {
+        if (spec.exitHook && result) {
+          try {
+            await spec.exitHook(result);
+          } catch (error: unknown) {
+            status = "error";
+            result = {
+              success: false,
+              error: `exitHook failed: ${error instanceof Error ? error.message : String(error)}`,
+            };
+          }
+        }
         if (timeoutId !== undefined) {
           clearTimeout(timeoutId);
         }
@@ -130,4 +144,31 @@ export class InProcessSubAgentBackend implements SubAgentBackend {
       },
     };
   }
+}
+
+async function buildPromptWithContextFiles(spec: SubAgentSpec): Promise<string> {
+  if (!spec.contextFiles?.length) {
+    return spec.prompt;
+  }
+
+  const chunks: string[] = [];
+  for (const filePath of spec.contextFiles) {
+    const absolutePath = isAbsolute(filePath) ? filePath : resolve(spec.cwd, filePath);
+    try {
+      const content = await readFile(absolutePath, "utf8");
+      chunks.push(`### ${filePath}\n\`\`\`\n${content}\n\`\`\``);
+    } catch (error: unknown) {
+      chunks.push(
+        `### ${filePath}\n(unavailable: ${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
+  }
+
+  return [
+    "The following files are injected as current task context. Treat them as read-only context unless the task instructions explicitly allow updates.",
+    "",
+    ...chunks,
+    "",
+    spec.prompt,
+  ].join("\n");
 }

@@ -26,6 +26,12 @@ test("team-parser: parses spawn and mode commands", () => {
 		role: "implementer",
 		name: "builder",
 	});
+	assert.deepEqual(parseTeamCommand("team:spawn", "implementer --name builder --harness"), {
+		command: "spawn",
+		role: "implementer",
+		name: "builder",
+		harnessEnabled: true,
+	});
 	assert.deepEqual(parseTeamCommand("team:mode", "builder execute"), {
 		command: "mode",
 		target: "builder",
@@ -37,6 +43,17 @@ test("team-parser: rejects invalid invocations", () => {
 	assert.equal(parseTeamCommand("team:spawn", ""), null);
 	assert.equal(parseTeamCommand("team:mode", "builder invalid"), null);
 	assert.equal(parseTeamCommand("team:send", "builder"), null);
+});
+
+test("team-parser: parses harness dashboard and preset commands", () => {
+	assert.deepEqual(parseTeamCommand("team:preset", "solo build a counter"), {
+		command: "preset",
+		presetName: "solo",
+		taskDescription: "build a counter",
+	});
+	assert.deepEqual(parseTeamCommand("team:dashboard", ""), { command: "dashboard" });
+	assert.deepEqual(parseTeamCommand("team:progress", "builder"), { command: "progress", target: "builder" });
+	assert.deepEqual(parseTeamCommand("team:psyche", ""), { command: "psyche", target: undefined });
 });
 
 test("team-parser: help text advertises list and approve flow", () => {

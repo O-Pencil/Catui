@@ -28,6 +28,10 @@ export interface SubAgentSpec {
   images?: ImageContent[];
   /** Model to use (reuses main session's model and auth) */
   model?: Model<any>;
+  /** Files to inject into the initial prompt as read-only context */
+  contextFiles?: string[];
+  /** Optional callback invoked after the run result is available */
+  exitHook?: (result: SubAgentResult) => Promise<void> | void;
 }
 
 /**
