@@ -8,6 +8,7 @@
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { allPassing, firstPending, readFeatureList } from "./grub-feature-list.js";
+import { languageName, grubText, type GrubLocale } from "./grub-i18n.js";
 import { persistState, stateFilePathFor } from "./grub-persistence.js";
 import type {
 	GrubControllerState,
@@ -22,6 +23,7 @@ const DEFAULT_MAX_CONSECUTIVE_FAILURES = 3;
 export interface GrubStartOptions {
 	maxIterations?: number;
 	maxConsecutiveFailures?: number;
+	locale?: GrubLocale;
 }
 
 export class GrubController {
@@ -58,6 +60,7 @@ export class GrubController {
 		const task: GrubTaskState = {
 			id,
 			goal: trimmedGoal,
+			locale: options.locale ?? "en",
 			status: "running",
 			phase: "initializer",
 			startedAt: now,
@@ -88,7 +91,7 @@ export class GrubController {
 		if (this.activeTask && this.activeTask.id !== task.id) {
 			throw new Error(`Cannot adopt task ${task.id}; ${this.activeTask.id} is already active.`);
 		}
-		const resumed: GrubTaskState = { ...task, awaitingTurn: false, updatedAt: Date.now() };
+		const resumed: GrubTaskState = { ...task, locale: task.locale ?? "en", awaitingTurn: false, updatedAt: Date.now() };
 		this.activeTask = resumed;
 		this.safePersist(resumed);
 		return resumed;
@@ -106,6 +109,7 @@ export class GrubController {
 		const snapshot: GrubTaskSnapshot = {
 			id: finalTask.id,
 			goal: finalTask.goal,
+			locale: finalTask.locale,
 			status,
 			phase: finalTask.phase,
 			startedAt: finalTask.startedAt,
@@ -137,60 +141,92 @@ export class GrubController {
 		}
 
 		const task = this.activeTask;
+		const text = grubText(task.locale);
 		const sections = [
 			`${this.getPromptPrefix(task.id)}${task.currentIteration}]`,
 			"",
-			"Autonomous grub goal:",
+			task.locale === "zh" ? "自主 Grub 目标：" : "Autonomous grub goal:",
 			task.goal,
 			"",
-			"You are inside a managed grub harness. Keep making concrete progress on the same goal.",
-			"Use tools, edit files, run checks, and verify results as needed.",
+			task.locale === "zh"
+				? "你正在一个受控的 grub harness 中工作。请围绕同一个目标持续推进具体进展。"
+				: "You are inside a managed grub harness. Keep making concrete progress on the same goal.",
+			task.locale === "zh"
+				? "按需使用工具、编辑文件、运行检查并验证结果。所有面向用户的总结、进度和说明都必须使用中文。"
+				: "Use tools, edit files, run checks, and verify results as needed.",
+			`User language: ${languageName(task.locale)}.`,
 			"",
-			"Harness files (must stay up to date every iteration):",
-			`- Feature list (JSON): ${task.featureListPath}`,
-			`- Progress log: ${task.progressLogPath}`,
-			`- Session init script: ${task.initScriptPath}`,
+			task.locale === "zh" ? "Harness 文件（每轮都必须保持最新）：" : "Harness files (must stay up to date every iteration):",
+			`- ${text.featureList}: ${task.featureListPath}`,
+			`- ${text.progressLog}: ${task.progressLogPath}`,
+			`- ${text.initScript}: ${task.initScriptPath}`,
 		];
 
 		if (task.phase === "initializer") {
 			sections.push(
 				"",
-				"Initializer phase requirements:",
-				"1. Replace the placeholder feature-list.json with 15-40 concrete, testable slices. Every entry MUST keep the schema {id, category, description, steps[], passes:false}.",
-				"2. Ensure init.sh contains reliable startup checks and make it executable.",
-				"3. Append a clear initialization summary in progress-log.md.",
-				"4. Do not attempt broad implementation yet; prepare a strong harness first.",
-				"5. End this turn with loop-state status=continue unless the goal is already complete/blocked.",
+				task.locale === "zh" ? "初始化阶段要求：" : "Initializer phase requirements:",
+				task.locale === "zh"
+					? "1. 将 feature-list.json 的占位内容替换为 15-40 个具体、可测试的切片。每项必须保持 {id, category, description, steps[], passes:false}。"
+					: "1. Replace the placeholder feature-list.json with 15-40 concrete, testable slices. Every entry MUST keep the schema {id, category, description, steps[], passes:false}.",
+				task.locale === "zh"
+					? "2. 确保 init.sh 包含可靠的启动检查，并设置为可执行。"
+					: "2. Ensure init.sh contains reliable startup checks and make it executable.",
+				task.locale === "zh"
+					? "3. 在 progress-log.md 中追加清晰的初始化总结。"
+					: "3. Append a clear initialization summary in progress-log.md.",
+				task.locale === "zh"
+					? "4. 先建立强 harness，不要开始大范围实现。"
+					: "4. Do not attempt broad implementation yet; prepare a strong harness first.",
+				task.locale === "zh"
+					? "5. 除非目标已经完成或阻塞，否则本轮以 loop-state status=continue 结束。"
+					: "5. End this turn with loop-state status=continue unless the goal is already complete/blocked.",
 			);
 		} else {
 			sections.push(
 				"",
-				"Execution phase requirements:",
-				"1. Start by running the init script, then read feature-list.json and progress-log.md.",
-				"2. Pick exactly one feature with passes:false and execute it end-to-end.",
-				"3. Run relevant verification (tests, smoke checks, or runtime checks).",
-				"4. Flip ONLY the passes/evidence fields for that feature; other fields are immutable.",
-				"5. Append progress log and git-commit before finishing the turn.",
-				"6. Keep each iteration incremental and production-safe.",
+				task.locale === "zh" ? "执行阶段要求：" : "Execution phase requirements:",
+				task.locale === "zh"
+					? "1. 先运行 init.sh，再读取 feature-list.json 和 progress-log.md。"
+					: "1. Start by running the init script, then read feature-list.json and progress-log.md.",
+				task.locale === "zh"
+					? "2. 只选择一个 passes:false 的 feature，并端到端完成它。"
+					: "2. Pick exactly one feature with passes:false and execute it end-to-end.",
+				task.locale === "zh"
+					? "3. 运行相关验证（测试、烟测或运行时检查）。"
+					: "3. Run relevant verification (tests, smoke checks, or runtime checks).",
+				task.locale === "zh"
+					? "4. 只能修改该 feature 的 passes/evidence 字段；其他字段不可变。"
+					: "4. Flip ONLY the passes/evidence fields for that feature; other fields are immutable.",
+				task.locale === "zh"
+					? "5. 本轮结束前追加进度日志并 git commit。"
+					: "5. Append progress log and git-commit before finishing the turn.",
+				task.locale === "zh"
+					? "6. 每轮都保持增量、安全、可回退。"
+					: "6. Keep each iteration incremental and production-safe.",
 			);
 		}
 
 		if (task.lastDecision?.summary) {
-			sections.push("", "Previous summary:", task.lastDecision.summary);
+			sections.push("", task.locale === "zh" ? "上次总结：" : "Previous summary:", task.lastDecision.summary);
 		}
 
 		if (task.lastDecision?.nextStep) {
-			sections.push("", "Previous planned next step:", task.lastDecision.nextStep);
+			sections.push("", task.locale === "zh" ? "上次计划的下一步：" : "Previous planned next step:", task.lastDecision.nextStep);
 		}
 
 		if (task.lastError) {
-			sections.push("", "Recovery note:", task.lastError);
+			sections.push("", task.locale === "zh" ? "恢复提示：" : "Recovery note:", task.lastError);
 		}
 
 		sections.push(
 			"",
-			"Do not stop just because one query finished. Only decide `complete` when every feature in feature-list.json has passes:true.",
-			"If you need another autonomous pass, end with a valid <loop-state> block so the system can continue automatically.",
+			task.locale === "zh"
+				? "不要因为一次查询结束就停止。只有 feature-list.json 中每个 feature 都 passes:true 时，才可以决定 `complete`。"
+				: "Do not stop just because one query finished. Only decide `complete` when every feature in feature-list.json has passes:true.",
+			task.locale === "zh"
+				? "如果还需要下一轮自主推进，请以有效的 <loop-state> 块结束，让系统自动继续。"
+				: "If you need another autonomous pass, end with a valid <loop-state> block so the system can continue automatically.",
 		);
 
 		return sections.join("\n");
@@ -221,12 +257,15 @@ export class GrubController {
 			const rewritten: GrubDecision = {
 				status: "continue",
 				summary: decision.summary,
-				nextStep: "feature-list.json is missing or invalid; the initializer must produce it before claiming complete.",
+				nextStep:
+					this.activeTask.locale === "zh"
+						? "feature-list.json 缺失或无效；初始化阶段必须先生成它，不能直接声明完成。"
+						: "feature-list.json is missing or invalid; the initializer must produce it before claiming complete.",
 			};
 			return {
 				decision: rewritten,
 				downgraded: true,
-				reason: "feature-list.json missing or invalid",
+				reason: this.activeTask.locale === "zh" ? "feature-list.json 缺失或无效" : "feature-list.json missing or invalid",
 			};
 		}
 		if (allPassing(list)) {
@@ -237,13 +276,20 @@ export class GrubController {
 			status: "continue",
 			summary: decision.summary,
 			nextStep: pending
-				? `Complete pending feature: ${pending.id} (${pending.description})`
-				: "Complete the remaining pending features before declaring done.",
+				? this.activeTask.locale === "zh"
+					? `完成待处理 feature：${pending.id}（${pending.description}）`
+					: `Complete pending feature: ${pending.id} (${pending.description})`
+				: this.activeTask.locale === "zh"
+					? "先完成剩余待处理 feature，再声明完成。"
+					: "Complete the remaining pending features before declaring done.",
 		};
 		return {
 			decision: rewritten,
 			downgraded: true,
-			reason: `feature-list still has ${list.features.length - list.features.filter((f) => f.passes).length} pending entries`,
+			reason:
+				this.activeTask.locale === "zh"
+					? `feature-list 仍有 ${list.features.length - list.features.filter((f) => f.passes).length} 个待处理条目`
+					: `feature-list still has ${list.features.length - list.features.filter((f) => f.passes).length} pending entries`,
 		};
 	}
 
@@ -263,16 +309,27 @@ export class GrubController {
 		}
 
 		if (decision.status === "complete") {
-			return { action: "stop", snapshot: this.stop("Grub goal completed.", "complete") };
+			return {
+				action: "stop",
+				snapshot: this.stop(task.locale === "zh" ? "Grub 目标已完成。" : "Grub goal completed.", "complete"),
+			};
 		}
 		if (decision.status === "blocked") {
-			return { action: "stop", snapshot: this.stop("Grub reported it is blocked.", "blocked") };
+			return {
+				action: "stop",
+				snapshot: this.stop(task.locale === "zh" ? "Grub 报告任务被阻塞。" : "Grub reported it is blocked.", "blocked"),
+			};
 		}
 
 		if (task.currentIteration >= task.maxIterations) {
 			return {
 				action: "stop",
-				snapshot: this.stop(`Grub hit the iteration limit (${task.maxIterations}).`, "failed"),
+				snapshot: this.stop(
+					task.locale === "zh"
+						? `Grub 达到轮次上限（${task.maxIterations}）。`
+						: `Grub hit the iteration limit (${task.maxIterations}).`,
+					"failed",
+				),
 			};
 		}
 
@@ -296,7 +353,9 @@ export class GrubController {
 			return {
 				action: "stop",
 				snapshot: this.stop(
-					`Grub stopped after ${task.consecutiveFailures} consecutive failures. Last error: ${message}`,
+					task.locale === "zh"
+						? `Grub 连续失败 ${task.consecutiveFailures} 次后停止。最近错误：${message}`
+						: `Grub stopped after ${task.consecutiveFailures} consecutive failures. Last error: ${message}`,
 					"failed",
 				),
 			};
@@ -305,7 +364,12 @@ export class GrubController {
 		if (task.currentIteration >= task.maxIterations) {
 			return {
 				action: "stop",
-				snapshot: this.stop(`Grub hit the iteration limit (${task.maxIterations}).`, "failed"),
+				snapshot: this.stop(
+					task.locale === "zh"
+						? `Grub 达到轮次上限（${task.maxIterations}）。`
+						: `Grub hit the iteration limit (${task.maxIterations}).`,
+					"failed",
+				),
 			};
 		}
 

@@ -58,15 +58,18 @@ function renderTeammateCard(teammate: PersistedTeammate, width: number): string[
 	const progress = harness?.enabled ? `${harness.passedFeatures}/${harness.totalFeatures}` : "-";
 	const feature = harness?.currentFeature ?? "none";
 	const percent = harness?.enabled && harness.totalFeatures > 0 ? harness.passedFeatures / harness.totalFeatures : 0;
+	const live = teammate.live;
 	const title = `${teammate.identity.name} (${teammate.identity.role})`;
 	const inner = Math.max(20, width - 2);
 
 	return [
 		`┌${pad(` ${truncate(title, inner - 2)} `, inner, "─")}┐`,
 		`│${pad(`${statusIcon(teammate.status)} ${teammate.status}  mode:${teammate.mode}  phase:${phase}`, inner)}│`,
+		`│${pad(`live: ${live ? `${live.phase}${live.toolName ? `:${live.toolName}` : ""}` : "idle"}`, inner)}│`,
 		`│${pad(renderPsycheBar(teammate.psyche), inner)}│`,
 		`│${pad(`feature: [${progress}] ${truncate(feature, Math.max(8, inner - 17))}`, inner)}│`,
 		`│${pad(`progress: ${renderProgressBar(percent, Math.max(8, inner - 15))}`, inner)}│`,
+		...(live?.preview ? [`│${pad(`stream: ${truncate(singleLine(live.preview), Math.max(8, inner - 8))}`, inner)}│`] : []),
 		`└${"─".repeat(inner)}┘`,
 	];
 }
@@ -105,6 +108,10 @@ function statusIcon(status: PersistedTeammate["status"]): string {
 function truncate(value: string, max: number): string {
 	if (value.length <= max) return value;
 	return `${value.slice(0, Math.max(0, max - 1))}…`;
+}
+
+function singleLine(value: string): string {
+	return value.replace(/\s+/g, " ").trim();
 }
 
 function pad(value: string, width: number, fill = " "): string {

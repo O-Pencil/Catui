@@ -10,6 +10,7 @@ import { Box, Container, Spacer, Text } from "@pencil-agent/tui";
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../core/extensions/types.js";
+import { getLocale, type Locale } from "../../../core/i18n/index.js";
 import type { EventBus } from "../../../core/runtime/event-bus.js";
 import { GrubController } from "./grub-controller.js";
 import {
@@ -18,6 +19,7 @@ import {
 	readFeatureList,
 	writeFeatureList,
 } from "./grub-feature-list.js";
+import { detectGrubLocale, grubText, languageName, type GrubLocale } from "./grub-i18n.js";
 import { buildGrubHelp, parseGrubCommand } from "./grub-parser.js";
 import { discoverActiveTasks, pruneStale } from "./grub-persistence.js";
 import type { GrubDecision, GrubTaskSnapshot, GrubTaskState } from "./grub-types.js";
@@ -25,8 +27,14 @@ import type { GrubDecision, GrubTaskSnapshot, GrubTaskState } from "./grub-types
 const GRUB_CUSTOM_TYPE = "grub";
 const LOOP_STATE_START = "<loop-state>";
 const LOOP_STATE_END = "</loop-state>";
+let currentGrubLocale: GrubLocale = "en";
 
-const GRUB_INITIALIZER_PROMPT = `
+function buildGrubInitializerPrompt(locale: GrubLocale): string {
+	const languageLine =
+		locale === "zh"
+			? "All user-visible summaries, progress log entries, and explanations MUST be written in 中文."
+			: "All user-visible summaries, progress log entries, and explanations MUST be written in English.";
+	return `
 You are the INITIALIZER for a long-running autonomous grub task.
 
 Your only job this turn is to set up a complete, executable harness that
@@ -68,9 +76,16 @@ Rules for later coding agents (document them in progress-log.md):
 
 End with exactly one XML block:
 <loop-state>{"status":"continue","summary":"harness ready","nextStep":"begin execution phase"}</loop-state>
+${languageLine}
 `.trim();
+}
 
-const GRUB_CODING_PROMPT = `
+function buildGrubCodingPrompt(locale: GrubLocale): string {
+	const languageLine =
+		locale === "zh"
+			? "All user-visible summaries, progress log entries, and explanations MUST be written in 中文."
+			: "All user-visible summaries, progress log entries, and explanations MUST be written in English.";
+	return `
 You are a CODING AGENT working inside a long-running grub harness.
 
 Every turn you MUST:
@@ -95,7 +110,9 @@ completion and keep you iterating.
 
 Do not remove or rewrite tests. Treat tests as ground truth.
 Do not wrap the loop-state JSON in markdown fences.
+${languageLine}
 `.trim();
+}
 
 const controllersByBus = new WeakMap<EventBus, GrubController>();
 const notifyByBus = new WeakMap<EventBus, (msg: string, type?: "info" | "warning" | "error") => void>();
@@ -111,6 +128,19 @@ function getController(bus: EventBus): GrubController {
 
 function notify(bus: EventBus, message: string, type: "info" | "warning" | "error" = "info"): void {
 	notifyByBus.get(bus)?.(message, type);
+}
+
+function getActiveLocale(): GrubLocale {
+	return currentGrubLocale;
+}
+
+function localeFromSettings(ctx: Pick<ExtensionCommandContext, "getSettings">): GrubLocale {
+	const locale = ctx.getSettings().locale;
+	return locale === "zh" || locale === "en" ? locale : getLocale();
+}
+
+function localeForTask(task: GrubTaskState | undefined): GrubLocale {
+	return task?.locale ?? getActiveLocale();
 }
 
 function publishGrubUpdate(
@@ -129,62 +159,65 @@ function publishGrubUpdate(
 	});
 }
 
-function formatDate(timestamp: number): string {
-	return new Date(timestamp).toLocaleString();
+function formatDate(timestamp: number, locale: GrubLocale): string {
+	return new Date(timestamp).toLocaleString(locale === "zh" ? "zh-CN" : "en-US");
 }
 
 function formatTaskState(task: GrubTaskState): string {
+	const text = grubText(task.locale ?? "en");
 	const lines = [
-		`[Grub] Active task ${task.id}`,
-		`Status: ${task.status}`,
-		`Phase: ${task.phase}`,
-		`Goal: ${task.goal}`,
-		`Started: ${formatDate(task.startedAt)}`,
-		`Current iteration: ${task.currentIteration}`,
-		`Awaiting result: ${task.awaitingTurn ? "yes" : "no"}`,
-		`Consecutive failures: ${task.consecutiveFailures}/${task.maxConsecutiveFailures}`,
-		`Max iterations: ${task.maxIterations}`,
-		`Harness dir: ${task.harnessDirectory}`,
-		`Feature list: ${task.featureListPath}`,
-		`Progress log: ${task.progressLogPath}`,
-		`Init script: ${task.initScriptPath}`,
-		`State file: ${task.stateFilePath}`,
+		`${text.prefix} ${text.activeTask} ${task.id}`,
+		`${text.status}: ${task.status}`,
+		`${text.phase}: ${task.phase}`,
+		`${text.goal}: ${task.goal}`,
+		`${text.started}: ${formatDate(task.startedAt, task.locale ?? "en")}`,
+		`${text.currentIteration}: ${task.currentIteration}`,
+		`${text.awaitingResult}: ${task.awaitingTurn ? text.yes : text.no}`,
+		`${text.consecutiveFailures}: ${task.consecutiveFailures}/${task.maxConsecutiveFailures}`,
+		`${text.maxIterations}: ${task.maxIterations}`,
+		`${text.harnessDir}: ${task.harnessDirectory}`,
+		`${text.featureList}: ${task.featureListPath}`,
+		`${text.progressLog}: ${task.progressLogPath}`,
+		`${text.initScript}: ${task.initScriptPath}`,
+		`${text.stateFile}: ${task.stateFilePath}`,
 	];
 
 	const list = readFeatureList(task.featureListPath);
 	if (list) {
 		const total = list.features.length;
 		const passing = list.features.filter((f) => f.passes).length;
-		lines.push(`Features: ${passing}/${total} passing`);
+		lines.push(text.featuresPassing(passing, total));
 	}
 
-	if (task.lastDecision?.summary) lines.push(`Last summary: ${task.lastDecision.summary}`);
-	if (task.lastDecision?.nextStep) lines.push(`Last next step: ${task.lastDecision.nextStep}`);
-	if (task.lastError) lines.push(`Last error: ${task.lastError}`);
+	if (task.lastDecision?.summary) lines.push(`${text.lastSummary}: ${task.lastDecision.summary}`);
+	if (task.lastDecision?.nextStep) lines.push(`${text.lastNextStep}: ${task.lastDecision.nextStep}`);
+	if (task.lastError) lines.push(`${text.lastError}: ${task.lastError}`);
 
 	return lines.join("\n");
 }
 
 function formatSnapshot(snapshot: GrubTaskSnapshot): string {
+	const locale = snapshot.locale ?? "en";
+	const text = grubText(locale);
 	const lines = [
-		`[Grub] Last task ${snapshot.id}`,
-		`Status: ${snapshot.status}`,
-		`Final phase: ${snapshot.phase}`,
-		`Goal: ${snapshot.goal}`,
-		`Started: ${formatDate(snapshot.startedAt)}`,
-		`Updated: ${formatDate(snapshot.updatedAt)}`,
-		`Completed iterations: ${snapshot.completedIterations}`,
-		`Consecutive failures: ${snapshot.consecutiveFailures}`,
-		`Harness dir: ${snapshot.harnessDirectory}`,
-		`Feature list: ${snapshot.featureListPath}`,
-		`Progress log: ${snapshot.progressLogPath}`,
-		`Init script: ${snapshot.initScriptPath}`,
-		`State file: ${snapshot.stateFilePath}`,
+		`${text.prefix} ${text.lastTask} ${snapshot.id}`,
+		`${text.status}: ${snapshot.status}`,
+		`${text.phase}: ${snapshot.phase}`,
+		`${text.goal}: ${snapshot.goal}`,
+		`${text.started}: ${formatDate(snapshot.startedAt, locale)}`,
+		`${text.updated}: ${formatDate(snapshot.updatedAt, locale)}`,
+		`${text.completedIterations}: ${snapshot.completedIterations}`,
+		`${text.consecutiveFailures}: ${snapshot.consecutiveFailures}`,
+		`${text.harnessDir}: ${snapshot.harnessDirectory}`,
+		`${text.featureList}: ${snapshot.featureListPath}`,
+		`${text.progressLog}: ${snapshot.progressLogPath}`,
+		`${text.initScript}: ${snapshot.initScriptPath}`,
+		`${text.stateFile}: ${snapshot.stateFilePath}`,
 	];
 
-	if (snapshot.lastDecision?.summary) lines.push(`Last summary: ${snapshot.lastDecision.summary}`);
-	if (snapshot.lastDecision?.nextStep) lines.push(`Last next step: ${snapshot.lastDecision.nextStep}`);
-	if (snapshot.lastError) lines.push(`Last error: ${snapshot.lastError}`);
+	if (snapshot.lastDecision?.summary) lines.push(`${text.lastSummary}: ${snapshot.lastDecision.summary}`);
+	if (snapshot.lastDecision?.nextStep) lines.push(`${text.lastNextStep}: ${snapshot.lastDecision.nextStep}`);
+	if (snapshot.lastError) lines.push(`${text.lastError}: ${snapshot.lastError}`);
 
 	return lines.join("\n");
 }
@@ -258,13 +291,15 @@ function extractGrubDecision(text: string): GrubDecision | undefined {
 }
 
 function describeDecision(decision: GrubDecision): string {
-	const lines = [`[Grub] Decision: ${decision.status}`, `Summary: ${decision.summary}`];
-	if (decision.nextStep) lines.push(`Next step: ${decision.nextStep}`);
+	const locale = getActiveLocale();
+	const text = grubText(locale);
+	const lines = [`${text.prefix} ${text.decision}: ${decision.status}`, `${text.summary}: ${decision.summary}`];
+	if (decision.nextStep) lines.push(`${text.nextStep}: ${decision.nextStep}`);
 	return lines.join("\n");
 }
 
 function describeTerminalSnapshot(snapshot: GrubTaskSnapshot | undefined): string {
-	if (!snapshot) return "[Grub] No grub task is active.";
+	if (!snapshot) return `${grubText(getActiveLocale()).prefix} ${grubText(getActiveLocale()).noActive}`;
 	return formatSnapshot(snapshot);
 }
 
@@ -274,17 +309,22 @@ function dispatchNextIteration(api: ExtensionAPI, bus: EventBus, controller: Gru
 
 	const prompt = controller.buildPrompt();
 	controller.markDispatched();
-	publishGrubUpdate(api, bus, `[Grub] Starting iteration ${task.currentIteration} for ${task.id}.`, "info");
+	publishGrubUpdate(api, bus, grubText(task.locale).startingIteration(task.currentIteration, task.id), "info");
 	api.sendUserMessage(prompt, { deliverAs: "followUp" });
 }
 
 function buildInitScript(task: GrubTaskState): string {
+	const isZh = task.locale === "zh";
 	return [
 		"#!/usr/bin/env bash",
 		"set -euo pipefail",
 		"",
-		"# Grub harness startup (get-bearings protocol). Override the smoke block below",
-		"# with project-specific commands that prove the app still boots end-to-end.",
+		isZh
+			? "# Grub harness 启动脚本（get-bearings 协议）。请将下方烟测替换为项目专属命令，"
+			: "# Grub harness startup (get-bearings protocol). Override the smoke block below",
+		isZh
+			? "# 用来证明应用仍能端到端启动。"
+			: "# with project-specific commands that prove the app still boots end-to-end.",
 		"",
 		'echo "=== grub bearings ==="',
 		"pwd",
@@ -297,7 +337,9 @@ function buildInitScript(task: GrubTaskState): string {
 		'echo "--- feature progress ---"',
 		`node -e "try{const l=require(${JSON.stringify(task.featureListPath)});const p=l.features.filter(f=>f.passes).length;console.log(p+'/'+l.features.length+' passing');}catch(e){console.log('feature-list.json unavailable');}" 2>/dev/null || true`,
 		'echo "--- project smoke (override below) ---"',
-		"# TODO: project-specific smoke command (tests, curl, tsc --noEmit, etc.)",
+		isZh
+			? "# TODO: 项目专属烟测命令（tests、curl、tsc --noEmit 等）"
+			: "# TODO: project-specific smoke command (tests, curl, tsc --noEmit, etc.)",
 		"",
 	].join("\n");
 }
@@ -315,20 +357,21 @@ function ensureHarnessArtifacts(task: GrubTaskState): void {
 	}
 
 	if (!existsSync(task.progressLogPath)) {
+		const text = grubText(task.locale);
 		writeFileSync(
 			task.progressLogPath,
 			[
-				`# Progress Log (${task.id})`,
+				text.progressLogTitle(task.id),
 				"",
-				`Goal: ${task.goal}`,
+				`${text.goal}: ${task.goal}`,
 				"",
-				"## Initialization",
-				"- Harness created by /grub.",
-				"- Structured feature list lives in feature-list.json; only passes/evidence may change.",
-				"- init.sh performs get-bearings + smoke before every iteration.",
+				text.initializationHeading,
+				text.harnessCreated,
+				text.structuredFeatureNote,
+				text.initScriptNote,
 				"",
-				"## Iterations",
-				"- (append one short entry per iteration with verification evidence)",
+				text.iterationsHeading,
+				text.appendIterationNote,
 				"",
 			].join("\n"),
 			"utf-8",
@@ -374,10 +417,11 @@ function gitCommitHarness(cwd: string, task: GrubTaskState): void {
 }
 
 function resumeSummary(task: GrubTaskState): string {
+	const text = grubText(task.locale ?? "en");
 	return [
-		`[Grub] Resumed task ${task.id} at iteration ${task.currentIteration} (${task.phase}).`,
-		`Goal: ${task.goal}`,
-		"Use /grub status to inspect, /grub resume to continue dispatch, or /grub stop to abandon.",
+		text.resumeSummary(task.id, task.currentIteration, task.phase),
+		`${text.goal}: ${task.goal}`,
+		text.resumeHint,
 	].join("\n");
 }
 
@@ -419,10 +463,11 @@ export default async function grubExtension(api: ExtensionAPI) {
 		const persisted = active[0];
 		try {
 			controller.adoptResumedTask(persisted.task);
+			currentGrubLocale = persisted.task.locale ?? getLocale();
 			publishGrubUpdate(api, bus, resumeSummary(persisted.task), "info");
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			publishGrubUpdate(api, bus, `[Grub] Failed to resume task ${persisted.task.id}: ${message}`, "warning");
+			publishGrubUpdate(api, bus, grubText(persisted.task.locale ?? getLocale()).failedResume(persisted.task.id, message), "warning");
 		}
 	});
 
@@ -437,8 +482,9 @@ export default async function grubExtension(api: ExtensionAPI) {
 		if (!controller.isGrubPrompt(event.prompt)) return;
 		const task = controller.getActiveTask();
 		const phase = task?.phase ?? "execution";
+		const locale = localeForTask(task);
 		return {
-			appendSystemPrompt: phase === "initializer" ? GRUB_INITIALIZER_PROMPT : GRUB_CODING_PROMPT,
+			appendSystemPrompt: phase === "initializer" ? buildGrubInitializerPrompt(locale) : buildGrubCodingPrompt(locale),
 		};
 	});
 
@@ -459,10 +505,12 @@ export default async function grubExtension(api: ExtensionAPI) {
 	api.on("agent_end", (event) => {
 		const activeTask = controller.getActiveTask();
 		if (!activeTask?.awaitingTurn) return;
+		const text = grubText(activeTask.locale);
+		currentGrubLocale = activeTask.locale;
 
 		const assistantText = extractAssistantText(getLastAssistantMessage(event.messages));
 		if (!assistantText) {
-			const failure = controller.recordFailure("Grub run ended without an assistant message.");
+			const failure = controller.recordFailure(text.failedNoAssistant);
 			if (failure.action === "stop") {
 				publishGrubUpdate(api, bus, describeTerminalSnapshot(failure.snapshot), "warning");
 				return;
@@ -470,7 +518,7 @@ export default async function grubExtension(api: ExtensionAPI) {
 			publishGrubUpdate(
 				api,
 				bus,
-				`[Grub] Iteration failed. Retrying iteration ${failure.task?.currentIteration}.`,
+				text.iterationFailedRetry(failure.task?.currentIteration),
 				"warning",
 			);
 			dispatchNextIteration(api, bus, controller);
@@ -479,7 +527,7 @@ export default async function grubExtension(api: ExtensionAPI) {
 
 		const parsedDecision = extractGrubDecision(assistantText);
 		if (!parsedDecision) {
-			const failure = controller.recordFailure("Assistant response did not include a valid <loop-state> block.");
+			const failure = controller.recordFailure(text.invalidLoopState);
 			if (failure.action === "stop") {
 				publishGrubUpdate(api, bus, describeTerminalSnapshot(failure.snapshot), "warning");
 				return;
@@ -487,7 +535,7 @@ export default async function grubExtension(api: ExtensionAPI) {
 			publishGrubUpdate(
 				api,
 				bus,
-				`[Grub] Missing or invalid loop-state block. Retrying iteration ${failure.task?.currentIteration}.`,
+				text.invalidLoopRetry(failure.task?.currentIteration),
 				"warning",
 			);
 			dispatchNextIteration(api, bus, controller);
@@ -499,7 +547,7 @@ export default async function grubExtension(api: ExtensionAPI) {
 			publishGrubUpdate(
 				api,
 				bus,
-				`[Grub] Rejected premature complete: ${validated.reason ?? "pending features remain"}. Continuing.`,
+				text.prematureComplete(validated.reason ?? (activeTask.locale === "zh" ? "仍有未完成 feature" : "pending features remain")),
 				"warning",
 			);
 		}
@@ -526,9 +574,11 @@ export default async function grubExtension(api: ExtensionAPI) {
 		}
 
 		const parsed = parseGrubCommand(args);
+		const settingsLocale = localeFromSettings(ctx);
 		if (parsed.type === "help") {
-			const reason = parsed.reason === "empty" ? "Missing grub goal." : undefined;
-			publishGrubUpdate(api, bus, buildGrubHelp(reason), "warning");
+			const text = grubText(settingsLocale);
+			const reason = parsed.reason === "empty" ? text.missingGoal : undefined;
+			publishGrubUpdate(api, bus, buildGrubHelp(reason, settingsLocale), "warning");
 			return;
 		}
 
@@ -542,71 +592,81 @@ export default async function grubExtension(api: ExtensionAPI) {
 				? formatTaskState(state.active)
 				: state.lastTerminal
 					? formatSnapshot(state.lastTerminal)
-					: "[Grub] No grub task has been started in this session.";
+					: `${grubText(settingsLocale).prefix} ${grubText(settingsLocale).noStarted}`;
 			publishGrubUpdate(api, bus, message, "info");
 			return;
 		}
 
 		if (parsed.type === "stop") {
 			const activeTask = controller.getActiveTask();
+			const locale = localeForTask(activeTask);
+			const text = grubText(locale);
 			if (!activeTask) {
-				publishGrubUpdate(api, bus, "[Grub] No active grub task is running.", "warning");
+				publishGrubUpdate(api, bus, `${text.prefix} ${text.noActiveRunning}`, "warning");
 				return;
 			}
 
-			controller.stop("Stopped by user request.", "stopped");
+			controller.stop(locale === "zh" ? "用户请求停止。" : "Stopped by user request.", "stopped");
 			if (!ctx.isIdle()) {
 				ctx.abort();
 			}
-			publishGrubUpdate(api, bus, `[Grub] Stopped grub task ${activeTask.id}.`, "info");
+			publishGrubUpdate(api, bus, text.stopped(activeTask.id), "info");
 			return;
 		}
 
 		if (parsed.type === "resume") {
 			let activeTask = controller.getActiveTask();
+			let locale = localeForTask(activeTask);
 			if (!activeTask) {
 				const persisted = discoverActiveTasks(ctx.cwd);
 				if (persisted.length === 0) {
-					publishGrubUpdate(api, bus, "[Grub] No adopted or persisted grub task to resume.", "warning");
+					publishGrubUpdate(api, bus, `${grubText(settingsLocale).prefix} ${grubText(settingsLocale).noPersisted}`, "warning");
 					return;
 				}
 				try {
 					activeTask = controller.adoptResumedTask(persisted[0].task);
+					locale = activeTask.locale ?? settingsLocale;
+					currentGrubLocale = locale;
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
-					publishGrubUpdate(api, bus, `[Grub] Failed to adopt task: ${message}`, "error");
+					publishGrubUpdate(api, bus, grubText(settingsLocale).failedAdopt(message), "error");
 					return;
 				}
 			}
 			ensureHarnessArtifacts(activeTask);
-			publishGrubUpdate(api, bus, `[Grub] Resuming dispatch for task ${activeTask.id}.`, "info");
+			publishGrubUpdate(api, bus, grubText(locale).resuming(activeTask.id), "info");
 			dispatchNextIteration(api, bus, controller);
 			return;
 		}
 
 		try {
+			const locale = detectGrubLocale(parsed.goal, settingsLocale);
+			currentGrubLocale = locale;
 			const task = controller.start(parsed.goal, ctx.cwd, {
 				maxIterations: parsed.maxIterations,
 				maxConsecutiveFailures: parsed.maxConsecutiveFailures,
+				locale,
 			});
 			ensureHarnessArtifacts(task);
 			gitCommitHarness(ctx.cwd, task);
+			const text = grubText(locale);
 			publishGrubUpdate(
 				api,
 				bus,
 				[
-					`[Grub] Started autonomous grub task ${task.id}.`,
-					`Goal: ${task.goal}`,
-					`Harness: ${task.harnessDirectory}`,
-					`Init phase: expand feature-list.json / init.sh / progress-log.md before broad implementation.`,
-					`Safety limits: ${task.maxIterations} iterations, ${task.maxConsecutiveFailures} consecutive failures.`,
+					text.startedTask(task.id),
+					`${text.goal}: ${task.goal}`,
+					`${text.harnessDir}: ${task.harnessDirectory}`,
+					text.initPhase,
+					text.safetyLimits(task.maxIterations, task.maxConsecutiveFailures),
+					`Language: ${languageName(locale)}`,
 				].join("\n"),
 				"info",
 			);
 			dispatchNextIteration(api, bus, controller);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			publishGrubUpdate(api, bus, `[Grub] ${message}`, "error");
+			publishGrubUpdate(api, bus, `${grubText(settingsLocale).prefix} ${message}`, "error");
 		}
 	};
 

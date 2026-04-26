@@ -1,5 +1,5 @@
 /**
- * [WHO]: SubAgent types - SubAgentSpec, SubAgentHandle, SubAgentBackend, SubAgentResult
+ * [WHO]: SubAgent types - SubAgentSpec, SubAgentEvent, SubAgentHandle, SubAgentBackend, SubAgentResult
  * [FROM]: Depends on @pencil-agent/agent-core, @pencil-agent/ai, core/tools
  * [TO]: Consumed by ./sub-agent-runtime, ./sub-agent-backend, ./index.ts, extensions/defaults/subagent/*, extensions/defaults/team/*
  * [HERE]: core/sub-agent/sub-agent-types.ts - SubAgent type definitions
@@ -9,6 +9,16 @@
 import type { AgentMessage } from "@pencil-agent/agent-core";
 import type { ImageContent, Model } from "@pencil-agent/ai";
 import type { Tool } from "../tools/index.js";
+
+/** Realtime lifecycle event emitted by a running SubAgent. */
+export type SubAgentEvent =
+  | { type: "agent_start"; subAgentId: string; timestamp: number }
+  | { type: "message_update"; subAgentId: string; timestamp: number; text: string; deltaType?: string }
+  | { type: "message_end"; subAgentId: string; timestamp: number; text: string }
+  | { type: "tool_start"; subAgentId: string; timestamp: number; toolName: string; args: unknown }
+  | { type: "tool_update"; subAgentId: string; timestamp: number; toolName: string; partialResult: unknown }
+  | { type: "tool_end"; subAgentId: string; timestamp: number; toolName: string; isError: boolean }
+  | { type: "agent_end"; subAgentId: string; timestamp: number; success: boolean; error?: string };
 
 /**
  * Specification for spawning a SubAgent.
@@ -32,6 +42,8 @@ export interface SubAgentSpec {
   contextFiles?: string[];
   /** Optional callback invoked after the run result is available */
   exitHook?: (result: SubAgentResult) => Promise<void> | void;
+  /** Optional realtime observer for TUI/status integrations */
+  onEvent?: (event: SubAgentEvent) => void;
 }
 
 /**

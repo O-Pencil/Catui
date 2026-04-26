@@ -6,6 +6,7 @@
  *
  * Commands:
  *   /team                      - List teammates
+ *   /team <task>               - Auto-select team size/roles and start the task
  *   /team:spawn <role> [--name <id>] [--harness] - Create teammate
  *   /team:preset <solo|duo|squad> <task> - Create preset team
  *   /team:send <name> <message>      - Send message to teammate
@@ -21,10 +22,10 @@
 
 import { Box, Container, Spacer, Text } from "@pencil-agent/tui";
 import type { ExtensionAPI } from "../../../core/extensions/types.js";
-import { TeamRuntime } from "./team-runtime.js";
+import { TeamRuntime, type TeamRuntimeEvent } from "./team-runtime.js";
 import { buildTeamHelp, parseTeamCommand } from "./team-parser.js";
 import type { PersistedTeammate } from "./team-types.js";
-import { executePreset, formatPresetResult } from "./team-presets.js";
+import { executeAutoTeam, executePreset, formatAutoTeamResult, formatPresetResult } from "./team-presets.js";
 import { formatHarnessProgress } from "./team-harness.js";
 import { formatPsycheWeights } from "./team-psyche.js";
 import { renderTeamDashboard, renderTeamFooterStatus } from "./team-dashboard.js";
@@ -127,6 +128,42 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 						break;
 					}
 
+					case "auto": {
+						if (!parsed.taskDescription) {
+							ctx.ui.notify("Usage: /team <task>", "error");
+							return;
+						}
+
+						api.sendMessage({
+							customType: TEAM_MESSAGE_TYPE,
+							content: `Selecting team for task...`,
+							display: true,
+						});
+
+						try {
+							const observer = createTeamObserver(api, ctx, teamRuntime);
+							const result = await executeAutoTeam(
+								teamRuntime,
+								parsed.taskDescription,
+								ctx.cwd,
+								(ctx as any).model,
+								observer.onEvent,
+								ctx.completeSimple,
+							);
+							observer.flush();
+							api.sendMessage({
+								customType: TEAM_MESSAGE_TYPE,
+								content: formatAutoTeamResult(result).join("\n"),
+								display: true,
+							});
+							updateTeamUi(ctx, teamRuntime);
+						} catch (error: unknown) {
+							const message = error instanceof Error ? error.message : String(error);
+							ctx.ui.notify(`Failed to auto-select team: ${message}`, "error");
+						}
+						break;
+					}
+
 					case "spawn": {
 						if (!parsed.role) {
 							ctx.ui.notify("Usage: /team:spawn <role> [--name <name>]", "error");
@@ -185,7 +222,11 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 						});
 
 						try {
-							const result = await teamRuntime.send(parsed.target, parsed.message, model);
+							const observer = createTeamObserver(api, ctx, teamRuntime);
+							const result = await teamRuntime.send(parsed.target, parsed.message, model, {
+								onEvent: observer.onEvent,
+							});
+							observer.flush();
 							updateTeamUi(ctx, teamRuntime);
 
 							if (result.success) {
@@ -364,13 +405,16 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 						});
 
 						try {
+							const observer = createTeamObserver(api, ctx, teamRuntime);
 							const result = await executePreset(
 								teamRuntime,
 								parsed.presetName,
 								parsed.taskDescription,
 								ctx.cwd,
 								(ctx as any).model,
+								observer.onEvent,
 							);
+							observer.flush();
 							api.sendMessage({
 								customType: TEAM_MESSAGE_TYPE,
 								content: formatPresetResult(result).join("\n"),
@@ -545,6 +589,67 @@ function updateTeamUi(
 			dashboardAutoHideTimer = undefined;
 		}, 30_000);
 	}
+}
+
+function createTeamObserver(
+	api: ExtensionAPI,
+	ctx: { ui: { setStatus(key: string, text: string | undefined): void; setWidget(key: string, content: string[] | undefined): void } },
+	teamRuntime: TeamRuntime,
+): { onEvent(event: TeamRuntimeEvent): void; flush(): void } {
+	let lastUiUpdate = 0;
+	let lastMessageAt = 0;
+	let lastPreview = "";
+	let lastTeammateName = "";
+
+	const flushPreview = () => {
+		const preview = singleLine(lastPreview).trim();
+		if (!preview || !lastTeammateName) return;
+		api.sendMessage({
+			customType: TEAM_MESSAGE_TYPE,
+			content: [`Streaming from ${lastTeammateName}:`, "", preview].join("\n"),
+			display: true,
+		});
+		lastMessageAt = Date.now();
+	};
+
+	return {
+		onEvent(event) {
+			const now = Date.now();
+			if (event.type === "teammate_live") {
+				lastTeammateName = event.teammate.identity.name;
+				if (event.event.type === "message_update" || event.event.type === "message_end") {
+					lastPreview = event.event.text.slice(-1200);
+					if (now - lastMessageAt > 1500) {
+						flushPreview();
+					}
+				} else if (event.event.type === "tool_start") {
+					lastPreview = `Running tool: ${event.event.toolName}`;
+					if (now - lastMessageAt > 1500) {
+						flushPreview();
+					}
+				}
+			} else {
+				api.sendMessage({
+					customType: TEAM_MESSAGE_TYPE,
+					content: `Harness event for ${event.teammate.identity.name}: ${event.event}`,
+					display: true,
+				});
+			}
+
+			if (now - lastUiUpdate > 250) {
+				updateTeamUi(ctx, teamRuntime);
+				lastUiUpdate = now;
+			}
+		},
+		flush() {
+			flushPreview();
+			updateTeamUi(ctx, teamRuntime);
+		},
+	};
+}
+
+function singleLine(value: string): string {
+	return value.replace(/\s+/g, " ").trim();
 }
 
 function getStatusIcon(status: PersistedTeammate["status"]): string {

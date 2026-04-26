@@ -17,10 +17,11 @@ security-audit/engine/interceptor.ts: Request/response interception, Interceptor
 security-audit/engine/logger.ts: Security event logging, JSON file audit trail
 security-audit/engine/detector.ts: Vulnerability detection, pattern matching for dangerous commands
 soul/index.ts: AI personality evolution extension, persistent personality across sessions
-grub/index.ts: Grub extension entry - long-running autonomous harness, dual-phase system prompts (initializer/coding), /grub command (start/status/resume/stop) + grub renderer, session_start auto-adopt, git harness commit, pruneStale cleanup
-grub/grub-controller.ts: GrubController - state machine for /grub iterations, durable persistState on every transition, adoptResumedTask for cross-session resume, validateCompletion downgrades premature complete when feature-list still has pending entries
-grub/grub-parser.ts: Grub command parsing - parseGrubCommand/buildGrubHelp with resume subcommand, status --json, --max-iter/--max-fail flags
-grub/grub-types.ts: Grub types - GrubStatus/GrubDecisionStatus/GrubDecision/GrubPhase/GrubTaskState/GrubTaskSnapshot/ParsedGrubCommand + FeatureItem/FeatureList (version 1 schema) + PersistedGrubState envelope
+grub/index.ts: Grub extension entry - long-running autonomous harness, locale-aware dual-phase system prompts (initializer/coding), /grub command (start/status/resume/stop) + grub renderer, session_start auto-adopt, git harness commit, pruneStale cleanup
+grub/grub-controller.ts: GrubController - state machine for /grub iterations, locale-persisted prompt generation, durable persistState on every transition, adoptResumedTask for cross-session resume, validateCompletion downgrades premature complete when feature-list still has pending entries
+grub/grub-parser.ts: Grub command parsing - parseGrubCommand/buildGrubHelp with localized help, resume subcommand, status --json, --max-iter/--max-fail flags
+grub/grub-types.ts: Grub types - GrubStatus/GrubDecisionStatus/GrubDecision/GrubPhase/GrubLocale/GrubTaskState/GrubTaskSnapshot/ParsedGrubCommand + FeatureItem/FeatureList (version 1 schema) + PersistedGrubState envelope
+grub/grub-i18n.ts: Grub localization helper - detectGrubLocale(), grubText(), languageName(), English/Chinese TUI strings
 grub/grub-feature-list.ts: feature-list.json IO - readFeatureList/writeFeatureList atomic write, validateFeatureListDiff enforces passes/evidence-only mutations, createInitialFeatureList placeholder, migrateChecklistToFeatureList legacy converter, countPassing/allPassing/firstPending helpers
 grub/grub-persistence.ts: Cross-session persistence - persistState atomic JSON write to .grub/<id>/state.json, loadState shape-validated read, discoverActiveTasks scans .grub/ for running records, pruneStale removes terminal harnesses older than 30 days by default
 grub/README.md: Grub extension documentation - long-running harness contract, feature-list.json schema, completion guard, cross-session resume, legacy migration

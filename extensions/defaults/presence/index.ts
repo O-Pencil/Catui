@@ -91,6 +91,7 @@ type PresenceState = {
 	recentPresenceLines: string[]; // Last few presence lines (max 3) for per-turn agent injection
 	lastPresenceAt?: number; // Timestamp of last sendPresence (debounce)
 	idleGenerating?: boolean; // In-flight lock for async idle generation
+	recentlyReferencedMemories: string[]; // Track recently referenced memory names to avoid repetition
 };
 
 const MAX_RECENT_PRESENCE = 3;
@@ -101,6 +102,7 @@ function createState(): PresenceState {
 		idleReminderSent: false,
 		openingSent: false,
 		recentPresenceLines: [],
+		recentlyReferencedMemories: [],
 	};
 }
 
@@ -308,26 +310,82 @@ async function collectMemoryHighlights(state: PresenceState): Promise<MemoryHigh
 	if (!state.memEngine) return out;
 	try {
 		const entries = await state.memEngine.getAllEntries();
-		const prefs = [
+
+		// Build a larger pool and randomly sample to avoid repeating the same memories
+		const prefPool = [
 			...entries.knowledge.filter((e) => e.type === "preference" || e.tags.includes("preference")),
 			...entries.lessons.filter((e) => e.type === "preference" || e.tags.includes("preference")),
-		].slice(0, 3);
-		for (const p of prefs) {
+		];
+
+		// Deprioritize recently referenced memories
+		const recentlyReferenced = new Set(state.recentlyReferencedMemories);
+		const prefPoolSorted = prefPool.sort((a, b) => {
+			const aRecent = a.name && recentlyReferenced.has(a.name) ? 1 : 0;
+			const bRecent = b.name && recentlyReferenced.has(b.name) ? 1 : 0;
+			return aRecent - bRecent;
+		});
+
+		// Take top 6, then randomly pick 1-2
+		const prefCandidates = prefPoolSorted.slice(0, 6);
+		const prefCount = Math.min(prefCandidates.length, 1 + Math.floor(Math.random() * 2)); // 1 or 2
+		const prefSelected = shufflePick(prefCandidates, prefCount);
+
+		for (const p of prefSelected) {
 			const text = (p.summary || p.detail || p.content || "").toString().slice(0, 80);
-			if (text) out.preferences.push(`${p.name || "pref"}: ${text}`);
+			if (text) {
+				out.preferences.push(`${p.name || "pref"}: ${text}`);
+				if (p.name) {
+					state.recentlyReferencedMemories.push(p.name);
+				}
+			}
 		}
-		const lessons = (entries.lessons || [])
+
+		// Same for lessons - larger pool, random sample
+		const lessonPool = (entries.lessons || [])
 			.filter((e) => e.type !== "preference")
-			.sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0))
-			.slice(0, 2);
-		for (const l of lessons) {
+			.sort((a, b) => {
+				// Sort by importance but deprioritize recently referenced
+				const aRecent = a.name && recentlyReferenced.has(a.name) ? -1 : 0;
+				const bRecent = b.name && recentlyReferenced.has(b.name) ? -1 : 0;
+				return (bRecent - aRecent) || ((b.importance ?? 0) - (a.importance ?? 0));
+			});
+
+		const lessonCandidates = lessonPool.slice(0, 4);
+		// Pick 0 or 1 lesson - don't always include one
+		const lessonCount = Math.random() < 0.5 ? 0 : Math.min(lessonCandidates.length, 1);
+		const lessonSelected = shufflePick(lessonCandidates, lessonCount);
+
+		for (const l of lessonSelected) {
 			const text = (l.summary || l.detail || l.content || "").toString().slice(0, 80);
-			if (text) out.lessons.push(`${l.name || "lesson"}: ${text}`);
+			if (text) {
+				out.lessons.push(`${l.name || "lesson"}: ${text}`);
+				if (l.name) {
+					state.recentlyReferencedMemories.push(l.name);
+				}
+			}
+		}
+
+		// Trim the recently-referenced tracker to last 8 entries
+		if (state.recentlyReferencedMemories.length > 8) {
+			state.recentlyReferencedMemories = state.recentlyReferencedMemories.slice(-8);
 		}
 	} catch {
 		/* fail-soft */
 	}
 	return out;
+}
+
+/** Randomly pick `count` items from array without replacement */
+function shufflePick<T>(arr: readonly T[], count: number): T[] {
+	if (count <= 0 || arr.length === 0) return [];
+	const indices = arr.map((_, i) => i);
+	const picked: T[] = [];
+	for (let i = 0; i < count && indices.length > 0; i++) {
+		const idx = Math.floor(Math.random() * indices.length);
+		picked.push(arr[indices[idx]!]!);
+		indices.splice(idx, 1);
+	}
+	return picked;
 }
 
 type ProjectSnapshot = { name: string; branch?: string; lastCommit?: string; changedFiles: string[] };
@@ -352,7 +410,22 @@ async function collectProjectSnapshot(): Promise<ProjectSnapshot> {
 	if (status) {
 		snap.changedFiles = status
 			.split("\n")
-			.map((l) => l.trim().split(/\s+/).slice(-1)[0] || "")
+			.map((l) => l.trim())
+			// Filter out untracked directories (e.g., "?? newfolder/") - these are trivial actions
+			// like creating an empty folder, not meaningful work worth commenting on
+			.filter((l) => {
+				if (!l) return false;
+				// xy path format: first two chars are status codes
+				const xy = l.slice(0, 2);
+				const path = l.slice(3);
+				// Skip untracked items that are just empty directories
+				if (xy === "??" && path.endsWith("/")) return false;
+				// Only include modified/staged/renamed/deleted - meaningful changes
+				// "??" = untracked, "!" = ignored
+				if (xy === "??" || xy === "!!") return false;
+				return true;
+			})
+			.map((l) => l.split(/\s+/).slice(-1)[0] || "")
 			.filter(Boolean)
 			.slice(0, 5);
 	}
@@ -396,6 +469,10 @@ async function buildGreetingPrompt(
 				"- 像老朋友一样自然，不要太正式",
 				"- 简短随意",
 				kind === "idle" ? "- 不要重复你之前说过的开场白" : "- 如果有上下文，可以自然提一句",
+				"- 不要为了有话说而硬找话题",
+				"- 如果他只是在做很琐碎的事情，不需要特别提起，简单打个招呼就好",
+				"- 偏好和经验只是背景参考，不需要每次都引用，只在真正自然的时候带一句",
+				"- 不要反复提同样的记忆或概念，要换着花样",
 				"",
 				"项目状态:",
 				`项目: ${project}`,
@@ -452,6 +529,10 @@ async function buildGreetingPrompt(
 				"- Sound like a friend, not formal",
 				"- Short and casual",
 				kind === "idle" ? "- Do NOT repeat your earlier opening greeting" : "- If there's recent context, mention it naturally",
+				"- Don't force a topic just to have something to say",
+				"- If they're only doing trivial things (like creating an empty folder), don't mention it - just say hi",
+				"- Preferences and lessons are background context only - reference at most 1-2, only when it naturally fits",
+				"- Don't keep bringing up the same memories or concepts repeatedly",
 				"",
 				"Project state:",
 				`Project: ${project}`,

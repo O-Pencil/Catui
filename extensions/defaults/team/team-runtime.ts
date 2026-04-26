@@ -10,7 +10,7 @@
  */
 
 import { SubAgentRuntime } from "../../../core/sub-agent/index.js";
-import type { SubAgentHandle, SubAgentSpec } from "../../../core/sub-agent/index.js";
+import type { SubAgentEvent, SubAgentHandle, SubAgentSpec } from "../../../core/sub-agent/index.js";
 import { WorktreeManager } from "../../../core/workspace/index.js";
 import type { WorkspacePath } from "../../../core/workspace/index.js";
 import { join } from "node:path";
@@ -59,6 +59,14 @@ export interface RuntimeTeammate {
 export interface TeamRuntimeOptions {
 	storageDir?: string;
 }
+
+export interface TeamSendOptions {
+	onEvent?: (event: TeamRuntimeEvent) => void;
+}
+
+export type TeamRuntimeEvent =
+	| { type: "teammate_live"; teammate: PersistedTeammate; event: SubAgentEvent }
+	| { type: "harness_event"; teammate: PersistedTeammate; event: string };
 
 /**
  * TeamRuntime manages persistent teammates.
@@ -217,7 +225,7 @@ export class TeamRuntime {
 	/**
 	 * Send a message to a teammate.
 	 */
-	async send(name: string, message: string, model?: Model<any>): Promise<TeamSendResult> {
+	async send(name: string, message: string, model?: Model<any>, options: TeamSendOptions = {}): Promise<TeamSendResult> {
 		await this.ensureLoaded();
 
 		const teammate = this.findByName(name);
@@ -288,11 +296,16 @@ export class TeamRuntime {
 				signal: turnAbortController.signal,
 				model,
 				contextFiles: harnessContext?.contextFiles,
+				onEvent: (event) => {
+					this.applyLiveEvent(teammate, event);
+					options.onEvent?.({ type: "teammate_live", teammate: teammate.state, event });
+				},
 				exitHook: harnessContext
 					? async (result) => {
 							if (!teammate.state.harness) return;
 							const exit = await inspectHarnessExit(teammate.state.harness, teammate.state.cwd, result);
 							teammate.state.harness = exit.harness;
+							options.onEvent?.({ type: "harness_event", teammate: teammate.state, event: exit.event });
 							this.mailbox.post({
 								teammateId: teammate.state.identity.id,
 								teammateName: teammate.state.identity.name,
@@ -330,6 +343,7 @@ export class TeamRuntime {
 				teammate.state.lastError = undefined;
 			}
 			teammate.state.lastActiveAt = Date.now();
+			teammate.state.live = undefined;
 			await this.store.save(teammate.state);
 
 			this.mailbox.post({
@@ -375,6 +389,7 @@ export class TeamRuntime {
 			teammate.state.status = errorMsg === "Aborted" ? "stopped" : "error";
 			teammate.state.lastError = errorMsg === "Aborted" ? undefined : errorMsg;
 			teammate.state.lastActiveAt = Date.now();
+			teammate.state.live = undefined;
 			await this.store.save(teammate.state);
 
 			this.mailbox.post({
@@ -737,6 +752,57 @@ export class TeamRuntime {
 		}
 	}
 
+	private applyLiveEvent(teammate: RuntimeTeammate, event: SubAgentEvent): void {
+		const previous = teammate.state.live;
+		switch (event.type) {
+			case "agent_start":
+				teammate.state.live = {
+					phase: "starting",
+					preview: "Sub-agent starting...",
+					toolName: null,
+					updatedAt: event.timestamp,
+				};
+				break;
+			case "message_update":
+				teammate.state.live = {
+					phase: event.text ? "thinking" : (previous?.phase ?? "thinking"),
+					preview: tailText(event.text || previous?.preview || "", 1200),
+					toolName: previous?.toolName ?? null,
+					updatedAt: event.timestamp,
+				};
+				break;
+			case "message_end":
+				teammate.state.live = {
+					phase: "finishing",
+					preview: tailText(event.text || previous?.preview || "", 1200),
+					toolName: previous?.toolName ?? null,
+					updatedAt: event.timestamp,
+				};
+				break;
+			case "tool_start":
+			case "tool_update":
+			case "tool_end":
+				teammate.state.live = {
+					phase: "tool",
+					preview:
+						event.type === "tool_update"
+							? tailText(String(event.partialResult ?? previous?.preview ?? ""), 1200)
+							: previous?.preview ?? "",
+					toolName: event.toolName,
+					updatedAt: event.timestamp,
+				};
+				break;
+			case "agent_end":
+				teammate.state.live = {
+					phase: event.success ? "done" : "error",
+					preview: event.error ?? previous?.preview ?? "",
+					toolName: null,
+					updatedAt: event.timestamp,
+				};
+				break;
+		}
+	}
+
 	private selectTools(mode: TeammateMode, cwd: string): Tool[] {
 		switch (mode) {
 			case "research":
@@ -765,4 +831,9 @@ export class TeamRuntime {
 		});
 		return [...baseTools.filter((t) => t.name !== "bash"), sandboxBash];
 	}
+}
+
+function tailText(value: string, maxLength: number): string {
+	if (value.length <= maxLength) return value;
+	return value.slice(value.length - maxLength);
 }

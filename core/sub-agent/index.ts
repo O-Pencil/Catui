@@ -11,6 +11,7 @@ export { SubprocessSubAgentBackend } from "./subprocess-backend.js";
 export type { SubprocessBackendOptions } from "./subprocess-backend.js";
 export type {
   SubAgentSpec,
+  SubAgentEvent,
   SubAgentResult,
   SubAgentHandle,
   SubAgentBackend,

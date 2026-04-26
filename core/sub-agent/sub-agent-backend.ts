@@ -6,7 +6,8 @@
  */
 
 import { createAgentSession, type CreateAgentSessionOptions } from "../runtime/sdk.js";
-import type { SubAgentBackend, SubAgentHandle, SubAgentSpec, SubAgentResult } from "./sub-agent-types.js";
+import type { AgentSessionEvent } from "../runtime/agent-session.js";
+import type { SubAgentBackend, SubAgentEvent, SubAgentHandle, SubAgentSpec, SubAgentResult } from "./sub-agent-types.js";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 
@@ -39,6 +40,12 @@ export class InProcessSubAgentBackend implements SubAgentBackend {
     };
 
     const { session } = await createAgentSession(options);
+    const unsubscribe = session.subscribe((event) => {
+      const subAgentEvent = toSubAgentEvent(id, event);
+      if (subAgentEvent) {
+        spec.onEvent?.(subAgentEvent);
+      }
+    });
     const timeoutMs = spec.timeoutMs;
 
     let status: "running" | "done" | "aborted" | "error" = "running";
@@ -54,23 +61,10 @@ export class InProcessSubAgentBackend implements SubAgentBackend {
       }, timeoutMs);
     }
 
-    // Extract text from assistant message content
-    const extractTextFromContent = (content: unknown): string => {
-      if (typeof content === "string") return content;
-      if (Array.isArray(content)) {
-        return content
-          .filter((part): part is { type: "text"; text: string } =>
-            typeof part === "object" && part !== null && "type" in part && part.type === "text" && typeof (part as { text?: unknown }).text === "string"
-          )
-          .map((part) => part.text)
-          .join("\n");
-      }
-      return "";
-    };
-
     // Start the prompt
     const promptPromise = (async () => {
       try {
+        spec.onEvent?.({ type: "agent_start", subAgentId: id, timestamp: Date.now() });
         await session.prompt(prompt, {
           images: spec.images,
         });
@@ -117,6 +111,14 @@ export class InProcessSubAgentBackend implements SubAgentBackend {
         }
         // Clean up signal handler
         spec.signal.removeEventListener("abort", signalHandler);
+        unsubscribe();
+        spec.onEvent?.({
+          type: "agent_end",
+          subAgentId: id,
+          timestamp: Date.now(),
+          success: result?.success ?? false,
+          error: result?.error,
+        });
       }
     })();
 
@@ -144,6 +146,73 @@ export class InProcessSubAgentBackend implements SubAgentBackend {
       },
     };
   }
+}
+
+function toSubAgentEvent(subAgentId: string, event: AgentSessionEvent): SubAgentEvent | undefined {
+  const timestamp = Date.now();
+  switch (event.type) {
+    case "message_update":
+      return {
+        type: "message_update",
+        subAgentId,
+        timestamp,
+        text: extractMessageText(event.message),
+        deltaType: event.assistantMessageEvent.type,
+      };
+    case "message_end":
+      return {
+        type: "message_end",
+        subAgentId,
+        timestamp,
+        text: extractMessageText(event.message),
+      };
+    case "tool_execution_start":
+      return {
+        type: "tool_start",
+        subAgentId,
+        timestamp,
+        toolName: event.toolName,
+        args: event.args,
+      };
+    case "tool_execution_update":
+      return {
+        type: "tool_update",
+        subAgentId,
+        timestamp,
+        toolName: event.toolName,
+        partialResult: event.partialResult,
+      };
+    case "tool_execution_end":
+      return {
+        type: "tool_end",
+        subAgentId,
+        timestamp,
+        toolName: event.toolName,
+        isError: event.isError,
+      };
+    default:
+      return undefined;
+  }
+}
+
+function extractTextFromContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((part): part is { type: "text"; text: string } =>
+        typeof part === "object" && part !== null && "type" in part && part.type === "text" && typeof (part as { text?: unknown }).text === "string"
+      )
+      .map((part) => part.text)
+      .join("\n");
+  }
+  return "";
+}
+
+function extractMessageText(message: unknown): string {
+  if (typeof message !== "object" || message === null || !("content" in message)) {
+    return "";
+  }
+  return extractTextFromContent((message as { content?: unknown }).content);
 }
 
 async function buildPromptWithContextFiles(spec: SubAgentSpec): Promise<string> {

@@ -8,6 +8,7 @@ export type GrubStatus = "running" | "complete" | "blocked" | "stopped" | "faile
 
 export type GrubDecisionStatus = "continue" | "complete" | "blocked";
 export type GrubPhase = "initializer" | "execution";
+export type GrubLocale = "en" | "zh";
 
 export interface GrubDecision {
 	status: GrubDecisionStatus;
@@ -18,6 +19,7 @@ export interface GrubDecision {
 export interface GrubTaskState {
 	id: string;
 	goal: string;
+	locale: GrubLocale;
 	status: GrubStatus;
 	phase: GrubPhase;
 	startedAt: number;
@@ -40,6 +42,7 @@ export interface GrubTaskState {
 export interface GrubTaskSnapshot {
 	id: string;
 	goal: string;
+	locale?: GrubLocale;
 	status: GrubStatus;
 	phase: GrubPhase;
 	startedAt: number;

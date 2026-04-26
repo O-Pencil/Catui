@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildTeamHelp, parseTeamCommand } from "../extensions/defaults/team/team-parser.js";
+import { selectAutoTeamPlan } from "../extensions/defaults/team/team-presets.js";
 
 test("team-parser: parses root list and help commands", () => {
 	assert.deepEqual(parseTeamCommand("team", ""), { command: "list" });
 	assert.deepEqual(parseTeamCommand("team", "help"), { command: "help" });
+	assert.deepEqual(parseTeamCommand("team", "implement login with tests"), {
+		command: "auto",
+		taskDescription: "implement login with tests",
+	});
 });
 
 test("team-parser: parses approve commands with and without request ids", () => {
@@ -59,5 +64,28 @@ test("team-parser: parses harness dashboard and preset commands", () => {
 test("team-parser: help text advertises list and approve flow", () => {
 	const help = buildTeamHelp();
 	assert.match(help, /\/team\s+- List all teammates/);
+	assert.match(help, /\/team <task>/);
 	assert.match(help, /\/team:approve <request-id>/);
+});
+
+test("team-presets: auto team selector uses model JSON when available", async () => {
+	const plan = await selectAutoTeamPlan("refactor the workspace layer", async () =>
+		JSON.stringify({
+			presetName: "squad",
+			rationale: "Needs planning and parallel work.",
+			startTargetRole: "planner",
+		}),
+	);
+
+	assert.deepEqual(plan, {
+		presetName: "squad",
+		rationale: "Needs planning and parallel work.",
+		startTargetRole: "planner",
+	});
+});
+
+test("team-presets: auto team selector falls back to heuristics", async () => {
+	assert.equal((await selectAutoTeamPlan("fix typo in help text")).presetName, "solo");
+	assert.equal((await selectAutoTeamPlan("implement auth with tests")).presetName, "duo");
+	assert.equal((await selectAutoTeamPlan("large architecture migration across modules")).presetName, "squad");
 });

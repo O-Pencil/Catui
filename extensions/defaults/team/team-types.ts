@@ -80,6 +80,14 @@ export interface HarnessState {
   lastEvent?: string;
 }
 
+/** Transient live view state used by the TUI dashboard while a teammate is running. */
+export interface TeammateLiveState {
+  phase: "starting" | "thinking" | "tool" | "finishing" | "done" | "error";
+  preview: string;
+  toolName: string | null;
+  updatedAt: number;
+}
+
 /** Stable identity for a teammate, assigned at spawn time. */
 export interface TeammateIdentity {
   /** Unique id (uuid) */
@@ -134,6 +142,8 @@ export interface PersistedTeammate {
   psyche?: PsycheWeights;
   /** Optional static psyche tuning from presets or spawn configuration */
   psycheOverrides?: Partial<PsycheWeights>;
+  /** Runtime-only TUI live state; cleared before persistence after each run */
+  live?: TeammateLiveState;
 }
 
 /** Input for spawning a new teammate. */

@@ -18,6 +18,7 @@ import {
 	pruneStale,
 } from "../extensions/defaults/grub/grub-persistence.js";
 import { parseGrubCommand } from "../extensions/defaults/grub/grub-parser.js";
+import { buildGrubHelp } from "../extensions/defaults/grub/grub-parser.js";
 
 function createTempWorkspace(): string {
 	return mkdtempSync(join(tmpdir(), "nanopencil-grub-"));
@@ -39,6 +40,21 @@ test("grub controller starts with initializer phase and harness paths", () => {
 		assert.match(task.progressLogPath, /progress-log\.md$/);
 		assert.match(task.initScriptPath, /init\.sh$/);
 		assert.match(task.stateFilePath, /state\.json$/);
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("grub controller stores locale and builds localized prompts", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		const task = controller.start("实现中文进度体验", cwd, { locale: "zh" });
+		const prompt = controller.buildPrompt();
+
+		assert.equal(task.locale, "zh");
+		assert.match(prompt, /自主 Grub 目标/);
+		assert.match(prompt, /所有面向用户的总结、进度和说明都必须使用中文/);
 	} finally {
 		cleanup(cwd);
 	}
@@ -323,6 +339,12 @@ test("parseGrubCommand handles start with flags, status --json, resume", () => {
 
 	const help = parseGrubCommand("");
 	assert.equal(help.type, "help");
+});
+
+test("buildGrubHelp supports Chinese output", () => {
+	const help = buildGrubHelp("缺少 grub 目标。", "zh");
+	assert.match(help, /用法/);
+	assert.match(help, /启动一个自主长任务/);
 });
 
 test("persisted state reflects start and finishTurn", () => {

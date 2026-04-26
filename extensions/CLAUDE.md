@@ -41,15 +41,17 @@ Auto-loaded extensions available to all users.
 #### grub/ — Autonomous Iterative Task Runner
 
 **P3 Contract:**
-`index.ts`: - [WHO]: Extension with /grub command, GRUB_MESSAGE_TYPE renderer, before_agent_start/context/input/agent_end hooks
+`index.ts`: - [WHO]: Extension with /grub command, locale-aware GRUB_MESSAGE_TYPE renderer, before_agent_start/context/input/agent_end hooks
     - [FROM]: core/extensions/types, @pencil-agent/tui
     - [HERE]: grub extension entry
 
-`grub-controller.ts`: GrubController - state machine for autonomous iterations, LoopTaskState management
+`grub-controller.ts`: GrubController - state machine for autonomous iterations, localized prompt generation, GrubTaskState management
 
 `grub-parser.ts`: Grub command parsing, parseGrubCommand/buildGrubHelp
 
-`grub-types.ts`: Grub-specific type definitions (GrubStatus/GrubDecisionStatus/GrubDecision/GrubTaskState)
+`grub-i18n.ts`: Grub localization helper, English/Chinese strings and goal-language detection
+
+`grub-types.ts`: Grub-specific type definitions (GrubStatus/GrubDecisionStatus/GrubDecision/GrubLocale/GrubTaskState)
 
 `README.md`: Usage documentation for autonomous "keep digging until done" runner
 

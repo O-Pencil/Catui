@@ -141,6 +141,56 @@ test("team-runtime: error path posts task_result and writes transcript", async (
 	}
 });
 
+test("team-runtime: forwards sub-agent realtime events and clears live state after completion", async () => {
+	const storageDir = createTempDir("nanopencil-team-live-");
+	const runtime = new TeamRuntime({ storageDir });
+	(runtime as any).subAgentRuntime = {
+		spawn: async (spec: { onEvent?: (event: any) => void }) => ({
+			id: "live-handle",
+			status: "running",
+			async result(): Promise<SubAgentResult> {
+				spec.onEvent?.({ type: "agent_start", subAgentId: "live-handle", timestamp: Date.now() });
+				spec.onEvent?.({
+					type: "message_update",
+					subAgentId: "live-handle",
+					timestamp: Date.now(),
+					text: "streaming partial answer",
+				});
+				spec.onEvent?.({
+					type: "tool_start",
+					subAgentId: "live-handle",
+					timestamp: Date.now(),
+					toolName: "read",
+					args: {},
+				});
+				return { success: true, response: "done" };
+			},
+			async abort(): Promise<void> {},
+			async terminate(): Promise<void> {},
+		}),
+		terminateAll: async () => {},
+	};
+
+	try {
+		await runtime.spawn({ role: "researcher", name: "scout", baseCwd: process.cwd() });
+		const events: string[] = [];
+		const result = await runtime.send("scout", "observe", undefined, {
+			onEvent: (event) => {
+				events.push(event.type === "teammate_live" ? event.event.type : event.type);
+			},
+		});
+
+		assert.equal(result.success, true);
+		assert.deepEqual(events, ["agent_start", "message_update", "tool_start"]);
+		assert.equal(runtime.getTeammate("scout")?.live, undefined);
+	} finally {
+		await runtime.terminate("scout").catch(() => {});
+		await runtime.dispose();
+		rmSync(storageDir, { recursive: true, force: true });
+	}
+});
+
+
 test("team-runtime: execute approval emits permission response and mode change", async () => {
 	const storageDir = createTempDir("nanopencil-team-approve-");
 	const runtime = new TeamRuntime({ storageDir });

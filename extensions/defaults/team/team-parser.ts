@@ -31,6 +31,7 @@ export type TeamSubcommand =
 	| "approve"
 	| "mode"
 	| "preset"
+	| "auto"
 	| "dashboard"
 	| "progress"
 	| "psyche"
@@ -113,8 +114,7 @@ export function parseTeamCommand(commandName: string, args = ""): ParsedTeamComm
 			if (trimmedArgs.startsWith("psyche")) {
 				return parseTargetOnly("psyche", trimmedArgs.slice(6).trim());
 			}
-			// If just a name, treat as list filter (or could be status)
-			return { command: "list" };
+			return { command: "auto", taskDescription: trimmedArgs };
 
 		case "team:spawn":
 			return parseSpawnArgs(trimmedArgs);
@@ -223,6 +223,7 @@ export function buildTeamHelp(): string {
 	return `
 Team Commands (AgentTeam + Harness):
   /team                           - List all teammates
+  /team <task>                    - Auto-select a team and start the task
   /team:spawn <role> [--name <n>] [--harness] - Create a persistent teammate
   /team:preset <solo|duo|squad> <task> - Create teammates from a preset
   /team:send <name> <message>     - Send message to a teammate
@@ -239,6 +240,7 @@ Roles: researcher, reviewer, implementer, planner, verifier, generic
 Modes: research, plan, execute, review
 
 Examples:
+  /team Implement login with tests
   /team:spawn implementer --name alice --harness
   /team:preset solo "Implement login feature"
   /team:send alice "Implement login feature"

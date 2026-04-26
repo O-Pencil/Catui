@@ -6,6 +6,7 @@
  */
 
 import type { ParsedGrubCommand } from "./grub-types.js";
+import { grubText, type GrubLocale } from "./grub-i18n.js";
 
 interface TokenizedArgs {
 	positional: string[];
@@ -112,27 +113,12 @@ export function parseGrubCommand(input: string): ParsedGrubCommand {
 	};
 }
 
-export function buildGrubHelp(reason?: string): string {
+export function buildGrubHelp(reason?: string, locale: GrubLocale = "en"): string {
+	const text = grubText(locale);
 	const lines: string[] = [];
 	if (reason) {
-		lines.push(`[Grub] ${reason}`);
+		lines.push(`${text.prefix} ${reason}`);
 	}
-	lines.push(
-		"[Grub] Usage:",
-		"  /grub <goal> [--max-iter N] [--max-fail N]   Start an autonomous digging task",
-		"  /grub status [--json]                        Show the active or last finished task",
-		"  /grub resume                                 Resume an adopted task from disk",
-		"  /grub stop                                   Stop the active task",
-		"",
-		"[Grub] Harness artifacts under .grub/<task-id>/:",
-		"  feature-list.json   structured features (agent may only flip passes/evidence)",
-		"  progress-log.md     append-only progress notes",
-		"  init.sh             per-iteration get-bearings + smoke script",
-		"  state.json          durable GrubController state (for cross-session resume)",
-		"",
-		"[Grub] The agent keeps iterating until it reports complete, reports blocked,",
-		"or hits a safety limit (iterations / consecutive failures). Declaring complete",
-		"is rejected unless every feature in feature-list.json has passes:true.",
-	);
+	lines.push(...text.usage);
 	return lines.join("\n");
 }
