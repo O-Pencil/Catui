@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.9] - 2026-04-26
+
+### Added
+- feat(idle-think): add idle exploration extension with 3-phase architecture
+- feat(team,grub,sub-agent): harness streaming, auto-team, grub locale
+
+### Maintenance
+- chore: update grub state
+- chore: update generated model list (kimi-k2.6, gemini context fix)
+
+
 ## [1.13.8] - 2026-04-26
 
 ### Added
