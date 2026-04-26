@@ -12,7 +12,6 @@
 
 import { Container, Spacer, Text, type TUI } from "@pencil-agent/tui";
 import type { Theme } from "../theme/theme.js";
-import { getTipToShow } from "../services/tips.js";
 
 export class PencilLoader extends Container {
 	private tui: TUI;
@@ -21,7 +20,6 @@ export class PencilLoader extends Container {
 	private interval: NodeJS.Timeout | undefined;
 	private currentFrame = 0;
 	private textComponent: Text;
-	private tipComponent: Text;
 	private isStopped = false;
 
 	// Time tracking for stalled animation
@@ -31,7 +29,6 @@ export class PencilLoader extends Container {
 
 	// Stall thresholds (in ms)
 	private readonly STALL_THRESHOLD_MS = 3000;
-	private readonly TIP_THRESHOLD_MS = 5000;
 
 	// Rotating diamond animation frames
 	private readonly frames = [
@@ -50,11 +47,9 @@ export class PencilLoader extends Container {
 		this.lastTokenTime = Date.now();
 
 		this.textComponent = new Text("", 0, 0);
-		this.tipComponent = new Text("", 0, 0);
 
 		this.addChild(new Spacer(1));
 		this.addChild(this.textComponent);
-		this.addChild(this.tipComponent);
 		this.addChild(new Spacer(1));
 
 		this.startAnimation();
@@ -70,16 +65,7 @@ export class PencilLoader extends Container {
 			const stallDuration = this.getStallDuration();
 
 			// Build display: spinner + message
-			let display = `${diamond} ${this.message}`;
-
-			// Show tip after TIP_THRESHOLD_MS of continuous stall
-			if (stallDuration > this.TIP_THRESHOLD_MS) {
-				const tip = getTipToShow(this.sessionId);
-				if (tip) {
-					const dimTip = this.theme.fg("dim", `  💡 ${tip}`);
-					display += `\n${dimTip}`;
-				}
-			}
+			const display = `${diamond} ${this.message}`;
 
 			this.textComponent.setText(display);
 			this.tui.requestRender();

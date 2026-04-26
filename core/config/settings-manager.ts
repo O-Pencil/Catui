@@ -122,6 +122,13 @@ export interface Settings {
 	presence?: {
 		enabled?: boolean; // default: true - show AI-generated greeting and idle reminders
 	};
+	/** IdleThink extension settings - background code exploration during idle */
+	idleThink?: {
+		enabled?: boolean;           // default: true - agent thinks when idle
+		idleMinutes?: number;        // default: 10 - minutes of idle before exploration
+		dailyBudget?: number;        // default: 999 - effectively unlimited
+		maxDurationMinutes?: number; // default: 30 - let it think deeply
+	};
 	/** Auto-update setting: 'always' = auto-update on startup, 'prompt' = ask user (default), 'never' = never check */
 	autoUpdate?: "always" | "prompt" | "never";
 	/** Last skipped version for update prompts */

@@ -27,6 +27,7 @@ const BUNDLED_SAL_EXTENSION = join(__dirname, "extensions", "defaults", "sal", "
 const BUNDLED_GRUB_EXTENSION = join(__dirname, "extensions", "defaults", "grub", "index.js");
 const BUNDLED_SUBAGENT_EXTENSION = join(__dirname, "extensions", "defaults", "subagent", "index.js");
 const BUNDLED_TEAM_EXTENSION = join(__dirname, "extensions", "defaults", "team", "index.js");
+const BUNDLED_IDLE_THINK_EXTENSION = join(__dirname, "extensions", "defaults", "idle-think", "index.js");
 const BUNDLED_BTW_EXTENSION = join(__dirname, "extensions", "defaults", "btw", "index.js");
 const BUNDLED_DEBUG_EXTENSION = join(__dirname, "extensions", "defaults", "debug", "index.js");
 const BUNDLED_MCP_EXTENSION = join(__dirname, "extensions", "defaults", "mcp", "index.js");
@@ -196,6 +197,14 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const teamTs = join(__dirname, "extensions", "defaults", "team", "index.ts");
 		if (existsSync(teamTs)) paths.push(teamTs);
+	}
+
+	// === IdleThink extension (background code exploration during idle) ===
+	if (existsSync(BUNDLED_IDLE_THINK_EXTENSION)) {
+		paths.push(BUNDLED_IDLE_THINK_EXTENSION);
+	} else {
+		const idleThinkTs = join(__dirname, "extensions", "defaults", "idle-think", "index.ts");
+		if (existsSync(idleThinkTs)) paths.push(idleThinkTs);
 	}
 
 	// === BTW extension (quick side question without interrupting) ===
