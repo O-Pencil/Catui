@@ -5,26 +5,27 @@
  * [HERE]: High-level wrapper class with simplified API
  */
 
-import { 
-  createAgentSession, 
-  type CreateAgentSessionOptions, 
+import {
+  createAgentSession,
+  type CreateAgentSessionOptions,
   type CreateAgentSessionResult,
   type SDKLogger,
   silentLogger,
   defaultLogger,
 } from "./sdk.js";
-import { 
-  AgentSession, 
+import {
+  AgentSession,
   type AgentSessionEvent,
 } from "./agent-session.js";
-import { 
-  type Tool, 
-  type ToolName, 
+import {
+  type Tool,
+  type ToolName,
   allTools,
 } from "../tools/index.js";
 import { AuthStorage } from "../config/auth-storage.js";
 import { SessionManager } from "../session/session-manager.js";
 import { ModelRegistry } from "../model-registry.js";
+import type { Api, Model } from "@pencil-agent/ai";
 import type { ThinkingLevel } from "@pencil-agent/agent-core";
 
 // ============================================================================
@@ -38,12 +39,25 @@ export interface PencilAgentOptions {
   /** API key for the provider. If omitted, uses environment variable. */
   apiKey?: string;
   
-  /** Provider name: 'anthropic', 'openai', 'google', etc. */
+  /** Provider name: 'anthropic', 'openai', 'google', or any custom provider in models.json. */
   provider?: string;
-  
+
   /** Model ID: 'claude-4-5-20250920', 'gpt-4o', etc. */
   model?: string;
-  
+
+  /**
+   * Optional base URL when registering a custom provider on the fly.
+   * Required when `provider` + `model` is not already defined in
+   * ~/.nanopencil/agent/models.json. Ignored when the model is found.
+   */
+  baseUrl?: string;
+
+  /**
+   * Optional API protocol for the dynamically-registered provider.
+   * Defaults to "openai-completions". Ignored when the model is found.
+   */
+  api?: Api;
+
   /** Thinking level: 'off' | 'low' | 'medium' | 'high' */
   thinkingLevel?: ThinkingLevel;
   
@@ -130,7 +144,12 @@ export class PencilAgent {
         key: this.options.apiKey,
       });
     }
-    
+
+    // Resolve user-specified provider/model into a Model<any> for createAgentSession.
+    // Without this, createAgentSession falls back to findInitialModel() which
+    // picks the first available built-in — silently ignoring constructor args.
+    const resolvedModel = this.resolveRequestedModel(modelRegistry);
+
     // Resolve tools
     let tools: Tool[] | undefined = undefined;
     if (this.options.tools && this.options.tools.length > 0) {
@@ -138,16 +157,17 @@ export class PencilAgent {
         .map(name => allTools[name as ToolName])
         .filter((t): t is Tool => t !== undefined);
     }
-    
+
     // Create session
     this.sessionResult = await createAgentSession({
       cwd: this.cwd,
+      model: resolvedModel,
       thinkingLevel: this.options.thinkingLevel,
       tools,
       authStorage,
       modelRegistry,
-      sessionManager: this.options.inMemory 
-        ? SessionManager.inMemory() 
+      sessionManager: this.options.inMemory
+        ? SessionManager.inMemory()
         : SessionManager.create(this.cwd),
       enableMCP: this.options.enableMCP ?? false,
       enableSoul: this.options.enableSoul ?? false,
@@ -168,6 +188,61 @@ export class PencilAgent {
     this.initialized = true;
   }
   
+  /**
+   * Resolve constructor-provided provider/model into a Model<any>.
+   *
+   * Lookup order:
+   *   1. Existing entry in modelRegistry (e.g. ~/.nanopencil/agent/models.json
+   *      already declares this provider/model — common case for users who ran
+   *      /sal:setup or hand-edited models.json).
+   *   2. Dynamic registration when caller supplied baseUrl + apiKey — lets a
+   *      one-line constructor call wire up a brand-new OpenAI-compatible
+   *      endpoint without touching disk.
+   *   3. Otherwise return undefined and let createAgentSession fall back to
+   *      findInitialModel() (built-in default). The logger surfaces a warning
+   *      in this case so the caller knows their args were not honoured.
+   */
+  private resolveRequestedModel(registry: ModelRegistry): Model<any> | undefined {
+    const provider = this.options.provider;
+    const modelId = this.options.model;
+    if (!provider || !modelId) return undefined;
+
+    const existing = registry.find(provider, modelId);
+    if (existing) return existing;
+
+    if (this.options.baseUrl) {
+      try {
+        registry.registerProvider(provider, {
+          api: this.options.api ?? "openai-completions",
+          baseUrl: this.options.baseUrl,
+          apiKey: this.options.apiKey,
+          models: [{
+            id: modelId,
+            name: modelId,
+            reasoning: false,
+            input: ["text"],
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 128_000,
+            maxTokens: 8192,
+          }],
+        });
+        const registered = registry.find(provider, modelId);
+        if (registered) return registered;
+      } catch (err) {
+        this.logger.warn(
+          `[PencilAgent] dynamic provider registration failed for ${provider}/${modelId}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    this.logger.warn(
+      `[PencilAgent] model ${provider}/${modelId} not found in registry. ` +
+      `Either add it to ~/.nanopencil/agent/models.json or pass { baseUrl, apiKey } to register it dynamically. ` +
+      `Falling back to default model selection.`,
+    );
+    return undefined;
+  }
+
   /**
    * Handle session events - collects text for run()
    */
