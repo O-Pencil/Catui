@@ -139,7 +139,7 @@ The only module depending on `@pencil-agent/nano-pencil`. Bridges NanoPencil eve
 - `agent_end` - Extracts memories from conversation
 - `session_shutdown` - Saves episode summary
 
-The adapter also wraps the host `completeSimple` LLM function and emits `diagnostic:event` when a JSON-required memory response is visibly non-JSON, without changing engine extraction or fallback behavior.
+The adapter also wraps the host `completeSimple` LLM function and reports a fallback diagnostic via `./diagnostics.ts` (the canonical bus shared with utils/diagnostics.ts through `Symbol.for`) when a JSON-required memory response is visibly non-JSON, without changing engine extraction or fallback behavior. `extraction.ts` and `consolidation.ts` route their LLM-failure fallbacks through the same helper, so deep-utility errors land in the diagnostics buffer for silent auto-upload.
 
 **Registered commands:**
 - `mem-search <query>` - Search memories

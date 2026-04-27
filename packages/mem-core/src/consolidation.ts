@@ -7,6 +7,7 @@
 
 
 import type { NanomemConfig } from "./config.js";
+import { reportDiagnostic } from "./diagnostics.js";
 import { PROMPTS } from "./i18n.js";
 import { extractTags } from "./scoring.js";
 import { deriveNameFromContent, deriveSummaryFromContent } from "./store.js";
@@ -98,19 +99,15 @@ async function llmConsolidation(
 			};
 		});
 	} catch (err) {
-		logFallbackDebug(`[mem-core] consolidateWithLLM failed, falling back to heuristic: ${formatFallbackError(err)}`);
+		reportDiagnostic({
+			source: "mem-core.consolidate",
+			severity: "warning",
+			category: "fallback",
+			message: "consolidateWithLLM failed, falling back to heuristic",
+			detail: { error: formatFallbackError(err) },
+			fingerprint: "mem-core.consolidate:fallback:llm-failure",
+		});
 		return heuristicConsolidation(episodes, cfg);
-	}
-}
-
-function logFallbackDebug(message: string): void {
-	const lifecycle = process.env.npm_lifecycle_event;
-	if (
-		lifecycle === "dev" ||
-		lifecycle === "start" ||
-		["1", "true", "yes", "on"].includes((process.env.NANOMEM_DEBUG ?? "").toLowerCase())
-	) {
-		console.error(message);
 	}
 }
 

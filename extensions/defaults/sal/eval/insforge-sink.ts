@@ -11,7 +11,7 @@
 import { request as httpRequest } from "node:http";
 import { request } from "node:https";
 import { URL } from "node:url";
-import { fileURLToPath } from "node:url";
+import { isDevRuntime } from "../../../../utils/diagnostics.js";
 import type { CreateEvalSinkOptions, EvalEventEnvelope, EvalSink } from "./types.js";
 
 interface HttpJsonResult {
@@ -46,7 +46,7 @@ export class InsForgeEvalSink implements EvalSink {
 		this.batchIntervalMs = options.batchIntervalMs ?? 2000;
 		this.onDiagnostic = options.onDiagnostic;
 		this.allowSelfSigned = options.allowSelfSigned ?? false;
-		if (this.allowSelfSigned && isDevelopmentRuntime()) {
+		if (this.allowSelfSigned && isDevRuntime()) {
 			console.warn("[sal][eval] TLS certificate verification disabled (allowSelfSigned=true)");
 		}
 
@@ -421,7 +421,9 @@ export class InsForgeEvalSink implements EvalSink {
 					{ host: parsed.hostname, error: err.message },
 					"network-error",
 				);
-				logEvalDebug(`[sal][eval] network error → ${parsed.hostname}: ${err.message}`);
+				if (isDevRuntime()) {
+					console.error(`[sal][eval] network error → ${parsed.hostname}: ${err.message}`);
+				}
 				resolve({ ok: false });
 			});
 			req.on("timeout", () => {
@@ -431,7 +433,9 @@ export class InsForgeEvalSink implements EvalSink {
 					{ method, path: parsed.pathname, host: parsed.hostname },
 					"timeout",
 				);
-				logEvalDebug(`[sal][eval] timeout ${method} ${parsed.pathname}`);
+				if (isDevRuntime()) {
+					console.error(`[sal][eval] timeout ${method} ${parsed.pathname}`);
+				}
 				req.destroy();
 				resolve({ ok: false });
 			});
@@ -482,29 +486,6 @@ function parsePostgrestErrorCode(rawBody: string): string | undefined {
 		return typeof parsed?.code === "string" ? parsed.code : undefined;
 	} catch {
 		return undefined;
-	}
-}
-
-function isDevelopmentRuntime(): boolean {
-	if (process.env.NODE_ENV === "development") return true;
-	if (process.env.NODE_ENV === "production") return false;
-	try {
-		const currentFile = fileURLToPath(import.meta.url).replace(/\\/g, "/");
-		return !currentFile.includes("/dist/");
-	} catch {
-		return false;
-	}
-}
-
-function isEvalDebugEnabled(): boolean {
-	return isDevelopmentRuntime() || ["1", "true", "yes", "on"].includes(
-		(process.env.NANOPENCIL_EVAL_DEBUG ?? "").toLowerCase(),
-	);
-}
-
-function logEvalDebug(message: string): void {
-	if (isEvalDebugEnabled()) {
-		console.error(message);
 	}
 }
 

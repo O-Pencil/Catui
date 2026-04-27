@@ -20,23 +20,13 @@ import { extractTags } from "./scoring.js";
 import type { Episode, Meta, MemoryEntry, WorkEntry } from "./types.js";
 import { loadEntries, loadMeta } from "./store.js";
 
+import { reportDiagnostic } from "./diagnostics.js";
+
 type LlmCapableContext = ExtensionContext & {
 	completeSimple?: (systemPrompt: string, userMessage: string) => Promise<string | undefined>;
 };
 
-const DIAGNOSTIC_EVENT_CHANNEL = "diagnostic:event";
-
-type MemoryDiagnosticEvent = {
-	source: "mem-core.extract" | "mem-core.consolidate" | "mem-core.insights";
-	severity: "warning" | "error";
-	category: "fallback";
-	message: string;
-	detail?: Record<string, unknown>;
-	fingerprint: string;
-	context?: Record<string, unknown>;
-};
-
-type MemoryDiagnosticReporter = (event: MemoryDiagnosticEvent) => void;
+type MemoryDiagnosticSource = "mem-core.extract" | "mem-core.consolidate" | "mem-core.insights";
 
 type DreamTaskState = {
 	status: "idle" | "running" | "completed" | "failed" | "killed";
@@ -63,17 +53,11 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | und
 	});
 }
 
-function shouldEmitMemoryConsoleDiagnostics(): boolean {
-	const lifecycle = process.env.npm_lifecycle_event;
-	if (lifecycle === "dev" || lifecycle === "start") return true;
-	return ["1", "true", "yes", "on"].includes((process.env.NANOMEM_DEBUG ?? "").toLowerCase());
-}
-
 function expectsJsonOutput(systemPrompt: string): boolean {
 	return /\bJSON\b/i.test(systemPrompt) || /有效\s*JSON/.test(systemPrompt);
 }
 
-function inferDiagnosticSource(systemPrompt: string): MemoryDiagnosticEvent["source"] {
+function inferDiagnosticSource(systemPrompt: string): MemoryDiagnosticSource {
 	if (/(consolidate|固化|合并相似教训)/i.test(systemPrompt)) return "mem-core.consolidate";
 	if (/(insight|洞察|recommendation|推荐建议)/i.test(systemPrompt)) return "mem-core.insights";
 	return "mem-core.extract";
@@ -370,9 +354,6 @@ export default function nanomemExtension(api: ExtensionAPI) {
 	let cachedInjection: string | undefined;
 	let lastInjectionAt = 0;
 	let injectionRefreshInFlight: Promise<void> | undefined;
-	const reportDiagnostic: MemoryDiagnosticReporter = (event) => {
-		api.events.emit(DIAGNOSTIC_EVENT_CHANNEL, event);
-	};
 	const bindLlm = (ctx: ExtensionContext) => {
 		const llmCtx = ctx as LlmCapableContext;
 		if (!llmCtx.completeSimple) return;

@@ -7,6 +7,7 @@
 
 import { Box, Container, Spacer, Text, type Component } from "@pencil-agent/tui";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../../../core/extensions/types.js";
+import { subscribeDiagnostics } from "../../../utils/diagnostics.js";
 import { coerceDiagnosticEvent, DiagnosticBuffer } from "./diagnostic-buffer.js";
 import { reportDiagnostics } from "./reporter.js";
 import { DIAGNOSTIC_EVENT_CHANNEL, type DiagnosticRecord } from "./types.js";
@@ -26,10 +27,19 @@ export default async function diagnosticsExtension(api: ExtensionAPI): Promise<v
 		return container;
 	});
 
+	// Legacy path: producers that still call api.events.emit("diagnostic:event", ...)
 	api.events.on(DIAGNOSTIC_EVENT_CHANNEL, (payload) => {
 		const event = coerceDiagnosticEvent(payload);
 		if (!event) return;
 		buffer.add(event);
+	});
+
+	// Canonical path: producers (including deep utilities without api access)
+	// using utils/diagnostics.ts → reportDiagnostic(...). The shared Symbol.for
+	// slot also relays mem-core (separate package) events here.
+	subscribeDiagnostics((event) => {
+		const coerced = coerceDiagnosticEvent(event);
+		if (coerced) buffer.add(coerced);
 	});
 
 	api.on("agent_end", async (_event, ctx) => {
