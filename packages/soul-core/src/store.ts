@@ -19,6 +19,13 @@ import type {
 	DecisionMemory,
 } from "./types.js";
 import type { SoulConfig } from "./config.js";
+import { reportDiagnostic } from "./diagnostics.js";
+
+function classifyLoadError(error: unknown): "parse" | "io" | "unknown" {
+	if (error instanceof SyntaxError) return "parse";
+	if (error && typeof error === "object" && "code" in error) return "io";
+	return "unknown";
+}
 
 /**
  * Soul Store - persistent storage backed by NanoMem
@@ -71,10 +78,16 @@ export class SoulStore {
 			data.stats.lastUpdate = new Date(data.stats.lastUpdate);
 			return data as SoulProfile;
 		} catch (error) {
+			const kind = classifyLoadError(error);
 			const msg = error instanceof Error ? error.message : String(error);
-			console.warn(
-				`Failed to load Soul profile (${this.profilePath}): ${msg}. Using a fresh profile.`,
-			);
+			reportDiagnostic({
+				source: "soul.store",
+				severity: "warning",
+				category: "persistence",
+				message: `Failed to load Soul profile; using a fresh profile.`,
+				detail: { path: this.profilePath, kind, error: msg },
+				fingerprint: `soul.store:loadProfile:${kind}`,
+			});
 			return null;
 		}
 	}
@@ -118,7 +131,16 @@ export class SoulStore {
 				decisions: data.decisions.map((d: any) => ({ ...d, timestamp: new Date(d.timestamp) })),
 			};
 		} catch (error) {
-			console.warn("Failed to load Soul memory:", error);
+			const kind = classifyLoadError(error);
+			const msg = error instanceof Error ? error.message : String(error);
+			reportDiagnostic({
+				source: "soul.store",
+				severity: "warning",
+				category: "persistence",
+				message: `Failed to load Soul memory; using empty memory.`,
+				detail: { path: this.memoryPath, kind, error: msg },
+				fingerprint: `soul.store:loadMemory:${kind}`,
+			});
 			return {
 				successes: [],
 				failures: [],
@@ -170,7 +192,16 @@ export class SoulStore {
 			const data = JSON.parse(raw);
 			return data.map((e: any) => ({ ...e, timestamp: new Date(e.timestamp) }));
 		} catch (error) {
-			console.warn("Failed to load evolutions:", error);
+			const kind = classifyLoadError(error);
+			const msg = error instanceof Error ? error.message : String(error);
+			reportDiagnostic({
+				source: "soul.store",
+				severity: "warning",
+				category: "persistence",
+				message: `Failed to load Soul evolutions; using empty list.`,
+				detail: { path: this.evolutionsPath, kind, error: msg },
+				fingerprint: `soul.store:loadEvolutions:${kind}`,
+			});
 			return [];
 		}
 	}
