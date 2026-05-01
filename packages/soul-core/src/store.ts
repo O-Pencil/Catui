@@ -6,7 +6,7 @@
  */
 
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type {
@@ -25,6 +25,25 @@ function classifyLoadError(error: unknown): "parse" | "io" | "unknown" {
 	if (error instanceof SyntaxError) return "parse";
 	if (error && typeof error === "object" && "code" in error) return "io";
 	return "unknown";
+}
+
+// Atomic JSON write: write to a unique temp sibling, then rename onto the
+// target. Rename is atomic on POSIX same-filesystem operations, so concurrent
+// writers (parent agent + sub-agent both holding their own SoulStore on the
+// shared soulDir) can no longer leave the target half-written. Worst case is a
+// lost write, never a corrupted file. Without this, a longer prior write's
+// trailing bytes survived past a shorter newer write's end, producing
+// "Unexpected non-whitespace character after JSON at position N" on next load.
+async function atomicWriteJson(targetPath: string, data: unknown): Promise<void> {
+	const tmpPath = `${targetPath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+	const payload = JSON.stringify(data, null, 2);
+	try {
+		await writeFile(tmpPath, payload, "utf-8");
+		await rename(tmpPath, targetPath);
+	} catch (error) {
+		try { await unlink(tmpPath); } catch { /* tmp may not exist */ }
+		throw error;
+	}
 }
 
 /**
@@ -97,7 +116,7 @@ export class SoulStore {
 	 */
 	async saveProfile(profile: SoulProfile): Promise<void> {
 		await this.init();
-		await writeFile(this.profilePath, JSON.stringify(profile, null, 2), "utf-8");
+		await atomicWriteJson(this.profilePath, profile);
 	}
 
 	/**
@@ -174,7 +193,7 @@ export class SoulStore {
 			.slice(0, retention.decisions);
 
 		const data = { successes, failures, patterns, decisions };
-		await writeFile(this.memoryPath, JSON.stringify(data, null, 2), "utf-8");
+		await atomicWriteJson(this.memoryPath, data);
 	}
 
 	/**
@@ -213,7 +232,7 @@ export class SoulStore {
 		await this.init();
 		// Keep last 1000 evolutions
 		const trimmed = evolutions.slice(-1000);
-		await writeFile(this.evolutionsPath, JSON.stringify(trimmed, null, 2), "utf-8");
+		await atomicWriteJson(this.evolutionsPath, trimmed);
 	}
 
 	/**
