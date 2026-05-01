@@ -29,6 +29,9 @@ import type {
 } from "./types.js";
 import { ToolNotFoundError, ToolExecutionError, ValidationError } from "./errors.js";
 
+const DEFAULT_MAX_TURNS_PER_PROMPT = 64;
+const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 128;
+
 /**
  * Start an agent loop with a new prompt message.
  * The prompt is added to the context and events are emitted for it.
@@ -49,14 +52,18 @@ export function agentLoop(
 			messages: [...context.messages, ...prompts],
 		};
 
-		stream.push({ type: "agent_start" });
-		stream.push({ type: "turn_start" });
-		for (const prompt of prompts) {
-			stream.push({ type: "message_start", message: prompt });
-			stream.push({ type: "message_end", message: prompt });
-		}
+		try {
+			stream.push({ type: "agent_start" });
+			stream.push({ type: "turn_start" });
+			for (const prompt of prompts) {
+				stream.push({ type: "message_start", message: prompt });
+				stream.push({ type: "message_end", message: prompt });
+			}
 
-		await runLoop(currentContext, newMessages, config, signal, stream, streamFn);
+			await runLoop(currentContext, newMessages, config, signal, stream, streamFn);
+		} catch (error: unknown) {
+			endWithLoopError(stream, newMessages, config, error, signal);
+		}
 	})();
 
 	return stream;
@@ -90,10 +97,14 @@ export function agentLoopContinue(
 		const newMessages: AgentMessage[] = [];
 		const currentContext: AgentContext = { ...context };
 
-		stream.push({ type: "agent_start" });
-		stream.push({ type: "turn_start" });
+		try {
+			stream.push({ type: "agent_start" });
+			stream.push({ type: "turn_start" });
 
-		await runLoop(currentContext, newMessages, config, signal, stream, streamFn);
+			await runLoop(currentContext, newMessages, config, signal, stream, streamFn);
+		} catch (error: unknown) {
+			endWithLoopError(stream, newMessages, config, error, signal);
+		}
 	})();
 
 	return stream;
@@ -104,6 +115,49 @@ function createAgentStream(): EventStream<AgentEvent, AgentMessage[]> {
 		(event: AgentEvent) => event.type === "agent_end",
 		(event: AgentEvent) => (event.type === "agent_end" ? event.messages : []),
 	);
+}
+
+function createLoopLimitMessage(config: AgentLoopConfig, errorMessage: string): AssistantMessage {
+	return {
+		role: "assistant",
+		content: [{ type: "text", text: "" }],
+		api: config.model.api,
+		provider: config.model.provider,
+		model: config.model.id,
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "error",
+		errorMessage,
+		timestamp: Date.now(),
+	};
+}
+
+function endWithLoopError(
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+	newMessages: AgentMessage[],
+	config: AgentLoopConfig,
+	error: unknown,
+	signal: AbortSignal | undefined,
+): void {
+	const errorMessage = createLoopLimitMessage(
+		config,
+		error instanceof Error ? error.message : String(error),
+	);
+	if (signal?.aborted) {
+		errorMessage.stopReason = "aborted";
+	}
+	newMessages.push(errorMessage);
+	stream.push({ type: "message_start", message: { ...errorMessage } });
+	stream.push({ type: "message_end", message: errorMessage });
+	stream.push({ type: "turn_end", message: errorMessage, toolResults: [] });
+	stream.push({ type: "agent_end", messages: newMessages });
+	stream.end(newMessages);
 }
 
 /**
@@ -118,6 +172,10 @@ async function runLoop(
 	streamFn?: StreamFn,
 ): Promise<void> {
 	let firstTurn = true;
+	let turnCount = 0;
+	let toolCallCount = 0;
+	const maxTurns = config.maxTurnsPerPrompt ?? DEFAULT_MAX_TURNS_PER_PROMPT;
+	const maxToolCalls = config.maxToolCallsPerPrompt ?? DEFAULT_MAX_TOOL_CALLS_PER_PROMPT;
 	// Check for steering messages at start (user may have typed while waiting)
 	let pendingMessages: AgentMessage[] = (await config.getSteeringMessages?.()) || [];
 
@@ -145,6 +203,22 @@ async function runLoop(
 				pendingMessages = [];
 			}
 
+			turnCount++;
+			if (turnCount > maxTurns) {
+				const limitMessage = createLoopLimitMessage(
+					config,
+					`Stopped after ${maxTurns} assistant turns to prevent a runaway agent loop.`,
+				);
+				currentContext.messages.push(limitMessage);
+				newMessages.push(limitMessage);
+				stream.push({ type: "message_start", message: { ...limitMessage } });
+				stream.push({ type: "message_end", message: limitMessage });
+				stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
+				stream.push({ type: "agent_end", messages: newMessages });
+				stream.end(newMessages);
+				return;
+			}
+
 			// Stream assistant response
 			const message = await streamAssistantResponse(currentContext, config, signal, stream, streamFn);
 			newMessages.push(message);
@@ -162,6 +236,21 @@ async function runLoop(
 
 			const toolResults: ToolResultMessage[] = [];
 			if (hasMoreToolCalls) {
+				if (toolCallCount + toolCalls.length > maxToolCalls) {
+					const limitMessage = createLoopLimitMessage(
+						config,
+						`Stopped before executing ${toolCalls.length} tool call${toolCalls.length === 1 ? "" : "s"} because this prompt reached the ${maxToolCalls} tool-call limit.`,
+					);
+					currentContext.messages.push(limitMessage);
+					newMessages.push(limitMessage);
+					stream.push({ type: "message_start", message: { ...limitMessage } });
+					stream.push({ type: "message_end", message: limitMessage });
+					stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
+					stream.push({ type: "agent_end", messages: newMessages });
+					stream.end(newMessages);
+					return;
+				}
+				toolCallCount += toolCalls.length;
 				const toolExecution = await executeToolCalls(
 					currentContext.tools,
 					message,
@@ -307,12 +396,13 @@ async function executeToolCalls(
 	getSteeringMessages?: AgentLoopConfig["getSteeringMessages"],
 ): Promise<{ toolResults: ToolResultMessage[]; steeringMessages?: AgentMessage[] }> {
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
+	const toolByName = new Map((tools ?? []).map((tool) => [tool.name, tool]));
 	const results: ToolResultMessage[] = [];
 	let steeringMessages: AgentMessage[] | undefined;
 
 	for (let index = 0; index < toolCalls.length; index++) {
 		const toolCall = toolCalls[index];
-		const tool = tools?.find((t) => t.name === toolCall.name);
+		const tool = toolByName.get(toolCall.name);
 
 		stream.push({
 			type: "tool_execution_start",

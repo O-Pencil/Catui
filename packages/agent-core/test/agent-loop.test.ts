@@ -307,6 +307,119 @@ describe("agentLoop with AgentMessage", () => {
 		}
 	});
 
+	it("should stop before exceeding the per-prompt tool call limit", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const executed: string[] = [];
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "echo",
+			label: "Echo",
+			description: "Echo tool",
+			parameters: toolSchema,
+			async execute(_toolCallId, params) {
+				executed.push(params.value);
+				return {
+					content: [{ type: "text", text: `echoed: ${params.value}` }],
+					details: { value: params.value },
+				};
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			maxToolCallsPerPrompt: 1,
+		};
+
+		const stream = agentLoop([createUserMessage("echo twice")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				const message = createAssistantMessage(
+					[
+						{ type: "toolCall", id: "tool-1", name: "echo", arguments: { value: "first" } },
+						{ type: "toolCall", id: "tool-2", name: "echo", arguments: { value: "second" } },
+					],
+					"toolUse",
+				);
+				mockStream.push({ type: "done", reason: "toolUse", message });
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(executed).toEqual([]);
+		const assistantEnds = events.filter(
+			(e): e is Extract<AgentEvent, { type: "message_end" }> =>
+				e.type === "message_end" && e.message.role === "assistant",
+		);
+		expect(assistantEnds.at(-1)?.message.stopReason).toBe("error");
+		expect((assistantEnds.at(-1)?.message as AssistantMessage | undefined)?.errorMessage).toContain(
+			"tool-call limit",
+		);
+	});
+
+	it("should stop when the per-prompt assistant turn limit is reached", async () => {
+		const toolSchema = Type.Object({});
+		const tool: AgentTool<typeof toolSchema, Record<string, never>> = {
+			name: "again",
+			label: "Again",
+			description: "Ask for another turn",
+			parameters: toolSchema,
+			async execute() {
+				return { content: [{ type: "text", text: "ok" }], details: {} };
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			maxTurnsPerPrompt: 1,
+		};
+
+		let streamCalls = 0;
+		const stream = agentLoop([createUserMessage("loop")], context, config, undefined, () => {
+			streamCalls++;
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				const message = createAssistantMessage(
+					[{ type: "toolCall", id: `tool-${streamCalls}`, name: "again", arguments: {} }],
+					"toolUse",
+				);
+				mockStream.push({ type: "done", reason: "toolUse", message });
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(streamCalls).toBe(1);
+		const assistantEnds = events.filter(
+			(e): e is Extract<AgentEvent, { type: "message_end" }> =>
+				e.type === "message_end" && e.message.role === "assistant",
+		);
+		expect((assistantEnds.at(-1)?.message as AssistantMessage | undefined)?.errorMessage).toContain(
+			"assistant turns",
+		);
+	});
+
 	it("should inject queued messages and skip remaining tool calls", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		const executed: string[] = [];

@@ -102,6 +102,23 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * Use this for follow-up messages that should wait until the agent finishes.
 	 */
 	getFollowUpMessages?: () => Promise<AgentMessage[]>;
+
+	/**
+	 * Maximum assistant turns allowed for one prompt/continue loop.
+	 *
+	 * Prevents runaway model/tool/follow-up cycles from consuming unbounded
+	 * tokens when the model keeps asking for tools or queued messages keep the
+	 * loop alive.
+	 */
+	maxTurnsPerPrompt?: number;
+
+	/**
+	 * Maximum tool calls allowed for one prompt/continue loop.
+	 *
+	 * The loop stops before executing a batch that would exceed this limit and
+	 * emits a controlled assistant error message.
+	 */
+	maxToolCallsPerPrompt?: number;
 }
 
 /**

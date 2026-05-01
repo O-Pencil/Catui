@@ -194,6 +194,33 @@ describe("Agent", () => {
 		await firstPrompt.catch(() => {}); // Ignore abort error
 	});
 
+	it("should emit message lifecycle events for setup errors before agent_end", async () => {
+		const agent = new Agent({
+			streamFn: () => {
+				throw new Error("stream setup failed");
+			},
+		});
+
+		const events: string[] = [];
+		agent.subscribe((event) => {
+			if (event.type === "message_start" && event.message.role === "assistant") {
+				events.push("message_start");
+			}
+			if (event.type === "message_end" && event.message.role === "assistant") {
+				events.push("message_end");
+			}
+			if (event.type === "agent_end") {
+				events.push("agent_end");
+			}
+		});
+
+		await expect(agent.prompt("trigger failure")).resolves.toBeUndefined();
+
+		expect(events).toEqual(["message_start", "message_end", "agent_end"]);
+		expect(agent.state.messages.at(-1)?.role).toBe("assistant");
+		expect((agent.state.messages.at(-1) as AssistantMessage | undefined)?.errorMessage).toBe("stream setup failed");
+	});
+
 	it("should throw when continue() called while streaming", async () => {
 		let abortSignal: AbortSignal | undefined;
 		const agent = new Agent({
