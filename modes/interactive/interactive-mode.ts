@@ -266,6 +266,7 @@ export class InteractiveMode {
   // Streaming message tracking
   private streamingComponent: AssistantMessageComponent | undefined = undefined;
   private streamingMessage: AssistantMessage | undefined = undefined;
+  private customStreamComponents = new Map<string, CustomMessageComponent>();
 
   // Tool execution tracking: toolCallId -> component
   private pendingTools = new Map<string, ToolExecutionComponent>();
@@ -3618,6 +3619,18 @@ export class InteractiveMode {
       }
       case "custom": {
         if (message.display) {
+          const details =
+            typeof message.details === "object" && message.details !== null
+              ? (message.details as { streamKey?: string; replace?: boolean })
+              : undefined;
+          if (details?.replace && details.streamKey) {
+            const existing = this.customStreamComponents.get(details.streamKey);
+            if (existing) {
+              existing.updateMessage(message);
+              this.ui.requestRender();
+              break;
+            }
+          }
           const renderer = this.session.extensionRunner?.getMessageRenderer(
             message.customType,
           );
@@ -3628,6 +3641,9 @@ export class InteractiveMode {
           );
           component.setExpanded(this.toolOutputExpanded);
           this.chatContainer.addChild(component);
+          if (details?.streamKey) {
+            this.customStreamComponents.set(details.streamKey, component);
+          }
         }
         break;
       }
@@ -3715,6 +3731,7 @@ export class InteractiveMode {
     options: { updateFooter?: boolean; populateHistory?: boolean } = {},
   ): void {
     this.pendingTools.clear();
+    this.customStreamComponents.clear();
 
     if (options.updateFooter) {
       this.footer.invalidate();
@@ -3819,10 +3836,10 @@ export class InteractiveMode {
             "          |     |         |~   \\ |  ~/",
             "         /       \\         \\  ~/- \\ ~\\",
             "         \\       /         || |  // /`",
-            "  aac_/\\_/\\_   _/_/\\_/\\_/\\_((_|\\((_//\\_/\\_/\\_",
+            "     _/\\_/\\_   _/_/\\_/\\_/\\_((_|\\((_//\\_/\\_/\\_",
             "  |  |  |  |( (  |  |  |  |  |  |  |  |  |  |",
             "  |  |  |  | ) ) |  |  |  |  |  |  |  |  |  |",
-            "  |  |  |  |(_(  |  |  |  |  |  |  |  |  |  |     asciiart.cc",
+            "  |  |  |  |(_(  |  |  |  |  |  |  |  |  |  |",
             "  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |",
             "  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |",
           ];

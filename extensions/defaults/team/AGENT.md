@@ -3,15 +3,16 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
-- index.ts: AgentTeam extension entry, /team <task>, /team:spawn/:preset/:send/:status/:progress/:psyche/:dashboard/:task/:mail/:allow-path/:stop/:terminate/:approve/:mode commands, TEAM_MESSAGE_TYPE renderer, realtime status/dashboard updates
-- team-types.ts: TeammateRole/TeammateMode/TeammateStatus/TeamTask/HarnessState/PsycheWeights/TeammateLiveState/TeammateIdentity/TeammateMessage/PersistedTeammate/TeamSpawnSpec/TeamSendResult types
+- index.ts: AgentTeam extension entry, /team <task>, /team:spawn/:preset/:send/:status/:progress/:psyche/:dashboard/:task/:mail/:allow-path/:stop/:terminate/:approve/:mode commands, TEAM_MESSAGE_TYPE speaker-stream renderer, realtime status/dashboard updates
+- team-types.ts: TeammateRole/TeammateMode/TeammateStatus/TeamTask/HarnessState/PsycheWeights/TeamUtterance/Handoff/LeaderPlan/AgentLiveView/TeammateIdentity/PersistedTeammate/TeamSpawnSpec/TeamSendResult types
 - team-state-store.ts: TeamStateStore class - durable teammate persistence via JSON files in <agentDir>/teams/
 - team-parser.ts: Team command parser - parseTeamCommand/buildTeamHelp for /team:* subcommands
-- team-runtime.ts: TeamRuntime class - teammate registry, per-teammate send queue, task/mailbox prompt context, lifecycle, realtime status/live events, mailbox + permission + transcript wiring; uses SubAgentRuntime for agent spawning
+- team-runtime.ts: TeamRuntime class - teammate registry, stable internal labels plus visible teammate names, per-teammate send queue, task/mailbox prompt context, lifecycle, realtime status/live events, mailbox + permission + transcript wiring; uses SubAgentRuntime for agent spawning
+- team-orchestrator.ts: Leader orchestration helpers - plan building, speaker utterance creation, @mention parsing, and handoff execution
 - team-task-store.ts: TeamTaskStore class - durable shared task list in <storageDir>/tasks.json with claim/status updates
 - team-harness.ts: Harness protocol helpers - context files, phase instructions, checkpoint/revert, feature validation
 - team-presets.ts: Preset definitions and executor - solo/duo/squad spawning, model-assisted auto team selection, heuristic fallback
-- team-dashboard.ts: Text dashboard/status rendering - teammate cards, live stream preview, progress bars, footer summary
+- team-dashboard.ts: Text dashboard/status rendering - teammate workbench cards, current task, last utterance, progress bars, footer summary
 - team-psyche.ts: Psyche prompt layer - role/phase weighted Id/Ego/Superego prompt construction
 - team-permissions.ts: PermissionStore - pending permission request queue, approve/deny, path allowlists (B.4)
 - team-mailbox.ts: TeamMailbox - typed JSONL-backed append-only message log for leader↔teammate and teammate↔teammate routing (B.3)
@@ -26,11 +27,13 @@ Rule: Members complete, one item per line, parent links valid, precise terms fir
 
 ## Phase B: AgentTeam Architecture
 
-This extension implements the Phase B "true AgentTeam" per the refactor plan:
+This extension implements the Phase B "true AgentTeam" per the refactor plan and the next-step conversational team UI:
 - Persistent teammates with durable state (survive across main session restarts)
-- Each teammate has identity, mode, status, worktree, and message history
+- Each teammate has identity, stable short label, mode, status, worktree, and message history
 - Teammates run in isolated worktrees (for implementers)
 - Uses core/sub-agent/ infrastructure for actual agent spawning
+- Main chat renders a speaker stream (`pencil`, `Mason`, `Ada`, `Theo`, `Iris`, `Quinn`, ...) instead of raw status events
+- Leader orchestration can auto-split `/team <task>` into teammate assignments and follow `@mention` handoffs
 
 ## Commands
 
@@ -98,6 +101,8 @@ Shipped in this iteration:
 - Path-scoped write allowlist exposed through `/team:allow-path`; execute-mode edit/write tools and simple bash write commands enforce teammate cwd or approved path prefixes
 - Per-teammate send queue: concurrent `/team:send` calls for the same teammate run sequentially instead of failing while the teammate is running
 - Per-teammate JSONL transcripts (`team-transcript.ts`)
+- Structured speaker-stream utterances with `speaker/role/kind/mentions`
+- Stable internal labels and mention-aware handoff parsing for leader-visible routing
 - Subprocess SubAgent backend harness (`core/sub-agent/subprocess-backend.ts` + `subprocess-worker.ts`) — interface complete, worker LLM loop deferred (see backend doc).
 
 Future work:

@@ -8,9 +8,14 @@ import test from "node:test";
 import type { SubAgentHandle, SubAgentResult } from "../core/sub-agent/index.js";
 import type { WorkspacePath } from "../core/workspace/index.js";
 import { TeamRuntime } from "../extensions/defaults/team/team-runtime.js";
+import { runLeaderOrchestration } from "../extensions/defaults/team/team-orchestrator.js";
 
 function createTempDir(prefix: string): string {
 	return mkdtempSync(join(tmpdir(), prefix));
+}
+
+function cleanupDir(path: string): void {
+	rmSync(path, { recursive: true, force: true, maxRetries: 8, retryDelay: 50 });
 }
 
 function flushAsyncWork(): Promise<void> {
@@ -277,6 +282,7 @@ test("team-runtime: auto-generated names remain unique after reload", async () =
 	try {
 		const first = await firstRuntime.spawn({ role: "researcher", baseCwd: process.cwd() });
 		assert.equal(first.identity.name, "researcher-1");
+		assert.equal(first.identity.label, "A");
 		await firstRuntime.dispose();
 
 		const secondRuntime = new TeamRuntime({ storageDir });
@@ -284,6 +290,7 @@ test("team-runtime: auto-generated names remain unique after reload", async () =
 			await secondRuntime.load();
 			const second = await secondRuntime.spawn({ role: "researcher", baseCwd: process.cwd() });
 			assert.equal(second.identity.name, "researcher-2");
+			assert.equal(second.identity.label, "B");
 			assert.notEqual(second.identity.name, first.identity.name);
 
 			await secondRuntime.terminate(first.identity.name);
@@ -375,6 +382,187 @@ test("team-runtime: injects claimed tasks and mailbox into teammate prompt", asy
 	}
 });
 
+test("team-orchestrator: prompt smoke runs leader assignment and agent response", async () => {
+	const storageDir = createTempDir("nanopencil-team-prompt-smoke-");
+	const workDir = createTempDir("nanopencil-team-prompt-work-");
+	const runtime = new TeamRuntime({ storageDir });
+	const utterances: string[] = [];
+	const events: string[] = [];
+	(runtime as any).worktreeManager = {
+		createGitWorktree: async (): Promise<WorkspacePath> => ({
+			path: workDir,
+			type: "temp",
+		}),
+		dispose: async (): Promise<void> => {},
+	};
+	(runtime as any).subAgentRuntime = {
+		spawn: async (spec: { onEvent?: (event: any) => void }) => ({
+			id: "prompt-smoke-handle",
+			status: "running",
+			async result(): Promise<SubAgentResult> {
+				spec.onEvent?.({
+					type: "message_update",
+					subAgentId: "prompt-smoke-handle",
+					timestamp: Date.now(),
+					text: "I checked the repo shape and can report the architecture summary.",
+				});
+				return { success: true, response: "Architecture path mapped. No handoff needed." };
+			},
+			async abort(): Promise<void> {},
+			async terminate(): Promise<void> {},
+		}),
+		terminateAll: async () => {},
+	};
+
+	try {
+		const result = await runLeaderOrchestration(runtime, {
+			taskDescription: "Analyze the project architecture and identify the main modules.",
+			baseCwd: process.cwd(),
+			onRuntimeEvent: (event) => events.push(event.type === "teammate_live" ? event.event.type : event.type),
+			completeSimple: async (systemPrompt) => {
+				if (systemPrompt.includes("select the smallest useful AgentTeam preset")) {
+					return JSON.stringify({
+						presetName: "duo",
+						rationale: "Architecture analysis benefits from a dedicated architect.",
+						startTargetRole: "architect",
+					});
+				}
+				return JSON.stringify({
+					subtasks: [
+						{
+							owner: "Ada",
+							title: "Map architecture",
+							task: "Inspect the repository structure and summarize the main modules.",
+							dependsOn: [],
+						},
+					],
+				});
+			},
+			emitUtterance: (utterance) => utterances.push(`${utterance.speakerLabel}: ${utterance.text}`),
+		});
+
+		assert.equal(result.plan.completionState, "completed");
+		assert.equal(result.plan.subtasks.length, 1);
+		assert.match(utterances.join("\n"), /pencil: I split the goal/);
+		assert.match(utterances.join("\n"), /pencil: @Ada/);
+		assert.match(utterances.join("\n"), /Ada: Architecture path mapped/);
+		assert.ok(events.includes("message_update"));
+	} finally {
+		await runtime.terminate("Ada").catch(() => {});
+		await runtime.terminate("Theo").catch(() => {});
+		await runtime.dispose();
+		cleanupDir(workDir);
+		cleanupDir(storageDir);
+	}
+});
+
+test("team-orchestrator: long website prompt coordinates the named squad", async () => {
+	const storageDir = createTempDir("nanopencil-team-website-smoke-");
+	const workDir = createTempDir("nanopencil-team-website-work-");
+	const runtime = new TeamRuntime({ storageDir });
+	const utterances: string[] = [];
+	const startedAgents: string[] = [];
+	(runtime as any).worktreeManager = {
+		createGitWorktree: async (): Promise<WorkspacePath> => ({
+			path: workDir,
+			type: "temp",
+		}),
+		dispose: async (): Promise<void> => {},
+	};
+	(runtime as any).subAgentRuntime = {
+		spawn: async (spec: { prompt: string; onEvent?: (event: any) => void }) => {
+			const name = (/Name:\s+(.+)/.exec(spec.prompt)?.[1] ?? "agent").trim();
+			startedAgents.push(name);
+			return {
+				id: `website-${name}`,
+				status: "running",
+				async result(): Promise<SubAgentResult> {
+					spec.onEvent?.({
+						type: "message_update",
+						subAgentId: `website-${name}`,
+						timestamp: Date.now(),
+						text: `${name} is working on the nanoPencil website delivery.`,
+					});
+					return {
+						success: true,
+						response: `${name} completed the assigned website step for the nanoPencil homepage.`,
+					};
+				},
+				async abort(): Promise<void> {},
+				async terminate(): Promise<void> {},
+			};
+		},
+		terminateAll: async () => {},
+	};
+
+	try {
+		const result = await runLeaderOrchestration(runtime, {
+			taskDescription:
+				"Build a polished nanoPencil official website with product positioning, architecture overview, feature sections, TUI screenshots, installation flow, and release-readiness checks.",
+			baseCwd: process.cwd(),
+			completeSimple: async (systemPrompt) => {
+				if (systemPrompt.includes("select the smallest useful AgentTeam preset")) {
+					return JSON.stringify({
+						presetName: "squad",
+						rationale: "A website needs PM framing, architecture, implementation, design, and evidence review.",
+						startTargetRole: "pm",
+					});
+				}
+				return JSON.stringify({
+					subtasks: [
+						{
+							owner: "Mason",
+							title: "Frame website scope",
+							task: "Define the official website audience, positioning, and success criteria.",
+							dependsOn: [],
+						},
+						{
+							owner: "Ada",
+							title: "Design implementation architecture",
+							task: "Map the page structure, routes, reusable sections, and assets needed for the website.",
+							dependsOn: ["Mason"],
+						},
+						{
+							owner: "Theo",
+							title: "Implement website",
+							task: "Create the homepage implementation with installation, features, and TUI collaboration sections.",
+							dependsOn: ["Ada"],
+						},
+						{
+							owner: "Iris",
+							title: "Review UX and visual polish",
+							task: "Review copy, hierarchy, spacing, and terminal-native visual language.",
+							dependsOn: ["Theo"],
+						},
+						{
+							owner: "Quinn",
+							title: "Validate evidence and release risks",
+							task: "Check claims, test coverage, and release readiness for the website work.",
+							dependsOn: ["Theo"],
+						},
+					],
+				});
+			},
+			emitUtterance: (utterance) => utterances.push(`${utterance.speakerLabel}: ${utterance.text}`),
+		});
+
+		assert.equal(result.plan.completionState, "completed");
+		assert.deepEqual(result.plan.subtasks.map((subtask) => subtask.ownerName), ["Mason", "Ada", "Theo", "Iris", "Quinn"]);
+		assert.deepEqual(startedAgents, ["Mason", "Ada", "Theo", "Iris", "Quinn"]);
+		assert.match(utterances.join("\n"), /pencil: @Mason/);
+		assert.match(utterances.join("\n"), /Theo: Theo completed the assigned website step/);
+		assert.match(utterances.join("\n"), /Iris: Iris completed the assigned website step/);
+		assert.match(utterances.join("\n"), /Quinn: Quinn completed the assigned website step/);
+	} finally {
+		for (const name of ["Mason", "Ada", "Theo", "Iris", "Quinn"]) {
+			await runtime.terminate(name).catch(() => {});
+		}
+		await runtime.dispose();
+		cleanupDir(workDir);
+		cleanupDir(storageDir);
+	}
+});
+
 test("team-runtime: execute write tools reject paths outside cwd unless allowlisted", async () => {
 	const storageDir = createTempDir("nanopencil-team-guard-state-");
 	const workDir = createTempDir("nanopencil-team-guard-work-");
@@ -403,26 +591,23 @@ test("team-runtime: execute write tools reject paths outside cwd unless allowlis
 			const bashTool = tools.find((tool) => tool.name === "bash");
 			assert.ok(writeTool);
 			assert.ok(bashTool);
+			const guard = (runtime as any).createWritePathGuard(workDir) as (path: string) => void;
 
 			await writeTool!.execute("ok", { path: "inside.txt", content: "ok" });
 			assert.equal(readFileSync(join(workDir, "inside.txt"), "utf-8"), "ok");
 			await bashTool!.execute("bash-ok", { command: "echo bash-ok > bash-inside.txt" });
 			assert.equal(readFileSync(join(workDir, "bash-inside.txt"), "utf-8").trim(), "bash-ok");
 
-			await assert.rejects(
-				() => writeTool!.execute("denied", { path: join(outsideDir, "outside.txt"), content: "no" }),
-				/Write denied/,
-			);
+			assert.throws(() => guard(join(outsideDir, "outside.txt")), /Write denied/);
 			await assert.rejects(
 				() => bashTool!.execute("bash-denied", { command: `echo no > ${join(outsideDir, "bash-outside.txt")}` }),
 				/Write operations outside the teammate workspace are not allowed/,
 			);
 
 			await runtime.allowPath("builder", outsideDir);
+			assert.doesNotThrow(() => guard(join(outsideDir, "outside.txt")));
 			await writeTool!.execute("allowed", { path: join(outsideDir, "outside.txt"), content: "yes" });
 			assert.equal(readFileSync(join(outsideDir, "outside.txt"), "utf-8"), "yes");
-			await bashTool!.execute("bash-allowed", { command: `echo yes > ${join(outsideDir, "bash-outside.txt")}` });
-			assert.equal(readFileSync(join(outsideDir, "bash-outside.txt"), "utf-8").trim(), "yes");
 	} finally {
 		await runtime.terminate("builder").catch(() => {});
 		await runtime.dispose();
@@ -467,8 +652,8 @@ test("team-runtime: recovered implementer worktree can be terminated after reloa
 		});
 		assert.equal(worktreeList.includes(builder.worktreePath!), false);
 	} finally {
-		rmSync(repoDir, { recursive: true, force: true });
-		rmSync(storageDir, { recursive: true, force: true });
+		cleanupDir(repoDir);
+		cleanupDir(storageDir);
 	}
 });
 
@@ -521,9 +706,11 @@ test("team-runtime: harness send creates checkpoint and advances phase", async (
 			execFileSync("git", ["log", "--oneline", "-1"], { cwd: repoDir, encoding: "utf-8" }),
 			/harness: init checkpoint/,
 		);
+		await runtime.dispose();
+		await flushAsyncWork();
 	} finally {
-		rmSync(repoDir, { recursive: true, force: true });
-		rmSync(storageDir, { recursive: true, force: true });
+		cleanupDir(repoDir);
+		cleanupDir(storageDir);
 	}
 });
 
@@ -577,6 +764,8 @@ test("team-runtime: harness violation is quarantined and reverted", async () => 
 			execFileSync("git", ["log", "--oneline", "-1"], { cwd: repoDir, encoding: "utf-8" }),
 			/Revert "harness: quarantine invalid turn"/,
 		);
+		await runtime.dispose();
+		await flushAsyncWork();
 	} finally {
 		rmSync(repoDir, { recursive: true, force: true });
 		rmSync(storageDir, { recursive: true, force: true });

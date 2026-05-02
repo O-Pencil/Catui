@@ -1,20 +1,36 @@
 /**
- * [WHO]: TeammateRole, TeammateMode, HarnessState, PsycheWeights, PersistedTeammate, TeamSpawnSpec, TeamSendResult
+ * [WHO]: TeammateRole, TeammateMode, HarnessState, PsycheWeights, TeamUtterance, Handoff, LeaderPlan, AgentLiveView, PersistedTeammate, TeamSpawnSpec, TeamSendResult
  * [FROM]: No external deps
- * [TO]: Consumed by team-state-store.ts, team-runtime.ts, team-parser.ts, index.ts
- * [HERE]: extensions/defaults/team/team-types.ts - shared type surface for team extension (Phase B M1)
+ * [TO]: Consumed by team-state-store.ts, team-runtime.ts, team-parser.ts, team-dashboard.ts, team-orchestrator.ts, index.ts
+ * [HERE]: extensions/defaults/team/team-types.ts - shared type surface for team extension
  */
 
 /**
  * Teammate role. Determines default mode and toolset.
+ * - pm: planning and sequencing
+ * - architect: system design and technical decomposition
+ * - developer: implementation and code delivery
+ * - designer: UX/UI and interaction review
+ * - data-analyst: metrics, evidence, and verification framing
  * - researcher: read-only exploration
  * - reviewer: read-only review/audit
- * - implementer: sandboxed write in isolated worktree
- * - planner: read-only, produces plans
- * - verifier: read-only verification with stricter quality constraints
+ * - implementer: legacy implementation role
+ * - planner: legacy planning role
+ * - verifier: legacy verification role
  * - generic: read-only by default, caller supplies mode
  */
-export type TeammateRole = "researcher" | "reviewer" | "implementer" | "planner" | "verifier" | "generic";
+export type TeammateRole =
+	| "pm"
+	| "architect"
+	| "developer"
+	| "designer"
+	| "data-analyst"
+	| "researcher"
+	| "reviewer"
+	| "implementer"
+	| "planner"
+	| "verifier"
+	| "generic";
 
 /**
  * Teammate operating mode. Controls the permission envelope.
@@ -91,10 +107,83 @@ export interface TeammateLiveState {
   updatedAt: number;
 }
 
+/** High-level conversation role surfaced in the team TUI. */
+export type TeamSpeakerRole = "leader" | TeammateRole;
+
+/** Canonical message kind used by the team speaker stream. */
+export type TeamMessageKind = "thought" | "work" | "handoff" | "result";
+
+/** Parsed @mention used for agent-to-agent handoffs. */
+export interface TeamMention {
+  raw: string;
+  targetId: string;
+  targetName: string;
+  targetLabel: string;
+  task: string;
+}
+
+/** One utterance in the visible team chat stream. */
+export interface TeamUtterance {
+  id: string;
+  speakerId: string;
+  speakerLabel: string;
+  role: TeamSpeakerRole;
+  text: string;
+  kind: TeamMessageKind;
+  mentions: TeamMention[];
+  timestamp: number;
+}
+
+/** Leader-visible handoff edge between two agents. */
+export interface Handoff {
+  id: string;
+  from: string;
+  to: string;
+  task: string;
+  status: "pending" | "accepted" | "done" | "blocked";
+  timestamp: number;
+}
+
+/** Compact per-agent state shown in the workbench/dashboard. */
+export interface AgentLiveView {
+  name: string;
+  label: string;
+  role: TeammateRole;
+  currentTask?: string;
+  lastUtterance?: string;
+  blockedOn?: string;
+  progress?: string;
+}
+
+/** One leader-owned subtask in the orchestration plan. */
+export interface LeaderSubtask {
+  id: string;
+  ownerId: string;
+  ownerName: string;
+  ownerLabel: string;
+  ownerRole: TeammateRole;
+  title: string;
+  task: string;
+  dependsOn: string[];
+  status: "pending" | "in_progress" | "done" | "blocked";
+}
+
+/** Session-scoped leader plan used by the orchestrator. */
+export interface LeaderPlan {
+  userGoal: string;
+  phase: "plan" | "assign" | "watch" | "rebalance" | "summarize" | "done";
+  subtasks: LeaderSubtask[];
+  owners: Record<string, string>;
+  dependencies: Record<string, string[]>;
+  completionState: "pending" | "running" | "completed" | "blocked";
+}
+
 /** Stable identity for a teammate, assigned at spawn time. */
 export interface TeammateIdentity {
   /** Unique id (uuid) */
   id: string;
+  /** Stable short label used in the TUI and mention protocol (A/B/C/...) */
+  label: string;
   /** Human-friendly name (user-supplied or auto-generated) */
   name: string;
   /** Role determines default tools and mode */
@@ -147,6 +236,8 @@ export interface PersistedTeammate {
   psycheOverrides?: Partial<PsycheWeights>;
   /** Runtime-only TUI live state; cleared before persistence after each run */
   live?: TeammateLiveState;
+  /** Structured workbench state shown by the team dashboard */
+  liveView?: AgentLiveView;
 }
 
 /** Input for spawning a new teammate. */
@@ -174,6 +265,8 @@ export interface TeamSendResult {
   aborted?: boolean;
   error?: string;
   durationMs: number;
+  utterance?: TeamUtterance;
+  mentions?: TeamMention[];
 }
 
 /** Durable task record shared by the team. */

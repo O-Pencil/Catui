@@ -2,39 +2,42 @@
  * [WHO]: Provides renderTeamDashboard(), renderTeamFooterStatus()
  * [FROM]: Depends on ./team-types and ./team-psyche formatting helpers
  * [TO]: Consumed by index.ts to render /team:dashboard widget and footer status text
- * [HERE]: extensions/defaults/team/team-dashboard.ts - lightweight text dashboard for AgentTeam state
+ * [HERE]: extensions/defaults/team/team-dashboard.ts - lightweight team workbench dashboard
  */
 
-import type { PersistedTeammate, PsycheWeights } from "./team-types.js";
+import type { PersistedTeammate } from "./team-types.js";
 
-export function renderTeamDashboard(teammates: PersistedTeammate[], width = 80): string[] {
-	if (teammates.length === 0) return ["Team Dashboard: no teammates"];
+interface TeamDashboardOptions {
+	expanded?: boolean;
+}
 
-	const outerWidth = Math.max(60, Math.min(width, 120));
-	const cardWidth = outerWidth >= 110 ? Math.floor((outerWidth - 5) / 2) : outerWidth - 2;
-	const cards = teammates.map((teammate) => renderTeammateCard(teammate, cardWidth));
-	const lines = [`+ Team Dashboard ${"-".repeat(Math.max(0, outerWidth - 18))}+`];
+export function renderTeamDashboard(teammates: PersistedTeammate[], width = 80, options: TeamDashboardOptions = {}): string[] {
+	if (teammates.length === 0) return ["Team: no agents"];
 
-	if (outerWidth >= 110) {
-		for (let i = 0; i < cards.length; i += 2) {
-			const left = cards[i] ?? [];
-			const right = cards[i + 1] ?? [];
-			const height = Math.max(left.length, right.length);
-			for (let row = 0; row < height; row++) {
-				const leftLine = left[row] ?? " ".repeat(cardWidth);
-				const rightLine = right[row] ?? " ".repeat(cardWidth);
-				lines.push(`| ${leftLine} ${rightLine} |`);
-			}
-		}
-	} else {
-		for (const card of cards) {
-			for (const line of card) {
-				lines.push(`| ${line} |`);
-			}
-		}
+	const panelWidth = Math.max(58, Math.min(width, 100));
+	const active = teammates.filter((teammate) => teammate.status === "running").length;
+	const blocked = teammates.filter((teammate) => teammate.liveView?.blockedOn || teammate.status === "error").length;
+	const visibleCount = options.expanded ? 6 : 4;
+	const visibleTeammates = prioritizeTeammates(teammates).slice(0, visibleCount);
+	const hiddenCount = Math.max(0, teammates.length - visibleTeammates.length);
+	const bodyWidth = panelWidth - 2;
+	const lines = [
+		`+${pad(` Team Workbench  ${teammates.length} agents | ${active} running | ${blocked} blocked `, bodyWidth, "-")}+`,
+	];
+
+	for (const teammate of visibleTeammates) {
+		lines.push(`|${pad(renderAgentLine(teammate, bodyWidth), bodyWidth)}|`);
+	}
+	if (hiddenCount > 0) {
+		lines.push(`|${pad(`+ ${hiddenCount} more agents`, bodyWidth)}|`);
 	}
 
-	lines.push(`+${"-".repeat(Math.max(0, outerWidth - 2))}+`);
+	const latest = latestUtterances(teammates, options.expanded ? 2 : 1);
+	for (const item of latest) {
+		lines.push(`|${pad(`${item.name}: ${item.text}`, bodyWidth)}|`);
+	}
+
+	lines.push(`+${"-".repeat(bodyWidth)}+`);
 	return lines;
 }
 
@@ -44,62 +47,55 @@ export function renderTeamFooterStatus(teammates: PersistedTeammate[]): string |
 	const summaries = teammates
 		.slice(0, 3)
 		.map((teammate) => {
-			const harness = teammate.harness;
-			const progress = harness?.enabled ? ` ${harness.phase} ${harness.passedFeatures}/${harness.totalFeatures}` : "";
+			const progress = teammate.liveView?.progress ? ` ${teammate.liveView.progress}` : "";
 			return `${teammate.identity.name}:${teammate.status}${progress}`;
 		})
 		.join(" | ");
 	return `team: ${teammates.length} agents${active ? ` (${active} running)` : ""} | ${summaries}`;
 }
 
-function renderTeammateCard(teammate: PersistedTeammate, width: number): string[] {
-	const harness = teammate.harness;
-	const phase = harness?.enabled ? harness.phase : "-";
-	const progress = harness?.enabled ? `${harness.passedFeatures}/${harness.totalFeatures}` : "-";
-	const feature = harness?.currentFeature ?? "none";
-	const percent = harness?.enabled && harness.totalFeatures > 0 ? harness.passedFeatures / harness.totalFeatures : 0;
-	const live = teammate.live;
-	const title = `${teammate.identity.name} (${teammate.identity.role})`;
-	const inner = Math.max(20, width - 2);
-
-	return [
-		`+${pad(` ${truncate(title, inner - 2)} `, inner, "-")}+`,
-		`|${pad(`${statusIcon(teammate.status)} ${teammate.status}  mode:${teammate.mode}  phase:${phase}`, inner)}|`,
-		`|${pad(`live: ${live ? `${live.phase}${live.toolName ? `:${live.toolName}` : ""}` : "idle"}`, inner)}|`,
-		`|${pad(renderPsycheBar(teammate.psyche), inner)}|`,
-		`|${pad(`feature: [${progress}] ${truncate(feature, Math.max(8, inner - 17))}`, inner)}|`,
-		`|${pad(`progress: ${renderProgressBar(percent, Math.max(8, inner - 15))}`, inner)}|`,
-		...(live?.preview ? renderPreviewLines(live.preview, inner) : []),
-		`+${"-".repeat(inner)}+`,
-	];
+function renderAgentLine(teammate: PersistedTeammate, width: number): string {
+	const liveView = teammate.liveView;
+	const nameWidth = 11;
+	const roleWidth = 12;
+	const stateWidth = 13;
+	const taskWidth = Math.max(12, width - nameWidth - roleWidth - stateWidth - 8);
+	const marker = statusIcon(teammate.status);
+	const name = pad(truncate(teammate.identity.name, nameWidth), nameWidth);
+	const role = pad(truncate(teammate.identity.role, roleWidth), roleWidth);
+	const state = pad(truncate(formatState(teammate), stateWidth), stateWidth);
+	const task = truncate(liveView?.currentTask ?? liveView?.lastUtterance ?? "-", taskWidth);
+	return `${marker} ${name} ${role} ${state} ${task}`;
 }
 
-function renderPreviewLines(preview: string, width: number): string[] {
-	const label = "stream: ";
-	const textWidth = Math.max(12, width - label.length);
-	const wrapped = wrapText(tailText(preview, textWidth * 4), textWidth).slice(-4);
-	if (wrapped.length === 0) return [];
-
-	return wrapped.map((line, index) => {
-		const prefix = index === 0 ? label : " ".repeat(label.length);
-		return `|${pad(`${prefix}${line}`, width)}|`;
-	});
+function formatState(teammate: PersistedTeammate): string {
+	if (teammate.liveView?.blockedOn) return `blocked:${teammate.liveView.blockedOn}`;
+	if (teammate.liveView?.progress) return teammate.liveView.progress;
+	if (teammate.live?.phase) return teammate.live.toolName ? `${teammate.live.phase}:${teammate.live.toolName}` : teammate.live.phase;
+	return teammate.status;
 }
 
-function renderPsycheBar(weights: PsycheWeights | undefined): string {
-	if (!weights) return "psyche: unavailable";
-	return `psyche: Id${bar(weights.id)} Eg${bar(weights.ego)} Se${bar(weights.superego)}`;
+function latestUtterances(teammates: PersistedTeammate[], limit: number): Array<{ name: string; text: string; timestamp: number }> {
+	return teammates
+		.map((teammate) => ({
+			name: teammate.identity.name,
+			text: singleLine(teammate.liveView?.lastUtterance ?? teammate.live?.preview ?? ""),
+			timestamp: teammate.lastActiveAt,
+		}))
+		.filter((item) => item.text.length > 0)
+		.sort((a, b) => b.timestamp - a.timestamp)
+		.slice(0, limit)
+		.map((item) => ({ ...item, text: truncate(item.text, 74) }));
 }
 
-function bar(value: number): string {
-	const filled = Math.round(Math.max(0, Math.min(10, value)));
-	return `${"#".repeat(filled)}${"-".repeat(10 - filled)}`;
-}
-
-function renderProgressBar(percent: number, width: number): string {
-	const bounded = Math.max(0, Math.min(1, percent));
-	const filled = Math.round(bounded * width);
-	return `${"#".repeat(filled)}${"-".repeat(width - filled)} ${Math.round(bounded * 100)}%`;
+function prioritizeTeammates(teammates: PersistedTeammate[]): PersistedTeammate[] {
+	const rank = (teammate: PersistedTeammate): number => {
+		if (teammate.status === "running") return 0;
+		if (teammate.liveView?.blockedOn || teammate.status === "error") return 1;
+		if (teammate.liveView?.progress && teammate.liveView.progress !== "done") return 2;
+		return 3;
+	};
+	return [...teammates].sort((a, b) => rank(a) - rank(b) || b.lastActiveAt - a.lastActiveAt);
 }
 
 function statusIcon(status: PersistedTeammate["status"]): string {
@@ -124,28 +120,6 @@ function truncate(value: string, max: number): string {
 
 function singleLine(value: string): string {
 	return value.replace(/\s+/g, " ").trim();
-}
-
-function tailText(value: string, max: number): string {
-	if (value.length <= max) return value;
-	return value.slice(value.length - max);
-}
-
-function wrapText(value: string, width: number): string[] {
-	const normalized = singleLine(value);
-	if (!normalized) return [];
-
-	const lines: string[] = [];
-	let remaining = normalized;
-	while (remaining.length > width) {
-		const hardSlice = remaining.slice(0, width);
-		const breakAt = Math.max(hardSlice.lastIndexOf(" "), hardSlice.lastIndexOf("\t"));
-		const cut = breakAt > Math.floor(width * 0.5) ? breakAt : width;
-		lines.push(remaining.slice(0, cut).trim());
-		remaining = remaining.slice(cut).trimStart();
-	}
-	if (remaining) lines.push(remaining);
-	return lines;
 }
 
 function pad(value: string, width: number, fill = " "): string {

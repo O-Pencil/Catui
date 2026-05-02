@@ -13,7 +13,7 @@ import { SubAgentRuntime } from "../../../core/sub-agent/index.js";
 import type { SubAgentEvent, SubAgentHandle, SubAgentSpec } from "../../../core/sub-agent/index.js";
 import { WorktreeManager } from "../../../core/workspace/index.js";
 import type { WorkspacePath } from "../../../core/workspace/index.js";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import {
 	createBashTool,
 	createCodingTools,
@@ -37,6 +37,7 @@ import {
 } from "./team-harness.js";
 import { buildPsychePrompt, computePsycheWeights, type SoulTraits } from "./team-psyche.js";
 import type {
+	AgentLiveView,
 	PersistedTeammate,
 	TeamTask,
 	TeamTaskStatus,
@@ -90,6 +91,7 @@ export class TeamRuntime {
 	private sendQueues: Map<string, Promise<void>> = new Map();
 	private loaded = false;
 	private nameCounter = 0;
+	private labelCounter = 0;
 	private soulManager: unknown;
 
 	constructor(options: TeamRuntimeOptions = {}) {
@@ -157,7 +159,13 @@ export class TeamRuntime {
 			if (state.status === "running") {
 				state.status = "idle";
 			}
+			if (!state.identity.label) {
+				state.identity.label = this.generateLabel();
+				await this.store.save(state);
+			}
 			this.bumpNameCounter(state.identity.name, state.identity.role);
+			this.bumpLabelCounter(state.identity.label);
+			state.liveView = this.ensureLiveView(state.liveView, state.identity);
 
 			const teammate: RuntimeTeammate = {
 				state,
@@ -166,6 +174,7 @@ export class TeamRuntime {
 			};
 			this.teammates.set(state.identity.id, teammate);
 			this.teammates.set(state.identity.name, teammate);
+			this.teammates.set(state.identity.label, teammate);
 		}
 
 		this.loaded = true;
@@ -188,19 +197,20 @@ export class TeamRuntime {
 		}
 
 		let worktree: WorkspacePath | undefined;
-		if (spec.role === "implementer") {
+		if (isBuilderRole(spec.role)) {
 			worktree = await this.worktreeManager.createGitWorktree(undefined, spec.baseCwd);
 		}
 
 		const identity: TeammateIdentity = {
 			id: crypto.randomUUID(),
+			label: this.generateLabel(),
 			name,
 			role: spec.role,
 			createdAt: Date.now(),
 		};
 
 		const mode: TeammateMode =
-			spec.mode ?? (spec.harnessEnabled && spec.role === "implementer" ? "execute" : this.getDefaultModeForRole(spec.role));
+			spec.mode ?? (spec.harnessEnabled && isBuilderRole(spec.role) ? "execute" : this.getDefaultModeForRole(spec.role));
 
 		const state: PersistedTeammate = {
 			identity,
@@ -214,11 +224,12 @@ export class TeamRuntime {
 			messages: [],
 			lastActiveAt: Date.now(),
 			psycheOverrides: spec.psycheOverrides,
+			liveView: this.ensureLiveView(undefined, identity),
 		};
 		if (spec.harnessEnabled) {
 			state.harness = createInitialHarnessState();
 		}
-		if (spec.psycheOverrides || spec.role === "verifier") {
+		if (spec.psycheOverrides || spec.role === "verifier" || spec.role === "data-analyst") {
 			state.psyche = computePsycheWeights("verify", spec.role, undefined, spec.psycheOverrides);
 		}
 
@@ -230,6 +241,7 @@ export class TeamRuntime {
 
 		this.teammates.set(identity.id, teammate);
 		this.teammates.set(identity.name, teammate);
+		this.teammates.set(identity.label, teammate);
 
 		await this.store.save(state);
 
@@ -275,44 +287,49 @@ export class TeamRuntime {
 			const turnAbortController = new AbortController();
 			teammate.currentTurnAbortController = turnAbortController;
 
-		const leaderMessage: TeammateMessage = {
-			id: crypto.randomUUID(),
-			timestamp: startTime,
-			direction: "leader",
-			content: message,
-		};
-		teammate.state.messages.push(leaderMessage);
+			const leaderMessage: TeammateMessage = {
+				id: crypto.randomUUID(),
+				timestamp: startTime,
+				direction: "leader",
+				content: message,
+			};
+			teammate.state.messages.push(leaderMessage);
+			teammate.state.liveView = {
+				...this.ensureLiveView(teammate.state.liveView, teammate.state.identity),
+				currentTask: summarizeTask(message),
+				progress: "assigned",
+			};
 
-		teammate.state.status = "running";
-		teammate.state.lastActiveAt = startTime;
-		await this.store.save(teammate.state);
-		options.onEvent?.({
-			type: "teammate_status",
-			teammate: teammate.state,
-			event: `Started ${teammate.state.identity.name} (${teammate.state.identity.role}) in ${teammate.state.mode} mode.`,
-		});
+			teammate.state.status = "running";
+			teammate.state.lastActiveAt = startTime;
+			await this.store.save(teammate.state);
+			options.onEvent?.({
+				type: "teammate_status",
+				teammate: teammate.state,
+				event: `Started ${teammate.state.identity.name} (${teammate.state.identity.role}) in ${teammate.state.mode} mode.`,
+			});
 
-		this.mailbox.post({
-			teammateId: teammate.state.identity.id,
-			teammateName: teammate.state.identity.name,
-			type: "task_request",
-			direction: "leader_to_teammate",
-			payload: { content: message },
-		});
-		await this.transcripts.append(teammate.state.identity.id, {
-			timestamp: startTime,
-			kind: "leader",
-			content: message,
-		});
+			this.mailbox.post({
+				teammateId: teammate.state.identity.id,
+				teammateName: teammate.state.identity.name,
+				type: "task_request",
+				direction: "leader_to_teammate",
+				payload: { content: message },
+			});
+			await this.transcripts.append(teammate.state.identity.id, {
+				timestamp: startTime,
+				kind: "leader",
+				content: message,
+			});
 
-		const prompt = await this.buildPrompt(teammate.state);
-		const harnessContext = await this.prepareHarnessTurn(teammate, message);
-		const fullPrompt = harnessContext
-			? [prompt, harnessContext.psychePrompt, harnessContext.harnessInstructions].join("\n\n")
-			: prompt;
-		const tools = this.selectTools(teammate.state.mode, teammate.state.cwd);
+			const prompt = await this.buildPrompt(teammate.state);
+			const harnessContext = await this.prepareHarnessTurn(teammate, message);
+			const fullPrompt = harnessContext
+				? [prompt, harnessContext.psychePrompt, harnessContext.harnessInstructions].join("\n\n")
+				: prompt;
+			const tools = this.selectTools(teammate.state.mode, teammate.state.cwd);
 
-		try {
+			try {
 			const spec: SubAgentSpec = {
 				prompt: fullPrompt,
 				tools,
@@ -368,6 +385,11 @@ export class TeamRuntime {
 			}
 			teammate.state.lastActiveAt = Date.now();
 			teammate.state.live = undefined;
+			teammate.state.liveView = {
+				...this.ensureLiveView(teammate.state.liveView, teammate.state.identity),
+				lastUtterance: tailText(singleLine(teammateResponse.content), 200),
+				progress: result.success ? "done" : teammateResponse.aborted ? "stopped" : "error",
+			};
 			await this.store.save(teammate.state);
 			options.onEvent?.({
 				type: "teammate_status",
@@ -421,6 +443,11 @@ export class TeamRuntime {
 			teammate.state.lastError = errorMsg === "Aborted" ? undefined : errorMsg;
 			teammate.state.lastActiveAt = Date.now();
 			teammate.state.live = undefined;
+			teammate.state.liveView = {
+				...this.ensureLiveView(teammate.state.liveView, teammate.state.identity),
+				lastUtterance: tailText(singleLine(errorMessage.content), 200),
+				progress: errorMsg === "Aborted" ? "stopped" : "error",
+			};
 			await this.store.save(teammate.state);
 			options.onEvent?.({
 				type: "teammate_status",
@@ -526,6 +553,7 @@ export class TeamRuntime {
 
 		this.teammates.delete(teammate.state.identity.id);
 		this.teammates.delete(teammate.state.identity.name);
+		this.teammates.delete(teammate.state.identity.label);
 
 		return true;
 	}
@@ -549,7 +577,7 @@ export class TeamRuntime {
 		if (!teammate) return { ok: false, error: "not_found" };
 
 		const needsApproval =
-			mode === "execute" && teammate.state.identity.role === "implementer" && teammate.state.mode !== "execute";
+			mode === "execute" && isBuilderRole(teammate.state.identity.role) && teammate.state.mode !== "execute";
 
 		if (!needsApproval) {
 			teammate.state.mode = mode;
@@ -767,6 +795,15 @@ export class TeamRuntime {
 		return candidate;
 	}
 
+	private generateLabel(): string {
+		let candidate = "";
+		do {
+			this.labelCounter++;
+			candidate = labelFromIndex(this.labelCounter);
+		} while (this.teammates.has(candidate));
+		return candidate;
+	}
+
 	private bumpNameCounter(name: string, role: TeammateRole): void {
 		const match = new RegExp(`^${role}-(\\d+)$`).exec(name);
 		if (!match) return;
@@ -774,6 +811,13 @@ export class TeamRuntime {
 		const nextCounter = Number.parseInt(match[1] ?? "", 10);
 		if (Number.isFinite(nextCounter)) {
 			this.nameCounter = Math.max(this.nameCounter, nextCounter);
+		}
+	}
+
+	private bumpLabelCounter(label: string): void {
+		const index = indexFromLabel(label);
+		if (index > 0) {
+			this.labelCounter = Math.max(this.labelCounter, index);
 		}
 	}
 
@@ -789,8 +833,15 @@ export class TeamRuntime {
 
 	private getDefaultModeForRole(role: TeammateRole): TeammateMode {
 		switch (role) {
+			case "pm":
+			case "architect":
+				return "plan";
+			case "designer":
+			case "data-analyst":
 			case "researcher":
 				return "research";
+			case "developer":
+				return "plan";
 			case "reviewer":
 				return "review";
 			case "verifier":
@@ -806,10 +857,12 @@ export class TeamRuntime {
 	}
 
 	private async buildPrompt(state: PersistedTeammate): Promise<string> {
+		const teammates = this.getAllTeammates();
 		const lines: string[] = [
 			"You are a persistent teammate in an AgentTeam.",
 			"",
 			"Identity:",
+			`  Label: ${state.identity.label}`,
 			`  Name: ${state.identity.name}`,
 			`  Role: ${state.identity.role}`,
 			`  Mode: ${state.mode}`,
@@ -821,6 +874,14 @@ export class TeamRuntime {
 			`  - execute: sandboxed write inside your working directory`,
 			`  - review: read-only review and feedback`,
 			"",
+			"Team roster:",
+			...teammates.map((teammate) => `  - ${teammate.identity.name} (${teammate.identity.role})`),
+			"",
+			"Mention rules:",
+			"  - Use @Name mentions only for concrete handoffs.",
+			"  - Every mention must include the next-step task after the mention.",
+			"  - Do not ping another teammate without actionable work.",
+			"",
 			"Conversation history with the leader:",
 		];
 
@@ -828,7 +889,7 @@ export class TeamRuntime {
 			lines.push("  (none yet)");
 		} else {
 			for (const msg of state.messages) {
-				const prefix = msg.direction === "leader" ? "Leader" : "You";
+				const prefix = msg.direction === "leader" ? "pencil" : state.identity.name;
 				lines.push(`${prefix}: ${msg.content}`);
 			}
 		}
@@ -934,6 +995,7 @@ export class TeamRuntime {
 
 	private applyLiveEvent(teammate: RuntimeTeammate, event: SubAgentEvent): void {
 		const previous = teammate.state.live;
+		const liveView = this.ensureLiveView(teammate.state.liveView, teammate.state.identity);
 		switch (event.type) {
 			case "agent_start":
 				teammate.state.live = {
@@ -942,6 +1004,7 @@ export class TeamRuntime {
 					toolName: null,
 					updatedAt: event.timestamp,
 				};
+				teammate.state.liveView = { ...liveView, progress: "starting" };
 				break;
 			case "message_update":
 				teammate.state.live = {
@@ -950,6 +1013,11 @@ export class TeamRuntime {
 					toolName: previous?.toolName ?? null,
 					updatedAt: event.timestamp,
 				};
+				teammate.state.liveView = {
+					...liveView,
+					lastUtterance: tailText(singleLine(event.text || previous?.preview || ""), 200),
+					progress: "thinking",
+				};
 				break;
 			case "message_end":
 				teammate.state.live = {
@@ -957,6 +1025,11 @@ export class TeamRuntime {
 					preview: tailText(event.text || previous?.preview || "", 1200),
 					toolName: previous?.toolName ?? null,
 					updatedAt: event.timestamp,
+				};
+				teammate.state.liveView = {
+					...liveView,
+					lastUtterance: tailText(singleLine(event.text || previous?.preview || ""), 200),
+					progress: "finishing",
 				};
 				break;
 			case "tool_start":
@@ -971,6 +1044,7 @@ export class TeamRuntime {
 					toolName: event.toolName,
 					updatedAt: event.timestamp,
 				};
+				teammate.state.liveView = { ...liveView, progress: `tool:${event.toolName}` };
 				break;
 			case "agent_end":
 				teammate.state.live = {
@@ -979,8 +1053,21 @@ export class TeamRuntime {
 					toolName: null,
 					updatedAt: event.timestamp,
 				};
+				teammate.state.liveView = { ...liveView, progress: event.success ? "done" : "error" };
 				break;
 		}
+	}
+
+	private ensureLiveView(view: AgentLiveView | undefined, identity: TeammateIdentity): AgentLiveView {
+		return {
+			name: identity.name,
+			label: identity.label,
+			role: identity.role,
+			currentTask: view?.currentTask,
+			lastUtterance: view?.lastUtterance,
+			blockedOn: view?.blockedOn,
+			progress: view?.progress,
+		};
 	}
 
 	private selectTools(mode: TeammateMode, cwd: string): Tool[] {
@@ -1045,8 +1132,9 @@ function normalizePath(path: string): string {
 }
 
 function isWithinPath(target: string, root: string): boolean {
-	const rel = relative(root, target);
-	return rel === "" || (!!rel && !rel.startsWith("..") && !isAbsolute(rel));
+	const normalizedRoot = normalizeForComparison(root);
+	const normalizedTarget = normalizeForComparison(target);
+	return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}/`);
 }
 
 function formatTaskForPrompt(task: TeamTask): string {
@@ -1057,7 +1145,44 @@ function formatTaskForPrompt(task: TeamTask): string {
 	return `${task.id} [${task.status}]${owner}${deps}${artifacts} ${task.title}${detail}`;
 }
 
+function summarizeTask(value: string): string {
+	return tailText(singleLine(value), 160);
+}
+
+function singleLine(value: string): string {
+	return value.replace(/\s+/g, " ").trim();
+}
+
 function tailText(value: string, maxLength: number): string {
 	if (value.length <= maxLength) return value;
 	return value.slice(value.length - maxLength);
+}
+
+function labelFromIndex(index: number): string {
+	let current = index;
+	let label = "";
+	while (current > 0) {
+		current--;
+		label = String.fromCharCode(65 + (current % 26)) + label;
+		current = Math.floor(current / 26);
+	}
+	return label || "A";
+}
+
+function indexFromLabel(label: string): number {
+	let result = 0;
+	for (const char of label.toUpperCase()) {
+		const code = char.charCodeAt(0);
+		if (code < 65 || code > 90) return 0;
+		result = result * 26 + (code - 64);
+	}
+	return result;
+}
+
+function isBuilderRole(role: TeammateRole): boolean {
+	return role === "implementer" || role === "developer";
+}
+
+function normalizeForComparison(value: string): string {
+	return normalizePath(value).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }

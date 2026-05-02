@@ -77,7 +77,19 @@ export interface ParsedTeamCommand {
 	path?: string;
 }
 
-const VALID_ROLES: TeammateRole[] = ["researcher", "reviewer", "implementer", "planner", "verifier", "generic"];
+const VALID_ROLES: TeammateRole[] = [
+	"pm",
+	"architect",
+	"developer",
+	"designer",
+	"data-analyst",
+	"researcher",
+	"reviewer",
+	"implementer",
+	"planner",
+	"verifier",
+	"generic",
+];
 const VALID_MODES: TeammateMode[] = ["research", "plan", "execute", "review"];
 const VALID_PRESETS: PresetName[] = ["solo", "duo", "squad"];
 
@@ -320,7 +332,7 @@ Team Commands (AgentTeam + Harness):
   /team:approve <request-id>      - Approve a permission request
   /team:mode <name> <mode>        - Switch teammate mode
 
-Roles: researcher, reviewer, implementer, planner, verifier, generic
+Roles: pm, architect, developer, designer, data-analyst, researcher, reviewer, implementer, planner, verifier, generic
 Modes: research, plan, execute, review
 
 Examples:

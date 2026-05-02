@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildTeamHelp, parseTeamCommand } from "../extensions/defaults/team/team-parser.js";
 import { selectAutoTeamPlan } from "../extensions/defaults/team/team-presets.js";
+import { parseTeamMentions } from "../extensions/defaults/team/team-orchestrator.js";
+import { renderTeamDashboard } from "../extensions/defaults/team/team-dashboard.js";
+import type { PersistedTeammate } from "../extensions/defaults/team/team-types.js";
 
 test("team-parser: parses root list and help commands", () => {
 	assert.deepEqual(parseTeamCommand("team", ""), { command: "list" });
@@ -100,19 +103,136 @@ test("team-presets: auto team selector uses model JSON when available", async ()
 		JSON.stringify({
 			presetName: "squad",
 			rationale: "Needs planning and parallel work.",
-			startTargetRole: "planner",
+			startTargetRole: "pm",
 		}),
 	);
 
 	assert.deepEqual(plan, {
 		presetName: "squad",
 		rationale: "Needs planning and parallel work.",
-		startTargetRole: "planner",
+		startTargetRole: "pm",
 	});
 });
 
 test("team-presets: auto team selector falls back to heuristics", async () => {
 	assert.equal((await selectAutoTeamPlan("fix typo in help text")).presetName, "solo");
-	assert.equal((await selectAutoTeamPlan("implement auth with tests")).presetName, "duo");
+	assert.equal((await selectAutoTeamPlan("implement auth with tests")).presetName, "squad");
 	assert.equal((await selectAutoTeamPlan("large architecture migration across modules")).presetName, "squad");
+	assert.equal((await selectAutoTeamPlan("analyze the API before implementation")).presetName, "duo");
+});
+
+test("team-orchestrator: parses concrete @mentions against labels", () => {
+	const teammates: PersistedTeammate[] = [
+		{
+			identity: { id: "a", label: "A", name: "researcher", role: "researcher", createdAt: 1 },
+			mode: "research",
+			status: "idle",
+			cwd: process.cwd(),
+			messages: [],
+			lastActiveAt: 1,
+		},
+		{
+			identity: { id: "b", label: "B", name: "implementer", role: "implementer", createdAt: 2 },
+			mode: "plan",
+			status: "idle",
+			cwd: process.cwd(),
+			messages: [],
+			lastActiveAt: 2,
+		},
+	];
+
+	const mentions = parseTeamMentions("I mapped the API. @B implement the client with retry handling.", teammates);
+	assert.deepEqual(mentions, [
+		{
+			raw: "@B",
+			targetId: "b",
+			targetName: "implementer",
+			targetLabel: "B",
+			task: "implement the client with retry handling.",
+		},
+	]);
+});
+
+test("team-orchestrator: ignores mention without concrete task", () => {
+	const teammates: PersistedTeammate[] = [
+		{
+			identity: { id: "a", label: "A", name: "researcher", role: "researcher", createdAt: 1 },
+			mode: "research",
+			status: "idle",
+			cwd: process.cwd(),
+			messages: [],
+			lastActiveAt: 1,
+		},
+	];
+	assert.deepEqual(parseTeamMentions("Looping in @A", teammates), []);
+});
+
+test("team-orchestrator: parses concrete @mentions against visible names", () => {
+	const teammates: PersistedTeammate[] = [
+		{
+			identity: { id: "a", label: "A", name: "Ada", role: "architect", createdAt: 1 },
+			mode: "plan",
+			status: "idle",
+			cwd: process.cwd(),
+			messages: [],
+			lastActiveAt: 1,
+		},
+		{
+			identity: { id: "b", label: "B", name: "Theo", role: "developer", createdAt: 2 },
+			mode: "plan",
+			status: "idle",
+			cwd: process.cwd(),
+			messages: [],
+			lastActiveAt: 2,
+		},
+	];
+
+	const mentions = parseTeamMentions("I mapped the modules. @Theo implement the client and wire the tests.", teammates);
+	assert.deepEqual(mentions, [
+		{
+			raw: "@Theo",
+			targetId: "b",
+			targetName: "Theo",
+			targetLabel: "B",
+			task: "implement the client and wire the tests.",
+		},
+	]);
+});
+
+test("team-dashboard: renders compact workbench with visible names", () => {
+	const teammates: PersistedTeammate[] = [
+		{
+			identity: { id: "pm", label: "A", name: "Mason", role: "pm", createdAt: 1 },
+			mode: "plan",
+			status: "idle",
+			cwd: process.cwd(),
+			messages: [],
+			lastActiveAt: 1,
+			liveView: { name: "Mason", label: "A", role: "pm", currentTask: "Frame scope", progress: "done" },
+		},
+		{
+			identity: { id: "dev", label: "B", name: "Theo", role: "developer", createdAt: 2 },
+			mode: "execute",
+			status: "running",
+			cwd: process.cwd(),
+			messages: [],
+			lastActiveAt: 2,
+			liveView: {
+				name: "Theo",
+				label: "B",
+				role: "developer",
+				currentTask: "Implement compact workbench",
+				lastUtterance: "I am wiring the dashboard renderer.",
+				progress: "thinking",
+			},
+		},
+	];
+
+	const lines = renderTeamDashboard(teammates, 72);
+	assert.ok(lines.length <= 10);
+	assert.match(lines.join("\n"), /Team Workbench/);
+	assert.match(lines.join("\n"), /Mason/);
+	assert.match(lines.join("\n"), /Theo/);
+	assert.doesNotMatch(lines.join("\n"), /\bA:/);
+	assert.doesNotMatch(lines.join("\n"), /\bB:/);
 });

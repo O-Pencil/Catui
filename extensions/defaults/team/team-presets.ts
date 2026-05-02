@@ -47,35 +47,36 @@ export interface AutoTeamResult extends PresetResult {
 export const PRESETS: Record<PresetName, PresetSpec> = {
 	solo: {
 		name: "solo",
-		description: "Single implementer with harness, suited for most focused tasks.",
-		teammates: [{ role: "implementer", harnessEnabled: true }],
+		description: "Single developer with harness, suited for focused delivery tasks.",
+		teammates: [{ role: "developer", name: "Theo", harnessEnabled: true }],
 		autoStart: true,
 	},
 	duo: {
 		name: "duo",
-		description: "Implementer plus verifier for higher confidence delivery.",
+		description: "Architect plus developer for discovery followed by execution.",
 		teammates: [
-			{ role: "implementer", harnessEnabled: true },
-			{
-				role: "verifier",
-				name: "verifier",
-				mode: "review",
-				harnessEnabled: false,
-				psycheOverrides: { superego: 1.5, id: 0.5 },
-			},
+			{ role: "architect", name: "Ada", mode: "plan", harnessEnabled: false },
+			{ role: "developer", name: "Theo", harnessEnabled: true },
 		],
 		autoStart: false,
 	},
 	squad: {
 		name: "squad",
-		description: "Planner, two implementers, and verifier for larger work.",
+		description: "PM, architect, developer, designer, and data analyst for explicit multi-agent handoffs.",
 		teammates: [
-			{ role: "planner", mode: "plan", harnessEnabled: false },
-			{ role: "implementer", name: "impl-1", harnessEnabled: true },
-			{ role: "implementer", name: "impl-2", harnessEnabled: true },
+			{ role: "pm", name: "Mason", mode: "plan", harnessEnabled: false },
+			{ role: "architect", name: "Ada", mode: "plan", harnessEnabled: false },
+			{ role: "developer", name: "Theo", harnessEnabled: true },
 			{
-				role: "verifier",
-				name: "verifier",
+				role: "designer",
+				name: "Iris",
+				mode: "research",
+				harnessEnabled: false,
+				psycheOverrides: { id: 1.3, ego: 1.1 },
+			},
+			{
+				role: "data-analyst",
+				name: "Quinn",
 				mode: "review",
 				harnessEnabled: false,
 				psycheOverrides: { superego: 1.5, id: 0.5 },
@@ -143,7 +144,8 @@ export async function executeAutoTeam(
 			teammateName: startTarget.identity.name,
 			success: sendResult.success,
 			error: sendResult.error,
-		};
+			response: sendResult.response,
+		} as typeof result.started & { response?: string };
 	}
 
 	return result;
@@ -167,12 +169,16 @@ export function formatPresetResult(result: PresetResult): string[] {
 		lines.push(`  ${teammate.identity.name} (${teammate.identity.role}, ${teammate.mode})${harness}`);
 	}
 	if (result.started) {
+		const started = result.started as typeof result.started & { response?: string };
 		lines.push(
 			"",
-			result.started.success
-				? `Auto-started ${result.started.teammateName}.`
-				: `Auto-start for ${result.started.teammateName} failed: ${result.started.error ?? "Unknown error"}`,
+			started.success
+				? `Auto-started ${started.teammateName}.`
+				: `Auto-start for ${started.teammateName} failed: ${started.error ?? "Unknown error"}`,
 		);
+		if (started.success && started.response?.trim()) {
+			lines.push("", `Response from ${started.teammateName}:`, "", started.response);
+		}
 	}
 	return lines;
 }
@@ -194,17 +200,22 @@ async function selectAutoTeamPlanWithModel(
 		const response = await completeSimple(
 			[
 				"You select the smallest useful AgentTeam preset for a coding task.",
-				'Return strict JSON only: {"presetName":"solo|duo|squad","rationale":"short reason","startTargetRole":"implementer|planner"}',
+				'Return strict JSON only: {"presetName":"solo|duo|squad","rationale":"short reason","startTargetRole":"developer|architect|pm"}',
 				"solo: focused implementation or small/medium bugfix.",
-				"duo: implementation needs independent verification, tests, risky behavior, or user-facing correctness.",
-				"squad: large ambiguous work needing planning and parallel implementation.",
+				"duo: implementation needs architecture reading, API mapping, or light decomposition before coding.",
+				"squad: tasks that need explicit handoff, product framing, design input, data validation, review, tests, or broader coordination.",
 			].join("\n"),
 			taskDescription,
 		);
 		if (!response) return undefined;
 		const parsed = JSON.parse(extractJsonObject(response)) as Partial<AutoTeamPlan>;
 		if (parsed.presetName === "solo" || parsed.presetName === "duo" || parsed.presetName === "squad") {
-			const startTargetRole = parsed.startTargetRole === "planner" && parsed.presetName === "squad" ? "planner" : "implementer";
+			const startTargetRole =
+				parsed.startTargetRole === "pm" && parsed.presetName === "squad"
+					? "pm"
+					: parsed.startTargetRole === "architect" && (parsed.presetName === "duo" || parsed.presetName === "squad")
+						? "architect"
+						: "developer";
 			return {
 				presetName: parsed.presetName,
 				rationale: typeof parsed.rationale === "string" ? parsed.rationale : "Selected by the current model.",
@@ -256,21 +267,28 @@ function selectAutoTeamPlanHeuristic(taskDescription: string): AutoTeamPlan {
 	if (largeSignals.some((signal) => text.includes(signal)) || taskDescription.length > 240) {
 		return {
 			presetName: "squad",
-			rationale: "Task looks broad or architectural, so a planner plus implementers and verifier is safer.",
-			startTargetRole: "planner",
+			rationale: "Task looks broad or architectural, so PM, architect, developer, designer, and data analyst are safer.",
+			startTargetRole: "pm",
 		};
 	}
 	if (verifySignals.some((signal) => text.includes(signal))) {
 		return {
+			presetName: "squad",
+			rationale: "Task has correctness or verification signals, so explicit PM, architecture, implementation, design, and data validation are appropriate.",
+			startTargetRole: "pm",
+		};
+	}
+	if (text.includes("refactor") || text.includes("api") || text.includes("investigate") || text.includes("analyze")) {
+		return {
 			presetName: "duo",
-			rationale: "Task has correctness or verification signals, so an implementer plus verifier is appropriate.",
-			startTargetRole: "implementer",
+			rationale: "Task benefits from architecture framing before coding, so an architect plus developer is appropriate.",
+			startTargetRole: "architect",
 		};
 	}
 	return {
 		presetName: "solo",
-		rationale: "Task appears focused enough for one harnessed implementer.",
-		startTargetRole: "implementer",
+		rationale: "Task appears focused enough for one harnessed developer.",
+		startTargetRole: "developer",
 	};
 }
 

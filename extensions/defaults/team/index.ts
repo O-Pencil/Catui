@@ -27,13 +27,21 @@ import { Box, Container, Spacer, Text } from "@pencil-agent/tui";
 import type { ExtensionAPI } from "../../../core/extensions/types.js";
 import { TeamRuntime, type TeamRuntimeEvent } from "./team-runtime.js";
 import { buildTeamHelp, parseTeamCommand } from "./team-parser.js";
-import type { PersistedTeammate, TeamTask } from "./team-types.js";
-import { executeAutoTeam, executePreset, formatAutoTeamResult, formatPresetResult } from "./team-presets.js";
+import type { PersistedTeammate, TeamTask, TeamUtterance } from "./team-types.js";
+import { executePreset, formatPresetResult } from "./team-presets.js";
 import { formatHarnessProgress } from "./team-harness.js";
 import { formatPsycheWeights } from "./team-psyche.js";
 import { renderTeamDashboard, renderTeamFooterStatus } from "./team-dashboard.js";
+import { createTeamUtterance, formatUtteranceForContext, parseTeamMentions, runLeaderOrchestration } from "./team-orchestrator.js";
 
 const TEAM_MESSAGE_TYPE = "team";
+
+interface TeamMessageDetails {
+	variant: "utterance";
+	utterance: TeamUtterance;
+	streamKey?: string;
+	replace?: boolean;
+}
 
 // Global runtime instance
 let runtime: TeamRuntime | null = null;
@@ -65,7 +73,26 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 	});
 
 	// Register message renderer
+	api.on("session_start", (_event, ctx) => {
+		ctx.ui.setWidget("team-dashboard", undefined);
+	});
+
+	api.on("session_switch", (_event, ctx) => {
+		ctx.ui.setWidget("team-dashboard", undefined);
+	});
+
 	api.registerMessageRenderer(TEAM_MESSAGE_TYPE, (message, _options, theme) => {
+		const details = message.details as TeamMessageDetails | undefined;
+		if (details?.variant === "utterance") {
+			const { utterance } = details;
+			const prefix = theme.fg("customMessageLabel", `\x1b[1m${utterance.speakerLabel}:\x1b[22m `);
+			const box = new Box(1, 1, (t) => theme.bg("customMessageBg", t));
+			box.addChild(new Text(prefix + theme.fg("customMessageText", utterance.text), 0, 0));
+			const container = new Container();
+			container.addChild(new Spacer(1));
+			container.addChild(box);
+			return container;
+		}
 		const text =
 			typeof message.content === "string"
 				? message.content
@@ -141,31 +168,21 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 						}
 
 						setTeamActivity(ctx, [
-							"Team: selecting agents for task...",
+							"Team: planning multi-agent work...",
 							`Task: ${truncateForStatus(parsed.taskDescription)}`,
 						]);
-						api.sendMessage({
-							customType: TEAM_MESSAGE_TYPE,
-							content: `Selecting team for task...`,
-							display: true,
-						});
 
 						try {
 							const observer = createTeamObserver(api, ctx, teamRuntime);
-							const result = await executeAutoTeam(
-								teamRuntime,
-								parsed.taskDescription,
-								ctx.cwd,
-								ctx.model,
-								observer.onEvent,
-								ctx.completeSimple,
-							);
-							observer.flush();
-							api.sendMessage({
-								customType: TEAM_MESSAGE_TYPE,
-								content: formatAutoTeamResult(result).join("\n"),
-								display: true,
+							await runLeaderOrchestration(teamRuntime, {
+								taskDescription: parsed.taskDescription,
+								baseCwd: ctx.cwd,
+								model: ctx.model,
+								onRuntimeEvent: observer.onEvent,
+								completeSimple: ctx.completeSimple,
+								emitUtterance: (utterance) => emitTeamUtterance(api, utterance),
 							});
+							observer.flush();
 							updateTeamUi(ctx, teamRuntime);
 						} catch (error: unknown) {
 							const message = error instanceof Error ? error.message : String(error);
@@ -241,12 +258,20 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 
 						const model = ctx.model;
 
-						api.sendMessage({
-							customType: TEAM_MESSAGE_TYPE,
-							content: `Sending message to ${parsed.target}...`,
-							display: true,
-						});
 						setTeamActivity(ctx, [`Team: sending task to ${parsed.target}...`]);
+						const targetTeammate = teamRuntime.getTeammate(parsed.target);
+						emitTeamUtterance(
+							api,
+							createTeamUtterance({
+								speakerId: "leader",
+								speakerLabel: "pencil",
+								role: "leader",
+								kind: "work",
+								text: targetTeammate
+									? `@${targetTeammate.identity.name} ${parsed.message}`
+									: `${parsed.target} ${parsed.message}`,
+							}),
+						);
 
 						try {
 							const observer = createTeamObserver(api, ctx, teamRuntime);
@@ -257,16 +282,52 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 							updateTeamUi(ctx, teamRuntime);
 
 							if (result.success) {
-								const lines = [
-									`Response from ${result.teammateName} (${Math.round(result.durationMs / 1000)}s):`,
-									"",
-									result.response,
-								];
-								api.sendMessage({
-									customType: TEAM_MESSAGE_TYPE,
-									content: lines.join("\n"),
-									display: true,
-								});
+								const teammate = teamRuntime.getTeammate(result.teammateName);
+								const mentions = parseTeamMentions(result.response, teamRuntime.getAllTeammates());
+								emitTeamUtterance(
+									api,
+									createTeamUtterance({
+										speakerId: teammate?.identity.id ?? result.teammateName,
+										speakerLabel: teammate ? formatSpeakerName(teammate) : result.teammateName,
+										role: teammate?.identity.role ?? "generic",
+										kind: mentions.length > 0 ? "handoff" : "result",
+										text: result.response,
+										mentions,
+									}),
+									teammate ? { streamKey: `team-stream:${teammate.identity.id}`, replace: true } : undefined,
+								);
+								for (const mention of mentions) {
+									const handoffTarget = teamRuntime.getTeammate(mention.targetLabel) ?? teamRuntime.getTeammate(mention.targetName);
+									if (!handoffTarget) continue;
+									emitTeamUtterance(
+										api,
+										createTeamUtterance({
+											speakerId: "leader",
+											speakerLabel: "pencil",
+											role: "leader",
+											kind: "handoff",
+											text: `@${handoffTarget.identity.name} take the handoff from ${teammate ? formatSpeakerName(teammate) : result.teammateName}: ${mention.task}`,
+											mentions: [mention],
+										}),
+									);
+									const handoffResult = await teamRuntime.send(
+										handoffTarget.identity.name,
+										`Handoff from ${teammate ? formatSpeakerName(teammate) : result.teammateName}: ${mention.task}`,
+										model,
+										{ onEvent: observer.onEvent },
+									);
+									emitTeamUtterance(
+										api,
+										createTeamUtterance({
+											speakerId: handoffTarget.identity.id,
+											speakerLabel: formatSpeakerName(handoffTarget),
+											role: handoffTarget.identity.role,
+											kind: handoffResult.success ? "result" : "work",
+											text: handoffResult.response || handoffResult.error || "No response.",
+										}),
+										{ streamKey: `team-stream:${handoffTarget.identity.id}`, replace: true },
+									);
+								}
 							} else {
 								ctx.ui.notify(
 									`Teammate ${result.teammateName} failed: ${result.error ?? "Unknown error"}`,
@@ -741,6 +802,28 @@ function formatTeammateStatus(teammate: PersistedTeammate): string[] {
 	return lines;
 }
 
+function emitTeamUtterance(
+	api: ExtensionAPI,
+	utterance: TeamUtterance,
+	options?: { streamKey?: string; replace?: boolean },
+): void {
+	api.sendMessage({
+		customType: TEAM_MESSAGE_TYPE,
+		content: formatUtteranceForContext(utterance),
+		display: true,
+		details: {
+			variant: "utterance",
+			utterance,
+			streamKey: options?.streamKey,
+			replace: options?.replace,
+		} satisfies TeamMessageDetails,
+	});
+}
+
+function formatSpeakerName(teammate: PersistedTeammate): string {
+	return teammate.identity.name;
+}
+
 function updateTeamUi(
 	ctx: { ui: { setStatus(key: string, text: string | undefined): void; setWidget(key: string, content: string[] | undefined): void } },
 	teamRuntime: TeamRuntime,
@@ -755,7 +838,7 @@ function updateTeamUi(
 	ctx.ui.setStatus("team", renderTeamFooterStatus(teammates));
 	ctx.ui.setWidget(
 		"team-dashboard",
-		dashboardVisible || hasRunning || teammates.length > 0 ? renderTeamDashboard(teammates) : undefined,
+		dashboardVisible || hasRunning || teammates.length > 0 ? renderTeamDashboard(teammates, 80, { expanded: dashboardVisible }) : undefined,
 	);
 	if (!dashboardVisible && !hasRunning && teammates.length > 0) {
 		dashboardAutoHideTimer = setTimeout(() => {
@@ -777,7 +860,7 @@ function setTeamActivity(
 ): void {
 	const [firstLine] = lines;
 	ctx.ui.setStatus("team", firstLine ?? "Team: working...");
-	ctx.ui.setWidget("team-dashboard", ["Team Activity", "", ...lines]);
+	ctx.ui.setWidget("team-dashboard", ["+ Team Workbench ------------------------------------------+", ...lines.map((line) => `| ${truncateForStatus(line, 58).padEnd(58)} |`), "+---------------------------------------------------------+"]);
 	ctx.ui.setWorkingMessage(firstLine ?? "Team: working...");
 }
 
@@ -793,25 +876,40 @@ function createTeamObserver(
 	teamRuntime: TeamRuntime,
 ): { onEvent(event: TeamRuntimeEvent): void; flush(): void } {
 	let lastUiUpdate = 0;
+	const streamedPreviewByTeammate = new Map<string, string>();
+	const lastStreamEmitAt = new Map<string, number>();
 
 	return {
 		onEvent(event) {
 			const now = Date.now();
 			if (event.type === "teammate_live") {
 				ctx.ui.setWorkingMessage(formatLiveWorkingMessage(event));
+				if (event.event.type === "message_update") {
+					const teammate = event.teammate;
+					const preview = teammate.live?.preview ?? event.event.text ?? "";
+					const previousPreview = streamedPreviewByTeammate.get(teammate.identity.id) ?? "";
+					const delta = preview.startsWith(previousPreview) ? preview.slice(previousPreview.length) : preview;
+					const lastEmitAt = lastStreamEmitAt.get(teammate.identity.id) ?? 0;
+					if (shouldEmitStreamDelta(delta, now - lastEmitAt)) {
+						emitTeamUtterance(
+							api,
+							createTeamUtterance({
+								speakerId: teammate.identity.id,
+								speakerLabel: formatSpeakerName(teammate),
+								role: teammate.identity.role,
+								kind: "thought",
+								text: preview.trim() || tailPreview(preview),
+							}),
+							{ streamKey: `team-stream:${teammate.identity.id}`, replace: true },
+						);
+						streamedPreviewByTeammate.set(teammate.identity.id, preview);
+						lastStreamEmitAt.set(teammate.identity.id, now);
+					}
+				}
 			} else if (event.type === "teammate_status") {
-				api.sendMessage({
-					customType: TEAM_MESSAGE_TYPE,
-					content: event.event,
-					display: true,
-				});
 				ctx.ui.setWorkingMessage(`Team: ${event.event}`);
 			} else {
-				api.sendMessage({
-					customType: TEAM_MESSAGE_TYPE,
-					content: `Harness event for ${event.teammate.identity.name}: ${event.event}`,
-					display: true,
-				});
+				ctx.ui.setWorkingMessage(`Team: ${event.teammate.identity.name} ${event.event}`);
 			}
 
 			if (event.type === "teammate_live" || now - lastUiUpdate > 80) {
@@ -823,6 +921,18 @@ function createTeamObserver(
 			updateTeamUi(ctx, teamRuntime);
 		},
 	};
+}
+
+function shouldEmitStreamDelta(delta: string, elapsedMs: number): boolean {
+	const trimmed = delta.trim();
+	if (!trimmed) return false;
+	return trimmed.length >= 24 || /[\n。！？!?]$/.test(trimmed) || elapsedMs >= 700;
+}
+
+function tailPreview(value: string, max = 120): string {
+	const single = value.replace(/\s+/g, " ").trim();
+	if (single.length <= max) return single;
+	return single.slice(single.length - max);
 }
 
 function formatLiveWorkingMessage(event: Extract<TeamRuntimeEvent, { type: "teammate_live" }>): string {

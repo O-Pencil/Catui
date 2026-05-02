@@ -22,6 +22,7 @@ export type MailboxMessageType =
 	| "plan_approval_request"
 	| "plan_approval_response"
 	| "teammate_message"
+	| "handoff"
 	| "task_claim"
 	| "task_update"
 	| "mode_change"

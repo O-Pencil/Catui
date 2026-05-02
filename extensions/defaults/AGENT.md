@@ -61,15 +61,16 @@ sal/eval/noop-sink.ts: noopSink — silent EvalSink used when eval disabled or n
 sal/eval/insforge-sink.ts: InsForgeEvalSink — PostgREST adapter, routes run_start→eval_runs INSERT (merge-duplicates) with legacy-schema fallback, writes turn_anchor/tool_trace/memory_recalls/run_end only after parent run confirmation, tool_trace→eval_tool_traces with PGRST204 fallback, memory_recalls→eval_memory_recalls batch INSERT, run_end→eval_runs PATCH; allowSelfSigned TLS option logs only in development runtime, batching with default 2000ms interval
 sal/eval/jsonl-sink.ts: JsonlEvalSink — append-only filesystem adapter, one JSON object per line, accepts file:// URLs or plain paths, auto-creates parent dir, batched writes
 sal/README.md: SAL extension usage, sidecar output layout, weights override, pluggability contract
-team/index.ts: AgentTeam extension entry, /team <task>, /team:spawn/:preset/:send/:status/:progress/:psyche/:dashboard/:task/:mail/:allow-path/:stop/:terminate/:approve/:mode commands, TEAM_MESSAGE_TYPE renderer, realtime status/dashboard updates
-team/team-types.ts: TeammateRole/TeammateMode/TeammateStatus/TeamTask/HarnessState/PsycheWeights/TeammateLiveState/TeammateIdentity/TeammateMessage/PersistedTeammate/TeamSpawnSpec/TeamSendResult types
+team/index.ts: AgentTeam extension entry, /team <task>, /team:spawn/:preset/:send/:status/:progress/:psyche/:dashboard/:task/:mail/:allow-path/:stop/:terminate/:approve/:mode commands, TEAM_MESSAGE_TYPE speaker-stream renderer, realtime status/dashboard updates
+team/team-types.ts: TeammateRole/TeammateMode/TeammateStatus/TeamTask/HarnessState/PsycheWeights/TeamUtterance/Handoff/LeaderPlan/AgentLiveView/TeammateIdentity/PersistedTeammate/TeamSpawnSpec/TeamSendResult types
 team/team-state-store.ts: TeamStateStore class - durable teammate persistence via JSON files in <agentDir>/teams/
 team/team-parser.ts: Team command parser - parseTeamCommand/buildTeamHelp for /team:* subcommands
-team/team-runtime.ts: TeamRuntime class - teammate registry, per-teammate send queue, task/mailbox prompt context, lifecycle, realtime status/live events, durable tasks, mailbox + permission + transcript wiring
+team/team-runtime.ts: TeamRuntime class - teammate registry, stable internal labels plus visible teammate names, per-teammate send queue, task/mailbox prompt context, lifecycle, realtime status/live events, durable tasks, mailbox + permission + transcript wiring
+team/team-orchestrator.ts: Leader orchestration helpers - plan building, speaker utterance creation, @mention parsing, and handoff execution
 team/team-task-store.ts: TeamTaskStore class - durable shared task list in <storageDir>/tasks.json
 team/team-harness.ts: Harness protocol helpers - context files, phase instructions, checkpoint/revert, feature validation
 team/team-presets.ts: Preset definitions and executor - solo/duo/squad spawning, model-assisted auto team selection, heuristic fallback
-team/team-dashboard.ts: Text dashboard/status rendering - teammate cards, live stream preview, progress bars, footer summary
+team/team-dashboard.ts: Text dashboard/status rendering - teammate workbench cards, current task, last utterance, progress bars, footer summary
 team/team-psyche.ts: Psyche prompt layer - role/phase weighted Id/Ego/Superego prompt construction
 team/team-permissions.ts: PermissionStore - pending permission request queue, approve/deny, path allowlists
 team/team-mailbox.ts: TeamMailbox - typed JSONL-backed append-only message log for leader↔teammate and teammate↔teammate

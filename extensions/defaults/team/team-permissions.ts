@@ -124,15 +124,16 @@ export class PermissionStore {
 			set = new Set();
 			this.pathAllowlist.set(teammateId, set);
 		}
-		set.add(path);
+		set.add(normalizeAllowedPath(path));
 	}
 
 	/** Check whether a teammate currently holds write access to `path`. */
 	isPathAllowed(teammateId: string, path: string): boolean {
 		const set = this.pathAllowlist.get(teammateId);
 		if (!set) return false;
+		const normalizedPath = normalizeAllowedPath(path);
 		for (const allowed of set) {
-			if (path === allowed || path.startsWith(`${allowed}/`)) return true;
+			if (normalizedPath === allowed || normalizedPath.startsWith(`${allowed}/`)) return true;
 		}
 		return false;
 	}
@@ -146,4 +147,8 @@ export class PermissionStore {
 function stripResolve(entry: PendingEntry): PermissionRequest {
 	const { resolve: _resolve, ...rest } = entry;
 	return rest;
+}
+
+function normalizeAllowedPath(path: string): string {
+	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }

@@ -18,6 +18,11 @@ const PHASE_WEIGHTS: Record<HarnessPhase, PsycheWeights> = {
 };
 
 const ROLE_MODIFIERS: Record<TeammateRole, Partial<PsycheWeights>> = {
+	pm: { ego: 1.4, superego: 1.1 },
+	architect: { ego: 1.4, id: 0.8 },
+	developer: { id: 1.1 },
+	designer: { id: 1.2, ego: 1.1 },
+	"data-analyst": { superego: 1.4, ego: 1.1 },
 	implementer: {},
 	verifier: { superego: 1.5, id: 0.5 },
 	planner: { ego: 1.3, id: 0.7 },

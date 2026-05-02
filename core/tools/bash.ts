@@ -462,14 +462,20 @@ function tokenizeSimpleShell(command: string): string[] {
   let quote: "'" | "\"" | undefined;
   let escaped = false;
 
-  for (const ch of command) {
+  for (let index = 0; index < command.length; index++) {
+    const ch = command[index]!;
     if (escaped) {
       current += ch;
       escaped = false;
       continue;
     }
     if (ch === "\\") {
-      escaped = true;
+      const next = command[index + 1];
+      if (!quote && next && (/\s/.test(next) || next === "\"" || next === "'" || next === "\\")) {
+        escaped = true;
+      } else {
+        current += ch;
+      }
       continue;
     }
     if (quote) {

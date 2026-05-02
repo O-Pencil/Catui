@@ -139,6 +139,10 @@ export interface CreateAgentSessionOptions {
   logger?: SDKLogger;
 }
 
+type SettingsManagerLike = Partial<SettingsManager> & {
+  getSettings?: () => { locale?: "en" | "zh" };
+};
+
 /** Result from createAgentSession */
 export interface CreateAgentSessionResult {
   /** The created session */
@@ -190,6 +194,34 @@ export {
   createFindTool,
   createLsTool,
 };
+
+function normalizeSettingsManager(
+  candidate: SettingsManagerLike | undefined,
+  cwd: string,
+  agentDir: string,
+): SettingsManager {
+  if (candidate instanceof SettingsManager) {
+    return candidate;
+  }
+
+  const fallback = SettingsManager.create(cwd, agentDir);
+  if (!candidate || typeof candidate !== "object") {
+    return fallback;
+  }
+
+  if (typeof candidate.getSettings !== "function") {
+    return fallback;
+  }
+
+  const wrapper = fallback as SettingsManagerLike;
+  for (const key of Object.keys(candidate) as Array<keyof SettingsManagerLike>) {
+    const value = candidate[key];
+    if (typeof value === "function") {
+      (wrapper as Record<string, unknown>)[key as string] = value.bind(candidate);
+    }
+  }
+  return fallback;
+}
 
 // Helper Functions
 
@@ -249,9 +281,14 @@ export async function createAgentSession(
   const agentDir = options.agentDir ?? getDefaultAgentDir();
   let resourceLoader = options.resourceLoader;
 
+  const settingsManager = normalizeSettingsManager(
+    options.settingsManager as SettingsManagerLike | undefined,
+    cwd,
+    agentDir,
+  );
+
   // Initialize i18n with locale from settings (or default to English)
-  const tempSettingsManager = options.settingsManager ?? SettingsManager.create(cwd, agentDir);
-  const locale = tempSettingsManager.getSettings().locale ?? "en";
+  const locale = settingsManager.getSettings().locale ?? "en";
   const { setLocale } = await import("../i18n/index.js");
   setLocale(locale);
 
@@ -264,8 +301,6 @@ export async function createAgentSession(
   const modelRegistry =
     options.modelRegistry ?? new ModelRegistry(authStorage, modelsPath);
 
-  const settingsManager =
-    options.settingsManager ?? SettingsManager.create(cwd, agentDir);
   const sessionManager = options.sessionManager ?? SessionManager.create(cwd);
 
   if (!resourceLoader) {
