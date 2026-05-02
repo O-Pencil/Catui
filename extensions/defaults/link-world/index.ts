@@ -82,6 +82,11 @@ interface CliResult {
 	output: string;
 }
 
+interface LinkWorldCapabilities {
+	search: boolean;
+	fetch: boolean;
+}
+
 function linkWorldWorkspacePath(cwd: string): string {
 	return join(cwd, ".nanopencil", "link-world-workspace");
 }
@@ -134,6 +139,26 @@ function isAgentReachInstalled(): boolean {
 	} catch {
 		return false;
 	}
+}
+
+function getAgentReachHelpText(): string {
+	try {
+		return execSync("agent-reach --help", { encoding: "utf-8", stdio: "pipe" });
+	} catch {
+		return "";
+	}
+}
+
+function getLinkWorldCapabilities(): LinkWorldCapabilities {
+	if (!isAgentReachInstalled()) {
+		return { search: false, fetch: false };
+	}
+
+	const help = getAgentReachHelpText().toLowerCase();
+	return {
+		search: /\bsearch\b/.test(help),
+		fetch: /\bfetch\b/.test(help),
+	};
 }
 
 function execAgentReach(args: string[], timeoutSeconds: number, signal?: AbortSignal): Promise<CliResult> {
@@ -192,6 +217,7 @@ function installHelpText(): string {
 }
 
 function getStatusText(): string {
+	const capabilities = getLinkWorldCapabilities();
 	const installed = isAgentReachInstalled();
 	const lines = [
 		"Link-world status",
@@ -199,6 +225,8 @@ function getStatusText(): string {
 		`agent-reach installed: ${installed ? "yes" : "no"}`,
 		`internet-search skill bundled: ${existsSync(SKILL_PATH) ? "yes" : "no"}`,
 		`agent guidance bundled: ${existsSync(AGENT_SKILL_PATH) ? "yes" : "no"}`,
+		`web_search enabled: ${capabilities.search ? "yes" : "no"}`,
+		`web_fetch enabled: ${capabilities.fetch ? "yes" : "no"}`,
 	];
 
 	if (!installed) {
@@ -296,6 +324,11 @@ function createWebSearchTool(): ToolDefinition<typeof WebSearchInputSchema> {
 			if (!isAgentReachInstalled()) {
 				throw new Error(`${getStatusText()}\n\n${installHelpText()}`);
 			}
+			if (!getLinkWorldCapabilities().search) {
+				throw new Error(
+					"web_search is disabled because the installed agent-reach runtime does not advertise a `search` command.\n\nUse `link_world_admin` with action `status` to inspect capabilities, or use the browser tool family for live web interaction.",
+				);
+			}
 
 			const args = ["search", input.query];
 			if (input.provider) {
@@ -331,6 +364,11 @@ function createWebFetchTool(): ToolDefinition<typeof WebFetchInputSchema> {
 			if (!isAgentReachInstalled()) {
 				throw new Error(`${getStatusText()}\n\n${installHelpText()}`);
 			}
+			if (!getLinkWorldCapabilities().fetch) {
+				throw new Error(
+					"web_fetch is disabled because the installed agent-reach runtime does not advertise a `fetch` command.\n\nUse `link_world_admin` with action `status` to inspect capabilities, or use the browser tool family when direct page interaction is required.",
+				);
+			}
 
 			const args = ["fetch", input.url];
 			if (input.provider) {
@@ -365,8 +403,13 @@ export default function linkWorldExtension(api: ExtensionAPI) {
 
 	api.registerTool(createLinkWorldAdminTool());
 	api.registerTool(createLinkWorldExecTool());
-	api.registerTool(createWebSearchTool());
-	api.registerTool(createWebFetchTool());
+	const capabilities = getLinkWorldCapabilities();
+	if (capabilities.search) {
+		api.registerTool(createWebSearchTool());
+	}
+	if (capabilities.fetch) {
+		api.registerTool(createWebFetchTool());
+	}
 
 	api.on("session_start", (_event, ctx) => {
 		ensureLinkWorldWorkspace(ctx.cwd);
@@ -385,11 +428,16 @@ export default function linkWorldExtension(api: ExtensionAPI) {
 			const action = (args.trim().split(/\s+/)[0] || "help").toLowerCase();
 
 			if (action === "help") {
+				const capabilityLines = [
+					`High-level tool availability: web_search=${capabilities.search ? "enabled" : "disabled"}, web_fetch=${capabilities.fetch ? "enabled" : "disabled"}`,
+					"",
+				];
 				api.sendMessage({
 					customType: LINK_WORLD_CUSTOM_TYPE,
 					content: [
 						"Link-world is NanoPencil's built-in internet access integration point.",
 						"",
+						...capabilityLines,
 						"Commands:",
 						"/link-world status  - show whether agent-reach is installed and whether skills are bundled",
 						"/link-world doctor  - run `agent-reach doctor`",
@@ -397,7 +445,7 @@ export default function linkWorldExtension(api: ExtensionAPI) {
 						"/link-world install - show the bundled installation guide",
 						"/link-world workspace - show the project-local link-world workspace",
 						"",
-						"Tools: `link_world_admin`, `link_world_exec`, `web_search`, `web_fetch`",
+						`Tools: \`link_world_admin\`, \`link_world_exec\`${capabilities.search ? ", `web_search`" : ""}${capabilities.fetch ? ", `web_fetch`" : ""}`,
 					].join("\n"),
 					display: true,
 				});

@@ -9,8 +9,8 @@ NanoPencil exposes link-world as first-class tools. Prefer these tools over call
 
 ## Tool Selection
 
-- Use `web_search` for ordinary search and lightweight web research.
-- Use `web_fetch` when you already have the target URL and need its content.
+- Use `web_search` for ordinary search and lightweight web research, but only if the tool is available in the current session.
+- Use `web_fetch` when you already have the target URL and need its content, but only if the tool is available in the current session.
 - Use `link_world_admin` first when you need setup status, version, install help, or diagnostics.
 - Use `link_world_exec` only when you need a lower-level `agent-reach` command that `web_search` does not model.
 - If the task is about interacting with a live page rather than retrieving knowledge, switch to the `browser` tool family instead of forcing link-world.
@@ -20,9 +20,9 @@ NanoPencil exposes link-world as first-class tools. Prefer these tools over call
 
 1. Check readiness with `link_world_admin` action `status` or `doctor`.
 2. If the runtime is missing, use `link_world_admin` action `install_help` or `/link-world install`.
-3. For ordinary search, call `web_search`.
-4. If the exact URL is already known, call `web_fetch`.
-5. If you need a lower-level command, call `link_world_exec` with explicit argv-style arguments.
+3. If `web_search` is available, use it for ordinary search.
+4. If `web_fetch` is available and the exact URL is already known, use it.
+5. If high-level link-world tools are unavailable, call `link_world_exec` with explicit argv-style arguments.
 6. Prefer bundled site or domain skills before inventing a new web workflow.
 
 ## Examples

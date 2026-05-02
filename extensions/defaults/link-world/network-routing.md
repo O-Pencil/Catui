@@ -7,15 +7,15 @@ description: Decide whether a task should use NanoPencil's web_search, link_worl
 
 NanoPencil has two different network paths:
 
-- `web_search` and `link_world_*` for knowledge retrieval and internet-backed research
-- `web_fetch` for direct URL retrieval when the target is already known
+- `web_search` and `web_fetch` when those high-level tools are actually available in the current session
+- `link_world_*` as the durable lower-level integration path
 - `browser` and `browser_admin` for direct browser control and page interaction
 
 Choose the path by task shape, not by habit.
 
 ## Use `web_search` First
 
-Use `web_search` when the user needs:
+Use `web_search` when it is available and the user needs:
 
 - current facts
 - recent news
@@ -27,7 +27,7 @@ If setup is uncertain, call `link_world_admin` with `status` or `doctor` first.
 
 ## Use `web_fetch` When The URL Is Known
 
-Use `web_fetch` when:
+Use `web_fetch` when it is available and:
 
 - the user already gave a URL
 - a prior search step found the exact page you need
@@ -49,10 +49,10 @@ If setup is uncertain, call `browser_admin` with `status` or `setup` first.
 
 ## Fallback Order
 
-1. For current knowledge discovery, try `web_search`.
-2. If the target URL is already known, try `web_fetch`.
+1. If `web_search` is available, use it for current knowledge discovery.
+2. If `web_fetch` is available and the target URL is already known, use it.
 3. If the answer requires interacting with a page, switch to `browser`.
-4. If a web task needs lower-level internet runtime features, use `link_world_exec`.
+4. If high-level link-world tools are unavailable but internet runtime is present, use `link_world_exec`.
 5. Only fall back to `bash` for external CLIs when the dedicated tools are unavailable.
 
 ## Working Rule
