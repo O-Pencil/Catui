@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.12] - 2026-05-02
+
+### Added
+- feat(interactive): animate welcome banner
+- feat(providers): add Ali Cloud Token Plan team edition
+- feat(interview): add grill mode
+- feat(interview): add grill mode
+- feat(perf): add startup benchmark infrastructure
+- feat(link-world): gate web_search/web_fetch on agent-reach capabilities
+- feat(extensions): add browser automation and link-world enhancements
+- feat(mem-core): unify llm json parsing and throttle diagnostics
+- feat(agent-core): add turn and tool-call limits to agent loop
+- feat(diagnostics): wire issue auto-upload to shared SAL InsForge instance
+- feat(diagnostics): unified reportDiagnostic + isDevRuntime helper
+- feat(diagnostics,sal): silent auto-upload + on_conflict upserts
+- feat(diagnostics): add extension-owned issue reporting
+
+### Fixed
+- fix(diagnostics): keep memory fallbacks silent
+- fix: harden memory and team agent behavior
+- fix(diagnostics): keep memory fallbacks silent
+- fix(team): improve runtime status streaming and dashboard rendering
+- fix(soul-core): atomic tmp+rename writes for concurrent SoulStore safety
+- fix(soul-core): silence corrupted-JSON load failures via diagnostic bus
+- fix(runtime,main): stronger MaxListeners silence + plug sleep() listener leak
+- fix(runtime,main): plug abort-listener leak + silence MaxListeners noise
+- fix(sdk): forward PencilAgent provider/model into createAgentSession
+- fix(soul,diagnostics): silence Soul evolution console flood, gate auto-upload by severity
+- fix(mem-core): route fallback noise through diagnostics
+- fix(diagnostics): reduce non-fatal background noise
+
+### Documentation
+- docs: add startup performance optimization plan
+- docs(eval): add evaluation framework
+
+### Maintenance
+- chore: ignore project-local .nanopencil workspace
+- chore: ignore Python bytecode and __pycache__
+
+
 ## [1.13.11] - 2026-05-01
 
 ### Added
