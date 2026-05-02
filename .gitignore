@@ -10,7 +10,8 @@ coverage/
 .env
 .env.local
 .claude/
-.nanopencil/images/
+# Project-local NanoPencil workspace (skills copies, browser workspace, etc.)
+.nanopencil/
 _clipboard_*
 _paste/
 .nexus/
