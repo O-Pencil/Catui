@@ -36,7 +36,9 @@ docs/
 # InsForge & AI agent skills
 .insforge
 .agent
+.agent-workspace/
 .agents
+agent-workspace/
 .augment
 .claude
 .cline

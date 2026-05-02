@@ -253,6 +253,8 @@ export class InteractiveMode {
   private workingMessageOverride: string | undefined = undefined;
   private agentRunStartMs: number | undefined = undefined;
   private agentRunTimer: ReturnType<typeof setInterval> | undefined = undefined;
+  private welcomeBannerTimer: ReturnType<typeof setInterval> | undefined =
+    undefined;
 
   private lastSigintTime = 0;
   private lastEscapeTime = 0;
@@ -1577,6 +1579,13 @@ export class InteractiveMode {
     if (this.agentRunTimer) {
       clearInterval(this.agentRunTimer);
       this.agentRunTimer = undefined;
+    }
+  }
+
+  private stopWelcomeBannerTimer(): void {
+    if (this.welcomeBannerTimer) {
+      clearInterval(this.welcomeBannerTimer);
+      this.welcomeBannerTimer = undefined;
     }
   }
 
@@ -3770,6 +3779,8 @@ export class InteractiveMode {
   }
 
   renderInitialMessages(): void {
+    this.stopWelcomeBannerTimer();
+
     // Get aligned messages and entries from session context
     const context = this.sessionManager.buildSessionContext();
     this.renderSessionContext(context, {
@@ -3786,19 +3797,47 @@ export class InteractiveMode {
         const modelLine =
           model?.name ??
           (model?.provider ? `${model.provider}` : "DashScope · Ollama");
-        const asciiLines = [
-          "                .-~~~~~~~~~-._       _.-~~~~~~~~~-.",
-          "            __.'              ~.   .~              `.__",
-          "          .'//                  \\./                  \\\\`.",
-          "        .'//                     |                     \\\\`.",
-          '      .\'// .-~\\"\\"\\"\\"\\"\\"\\"~~~~-._     |     _,-~~~~\\"\\"\\"\\"\\"\\"\\"~-. \\\\`.',
-          "    .'//.-\"                 `-.  |  .-'                 \"-.\\\\`.",
-          "  .'//______.============-..   \\ | /   ..-============.______\\\\`.",
-          ".'______________________________\\|/______________________________`.",
-        ];
-        const coloredAscii = asciiLines
-          .map((line) => theme.fg("accent", line))
-          .join("\n");
+        const buildAsciiLines = (frame: number) => {
+          const blink = frame % 8 === 5;
+          const leftStar = frame % 4 < 2 ? "*" : ".";
+          const rightStar = frame % 4 >= 2 ? "*" : ".";
+          const lines = [
+            `             ${leftStar}     ,MMM8&&&.            ${rightStar}`,
+            "                  MMMM88&&&&&    .",
+            "                 MMMM88&&&&&&&",
+            "     *           MMM88&&&&&&&&",
+            "                 MMM88&&&&&&&&",
+            "                 'MMM88&&&&&&'",
+            `                   'MMM8&&&'      ${rightStar}    _`,
+            "          |\\___/|                      \\\\",
+            "          )     (    |\\_/|              ||    '",
+            blink
+              ? '         =\\     /=   )- - \'._.-""""-.  //'
+              : '         =\\     /=   )a a \'._.-""""-.  //',
+            "           )===(    =\\T_= /    ~  ~  \\//",
+            "          /     \\     `\"`\\   ~   / ~  /",
+            "          |     |         |~   \\ |  ~/",
+            "         /       \\         \\  ~/- \\ ~\\",
+            "         \\       /         || |  // /`",
+            "  aac_/\\_/\\_   _/_/\\_/\\_/\\_((_|\\((_//\\_/\\_/\\_",
+            "  |  |  |  |( (  |  |  |  |  |  |  |  |  |  |",
+            "  |  |  |  | ) ) |  |  |  |  |  |  |  |  |  |",
+            "  |  |  |  |(_(  |  |  |  |  |  |  |  |  |  |     asciiart.cc",
+            "  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |",
+            "  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |",
+          ];
+          const width = Math.max(...lines.map((line) => line.length));
+          return lines.map((line) => line.padEnd(width));
+        };
+        const renderAscii = (frame: number) =>
+          buildAsciiLines(frame)
+            .map((line) =>
+              theme.fg(
+                "accent",
+                line.slice(0, Math.max(1, this.ui.terminal.columns || 80)),
+              ),
+            )
+            .join("\n");
         const titleLine = theme.bold(
           theme.fg("accent", `nano-pencil v${this.version}`),
         );
@@ -3821,7 +3860,7 @@ export class InteractiveMode {
           '❯ Try "refactor <filepath>" or type below',
         );
         const banner = [
-          coloredAscii,
+          renderAscii(0),
           "",
           `  ${titleLine}`,
           `  ${subtitleLine}`,
@@ -3833,7 +3872,31 @@ export class InteractiveMode {
           sep,
           tryLine,
         ].join("\n");
-        this.chatContainer.addChild(new Text(banner, 0, 0));
+        const bannerText = new Text(banner, 0, 0);
+        this.chatContainer.addChild(bannerText);
+        let frame = 0;
+        this.welcomeBannerTimer = setInterval(() => {
+          frame += 1;
+          bannerText.setText(
+            [
+              renderAscii(frame),
+              "",
+              `  ${titleLine}`,
+              `  ${subtitleLine}`,
+              `  ${cwdLine}`,
+              "",
+              hintLine,
+              ...(resourcesHint ? ["", resourcesHint] : []),
+              "",
+              sep,
+              tryLine,
+            ].join("\n"),
+          );
+          this.ui.requestRender();
+          if (frame >= 16) {
+            this.stopWelcomeBannerTimer();
+          }
+        }, 220);
       } else {
         const boxName = APP_NAME.padEnd(14).slice(0, 14);
         const asciiArt = [
@@ -6724,6 +6787,7 @@ export class InteractiveMode {
   }
 
   stop(): void {
+    this.stopWelcomeBannerTimer();
     this.clearBuddyPetResetTimer();
     this.buddyPet?.dispose();
     this.buddyPet = null;
