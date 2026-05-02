@@ -17,6 +17,7 @@ const require = createRequire(import.meta.url);
 const BUNDLED_NANOMEM_EXTENSION_PACKAGES = join(__dirname, "packages", "mem-core", "extension.js");
 const BUNDLED_SIMPLIFY_EXTENSION = join(__dirname, "extensions", "optional", "simplify", "index.js");
 const BUNDLED_LINK_WORLD_EXTENSION = join(__dirname, "extensions", "defaults", "link-world", "index.js");
+const BUNDLED_BROWSER_EXTENSION = join(__dirname, "extensions", "defaults", "browser", "index.js");
 const BUNDLED_SECURITY_AUDIT_EXTENSION = join(__dirname, "extensions", "defaults", "security-audit", "index.js");
 const BUNDLED_SOUL_EXTENSION = join(__dirname, "extensions", "defaults", "soul", "index.js");
 const BUNDLED_PRESENCE_EXTENSION = join(__dirname, "extensions", "defaults", "presence", "index.js");
@@ -135,6 +136,14 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const linkWorldTs = join(__dirname, "extensions", "defaults", "link-world", "index.ts");
 		if (existsSync(linkWorldTs)) paths.push(linkWorldTs);
+	}
+
+	// === Browser Harness extension (built-in CDP browser automation) ===
+	if (existsSync(BUNDLED_BROWSER_EXTENSION)) {
+		paths.push(BUNDLED_BROWSER_EXTENSION);
+	} else {
+		const browserTs = join(__dirname, "extensions", "defaults", "browser", "index.ts");
+		if (existsSync(browserTs)) paths.push(browserTs);
 	}
 
 	// === Security Audit extension (built-in source, compiled to dist/extensions/defaults/security-audit) ===

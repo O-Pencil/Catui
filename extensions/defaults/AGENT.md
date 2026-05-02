@@ -8,7 +8,16 @@ diagnostics/types.ts: Diagnostic event/report type contract and diagnostic:event
 diagnostics/diagnostic-buffer.ts: DiagnosticBuffer, event coercion, fingerprint dedupe, prompt gating
 diagnostics/reporter.ts: User-approved InsForge pencil_issue_events reporter, configured via NANOPENCIL_ISSUE_* env vars
 diagnostics/redaction.ts: Diagnostic message normalization and secret/path redaction helpers
-link-world/index.ts: Internet access extension, provides internet-search Skill after setup
+browser/index.ts: Browser Harness extension entry, registers browser/browser_admin tools, /browser command, Browser Harness resource discovery, project-local browser workspace seeding
+browser/browser.md: Browser Harness day-to-day skill instructions for NanoPencil tool use and workspace contribution
+browser/install.md: Browser Harness setup and troubleshooting instructions, exposed as a skill resource
+browser/src/browser_harness/: Vendored Browser Harness Python package, CDP daemon, IPC bridge, admin commands, and helper functions
+browser/interaction-skills/: Reusable Browser Harness mechanics guides for browser interactions
+browser/agent-workspace/: Seed workspace copied to .nanopencil/browser-workspace for editable helpers and domain skills
+link-world/index.ts: Internet access integration entry, registers link_world_admin/link_world_exec/web_search/web_fetch tools, /link-world status/doctor/version/install commands, and bundled internet-search resources
+link-world/link-world-agent.md: Agent-facing skill that tells models to prefer web_search/web_fetch and link_world_admin/link_world_exec over bash for internet tasks
+link-world/network-routing.md: Routing skill that tells models when to use web_search/web_fetch/link-world versus browser automation
+link-world/agent-workspace/: Seed workspace copied to .nanopencil/link-world-workspace for project-local domain skills and notes
 mcp/index.ts: MCP protocol integration extension, MCP guidance resources
 presence/index.ts: AI-driven opening + idle presence lines, uses NanoMemEngine episodes/preferences/lessons + git/cwd snapshot, injects latest line into agent systemPrompt every turn for main-conversation perception, 30s debounce + idle in-flight lock, configurable via settings.presence.enabled, PRESENCE_MESSAGE_TYPE renderer
 plan/index.ts: Plan Mode extension entry, /plan /plan:validate /plan:approve commands, EnterPlanMode/ExitPlanMode tools, permission gating, TUI status/widget, workflow prompt injection

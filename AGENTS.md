@@ -270,6 +270,7 @@ Extensions can:
 | `interview` | Requirement clarification through guided Q&A |
 | `loop` | `/loop` session-scoped scheduled prompts |
 | `link-world` | Internet access via agent-reach |
+| `browser` | Direct browser automation via vendored Browser Harness CDP bridge |
 | `mcp` | MCP protocol support |
 | `security-audit` | Security vulnerability detection |
 | `soul` | AI personality evolution and memory |
