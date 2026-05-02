@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.13] - 2026-05-02
+
+### Added
+- feat(team): add named agent workbench orchestration
+- feat(interactive): animate welcome banner
+- feat(providers): add Ali Cloud Token Plan team edition
+- feat(interview): add grill mode
+- feat(interview): add grill mode
+- feat(perf): add startup benchmark infrastructure
+- feat(link-world): gate web_search/web_fetch on agent-reach capabilities
+- feat(extensions): add browser automation and link-world enhancements
+- feat(mem-core): unify llm json parsing and throttle diagnostics
+
+### Fixed
+- fix(diagnostics): keep memory fallbacks silent
+- fix: harden memory and team agent behavior
+- fix(diagnostics): keep memory fallbacks silent
+
+### Documentation
+- docs: add startup performance optimization plan
+- docs(eval): add evaluation framework
+
+### Maintenance
+- chore(ai): update generated models
+- chore(release): 1.13.12
+- chore: ignore project-local .nanopencil workspace
+- chore: ignore Python bytecode and __pycache__
+
+
 ## [1.13.12] - 2026-05-02
 
 ### Added
