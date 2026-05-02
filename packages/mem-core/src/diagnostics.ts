@@ -2,7 +2,7 @@
  * [WHO]: Thin shell exporting reportDiagnostic / isDevRuntime for mem-core
  * [FROM]: Depends only on node:events
  * [TO]: Consumed by mem-core internals (extension.ts, extraction.ts, consolidation.ts, …) so deep utilities can report background failures without threading api.events
- * [HERE]: packages/mem-core/src/diagnostics.ts - mirrors utils/diagnostics.ts; both copies bind to the same Symbol.for slot on globalThis at runtime, so the diagnostics extension subscribed via utils/diagnostics.ts receives mem-core events too
+ * [HERE]: packages/mem-core/src/diagnostics.ts - mirrors utils/diagnostics.ts; explicit dev/debug mode prints to console, and both copies bind to the same Symbol.for slot on globalThis at runtime so the diagnostics extension subscribed via utils/diagnostics.ts receives mem-core events too
  *
  * Keep this file structurally identical to utils/diagnostics.ts. mem-core is a
  * separately-compiled package, so we cannot import the canonical helper. The
@@ -55,13 +55,9 @@ export function isDevRuntime(): boolean {
 	if (process.env.NODE_ENV === "production") return false;
 	if (process.env.NODE_ENV === "development") return true;
 	const lifecycle = process.env.npm_lifecycle_event;
-	if (lifecycle === "dev" || lifecycle === "start") return true;
+	if (lifecycle === "dev" || lifecycle === "test") return true;
 	if (["1", "true", "yes", "on"].includes((process.env.NANOPENCIL_DEBUG ?? "").toLowerCase())) return true;
-	try {
-		return !import.meta.url.includes("/dist/");
-	} catch {
-		return false;
-	}
+	return false;
 }
 
 export function reportDiagnostic(event: DiagnosticEvent): void {

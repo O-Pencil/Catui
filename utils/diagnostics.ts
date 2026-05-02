@@ -2,7 +2,7 @@
  * [WHO]: Provides DiagnosticEvent types, reportDiagnostic(), subscribeDiagnostics(), isDevRuntime()
  * [FROM]: Depends only on node:events and node built-ins
  * [TO]: Imported by repo-root code (extensions/, core/, modes/) for unified background-failure reporting; mirrored by tiny shells in standalone packages (e.g. packages/mem-core/src/diagnostics.ts) that share the same Symbol.for slot at runtime
- * [HERE]: utils/diagnostics.ts - canonical diagnostic bus; dev mode prints to console, every mode emits to the in-process bus where the diagnostics extension subscribes and auto-uploads
+ * [HERE]: utils/diagnostics.ts - canonical diagnostic bus; explicit dev/debug mode prints to console, every mode emits to the in-process bus where the diagnostics extension subscribes and auto-uploads
  *
  * Cross-compile-boundary sharing: independent packages compile their own copy of
  * a thin shell, but every copy resolves the same `Symbol.for(...)` slot on
@@ -52,11 +52,10 @@ function getSlot(): BusSlot {
 }
 
 /**
- * Unified dev-mode predicate. True when:
+ * Unified dev-mode predicate. True only for explicit developer intent:
  * - NODE_ENV=development, OR
- * - npm_lifecycle_event is "dev" or "start" (running via npm run dev), OR
- * - NANOPENCIL_DEBUG is truthy, OR
- * - this module is loaded from source (not dist/) — heuristic for tsx runs.
+ * - npm_lifecycle_event is "dev" or "test", OR
+ * - NANOPENCIL_DEBUG is truthy.
  *
  * Always false when NODE_ENV=production.
  */
@@ -64,13 +63,9 @@ export function isDevRuntime(): boolean {
 	if (process.env.NODE_ENV === "production") return false;
 	if (process.env.NODE_ENV === "development") return true;
 	const lifecycle = process.env.npm_lifecycle_event;
-	if (lifecycle === "dev" || lifecycle === "start") return true;
+	if (lifecycle === "dev" || lifecycle === "test") return true;
 	if (["1", "true", "yes", "on"].includes((process.env.NANOPENCIL_DEBUG ?? "").toLowerCase())) return true;
-	try {
-		return !import.meta.url.includes("/dist/");
-	} catch {
-		return false;
-	}
+	return false;
 }
 
 export function reportDiagnostic(event: DiagnosticEvent): void {

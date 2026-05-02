@@ -2,7 +2,7 @@
  * [WHO]: diagnosticsExtension - diagnostic:event listener, /report-issue command, silent auto-upload on agent_end
  * [FROM]: Depends on core/extensions/types, @pencil-agent/tui, ./diagnostic-buffer, ./reporter, ./types
  * [TO]: Auto-loaded by builtin-extensions.ts as a default extension before diagnostic producers
- * [HERE]: extensions/defaults/diagnostics/index.ts - extension-owned diagnostic buffer; background failures auto-upload silently at agent_end, /report-issue stays for explicit user-initiated bundles
+ * [HERE]: extensions/defaults/diagnostics/index.ts - extension-owned diagnostic buffer; background failures auto-upload silently at agent_end plus delayed sweep, /report-issue stays for explicit user-initiated bundles
  */
 
 import { Box, Container, Spacer, Text, type Component } from "@pencil-agent/tui";
@@ -47,32 +47,40 @@ export default async function diagnosticsExtension(api: ExtensionAPI): Promise<v
 		// auto-upload silently — they did not interrupt the user, so prompting
 		// for permission would be reverse-value. /report-issue stays available
 		// for the user to bundle records manually (info/debug included).
-		const unreported = buffer.findUnreported();
-		if (unreported.length === 0) return;
-
-		// pencil_issue_events is for actionable issues. info/debug telemetry
-		// (e.g. Soul evolution success notes) shows up in dev console via the
-		// bus but should not pollute the issue table. Mark them reported so
-		// they don't accumulate forever.
-		const uploadable = unreported.filter((r) => r.severity === "warning" || r.severity === "error");
-		const skipped = unreported.filter((r) => r.severity !== "warning" && r.severity !== "error");
-		for (const record of skipped) buffer.markReported(record.fingerprint);
-
-		if (uploadable.length === 0) return;
-		const result = await reportDiagnostics(uploadable, undefined, ctx);
-		// Mark reported when the upload landed OR when the reporter has no
-		// endpoint configured (no point re-trying every turn against missing
-		// config). Transient HTTP/network failures stay unreported and will
-		// retry on the next agent_end.
-		if (result.ok || !result.configured) {
-			for (const record of uploadable) buffer.markReported(record.fingerprint);
-		}
+		await flushUploadableDiagnostics(buffer, ctx);
+		const timer = setTimeout(() => {
+			void flushUploadableDiagnostics(buffer, ctx);
+		}, 1_000);
+		timer.unref?.();
 	});
 
 	api.registerCommand("report-issue", {
 		description: "Report recent diagnostics (/report-issue [last|all|note])",
 		handler: (args, ctx) => handleReportIssue(args, ctx, buffer),
 	});
+}
+
+async function flushUploadableDiagnostics(buffer: DiagnosticBuffer, ctx: ExtensionContext): Promise<void> {
+	const unreported = buffer.findUnreported();
+	if (unreported.length === 0) return;
+
+	// pencil_issue_events is for actionable issues. info/debug telemetry
+	// (e.g. Soul evolution success notes) shows up in dev console via the
+	// bus but should not pollute the issue table. Mark them reported so
+	// they don't accumulate forever.
+	const uploadable = unreported.filter((r) => r.severity === "warning" || r.severity === "error");
+	const skipped = unreported.filter((r) => r.severity !== "warning" && r.severity !== "error");
+	for (const record of skipped) buffer.markReported(record.fingerprint);
+
+	if (uploadable.length === 0) return;
+	const result = await reportDiagnostics(uploadable, undefined, ctx);
+	// Mark reported when the upload landed OR when the reporter has no
+	// endpoint configured (no point re-trying every turn against missing
+	// config). Transient HTTP/network failures stay unreported and will
+	// retry on the next agent_end.
+	if (result.ok || !result.configured) {
+		for (const record of uploadable) buffer.markReported(record.fingerprint);
+	}
 }
 
 async function handleReportIssue(

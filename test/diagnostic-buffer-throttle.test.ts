@@ -7,8 +7,8 @@ const event = {
 	source: "mem-core.extract",
 	severity: "warning" as const,
 	category: "fallback" as const,
-	message: "NanoMem LLM structured extraction returned non-JSON text and used its fallback path.",
-	fingerprint: "mem-core.extract:fallback:non-json-llm-output",
+	message: "NanoMem structured memory extraction fell back after repeated invalid JSON output.",
+	fingerprint: "mem-core.extract:fallback:llm-failure",
 };
 
 test("diagnostic buffer does not reopen reported warnings until the throttle threshold", () => {

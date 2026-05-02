@@ -668,13 +668,16 @@ export async function main(args: string[]) {
 	const firstPass = parseArgs(args);
 	const cwd = resolveWorkingDirectory(firstPass.cwd);
 	const { migratedAuthProviders: migratedProviders, deprecationWarnings } = runMigrations(cwd);
+	profileCheckpoint("after_migrations");
 
 	// Early load extensions to discover their CLI flags
 	const agentDir = getAgentDir();
 	profileCheckpoint("before_settings_manager");
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	profileCheckpoint("settings_manager_ready");
+	profileCheckpoint("auth_storage_created", "settings_manager_ready");
 	reportSettingsErrors(settingsManager, "startup");
+
 	const authStorage = AuthStorage.create();
 	if (APP_NAME === "nanopencil") {
 		ensureNanopencilDefaultConfig();
@@ -683,6 +686,8 @@ export async function main(args: string[]) {
 			process.env.NANOMEM_MEMORY_DIR = join(getAgentDir(), "memory");
 		}
 	}
+	profileCheckpoint("nanopencil_defaults_ensured", "auth_storage_created");
+
 	const modelRegistry = new ModelRegistry(
 		authStorage,
 		getModelsPath(),
@@ -704,8 +709,10 @@ export async function main(args: string[]) {
 				}
 			: {},
 	);
+	profileCheckpoint("model_registry_created");
 
 	const defaultExtPaths = APP_NAME === "nanopencil" ? getBuiltinExtensionPaths() : [];
+	profileCheckpoint("before_resource_loader_create");
 	const resourceLoader = new DefaultResourceLoader({
 		cwd,
 		agentDir,
@@ -726,6 +733,7 @@ export async function main(args: string[]) {
 	profileCheckpoint("resource_loader_reload", "settings_manager_ready");
 
 	const extensionsResult: LoadExtensionsResult = resourceLoader.getExtensions();
+	profileCheckpoint("extensions_loaded", "resource_loader_reload");
 	for (const { path, error } of extensionsResult.errors) {
 		console.error(chalk.red(`Failed to load extension "${path}": ${error}`));
 	}
@@ -764,8 +772,11 @@ export async function main(args: string[]) {
 	}
 
 	// Second pass: parse args with extension flags
+	profileCheckpoint("before_args_parse_2");
 	const parsed = parseArgs(args, extensionFlags);
+	profileCheckpoint("args_parsed_2");
 	const parsedCwd = resolveWorkingDirectory(parsed.cwd);
+	profileCheckpoint("cwd_resolved", "args_parsed_2");
 
 	// Pass flag values to extensions via runtime
 	for (const [name, value] of parsed.unknownFlags) {
@@ -883,7 +894,9 @@ export async function main(args: string[]) {
 		authStorage.setRuntimeApiKey(sessionOptions.model.provider, parsed.apiKey);
 	}
 
+	profileCheckpoint("before_create_agent_session");
 	const { session, modelFallbackMessage } = await createAgentSession(sessionOptions);
+	profileCheckpoint("agent_session_created");
 
 	if (!isInteractive && !session.model) {
 		console.error(chalk.red("No models available."));

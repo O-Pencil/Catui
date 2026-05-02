@@ -47,3 +47,6 @@ docs/
 .roo
 .trae
 .windsurf
+
+# Benchmark results (local baselines)
+.benchmarks/

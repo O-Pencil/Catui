@@ -9,6 +9,7 @@ evolution.ts: SoulEvolutionEngine and PatternInsight, personality evolution logi
 index.ts: soul-core barrel exports, entry point for package, exports SoulStore, SoulManager, getSoulConfig, all types
 config.ts: getDefaultConfig, getSoulConfig, validateSoulConfig, configuration layer with defaults and validation
 store.ts: SoulStore class, persistent storage backed by NanoMem, bridges Soul and memory system
+diagnostics.ts: Thin diagnostic bus shell, mirrors root utils/diagnostics.ts for silent issue-event routing plus explicit dev/debug console output
 injection.ts: generatePersonalityDirective, generateValueGuidance, generateCognitiveStyleHint, prompt injection for system messages
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
