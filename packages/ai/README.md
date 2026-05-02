@@ -640,6 +640,7 @@ A **provider** offers models through a specific API. For example:
 - **Anthropic** models use the `anthropic-messages` API
 - **Google** models use the `google-generative-ai` API
 - **OpenAI** models use the `openai-responses` API
+- **Ali Token Plan** models use either `openai-completions` or `anthropic-messages` through compatible endpoints
 - **Mistral, xAI, Cerebras, Groq, etc.** models use the `openai-completions` API (OpenAI-compatible)
 
 ### Querying Providers and Models
