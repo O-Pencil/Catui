@@ -141,6 +141,52 @@ test("team-runtime: error path posts task_result and writes transcript", async (
 	}
 });
 
+test("team-runtime: queues concurrent sends for the same teammate", async () => {
+	const storageDir = createTempDir("nanopencil-team-queue-");
+	const runtime = new TeamRuntime({ storageDir });
+	let active = 0;
+	let maxActive = 0;
+	let sequence = 0;
+	(runtime as any).subAgentRuntime = {
+		spawn: async () => {
+			const order = ++sequence;
+			return {
+				id: `queue-handle-${order}`,
+				status: "running",
+				async result(): Promise<SubAgentResult> {
+					active++;
+					maxActive = Math.max(maxActive, active);
+					await new Promise((resolve) => setTimeout(resolve, order === 1 ? 40 : 1));
+					active--;
+					return { success: true, response: `done ${order}` };
+				},
+				async abort(): Promise<void> {},
+				async terminate(): Promise<void> {},
+			};
+		},
+		terminateAll: async () => {},
+	};
+
+	try {
+		await runtime.spawn({ role: "researcher", name: "scout", baseCwd: process.cwd() });
+
+		const first = runtime.send("scout", "first");
+		const second = runtime.send("scout", "second");
+		const results = await Promise.all([first, second]);
+
+		assert.deepEqual(results.map((result) => result.response), ["done 1", "done 2"]);
+		assert.equal(maxActive, 1);
+		assert.equal(runtime.getTeammate("scout")?.messages.filter((message) => message.direction === "leader").length, 2);
+		const mailboxTypes = runtime.getMailbox().list().map((message) => message.type);
+		assert.equal(mailboxTypes.filter((type) => type === "task_result").length, 2);
+		assert.equal(mailboxTypes.includes("task_progress"), true);
+	} finally {
+		await runtime.terminate("scout").catch(() => {});
+		await runtime.dispose();
+		rmSync(storageDir, { recursive: true, force: true });
+	}
+});
+
 test("team-runtime: forwards sub-agent realtime events and clears live state after completion", async () => {
 	const storageDir = createTempDir("nanopencil-team-live-");
 	const runtime = new TeamRuntime({ storageDir });
@@ -246,6 +292,142 @@ test("team-runtime: auto-generated names remain unique after reload", async () =
 			await secondRuntime.dispose();
 		}
 	} finally {
+		rmSync(storageDir, { recursive: true, force: true });
+	}
+});
+
+test("team-runtime: persists shared tasks and teammate mailbox across reload", async () => {
+	const storageDir = createTempDir("nanopencil-team-shared-");
+	const firstRuntime = new TeamRuntime({ storageDir });
+
+	try {
+		await firstRuntime.spawn({ role: "researcher", name: "scout", baseCwd: process.cwd() });
+		await firstRuntime.spawn({ role: "reviewer", name: "reviewer", baseCwd: process.cwd() });
+		const task = await firstRuntime.addTask("Map team implementation");
+		const claimed = await firstRuntime.claimTask(task.id, "scout");
+		assert.equal(claimed?.ownerName, "scout");
+		assert.equal(await firstRuntime.sendTeammateMail("scout", "reviewer", "Please review the task."), true);
+		await firstRuntime.dispose();
+
+		const secondRuntime = new TeamRuntime({ storageDir });
+		try {
+			await secondRuntime.load();
+			const tasks = await secondRuntime.listTasks();
+			assert.equal(tasks.length, 1);
+			assert.equal(tasks[0]?.status, "claimed");
+			assert.equal(tasks[0]?.ownerName, "scout");
+
+			const mailbox = secondRuntime.getMailbox().list();
+			assert.deepEqual(
+				mailbox.map((message) => message.type),
+				["task_update", "task_claim", "teammate_message"],
+			);
+			assert.equal(mailbox[2]?.targetTeammateName, "reviewer");
+		} finally {
+			await secondRuntime.terminate("scout").catch(() => {});
+			await secondRuntime.terminate("reviewer").catch(() => {});
+			await secondRuntime.dispose();
+		}
+	} finally {
+		rmSync(storageDir, { recursive: true, force: true });
+	}
+});
+
+test("team-runtime: injects claimed tasks and mailbox into teammate prompt", async () => {
+	const storageDir = createTempDir("nanopencil-team-context-");
+	const runtime = new TeamRuntime({ storageDir });
+	let capturedPrompt = "";
+	(runtime as any).subAgentRuntime = {
+		spawn: async (spec: { prompt: string }) => {
+			capturedPrompt = spec.prompt;
+			return {
+				id: "context-handle",
+				status: "running",
+				async result(): Promise<SubAgentResult> {
+					return { success: true, response: "ok" };
+				},
+				async abort(): Promise<void> {},
+				async terminate(): Promise<void> {},
+			};
+		},
+		terminateAll: async () => {},
+	};
+
+	try {
+		await runtime.spawn({ role: "researcher", name: "scout", baseCwd: process.cwd() });
+		await runtime.spawn({ role: "reviewer", name: "reviewer", baseCwd: process.cwd() });
+		const task = await runtime.addTask("Map team implementation");
+		await runtime.claimTask(task.id, "scout");
+		await runtime.sendTeammateMail("reviewer", "scout", "Please include mailbox context.");
+
+		const result = await runtime.send("scout", "continue");
+		assert.equal(result.success, true);
+		assert.match(capturedPrompt, /Shared team tasks:/);
+		assert.match(capturedPrompt, /Claimed by you:/);
+		assert.match(capturedPrompt, /T-1 \[claimed\].*Map team implementation/);
+		assert.match(capturedPrompt, /Recent team mailbox:/);
+		assert.match(capturedPrompt, /reviewer -> scout: Please include mailbox context\./);
+	} finally {
+		await runtime.terminate("scout").catch(() => {});
+		await runtime.terminate("reviewer").catch(() => {});
+		await runtime.dispose();
+		rmSync(storageDir, { recursive: true, force: true });
+	}
+});
+
+test("team-runtime: execute write tools reject paths outside cwd unless allowlisted", async () => {
+	const storageDir = createTempDir("nanopencil-team-guard-state-");
+	const workDir = createTempDir("nanopencil-team-guard-work-");
+	const outsideDir = createTempDir("nanopencil-team-guard-outside-");
+	const runtime = new TeamRuntime({ storageDir });
+	(runtime as any).worktreeManager = {
+		createGitWorktree: async (): Promise<WorkspacePath> => ({
+			path: workDir,
+			type: "temp",
+		}),
+		dispose: async (): Promise<void> => {},
+	};
+
+	try {
+		await runtime.spawn({ role: "implementer", name: "builder", baseCwd: process.cwd() });
+		const modeChange = await runtime.setMode("builder", "execute");
+		assert.ok(modeChange.pending);
+		assert.equal(runtime.approvePermission(modeChange.pending!.requestId), true);
+		await waitFor(() => runtime.getTeammate("builder")?.mode === "execute");
+
+			const tools = (runtime as any).selectTools("execute", workDir) as Array<{
+				name: string;
+				execute: (id: string, input: { path?: string; content?: string; command?: string }) => Promise<unknown>;
+			}>;
+			const writeTool = tools.find((tool) => tool.name === "write");
+			const bashTool = tools.find((tool) => tool.name === "bash");
+			assert.ok(writeTool);
+			assert.ok(bashTool);
+
+			await writeTool!.execute("ok", { path: "inside.txt", content: "ok" });
+			assert.equal(readFileSync(join(workDir, "inside.txt"), "utf-8"), "ok");
+			await bashTool!.execute("bash-ok", { command: "echo bash-ok > bash-inside.txt" });
+			assert.equal(readFileSync(join(workDir, "bash-inside.txt"), "utf-8").trim(), "bash-ok");
+
+			await assert.rejects(
+				() => writeTool!.execute("denied", { path: join(outsideDir, "outside.txt"), content: "no" }),
+				/Write denied/,
+			);
+			await assert.rejects(
+				() => bashTool!.execute("bash-denied", { command: `echo no > ${join(outsideDir, "bash-outside.txt")}` }),
+				/Write operations outside the teammate workspace are not allowed/,
+			);
+
+			await runtime.allowPath("builder", outsideDir);
+			await writeTool!.execute("allowed", { path: join(outsideDir, "outside.txt"), content: "yes" });
+			assert.equal(readFileSync(join(outsideDir, "outside.txt"), "utf-8"), "yes");
+			await bashTool!.execute("bash-allowed", { command: `echo yes > ${join(outsideDir, "bash-outside.txt")}` });
+			assert.equal(readFileSync(join(outsideDir, "bash-outside.txt"), "utf-8").trim(), "yes");
+	} finally {
+		await runtime.terminate("builder").catch(() => {});
+		await runtime.dispose();
+		rmSync(workDir, { recursive: true, force: true });
+		rmSync(outsideDir, { recursive: true, force: true });
 		rmSync(storageDir, { recursive: true, force: true });
 	}
 });

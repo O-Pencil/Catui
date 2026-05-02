@@ -61,11 +61,38 @@ test("team-parser: parses harness dashboard and preset commands", () => {
 	assert.deepEqual(parseTeamCommand("team:psyche", ""), { command: "psyche", target: undefined });
 });
 
+test("team-parser: parses task, mail, and allow-path commands", () => {
+	assert.deepEqual(parseTeamCommand("team:task", "list"), { command: "task", taskAction: "list" });
+	assert.deepEqual(parseTeamCommand("team:task", "add Implement login tests"), {
+		command: "task",
+		taskAction: "add",
+		taskTitle: "Implement login tests",
+	});
+	assert.deepEqual(parseTeamCommand("team:task", "claim T-1 builder"), {
+		command: "task",
+		taskAction: "claim",
+		taskId: "T-1",
+		target: "builder",
+	});
+	assert.deepEqual(parseTeamCommand("team:mail", "builder verifier Review T-1"), {
+		command: "mail",
+		from: "builder",
+		to: "verifier",
+		message: "Review T-1",
+	});
+	assert.deepEqual(parseTeamCommand("team:allow-path", "builder ../shared"), {
+		command: "allow-path",
+		target: "builder",
+		path: "../shared",
+	});
+});
+
 test("team-parser: help text advertises list and approve flow", () => {
 	const help = buildTeamHelp();
 	assert.match(help, /\/team\s+- List all teammates/);
 	assert.match(help, /\/team <task>/);
 	assert.match(help, /\/team:approve <request-id>/);
+	assert.match(help, /\/team:task add <title>/);
 });
 
 test("team-presets: auto team selector uses model JSON when available", async () => {

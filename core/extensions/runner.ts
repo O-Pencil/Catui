@@ -208,6 +208,14 @@ export class ExtensionRunner {
 	private getModel: () => Model<any> | undefined = () => undefined;
 	private completeSimpleFn: (systemPrompt: string, userMessage: string) => Promise<string | undefined> = async () =>
 		undefined;
+	private completeJsonFn:
+		| ((
+				systemPrompt: string,
+				userMessage: string,
+				schema: Record<string, unknown>,
+				options?: { toolName?: string; resultKey?: string },
+		  ) => Promise<string | undefined>)
+		| undefined;
 	private isIdleFn: () => boolean = () => true;
 	private waitForIdleFn: () => Promise<void> = async () => {};
 	private abortFn: () => void = () => {};
@@ -295,6 +303,7 @@ export class ExtensionRunner {
 		// Context actions (required)
 		this.getModel = contextActions.getModel;
 		this.completeSimpleFn = contextActions.completeSimple;
+		this.completeJsonFn = contextActions.completeJson;
 		this.isIdleFn = contextActions.isIdle;
 		this.runtime.isIdle = () => this.isIdleFn();
 		this.abortFn = contextActions.abort;
@@ -573,6 +582,10 @@ export class ExtensionRunner {
 			},
 			completeSimple: (systemPrompt: string, userMessage: string) =>
 				this.completeSimpleFn(systemPrompt, userMessage),
+			completeJson: this.completeJsonFn
+				? (systemPrompt, userMessage, schema, options) =>
+						this.completeJsonFn!(systemPrompt, userMessage, schema, options)
+				: undefined,
 			isIdle: () => this.isIdleFn(),
 			abort: () => this.abortFn(),
 			hasPendingMessages: () => this.hasPendingMessagesFn(),

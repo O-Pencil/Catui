@@ -23,6 +23,8 @@ npx tsx cli.ts
 All teammate state lives under:
 
 - `${NANOPENCIL_AGENT_DIR:-~/.nanopencil/agent}/teams/<id>.json`        — durable state
+- `${NANOPENCIL_AGENT_DIR:-~/.nanopencil/agent}/teams/tasks.json`       — shared task list
+- `${NANOPENCIL_AGENT_DIR:-~/.nanopencil/agent}/teams/mailbox.jsonl`    — replayable mailbox log
 - `${NANOPENCIL_AGENT_DIR:-~/.nanopencil/agent}/teams/transcripts/<id>.jsonl` — per-teammate transcripts
 
 You can wipe state between runs with:
@@ -147,6 +149,41 @@ await rt.send("researcher-1", "ping");
 Expected message sequence: `task_request` → `task_result`.
 After `setMode("..." , "execute")` on an implementer: `permission_request`, then on approval `permission_response` and `mode_change`.
 
+Shared task and teammate mail smoke:
+
+```text
+/team:spawn researcher --name scout
+/team:spawn reviewer --name reviewer
+/team:task add Map team implementation
+/team:task claim T-1 scout
+/team:mail scout reviewer "Please review T-1 when ready"
+/team:task list
+```
+
+Pass criteria:
+
+- `tasks.json` contains `T-1` with `status: "claimed"` and `ownerName: "scout"`.
+- `mailbox.jsonl` contains `task_update`, `task_claim`, and `teammate_message`.
+- Restarting nanoPencil preserves `/team:task list` output and the teammate mailbox context shown to each teammate.
+- The next `/team:send scout ...` prompt includes `Shared team tasks`, the claimed task, and recent mailbox lines targeting `scout`.
+
+---
+
+## 6.1 Path-scoped write access
+
+```text
+/team:spawn implementer --name builder
+/team:mode builder execute
+/team:approve <request-id>
+```
+
+Pass criteria:
+
+- In execute mode, `edit`, `write`, and simple bash write commands can mutate files inside `builder.cwd`.
+- Attempts to mutate an absolute path outside `builder.cwd` fail with `Write denied` or the team bash sandbox message.
+- `/team:allow-path builder ../shared-output` grants that path prefix; subsequent `edit`, `write`, and simple bash writes under the approved path succeed.
+- Complex shell write syntax with `&&`, pipes, command substitution, or subshells remains blocked by default.
+
 ---
 
 ## 7. Transcripts
@@ -183,6 +220,21 @@ Pass criteria:
 - The send call returns within ~15 seconds with `aborted: true` or an error.
 - `slow` ends up in `stopped` status.
 - A subsequent `/team:send slow "ping"` works (status returns to `running` then `idle`).
+
+Concurrent send queue check:
+
+```text
+/team:spawn researcher --name scout
+/team:send scout "First long read"
+# while running:
+/team:send scout "Second follow-up"
+```
+
+Pass criteria:
+
+- The second send is queued instead of rejected.
+- Mailbox contains a `task_progress` event with `status: "queued"`.
+- The teammate receives and records both leader messages in order.
 
 ---
 

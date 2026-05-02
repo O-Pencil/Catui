@@ -14,6 +14,9 @@
  *   /team:progress [<name>]          - Show harness progress
  *   /team:psyche [<name>]            - Show psyche weights
  *   /team:dashboard                  - Toggle dashboard widget
+ *   /team:task <add|claim|done|block|cancel|list> ... - Manage shared task list
+ *   /team:mail <from> <to> <message> - Route teammate-to-teammate mailbox messages
+ *   /team:allow-path <name> <path>   - Grant teammate write access to a path prefix
  *   /team:stop <name>                - Stop teammate turn
  *   /team:terminate <name>           - Destroy teammate
  *   /team:approve <request-id>       - Approve permission request
@@ -24,7 +27,7 @@ import { Box, Container, Spacer, Text } from "@pencil-agent/tui";
 import type { ExtensionAPI } from "../../../core/extensions/types.js";
 import { TeamRuntime, type TeamRuntimeEvent } from "./team-runtime.js";
 import { buildTeamHelp, parseTeamCommand } from "./team-parser.js";
-import type { PersistedTeammate } from "./team-types.js";
+import type { PersistedTeammate, TeamTask } from "./team-types.js";
 import { executeAutoTeam, executePreset, formatAutoTeamResult, formatPresetResult } from "./team-presets.js";
 import { formatHarnessProgress } from "./team-harness.js";
 import { formatPsycheWeights } from "./team-psyche.js";
@@ -94,6 +97,9 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 		"team:dashboard",
 		"team:progress",
 		"team:psyche",
+		"team:task",
+		"team:mail",
+		"team:allow-path",
 	] as const;
 
 	for (const commandName of commandNames) {
@@ -524,6 +530,109 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 						});
 						break;
 					}
+
+					case "task": {
+						if (!parsed.taskAction) {
+							ctx.ui.notify("Usage: /team:task <list|add|claim|done|block|cancel> ...", "error");
+							return;
+						}
+						if (parsed.taskAction === "list") {
+							const tasks = await teamRuntime.listTasks();
+							api.sendMessage({
+								customType: TEAM_MESSAGE_TYPE,
+								content: formatTaskList(tasks).join("\n"),
+								display: true,
+							});
+							break;
+						}
+						if (parsed.taskAction === "add") {
+							if (!parsed.taskTitle) {
+								ctx.ui.notify("Usage: /team:task add <title>", "error");
+								return;
+							}
+							const task = await teamRuntime.addTask(parsed.taskTitle);
+							api.sendMessage({
+								customType: TEAM_MESSAGE_TYPE,
+								content: `Added task ${task.id}: ${task.title}`,
+								display: true,
+							});
+							break;
+						}
+						if (parsed.taskAction === "claim") {
+							if (!parsed.taskId || !parsed.target) {
+								ctx.ui.notify("Usage: /team:task claim <id> <name>", "error");
+								return;
+							}
+							const task = await teamRuntime.claimTask(parsed.taskId, parsed.target);
+							if (!task) {
+								ctx.ui.notify(`Task or teammate not found: ${parsed.taskId}`, "error");
+								return;
+							}
+							api.sendMessage({
+								customType: TEAM_MESSAGE_TYPE,
+								content: `Claimed ${task.id} for ${task.ownerName}: ${task.title}`,
+								display: true,
+							});
+							break;
+						}
+						if (!parsed.taskId) {
+							ctx.ui.notify(`Usage: /team:task ${parsed.taskAction} <id>`, "error");
+							return;
+						}
+						const status =
+							parsed.taskAction === "done"
+								? "done"
+								: parsed.taskAction === "block"
+									? "blocked"
+									: "cancelled";
+						const task = await teamRuntime.updateTaskStatus(parsed.taskId, status);
+						if (!task) {
+							ctx.ui.notify(`Task not found: ${parsed.taskId}`, "error");
+							return;
+						}
+						api.sendMessage({
+							customType: TEAM_MESSAGE_TYPE,
+							content: `Updated ${task.id} to ${task.status}: ${task.title}`,
+							display: true,
+						});
+						break;
+					}
+
+					case "mail": {
+						if (!parsed.from || !parsed.to || !parsed.message) {
+							ctx.ui.notify("Usage: /team:mail <from> <to> <message>", "error");
+							return;
+						}
+						const ok = await teamRuntime.sendTeammateMail(parsed.from, parsed.to, parsed.message);
+						if (!ok) {
+							ctx.ui.notify(`Could not route mail from ${parsed.from} to ${parsed.to}`, "error");
+							return;
+						}
+						api.sendMessage({
+							customType: TEAM_MESSAGE_TYPE,
+							content: `Routed mail ${parsed.from} -> ${parsed.to}.`,
+							display: true,
+						});
+						break;
+					}
+
+					case "allow-path": {
+						if (!parsed.target || !parsed.path) {
+							ctx.ui.notify("Usage: /team:allow-path <name> <path>", "error");
+							return;
+						}
+						const allowedPath = await teamRuntime.allowPath(parsed.target, parsed.path);
+						if (!allowedPath) {
+							ctx.ui.notify(`Teammate "${parsed.target}" not found`, "error");
+							return;
+						}
+						api.sendMessage({
+							customType: TEAM_MESSAGE_TYPE,
+							content: `Granted ${parsed.target} write access to ${allowedPath}`,
+							display: true,
+						});
+						break;
+					}
 				}
 			},
 		});
@@ -554,9 +663,28 @@ function getCommandDescription(commandName: string): string {
 			return "Show harness progress";
 		case "team:psyche":
 			return "Show psyche weights";
+		case "team:task":
+			return "Manage shared team tasks";
+		case "team:mail":
+			return "Route teammate-to-teammate mailbox messages";
+		case "team:allow-path":
+			return "Grant a teammate write access to a path prefix";
 		default:
 			return "AgentTeam management";
 	}
+}
+
+function formatTaskList(tasks: TeamTask[]): string[] {
+	if (tasks.length === 0) return ["No team tasks. Use /team:task add <title> to create one."];
+	const lines = ["Team Tasks:", ""];
+	for (const task of tasks) {
+		const owner = task.ownerName ? ` @${task.ownerName}` : "";
+		const deps = task.dependsOn.length ? ` deps:${task.dependsOn.join(",")}` : "";
+		lines.push(`${task.id} [${task.status}]${owner}${deps} ${task.title}`);
+		if (task.description) lines.push(`  ${task.description}`);
+		if (task.artifactPaths.length) lines.push(`  artifacts: ${task.artifactPaths.join(", ")}`);
+	}
+	return lines;
 }
 
 function formatTeammateList(teammates: PersistedTeammate[]): string[] {

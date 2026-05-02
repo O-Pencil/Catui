@@ -286,8 +286,9 @@ export const streamSimpleGoogle: StreamFunction<"google-generative-ai", SimpleSt
 	}
 
 	const base = buildBaseOptions(model, options, apiKey);
+	const toolChoice = options?.toolChoice as GoogleOptions["toolChoice"] | undefined;
 	if (!options?.reasoning) {
-		return streamGoogle(model, context, { ...base, thinking: { enabled: false } } satisfies GoogleOptions);
+		return streamGoogle(model, context, { ...base, toolChoice, thinking: { enabled: false } } satisfies GoogleOptions);
 	}
 
 	const effort = clampReasoning(options.reasoning)!;
@@ -296,6 +297,7 @@ export const streamSimpleGoogle: StreamFunction<"google-generative-ai", SimpleSt
 	if (isGemini3ProModel(googleModel) || isGemini3FlashModel(googleModel)) {
 		return streamGoogle(model, context, {
 			...base,
+			toolChoice,
 			thinking: {
 				enabled: true,
 				level: getGemini3ThinkingLevel(effort, googleModel),
@@ -305,6 +307,7 @@ export const streamSimpleGoogle: StreamFunction<"google-generative-ai", SimpleSt
 
 	return streamGoogle(model, context, {
 		...base,
+		toolChoice,
 		thinking: {
 			enabled: true,
 			budgetTokens: getGoogleBudget(googleModel, effort, options.thinkingBudgets),

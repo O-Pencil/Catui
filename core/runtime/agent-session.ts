@@ -20,6 +20,7 @@ import type {
   Message,
   Model,
   TextContent,
+  ToolCall,
 } from "@pencil-agent/ai";
 import {
   completeSimple,
@@ -31,6 +32,22 @@ import {
 import { getDocsPath } from "../../config.js";
 import { theme } from "../../modes/interactive/theme/theme.js";
 import { stripFrontmatter } from "../../utils/frontmatter.js";
+
+function getStructuredToolChoice(model: Model<any>, toolName: string): unknown {
+  switch (model.api) {
+    case "openai-completions":
+      return { type: "function", function: { name: toolName } };
+    case "anthropic-messages":
+    case "bedrock-converse-stream":
+      return { type: "tool", name: toolName };
+    case "google-generative-ai":
+    case "google-gemini-cli":
+    case "google-vertex":
+      return "any";
+    default:
+      return "required";
+  }
+}
 
 /**
  * Custom error for model cycling with additional context.
@@ -2570,6 +2587,53 @@ export class AgentSession {
                 .map((b) => (b as TextContent).text ?? "")
                 .join("") ?? "";
             return text;
+          } catch {
+            return undefined;
+          }
+        },
+        completeJson: async (
+          systemPrompt: string,
+          userMessage: string,
+          schema: Record<string, unknown>,
+          options?: { toolName?: string; resultKey?: string },
+        ) => {
+          const model = this.model;
+          if (!model) return undefined;
+          const apiKey = await this.modelRegistry.getApiKey(model);
+          if (!apiKey) return undefined;
+
+          const toolName = options?.toolName || "submit_json";
+          try {
+            const response = await completeSimple(
+              model,
+              {
+                systemPrompt: `${systemPrompt}\n\nYou must call the ${toolName} tool exactly once with the final structured JSON payload. Do not answer in prose.`,
+                messages: [
+                  { role: "user", content: userMessage, timestamp: Date.now() },
+                ],
+                tools: [
+                  {
+                    name: toolName,
+                    description: "Submit the final structured JSON payload.",
+                    parameters: schema as any,
+                  },
+                ],
+              },
+              {
+                maxTokens: 1500,
+                temperature: 0,
+                apiKey,
+                toolChoice: getStructuredToolChoice(model, toolName),
+              } as any,
+            );
+            const toolCall = response.content?.find(
+              (b) => b.type === "toolCall" && (b as ToolCall).name === toolName,
+            ) as ToolCall | undefined;
+            if (!toolCall) return undefined;
+            const payload = options?.resultKey
+              ? toolCall.arguments?.[options.resultKey]
+              : toolCall.arguments;
+            return JSON.stringify(payload);
           } catch {
             return undefined;
           }

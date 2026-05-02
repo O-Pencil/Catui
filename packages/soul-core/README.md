@@ -210,7 +210,7 @@ const soul = new SoulManager({
       natural: 15,      // Evolve every 15 interactions
       reflection: 200,  // Deep reflection every 200 interactions
       feedback: 1,      // Evolve on every user feedback
-      crisis: 3,        // Crisis mode after 3 failures
+      crisis: 3,        // Crisis mode after 3 recent failures
     },
     personalityLimits: {
       maxDelta: 0.03,   // Max 3% change per evolution

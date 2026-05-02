@@ -274,6 +274,13 @@ export interface ExtensionContext {
 	model: Model<any> | undefined;
 	/** One-shot LLM completion with current model (e.g. for memory extraction). Undefined when no model or no API key. */
 	completeSimple(systemPrompt: string, userMessage: string): Promise<string | undefined>;
+	/** One-shot structured JSON completion with current model. Uses provider tool-calling when available. */
+	completeJson?(
+		systemPrompt: string,
+		userMessage: string,
+		schema: Record<string, unknown>,
+		options?: { toolName?: string; resultKey?: string },
+	): Promise<string | undefined>;
 	/** Whether the agent is idle (not streaming) */
 	isIdle(): boolean;
 	/** Abort the current agent operation */
@@ -1308,6 +1315,13 @@ export interface ExtensionContextActions {
 	getModel: () => Model<any> | undefined;
 	/** One-shot completion with current model for extensions (e.g. memory extraction). Returns undefined if no model or no API key. */
 	completeSimple: (systemPrompt: string, userMessage: string) => Promise<string | undefined>;
+	/** One-shot structured JSON completion with current model. Returns undefined if no model, no API key, or no structured payload. */
+	completeJson?: (
+		systemPrompt: string,
+		userMessage: string,
+		schema: Record<string, unknown>,
+		options?: { toolName?: string; resultKey?: string },
+	) => Promise<string | undefined>;
 	isIdle: () => boolean;
 	abort: () => void;
 	hasPendingMessages: () => boolean;

@@ -226,14 +226,16 @@ export const streamSimpleBedrock: StreamFunction<"bedrock-converse-stream", Simp
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream => {
 	const base = buildBaseOptions(model, options, undefined);
+	const toolChoice = options?.toolChoice as BedrockOptions["toolChoice"] | undefined;
 	if (!options?.reasoning) {
-		return streamBedrock(model, context, { ...base, reasoning: undefined } satisfies BedrockOptions);
+		return streamBedrock(model, context, { ...base, toolChoice, reasoning: undefined } satisfies BedrockOptions);
 	}
 
 	if (model.id.includes("anthropic.claude") || model.id.includes("anthropic/claude")) {
 		if (supportsAdaptiveThinking(model.id)) {
 			return streamBedrock(model, context, {
 				...base,
+				toolChoice,
 				reasoning: options.reasoning,
 				thinkingBudgets: options.thinkingBudgets,
 			} satisfies BedrockOptions);
@@ -248,6 +250,7 @@ export const streamSimpleBedrock: StreamFunction<"bedrock-converse-stream", Simp
 
 		return streamBedrock(model, context, {
 			...base,
+			toolChoice,
 			maxTokens: adjusted.maxTokens,
 			reasoning: options.reasoning,
 			thinkingBudgets: {
@@ -259,6 +262,7 @@ export const streamSimpleBedrock: StreamFunction<"bedrock-converse-stream", Simp
 
 	return streamBedrock(model, context, {
 		...base,
+		toolChoice,
 		reasoning: options.reasoning,
 		thinkingBudgets: options.thinkingBudgets,
 	} satisfies BedrockOptions);

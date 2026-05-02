@@ -805,9 +805,11 @@ export const streamSimpleGoogleGeminiCli: StreamFunction<"google-gemini-cli", Si
 	}
 
 	const base = buildBaseOptions(model, options, apiKey);
+	const toolChoice = options?.toolChoice as GoogleGeminiCliOptions["toolChoice"] | undefined;
 	if (!options?.reasoning) {
 		return streamGoogleGeminiCli(model, context, {
 			...base,
+			toolChoice,
 			thinking: { enabled: false },
 		} satisfies GoogleGeminiCliOptions);
 	}
@@ -816,6 +818,7 @@ export const streamSimpleGoogleGeminiCli: StreamFunction<"google-gemini-cli", Si
 	if (isGemini3Model(model.id)) {
 		return streamGoogleGeminiCli(model, context, {
 			...base,
+			toolChoice,
 			thinking: {
 				enabled: true,
 				level: getGeminiCliThinkingLevel(effort, model.id),
@@ -841,6 +844,7 @@ export const streamSimpleGoogleGeminiCli: StreamFunction<"google-gemini-cli", Si
 
 	return streamGoogleGeminiCli(model, context, {
 		...base,
+		toolChoice,
 		maxTokens,
 		thinking: {
 			enabled: true,

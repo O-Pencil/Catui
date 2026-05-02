@@ -78,13 +78,13 @@ export {
 
 import type { AgentTool } from "@pencil-agent/agent-core";
 import { type BashToolOptions, bashTool, createBashTool } from "./bash.js";
-import { createEditTool, editTool } from "./edit.js";
+import { createEditTool, type EditToolOptions, editTool } from "./edit.js";
 import { createFindTool, findTool } from "./find.js";
 import { createGrepTool, grepTool } from "./grep.js";
 import { createLsTool, lsTool } from "./ls.js";
 import { createReadTool, type ReadToolOptions, readTool } from "./read.js";
 import { createTimeTool, timeTool } from "./time.js";
-import { createWriteTool, writeTool } from "./write.js";
+import { createWriteTool, type WriteToolOptions, writeTool } from "./write.js";
 
 /** Tool type (AgentTool from nanopencil-ai) */
 export type Tool = AgentTool<any>;
@@ -114,6 +114,10 @@ export interface ToolsOptions {
 	read?: ReadToolOptions;
 	/** Options for the bash tool */
 	bash?: BashToolOptions;
+	/** Options for the edit tool */
+	edit?: EditToolOptions;
+	/** Options for the write tool */
+	write?: WriteToolOptions;
 }
 
 /**
@@ -123,8 +127,8 @@ export function createCodingTools(cwd: string, options?: ToolsOptions): Tool[] {
 	return [
 		createReadTool(cwd, options?.read),
 		createBashTool(cwd, options?.bash),
-		createEditTool(cwd),
-		createWriteTool(cwd),
+		createEditTool(cwd, options?.edit),
+		createWriteTool(cwd, options?.write),
 		createTimeTool(),
 	];
 }
@@ -143,8 +147,8 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 	return {
 		read: createReadTool(cwd, options?.read),
 		bash: createBashTool(cwd, options?.bash),
-		edit: createEditTool(cwd),
-		write: createWriteTool(cwd),
+		edit: createEditTool(cwd, options?.edit),
+		write: createWriteTool(cwd, options?.write),
 		grep: createGrepTool(cwd),
 		find: createFindTool(cwd),
 		ls: createLsTool(cwd),

@@ -7,7 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { createWriteStream, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import type { AgentTool } from "@pencil-agent/agent-core";
 import { type Static, Type } from "@sinclair/typebox";
 import { spawn } from "child_process";
@@ -359,6 +359,8 @@ export interface BashSandboxOptions {
   additionalBlockedPatterns?: RegExp[];
   /** Custom error message for blocked commands */
   blockedMessage?: string;
+  /** Optional path allowlist hook for simple write commands. Defaults to denying all writes. */
+  allowWritePath?: (absolutePath: string) => boolean;
 }
 
 /**
@@ -374,6 +376,23 @@ export function createSandboxHook(options?: BashSandboxOptions): BashSpawnHook {
 
   return (context) => {
     const command = context.command.trim();
+    const writePaths = extractSimpleWritePaths(command, context.cwd);
+    if (writePaths === null) {
+      return {
+        ...context,
+        command: `echo "${blockedMessage}" >&2; exit 1`,
+      };
+    }
+    if (writePaths.length > 0) {
+      const allAllowed = writePaths.every((path) => options?.allowWritePath?.(path) === true);
+      if (!allAllowed) {
+        return {
+          ...context,
+          command: `echo "${blockedMessage}" >&2; exit 1`,
+        };
+      }
+      return context;
+    }
 
     // Check if command contains any blocked patterns
     for (const pattern of blockedPatterns) {
@@ -387,4 +406,98 @@ export function createSandboxHook(options?: BashSandboxOptions): BashSpawnHook {
 
     return context;
   };
+}
+
+function extractSimpleWritePaths(command: string, cwd: string): string[] | null {
+  if (/[;&|`$()]/.test(command)) return null;
+  const tokens = tokenizeSimpleShell(command);
+  if (tokens.length === 0) return [];
+
+  const paths: string[] = [];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]!;
+    if (token === ">" || token === ">>" || /^&?\d?>&?\d?$/.test(token)) {
+      const next = tokens[index + 1];
+      if (!next) return null;
+      paths.push(resolveSandboxPath(next, cwd));
+      index++;
+      continue;
+    }
+    const redirectMatch = /^(?:\d?>|>>)(.+)$/.exec(token);
+    if (redirectMatch?.[1]) {
+      paths.push(resolveSandboxPath(redirectMatch[1], cwd));
+      continue;
+    }
+  }
+
+  const cmd = tokens[0];
+  if (cmd === "mkdir") {
+    const targets = tokens.slice(1).filter((token) => !token.startsWith("-"));
+    if (targets.length === 0) return null;
+    paths.push(...targets.map((target) => resolveSandboxPath(target, cwd)));
+  } else if (cmd === "cp" || cmd === "mv") {
+    const operands = tokens.slice(1).filter((token) => !token.startsWith("-"));
+    if (operands.length < 2) return null;
+    paths.push(resolveSandboxPath(operands[operands.length - 1]!, cwd));
+  } else if (cmd === "rm") {
+    const targets = tokens.slice(1).filter((token) => !token.startsWith("-"));
+    if (targets.length === 0) return null;
+    paths.push(...targets.map((target) => resolveSandboxPath(target, cwd)));
+  } else if (cmd === "tee") {
+    const targets = tokens.slice(1).filter((token) => !token.startsWith("-"));
+    if (targets.length === 0) return null;
+    paths.push(...targets.map((target) => resolveSandboxPath(target, cwd)));
+  } else if (cmd === "touch") {
+    const targets = tokens.slice(1).filter((token) => !token.startsWith("-"));
+    if (targets.length === 0) return null;
+    paths.push(...targets.map((target) => resolveSandboxPath(target, cwd)));
+  }
+
+  return paths;
+}
+
+function tokenizeSimpleShell(command: string): string[] {
+  const tokens: string[] = [];
+  let current = "";
+  let quote: "'" | "\"" | undefined;
+  let escaped = false;
+
+  for (const ch of command) {
+    if (escaped) {
+      current += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) {
+        quote = undefined;
+      } else {
+        current += ch;
+      }
+      continue;
+    }
+    if (ch === "'" || ch === "\"") {
+      quote = ch;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (current) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += ch;
+  }
+
+  if (current) tokens.push(current);
+  return tokens;
+}
+
+function resolveSandboxPath(path: string, cwd: string): string {
+  return resolve(isAbsolute(path) ? path : join(cwd, path));
 }

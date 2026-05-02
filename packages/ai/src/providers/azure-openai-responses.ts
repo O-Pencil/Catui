@@ -50,6 +50,7 @@ function resolveDeploymentName(model: Model<"azure-openai-responses">, options?:
 export interface AzureOpenAIResponsesOptions extends StreamOptions {
 	reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
 	reasoningSummary?: "auto" | "detailed" | "concise" | null;
+	toolChoice?: unknown;
 	azureApiVersion?: string;
 	azureResourceName?: string;
 	azureBaseUrl?: string;
@@ -140,6 +141,7 @@ export const streamSimpleAzureOpenAIResponses: StreamFunction<"azure-openai-resp
 	return streamAzureOpenAIResponses(model, context, {
 		...base,
 		reasoningEffort,
+		toolChoice: options?.toolChoice,
 	} satisfies AzureOpenAIResponsesOptions);
 };
 
@@ -234,6 +236,10 @@ function buildParams(
 
 	if (context.tools) {
 		params.tools = convertResponsesTools(context.tools);
+	}
+
+	if (options?.toolChoice !== undefined) {
+		(params as any).tool_choice = options.toolChoice;
 	}
 
 	if (model.reasoning) {

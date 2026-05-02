@@ -13,6 +13,9 @@
  *   /team:progress [<name>]          - Show harness progress
  *   /team:psyche [<name>]            - Show psyche weights
  *   /team:dashboard                  - Toggle dashboard widget
+ *   /team:task <add|claim|done|block|cancel|list> ... - Manage shared task list
+ *   /team:mail <from> <to> <message> - Route a teammate-to-teammate mailbox message
+ *   /team:allow-path <name> <path>   - Grant teammate write access to a path prefix
  *   /team:stop <name>                - Stop teammate turn
  *   /team:terminate <name>           - Destroy teammate
  *   /team:approve <request-id>       - Approve permission request
@@ -35,6 +38,9 @@ export type TeamSubcommand =
 	| "dashboard"
 	| "progress"
 	| "psyche"
+	| "task"
+	| "mail"
+	| "allow-path"
 	| "help";
 
 export interface ParsedTeamCommand {
@@ -57,6 +63,18 @@ export interface ParsedTeamCommand {
 	presetName?: PresetName;
 	/** For preset: task description */
 	taskDescription?: string;
+	/** For task: task subcommand */
+	taskAction?: "add" | "claim" | "done" | "block" | "cancel" | "list";
+	/** For task: task id */
+	taskId?: string;
+	/** For task add: title */
+	taskTitle?: string;
+	/** For mail: source teammate */
+	from?: string;
+	/** For mail: target teammate */
+	to?: string;
+	/** For allow-path: path prefix */
+	path?: string;
 }
 
 const VALID_ROLES: TeammateRole[] = ["researcher", "reviewer", "implementer", "planner", "verifier", "generic"];
@@ -114,6 +132,15 @@ export function parseTeamCommand(commandName: string, args = ""): ParsedTeamComm
 			if (trimmedArgs.startsWith("psyche")) {
 				return parseTargetOnly("psyche", trimmedArgs.slice(6).trim());
 			}
+			if (trimmedArgs.startsWith("task")) {
+				return parseTaskArgs(trimmedArgs.slice(4).trim());
+			}
+			if (trimmedArgs.startsWith("mail ")) {
+				return parseMailArgs(trimmedArgs.slice(5));
+			}
+			if (trimmedArgs.startsWith("allow-path ")) {
+				return parseAllowPathArgs(trimmedArgs.slice(11));
+			}
 			return { command: "auto", taskDescription: trimmedArgs };
 
 		case "team:spawn":
@@ -138,6 +165,12 @@ export function parseTeamCommand(commandName: string, args = ""): ParsedTeamComm
 			return parseTargetOnly("progress", trimmedArgs);
 		case "team:psyche":
 			return parseTargetOnly("psyche", trimmedArgs);
+		case "team:task":
+			return parseTaskArgs(trimmedArgs);
+		case "team:mail":
+			return parseMailArgs(trimmedArgs);
+		case "team:allow-path":
+			return parseAllowPathArgs(trimmedArgs);
 		default:
 			return null;
 	}
@@ -216,6 +249,50 @@ function parseTargetOnly(command: "progress" | "psyche", rawArgs: string): Parse
 	return { command, target: target || undefined };
 }
 
+function parseTaskArgs(rawArgs: string): ParsedTeamCommand | null {
+	const trimmed = rawArgs.trim();
+	if (!trimmed || trimmed === "list") return { command: "task", taskAction: "list" };
+
+	const spaceIdx = trimmed.indexOf(" ");
+	const action = (spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx)) as ParsedTeamCommand["taskAction"];
+	const rest = spaceIdx === -1 ? "" : trimmed.slice(spaceIdx + 1).trim();
+
+	if (action === "add") {
+		return rest ? { command: "task", taskAction: "add", taskTitle: rest } : null;
+	}
+	if (action === "claim") {
+		const parts = rest.split(/\s+/);
+		return parts[0] && parts[1] ? { command: "task", taskAction: "claim", taskId: parts[0], target: parts[1] } : null;
+	}
+	if (action === "done" || action === "block" || action === "cancel") {
+		return rest ? { command: "task", taskAction: action, taskId: rest.split(/\s+/)[0] } : null;
+	}
+	return null;
+}
+
+function parseMailArgs(rawArgs: string): ParsedTeamCommand | null {
+	const trimmed = rawArgs.trim();
+	const firstSpace = trimmed.indexOf(" ");
+	if (firstSpace === -1) return null;
+	const secondSpace = trimmed.indexOf(" ", firstSpace + 1);
+	if (secondSpace === -1) return null;
+	const from = trimmed.slice(0, firstSpace);
+	const to = trimmed.slice(firstSpace + 1, secondSpace);
+	const message = trimmed.slice(secondSpace + 1).trim();
+	if (!from || !to || !message) return null;
+	return { command: "mail", from, to, message };
+}
+
+function parseAllowPathArgs(rawArgs: string): ParsedTeamCommand | null {
+	const trimmed = rawArgs.trim();
+	const spaceIdx = trimmed.indexOf(" ");
+	if (spaceIdx === -1) return null;
+	const target = trimmed.slice(0, spaceIdx);
+	const path = trimmed.slice(spaceIdx + 1).trim();
+	if (!target || !path) return null;
+	return { command: "allow-path", target, path };
+}
+
 /**
  * Build help text for /team commands.
  */
@@ -231,6 +308,13 @@ Team Commands (AgentTeam + Harness):
   /team:progress [<name>]         - Show harness progress
   /team:psyche [<name>]           - Show psyche weights
   /team:dashboard                 - Toggle team dashboard widget
+  /team:task list                 - Show shared team tasks
+  /team:task add <title>          - Add a shared task
+  /team:task claim <id> <name>    - Assign/claim task for teammate
+  /team:task done <id>            - Mark task done
+  /team:task block <id>           - Mark task blocked
+  /team:mail <from> <to> <msg>    - Send teammate-to-teammate mailbox message
+  /team:allow-path <name> <path>  - Grant teammate write access to a path prefix
   /team:stop <name>               - Stop teammate's current turn
   /team:terminate <name>          - Destroy a teammate
   /team:approve <request-id>      - Approve a permission request
@@ -244,6 +328,9 @@ Examples:
   /team:spawn implementer --name alice --harness
   /team:preset solo "Implement login feature"
   /team:send alice "Implement login feature"
+  /team:task add Implement login tests
+  /team:task claim T-1 alice
+  /team:mail alice verifier "Please review T-1 when ready"
   /team:status alice
   /team:mode alice execute
   /team:terminate alice

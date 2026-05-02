@@ -35,6 +35,9 @@ export type TeammateMode = "research" | "plan" | "execute" | "review";
  */
 export type TeammateStatus = "idle" | "running" | "stopped" | "terminated" | "error";
 
+/** Shared task status for team coordination. */
+export type TeamTaskStatus = "open" | "claimed" | "blocked" | "done" | "cancelled";
+
 /** Harness phase for long-running teammate work. */
 export type HarnessPhase = "init" | "coding" | "verify" | "fix" | "complete";
 
@@ -171,4 +174,19 @@ export interface TeamSendResult {
   aborted?: boolean;
   error?: string;
   durationMs: number;
+}
+
+/** Durable task record shared by the team. */
+export interface TeamTask {
+  id: string;
+  title: string;
+  description?: string;
+  status: TeamTaskStatus;
+  ownerId?: string;
+  ownerName?: string;
+  dependsOn: string[];
+  artifactPaths: string[];
+  createdAt: number;
+  updatedAt: number;
+  completedAt?: number;
 }

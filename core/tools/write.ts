@@ -36,6 +36,8 @@ const defaultWriteOperations: WriteOperations = {
 export interface WriteToolOptions {
 	/** Custom operations for file writing. Default: local filesystem */
 	operations?: WriteOperations;
+	/** Optional guard called with the resolved absolute path before writing. */
+	beforeWrite?: (absolutePath: string) => void | Promise<void>;
 }
 
 export function createWriteTool(cwd: string, options?: WriteToolOptions): AgentTool<typeof writeSchema> {
@@ -54,6 +56,7 @@ export function createWriteTool(cwd: string, options?: WriteToolOptions): AgentT
 		) => {
 			const absolutePath = resolveToCwd(path, cwd);
 			const dir = dirname(absolutePath);
+			await options?.beforeWrite?.(absolutePath);
 
 			return new Promise<{ content: Array<{ type: "text"; text: string }>; details: undefined }>(
 				(resolve, reject) => {

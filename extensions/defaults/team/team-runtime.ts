@@ -13,7 +13,7 @@ import { SubAgentRuntime } from "../../../core/sub-agent/index.js";
 import type { SubAgentEvent, SubAgentHandle, SubAgentSpec } from "../../../core/sub-agent/index.js";
 import { WorktreeManager } from "../../../core/workspace/index.js";
 import type { WorkspacePath } from "../../../core/workspace/index.js";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import {
 	createBashTool,
 	createCodingTools,
@@ -25,6 +25,7 @@ import type { Model } from "@pencil-agent/ai";
 import { TeamStateStore } from "./team-state-store.js";
 import { PermissionStore } from "./team-permissions.js";
 import { TeamMailbox } from "./team-mailbox.js";
+import { TeamTaskStore } from "./team-task-store.js";
 import { TeamTranscriptWriter } from "./team-transcript.js";
 import {
 	beginHarnessTurn,
@@ -37,6 +38,8 @@ import {
 import { buildPsychePrompt, computePsycheWeights, type SoulTraits } from "./team-psyche.js";
 import type {
 	PersistedTeammate,
+	TeamTask,
+	TeamTaskStatus,
 	TeammateIdentity,
 	TeammateMessage,
 	TeammateMode,
@@ -79,10 +82,12 @@ export class TeamRuntime {
 	private subAgentRuntime: SubAgentRuntime;
 	private permissions: PermissionStore;
 	private mailbox: TeamMailbox;
+	private tasks: TeamTaskStore;
 	private transcripts: TeamTranscriptWriter;
 	// TODO(B.next): split into `byId: Map<string, RuntimeTeammate>` + `nameToId: Map<string, string>`.
 	// Currently keyed by both id and name for lookup convenience; getAllTeammates dedupes by id.
 	private teammates: Map<string, RuntimeTeammate> = new Map();
+	private sendQueues: Map<string, Promise<void>> = new Map();
 	private loaded = false;
 	private nameCounter = 0;
 	private soulManager: unknown;
@@ -92,7 +97,8 @@ export class TeamRuntime {
 		this.worktreeManager = new WorktreeManager();
 		this.subAgentRuntime = new SubAgentRuntime();
 		this.permissions = new PermissionStore();
-		this.mailbox = new TeamMailbox();
+		this.mailbox = new TeamMailbox(1000, join(this.store.directory, "mailbox.jsonl"));
+		this.tasks = new TeamTaskStore(this.store.directory);
 		this.transcripts = new TeamTranscriptWriter(this.store.directory);
 	}
 
@@ -104,6 +110,11 @@ export class TeamRuntime {
 	/** Mailbox — used by index.ts for live observation. */
 	getMailbox(): TeamMailbox {
 		return this.mailbox;
+	}
+
+	/** Shared task list store. */
+	getTaskStore(): TeamTaskStore {
+		return this.tasks;
 	}
 
 	/** Soul manager from the session, used to tune psyche weights when available. */
@@ -119,6 +130,8 @@ export class TeamRuntime {
 		if (this.loaded) return;
 
 		const persisted = await this.store.loadAll();
+		await this.mailbox.load();
+		await this.tasks.load();
 		for (const state of persisted) {
 			if (state.status === "terminated") {
 				await this.store.remove(state.identity.id);
@@ -241,22 +254,26 @@ export class TeamRuntime {
 			};
 		}
 
-		if (teammate.state.status === "running") {
-			// v1 has no mailbox queue. Reject concurrent sends so the conversation
-			// stays consistent. A real queue is planned for B.3 (mailbox protocol).
-			return {
+		const previousTurn = this.sendQueues.get(teammate.state.identity.id);
+		if (previousTurn) {
+			options.onEvent?.({
+				type: "teammate_status",
+				teammate: teammate.state,
+				event: `Queued message for ${teammate.state.identity.name}.`,
+			});
+			this.mailbox.post({
 				teammateId: teammate.state.identity.id,
-				teammateName: name,
-				success: false,
-				response: "",
-				error: `Teammate "${name}" is currently processing another message. Use /team:stop to interrupt, or wait.`,
-				durationMs: 0,
-			};
+				teammateName: teammate.state.identity.name,
+				type: "task_progress",
+				direction: "leader_to_teammate",
+				payload: { status: "queued", content: message },
+			});
 		}
 
-		const startTime = Date.now();
-		const turnAbortController = new AbortController();
-		teammate.currentTurnAbortController = turnAbortController;
+		const run = (previousTurn ?? Promise.resolve()).catch(() => {}).then(async () => {
+			const startTime = Date.now();
+			const turnAbortController = new AbortController();
+			teammate.currentTurnAbortController = turnAbortController;
 
 		const leaderMessage: TeammateMessage = {
 			id: crypto.randomUUID(),
@@ -288,15 +305,16 @@ export class TeamRuntime {
 			content: message,
 		});
 
+		const prompt = await this.buildPrompt(teammate.state);
 		const harnessContext = await this.prepareHarnessTurn(teammate, message);
-		const prompt = harnessContext
-			? [this.buildPrompt(teammate.state), harnessContext.psychePrompt, harnessContext.harnessInstructions].join("\n\n")
-			: this.buildPrompt(teammate.state);
+		const fullPrompt = harnessContext
+			? [prompt, harnessContext.psychePrompt, harnessContext.harnessInstructions].join("\n\n")
+			: prompt;
 		const tools = this.selectTools(teammate.state.mode, teammate.state.cwd);
 
 		try {
 			const spec: SubAgentSpec = {
-				prompt,
+				prompt: fullPrompt,
 				tools,
 				cwd: teammate.state.cwd,
 				signal: turnAbortController.signal,
@@ -441,6 +459,14 @@ export class TeamRuntime {
 			teammate.currentTurnAbortController = undefined;
 			teammate.handle = undefined;
 		}
+		});
+		const cleanup = run.then(() => undefined, () => undefined).finally(() => {
+			if (this.sendQueues.get(teammate.state.identity.id) === cleanup) {
+				this.sendQueues.delete(teammate.state.identity.id);
+			}
+		});
+		this.sendQueues.set(teammate.state.identity.id, cleanup);
+		return run;
 	}
 
 	/**
@@ -593,6 +619,96 @@ export class TeamRuntime {
 		return this.permissions.deny(requestId);
 	}
 
+	async addTask(title: string): Promise<TeamTask> {
+		const task = await this.tasks.create({ title });
+		this.mailbox.post({
+			teammateId: "team",
+			teammateName: "team",
+			type: "task_update",
+			direction: "leader_to_teammate",
+			payload: { action: "add", task },
+		});
+		return task;
+	}
+
+	async claimTask(taskId: string, teammateName: string): Promise<TeamTask | undefined> {
+		await this.ensureLoaded();
+		const teammate = this.findByName(teammateName);
+		if (!teammate) return undefined;
+		const task = await this.tasks.claim(taskId, teammate.state.identity.id, teammate.state.identity.name);
+		if (task) {
+			this.mailbox.post({
+				teammateId: teammate.state.identity.id,
+				teammateName: teammate.state.identity.name,
+				type: "task_claim",
+				direction: "leader_to_teammate",
+				payload: { task },
+			});
+		}
+		return task;
+	}
+
+	async updateTaskStatus(taskId: string, status: TeamTaskStatus): Promise<TeamTask | undefined> {
+		const task = await this.tasks.update(taskId, { status });
+		if (task) {
+			this.mailbox.post({
+				teammateId: task.ownerId ?? "team",
+				teammateName: task.ownerName ?? "team",
+				type: "task_update",
+				direction: "leader_to_teammate",
+				payload: { action: status, task },
+			});
+		}
+		return task;
+	}
+
+	async listTasks(): Promise<TeamTask[]> {
+		return this.tasks.list();
+	}
+
+	async sendTeammateMail(fromName: string, toName: string, content: string): Promise<boolean> {
+		await this.ensureLoaded();
+		const from = this.findByName(fromName);
+		const to = this.findByName(toName);
+		if (!from || !to) return false;
+		this.mailbox.post({
+			teammateId: from.state.identity.id,
+			teammateName: from.state.identity.name,
+			targetTeammateId: to.state.identity.id,
+			targetTeammateName: to.state.identity.name,
+			type: "teammate_message",
+			direction: "teammate_to_teammate",
+			payload: { content },
+		});
+		await this.transcripts.append(from.state.identity.id, {
+			timestamp: Date.now(),
+			kind: "event",
+			content: `To ${to.state.identity.name}: ${content}`,
+		});
+		await this.transcripts.append(to.state.identity.id, {
+			timestamp: Date.now(),
+			kind: "event",
+			content: `From ${from.state.identity.name}: ${content}`,
+		});
+		return true;
+	}
+
+	async allowPath(teammateName: string, path: string): Promise<string | undefined> {
+		await this.ensureLoaded();
+		const teammate = this.findByName(teammateName);
+		if (!teammate) return undefined;
+		const absolute = normalizePath(isAbsolute(path) ? path : resolve(teammate.state.cwd, path));
+		this.permissions.allowPath(teammate.state.identity.id, absolute);
+		this.mailbox.post({
+			teammateId: teammate.state.identity.id,
+			teammateName: teammate.state.identity.name,
+			type: "permission_response",
+			direction: "leader_to_teammate",
+			payload: { action: "write_path", path: absolute, approved: true },
+		});
+		return absolute;
+	}
+
 	/**
 	 * Get all teammates.
 	 */
@@ -689,7 +805,7 @@ export class TeamRuntime {
 		}
 	}
 
-	private buildPrompt(state: PersistedTeammate): string {
+	private async buildPrompt(state: PersistedTeammate): Promise<string> {
 		const lines: string[] = [
 			"You are a persistent teammate in an AgentTeam.",
 			"",
@@ -714,6 +830,52 @@ export class TeamRuntime {
 			for (const msg of state.messages) {
 				const prefix = msg.direction === "leader" ? "Leader" : "You";
 				lines.push(`${prefix}: ${msg.content}`);
+			}
+		}
+
+		const tasks = await this.tasks.list();
+		const ownedTasks = tasks.filter((task) => task.ownerId === state.identity.id);
+		const blockedTasks = tasks.filter((task) => task.status === "blocked");
+		const openTasks = tasks.filter((task) => task.status === "open").slice(0, 8);
+		lines.push("", "Shared team tasks:");
+		if (ownedTasks.length === 0 && blockedTasks.length === 0 && openTasks.length === 0) {
+			lines.push("  (none)");
+		} else {
+			if (ownedTasks.length > 0) {
+				lines.push("  Claimed by you:");
+				for (const task of ownedTasks) {
+					lines.push(`    ${formatTaskForPrompt(task)}`);
+				}
+			}
+			if (blockedTasks.length > 0) {
+				lines.push("  Blocked:");
+				for (const task of blockedTasks.slice(0, 6)) {
+					lines.push(`    ${formatTaskForPrompt(task)}`);
+				}
+			}
+			if (openTasks.length > 0) {
+				lines.push("  Open:");
+				for (const task of openTasks) {
+					lines.push(`    ${formatTaskForPrompt(task)}`);
+				}
+			}
+		}
+
+		const mailboxMessages = this.mailbox.list(state.identity.id).slice(-12);
+		lines.push("", "Recent team mailbox:");
+		if (mailboxMessages.length === 0) {
+			lines.push("  (none)");
+		} else {
+			for (const message of mailboxMessages) {
+				const from = message.teammateName;
+				const to = message.targetTeammateName ? ` -> ${message.targetTeammateName}` : "";
+				const content =
+					typeof message.payload.content === "string"
+						? message.payload.content
+						: typeof message.payload.action === "string"
+							? `${message.payload.action}`
+							: JSON.stringify(message.payload);
+				lines.push(`  [${message.type}] ${from}${to}: ${content}`);
 			}
 		}
 
@@ -843,12 +1005,56 @@ export class TeamRuntime {
 	}
 
 	private createSandboxedTools(cwd: string): Tool[] {
-		const baseTools = createCodingTools(cwd);
+		const guard = this.createWritePathGuard(cwd);
+		const baseTools = createCodingTools(cwd, {
+			edit: { beforeWrite: guard },
+			write: { beforeWrite: guard },
+		});
 		const sandboxBash = createBashTool(cwd, {
-			spawnHook: createSandboxHook(),
+			spawnHook: createSandboxHook({
+				allowWritePath: (path) => {
+					try {
+						guard(path);
+						return true;
+					} catch {
+						return false;
+					}
+				},
+				blockedMessage: `Write operations outside the teammate workspace are not allowed. Use /team:allow-path to grant a path prefix.`,
+			}),
 		});
 		return [...baseTools.filter((t) => t.name !== "bash"), sandboxBash];
 	}
+
+	private createWritePathGuard(cwd: string): (absolutePath: string) => void {
+		const workspaceRoot = normalizePath(cwd);
+		return (absolutePath: string) => {
+			const target = normalizePath(absolutePath);
+			const teammate = this.getAllTeammates().find((candidate) => normalizePath(candidate.cwd) === workspaceRoot);
+			if (isWithinPath(target, workspaceRoot)) return;
+			if (teammate && this.permissions.isPathAllowed(teammate.identity.id, target)) return;
+			throw new Error(
+				`Write denied for ${target}. Team execute mode may only write inside ${workspaceRoot} unless the leader grants a path allowlist.`,
+			);
+		};
+	}
+}
+
+function normalizePath(path: string): string {
+	return resolve(isAbsolute(path) ? path : path);
+}
+
+function isWithinPath(target: string, root: string): boolean {
+	const rel = relative(root, target);
+	return rel === "" || (!!rel && !rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function formatTaskForPrompt(task: TeamTask): string {
+	const owner = task.ownerName ? ` owner:${task.ownerName}` : "";
+	const deps = task.dependsOn.length ? ` deps:${task.dependsOn.join(",")}` : "";
+	const artifacts = task.artifactPaths.length ? ` artifacts:${task.artifactPaths.join(",")}` : "";
+	const detail = task.description ? ` - ${task.description}` : "";
+	return `${task.id} [${task.status}]${owner}${deps}${artifacts} ${task.title}${detail}`;
 }
 
 function tailText(value: string, maxLength: number): string {

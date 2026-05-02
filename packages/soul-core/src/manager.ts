@@ -454,6 +454,7 @@ export class SoulManager {
     outcome: "success" | "failure",
   ): Promise<void> {
     const profile = this.getProfile();
+    const memory = this.getMemory();
     const triggers: Array<"natural" | "reflection" | "feedback" | "crisis"> = [
       "natural",
       "reflection",
@@ -465,13 +466,13 @@ export class SoulManager {
 
     if (
       outcome === "failure" &&
-      this.evolution.shouldEvolve(profile, context, "crisis")
+      this.evolution.shouldEvolve(profile, context, "crisis", memory)
     ) {
       triggers.push("crisis");
     }
 
     for (const trigger of triggers) {
-      if (this.evolution.shouldEvolve(profile, context, trigger)) {
+      if (this.evolution.shouldEvolve(profile, context, trigger, memory)) {
         await this.triggerEvolution(trigger, context, outcome);
         break; // Only one evolution per interaction
       }

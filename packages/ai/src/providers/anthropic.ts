@@ -472,8 +472,9 @@ export const streamSimpleAnthropic: StreamFunction<"anthropic-messages", SimpleS
 	}
 
 	const base = buildBaseOptions(model, options, apiKey);
+	const toolChoice = options?.toolChoice as AnthropicOptions["toolChoice"] | undefined;
 	if (!options?.reasoning) {
-		return streamAnthropic(model, context, { ...base, thinkingEnabled: false } satisfies AnthropicOptions);
+		return streamAnthropic(model, context, { ...base, toolChoice, thinkingEnabled: false } satisfies AnthropicOptions);
 	}
 
 	// For Opus 4.6 and Sonnet 4.6: use adaptive thinking with effort level
@@ -482,6 +483,7 @@ export const streamSimpleAnthropic: StreamFunction<"anthropic-messages", SimpleS
 		const effort = mapThinkingLevelToEffort(options.reasoning, model.id);
 		return streamAnthropic(model, context, {
 			...base,
+			toolChoice,
 			thinkingEnabled: true,
 			effort,
 		} satisfies AnthropicOptions);
@@ -496,6 +498,7 @@ export const streamSimpleAnthropic: StreamFunction<"anthropic-messages", SimpleS
 
 	return streamAnthropic(model, context, {
 		...base,
+		toolChoice,
 		maxTokens: adjusted.maxTokens,
 		thinkingEnabled: true,
 		thinkingBudgetTokens: adjusted.thinkingBudget,

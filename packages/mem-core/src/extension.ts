@@ -25,9 +25,76 @@ import { reportDiagnostic } from "./diagnostics.js";
 
 type LlmCapableContext = ExtensionContext & {
 	completeSimple?: (systemPrompt: string, userMessage: string) => Promise<string | undefined>;
+	completeJson?: (
+		systemPrompt: string,
+		userMessage: string,
+		schema: Record<string, unknown>,
+		options?: { toolName?: string; resultKey?: string },
+	) => Promise<string | undefined>;
 };
 
 type MemoryDiagnosticSource = "mem-core.extract" | "mem-core.consolidate" | "mem-core.insights";
+
+const extractedItemSchema = Type.Object(
+	{
+		type: Type.Union([
+			Type.Literal("preference"),
+			Type.Literal("fact"),
+			Type.Literal("lesson"),
+			Type.Literal("decision"),
+			Type.Literal("event"),
+			Type.Literal("retract"),
+			Type.Literal("pattern"),
+			Type.Literal("struggle"),
+		]),
+		name: Type.Optional(Type.String()),
+		summary: Type.Optional(Type.String()),
+		detail: Type.Optional(Type.String()),
+		content: Type.Optional(Type.String()),
+		facetData: Type.Optional(Type.Any()),
+	},
+	{ additionalProperties: true },
+);
+
+const memoryJsonContracts = {
+	extraction: {
+		toolName: "submit_memory_extraction",
+		resultKey: "items",
+		schema: Type.Object({ items: Type.Array(extractedItemSchema) }),
+	},
+	work: {
+		toolName: "submit_work_extraction",
+		schema: Type.Object({
+			goal: Type.String(),
+			summary: Type.String(),
+			detail: Type.Optional(Type.String()),
+		}),
+	},
+	consolidation: {
+		toolName: "submit_memory_consolidation",
+		resultKey: "items",
+		schema: Type.Object({
+			items: Type.Array(
+				Type.Object(
+					{
+						type: Type.Union([Type.Literal("fact"), Type.Literal("lesson"), Type.Literal("event")]),
+						name: Type.Optional(Type.String()),
+						summary: Type.Optional(Type.String()),
+						detail: Type.Optional(Type.String()),
+						content: Type.Optional(Type.String()),
+						importance: Type.Optional(Type.Number()),
+					},
+					{ additionalProperties: true },
+				),
+			),
+		}),
+	},
+	recommendations: {
+		toolName: "submit_memory_recommendations",
+		resultKey: "recommendations",
+		schema: Type.Object({ recommendations: Type.Array(Type.String()) }),
+	},
+} as const;
 
 type DreamTaskState = {
 	status: "idle" | "running" | "completed" | "failed" | "killed";
@@ -62,6 +129,14 @@ function inferDiagnosticSource(systemPrompt: string): MemoryDiagnosticSource {
 	if (/(consolidate|固化|合并相似教训)/i.test(systemPrompt)) return "mem-core.consolidate";
 	if (/(insight|洞察|recommendation|推荐建议)/i.test(systemPrompt)) return "mem-core.insights";
 	return "mem-core.extract";
+}
+
+function getMemoryJsonContract(systemPrompt: string): (typeof memoryJsonContracts)[keyof typeof memoryJsonContracts] | undefined {
+	if (/(what was accomplished|set out to do|完成了什么|实际又做到了什么)/i.test(systemPrompt)) return memoryJsonContracts.work;
+	if (/(consolidate|固化|合并相似教训)/i.test(systemPrompt)) return memoryJsonContracts.consolidation;
+	if (/(recommendation strings|recommendations|推荐建议)/i.test(systemPrompt)) return memoryJsonContracts.recommendations;
+	if (/(simulate human memory|自然记住|Types:\s*preference|类型)/i.test(systemPrompt)) return memoryJsonContracts.extraction;
+	return undefined;
 }
 
 function looksLikeJson(value: string): boolean {
@@ -355,8 +430,21 @@ export default function nanomemExtension(api: ExtensionAPI) {
 		const llmCtx = ctx as LlmCapableContext;
 		if (!llmCtx.completeSimple) return;
 		const completeSimple = llmCtx.completeSimple;
+		const completeJson = llmCtx.completeJson;
 		engine.setLlmFn(async (systemPrompt, userMessage) => {
-			const out = await completeSimple(systemPrompt, userMessage);
+			let out: string | undefined;
+			let usedStructuredContract = false;
+			if (completeJson) {
+				const contract = getMemoryJsonContract(systemPrompt);
+				if (contract) {
+					usedStructuredContract = true;
+					out = await completeJson(systemPrompt, userMessage, contract.schema, {
+						toolName: contract.toolName,
+						resultKey: "resultKey" in contract ? contract.resultKey : undefined,
+					});
+				}
+			}
+			if (out === undefined && !usedStructuredContract) out = await completeSimple(systemPrompt, userMessage);
 			const text = out ?? "";
 			if (text && expectsJsonOutput(systemPrompt) && !looksLikeJson(text)) {
 				const source = inferDiagnosticSource(systemPrompt);

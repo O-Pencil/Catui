@@ -10,10 +10,10 @@ orchestrator.ts: ToolInfo interface, ToolOrchestrator class, tool registration/l
 path-utils.ts: resolveReadPath(), resolveToCwd(), path manipulation utilities for tools, handles Unicode spaces and macOS NFD normalization
 ls.ts: LsTool, lsTool, createLsTool, LsToolInput, directory listing with metadata, consumed by orchestrator
 grep.ts: GrepTool, grepTool, createGrepTool, GrepToolInput, content search via ripgrep, consumed by orchestrator
-edit.ts: EditTool, editTool, createEditTool, EditToolInput, EditOperations, filesystem mutation via diff application, consumed by orchestrator
-bash.ts: BashTool, bashTool, createBashTool, BashToolInput, BashToolDetails, shell command execution with timeout/streaming, consumed by orchestrator
-index.ts: Tool registry, all tool creators and types, tool system public API, re-exports from all tool modules
-write.ts: WriteTool, writeTool, createWriteTool, WriteToolInput, filesystem creation/overwrite, consumed by orchestrator
+edit.ts: EditTool, editTool, createEditTool, EditToolInput, EditOperations, EditToolOptions.beforeWrite guard, filesystem mutation via diff application, consumed by orchestrator
+bash.ts: BashTool, bashTool, createBashTool, BashToolInput, BashToolDetails, createSandboxHook with optional simple write-path allowlist, shell command execution with timeout/streaming, consumed by orchestrator
+index.ts: Tool registry, all tool creators and types, tool system public API, passes edit/write options through createCodingTools/createAllTools, re-exports from all tool modules
+write.ts: WriteTool, writeTool, createWriteTool, WriteToolInput, WriteToolOptions.beforeWrite guard, filesystem creation/overwrite, consumed by orchestrator
 edit-diff.ts: detectLineEnding(), fuzzyFindText(), generateDiffString(), normalizeToLF(), restoreLineEndings(), shared diff computation for edit tool
 truncate.ts: TruncationResult, truncateHead(), truncateTail(), formatSize(), shared truncation utilities for tool outputs, constants: DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES, GREP_MAX_LINE_LENGTH
 time.ts: TimeTool, timeTool, createTimeTool, current time tool with timezone/locale formatting, consumed by orchestrator

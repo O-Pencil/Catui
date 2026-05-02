@@ -60,6 +60,7 @@ export interface OpenAIResponsesOptions extends StreamOptions {
 	reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
 	reasoningSummary?: "auto" | "detailed" | "concise" | null;
 	serviceTier?: ResponseCreateParamsStreaming["service_tier"];
+	toolChoice?: unknown;
 }
 
 /**
@@ -147,6 +148,7 @@ export const streamSimpleOpenAIResponses: StreamFunction<"openai-responses", Sim
 	return streamOpenAIResponses(model, context, {
 		...base,
 		reasoningEffort,
+		toolChoice: options?.toolChoice,
 	} satisfies OpenAIResponsesOptions);
 };
 
@@ -215,6 +217,10 @@ function buildParams(model: Model<"openai-responses">, context: Context, options
 
 	if (context.tools) {
 		params.tools = convertResponsesTools(context.tools);
+	}
+
+	if (options?.toolChoice !== undefined) {
+		(params as any).tool_choice = options.toolChoice;
 	}
 
 	if (model.reasoning) {

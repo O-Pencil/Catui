@@ -1,8 +1,8 @@
 /**
  * [WHO]: SoulEvolutionEngine, PatternInsight
- * [FROM]: No external dependencies
+ * [FROM]: Depends on soul-core types and config for profile, memory, context, and thresholds
  * [TO]: Consumed by packages/soul-core/src/index.ts
- * [HERE]: packages/soul-core/src/evolution.ts -
+ * [HERE]: packages/soul-core/src/evolution.ts - computes deltas, detects patterns, and gates evolution triggers
  */
 
 
@@ -24,6 +24,7 @@ import type { SoulConfig } from "./config.js";
  */
 export class SoulEvolutionEngine {
   private config: SoulConfig;
+  private readonly crisisWindowMs = 30 * 60 * 1000;
 
   constructor(config: SoulConfig) {
     this.config = config;
@@ -330,6 +331,7 @@ export class SoulEvolutionEngine {
     profile: SoulProfile,
     context: InteractionContext,
     triggerType: SoulEvolution["trigger"],
+    memory?: SoulMemory,
   ): boolean {
     const triggers = this.config.evolution;
 
@@ -341,13 +343,42 @@ export class SoulEvolutionEngine {
       case "feedback":
         return context.userFeedback !== undefined;
       case "crisis":
-        // Check recent failures
-        return (
-          profile.stats.totalInteractions > 0 && profile.stats.successRate < 0.5
+        return this.hasRecentFailureCrisis(
+          profile,
+          memory,
+          triggers.crisis,
+          context.timestamp,
         );
       default:
         return false;
     }
+  }
+
+  private hasRecentFailureCrisis(
+    profile: SoulProfile,
+    memory: SoulMemory | undefined,
+    threshold: number,
+    now: Date,
+  ): boolean {
+    const requiredFailures = Math.max(1, threshold);
+    if (!memory || profile.stats.totalInteractions < requiredFailures) {
+      return false;
+    }
+
+    const recentFailures = memory.failures
+      .filter((failure) => {
+        const timestamp = failure.timestamp.getTime();
+        return Number.isFinite(timestamp) && timestamp <= now.getTime();
+      })
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+      .slice(-requiredFailures);
+
+    if (recentFailures.length < requiredFailures) {
+      return false;
+    }
+
+    const oldestRecentFailure = recentFailures[0].timestamp.getTime();
+    return now.getTime() - oldestRecentFailure <= this.crisisWindowMs;
   }
 }
 

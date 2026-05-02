@@ -56,6 +56,8 @@ const defaultEditOperations: EditOperations = {
 export interface EditToolOptions {
 	/** Custom operations for file editing. Default: local filesystem */
 	operations?: EditOperations;
+	/** Optional guard called with the resolved absolute path before writing. */
+	beforeWrite?: (absolutePath: string) => void | Promise<void>;
 }
 
 export function createEditTool(cwd: string, options?: EditToolOptions): AgentTool<typeof editSchema> {
@@ -73,6 +75,7 @@ export function createEditTool(cwd: string, options?: EditToolOptions): AgentToo
 			signal?: AbortSignal,
 		) => {
 			const absolutePath = resolveToCwd(path, cwd);
+			await options?.beforeWrite?.(absolutePath);
 
 			return new Promise<{
 				content: Array<{ type: "text"; text: string }>;

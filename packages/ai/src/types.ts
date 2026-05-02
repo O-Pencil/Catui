@@ -128,6 +128,8 @@ export interface SimpleStreamOptions extends StreamOptions {
 	reasoning?: ThinkingLevel;
 	/** Custom token budgets for thinking levels (token-based providers only) */
 	thinkingBudgets?: ThinkingBudgets;
+	/** Provider-specific tool choice override for structured calls. */
+	toolChoice?: unknown;
 }
 
 // Generic StreamFunction with typed options
