@@ -31,6 +31,14 @@ const MINIMAX_CODING_BASE_URL = "https://api.minimaxi.com/v1";
 export const NANOPENCIL_ZHIPU_CODING_PROVIDER = "zhipu-coding";
 const ZHIPU_CODING_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
 
+/** Alibaba Cloud Token Plan Team Edition, OpenAI compatible protocol. */
+export const NANOPENCIL_ALI_TOKEN_PLAN_OPENAI_PROVIDER = "ali-token-plan-openai";
+const ALI_TOKEN_PLAN_OPENAI_BASE_URL = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1";
+
+/** Alibaba Cloud Token Plan Team Edition, Anthropic compatible protocol. */
+export const NANOPENCIL_ALI_TOKEN_PLAN_ANTHROPIC_PROVIDER = "ali-token-plan-anthropic";
+const ALI_TOKEN_PLAN_ANTHROPIC_BASE_URL = "https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic";
+
 /** Custom Anthropic-compatible provider; users may set baseUrl and apiKey for third-party Anthropic-compatible services. */
 export const NANOPENCIL_ANTHROPIC_CUSTOM_PROVIDER = "anthropic-custom";
 const ANTHROPIC_CUSTOM_DEFAULT_BASE_URL = "https://api.anthropic.com";
@@ -43,7 +51,7 @@ const OLLAMA_BASE_URL = "http://localhost:11434/v1";
  * What's new message displayed in TUI header at startup (about 50 words). Update on release.
  */
 export const NANOPENCIL_WHATS_NEW =
-	"Lightweight CLI writing agent: read, write, edit, bash. DashScope, Qianfan, Ark Coding Plan, local Ollama. Optional nanomem. Type / for commands, ! for bash. Config in ~/.nanopencil/agent/.";
+	"Lightweight CLI writing agent: read, write, edit, bash. DashScope, Ali Token Plan, Qianfan, Ark Coding Plan, local Ollama. Optional nanomem. Type / for commands, ! for bash. Config in ~/.nanopencil/agent/.";
 
 type DefaultModelDef =
 	(typeof NANOPENCIL_DEFAULT_MODELS_JSON.providers)[typeof NANOPENCIL_DEFAULT_PROVIDER]["models"][number];
@@ -59,6 +67,12 @@ type MinimaxModelDef =
 
 type ZhipuModelDef =
 	(typeof NANOPENCIL_DEFAULT_MODELS_JSON.providers)[typeof NANOPENCIL_ZHIPU_CODING_PROVIDER]["models"][number];
+
+type AliTokenPlanOpenAIModelDef =
+	(typeof NANOPENCIL_DEFAULT_MODELS_JSON.providers)[typeof NANOPENCIL_ALI_TOKEN_PLAN_OPENAI_PROVIDER]["models"][number];
+
+type AliTokenPlanAnthropicModelDef =
+	(typeof NANOPENCIL_DEFAULT_MODELS_JSON.providers)[typeof NANOPENCIL_ALI_TOKEN_PLAN_ANTHROPIC_PROVIDER]["models"][number];
 
 /** Default models.json content: dashscope-coding (Bailian), qianfan-coding (Qianfan), ark-coding (Ark), minimax-coding (MiniMax), zhipu-coding (Zhipu) + ollama (local). Each Coding Plan has no apiKey, user input stored in auth.json; ollama uses placeholder "ollama". */
 export const NANOPENCIL_DEFAULT_MODELS_JSON = {
@@ -129,6 +143,94 @@ export const NANOPENCIL_DEFAULT_MODELS_JSON = {
 					input: ["text", "image"],
 					contextWindow: 262144,
 					maxTokens: 32768,
+				},
+			],
+		},
+		[NANOPENCIL_ALI_TOKEN_PLAN_OPENAI_PROVIDER]: {
+			baseUrl: ALI_TOKEN_PLAN_OPENAI_BASE_URL,
+			api: "openai-completions",
+			models: [
+				{
+					id: "qwen3.6-plus",
+					name: "Qwen3.6 Plus (Ali Token Plan OpenAI)",
+					reasoning: true,
+					input: ["text"],
+					compat: {
+						supportsStore: false,
+						supportsDeveloperRole: false,
+						supportsReasoningEffort: false,
+					},
+					contextWindow: 262144,
+					maxTokens: 65536,
+				},
+				{
+					id: "glm-5",
+					name: "GLM-5 (Ali Token Plan OpenAI)",
+					reasoning: true,
+					input: ["text"],
+					compat: {
+						supportsStore: false,
+						supportsDeveloperRole: false,
+						supportsReasoningEffort: false,
+					},
+					contextWindow: 202752,
+					maxTokens: 16384,
+				},
+				{
+					id: "MiniMax-M2.5",
+					name: "MiniMax M2.5 (Ali Token Plan OpenAI)",
+					reasoning: true,
+					input: ["text"],
+					compat: {
+						supportsStore: false,
+						supportsDeveloperRole: false,
+						supportsReasoningEffort: false,
+					},
+					contextWindow: 204800,
+					maxTokens: 65536,
+				},
+				{
+					id: "deepseek-v3.2",
+					name: "DeepSeek V3.2 (Ali Token Plan OpenAI)",
+					reasoning: false,
+					input: ["text"],
+					compat: {
+						supportsStore: false,
+						supportsDeveloperRole: false,
+						supportsReasoningEffort: false,
+					},
+					contextWindow: 262144,
+					maxTokens: 65536,
+				},
+			],
+		},
+		[NANOPENCIL_ALI_TOKEN_PLAN_ANTHROPIC_PROVIDER]: {
+			baseUrl: ALI_TOKEN_PLAN_ANTHROPIC_BASE_URL,
+			api: "anthropic-messages",
+			models: [
+				{
+					id: "qwen3.6-plus",
+					name: "Qwen3.6 Plus (Ali Token Plan Anthropic)",
+					reasoning: true,
+					input: ["text"],
+					contextWindow: 262144,
+					maxTokens: 65536,
+				},
+				{
+					id: "glm-5",
+					name: "GLM-5 (Ali Token Plan Anthropic)",
+					reasoning: true,
+					input: ["text"],
+					contextWindow: 202752,
+					maxTokens: 16384,
+				},
+				{
+					id: "MiniMax-M2.5",
+					name: "MiniMax M2.5 (Ali Token Plan Anthropic)",
+					reasoning: true,
+					input: ["text"],
+					contextWindow: 204800,
+					maxTokens: 65536,
 				},
 			],
 		},
@@ -368,6 +470,14 @@ const DEFAULT_ZHIPU_MODELS: ZhipuModelDef[] = [
 	...NANOPENCIL_DEFAULT_MODELS_JSON.providers[NANOPENCIL_ZHIPU_CODING_PROVIDER].models,
 ];
 
+const DEFAULT_ALI_TOKEN_PLAN_OPENAI_MODELS: AliTokenPlanOpenAIModelDef[] = [
+	...NANOPENCIL_DEFAULT_MODELS_JSON.providers[NANOPENCIL_ALI_TOKEN_PLAN_OPENAI_PROVIDER].models,
+];
+
+const DEFAULT_ALI_TOKEN_PLAN_ANTHROPIC_MODELS: AliTokenPlanAnthropicModelDef[] = [
+	...NANOPENCIL_DEFAULT_MODELS_JSON.providers[NANOPENCIL_ALI_TOKEN_PLAN_ANTHROPIC_PROVIDER].models,
+];
+
 type AnthropicCustomModelDef =
 	(typeof NANOPENCIL_DEFAULT_MODELS_JSON.providers)[typeof NANOPENCIL_ANTHROPIC_CUSTOM_PROVIDER]["models"][number];
 const DEFAULT_ANTHROPIC_CUSTOM_MODELS: AnthropicCustomModelDef[] = [
@@ -397,6 +507,77 @@ function mergeNanopencilModelsIfNeeded(modelsPath: string): void {
 		return;
 	}
 	if (!data.providers) data.providers = {};
+
+	const mergeProviderModels = (
+		providerName: string,
+		providerConfig: { baseUrl: string; api: string },
+		defaultModels: readonly Record<string, unknown>[],
+	): void => {
+		const existingProvider = data.providers![providerName];
+		if (!existingProvider) {
+			data.providers![providerName] = {
+				baseUrl: providerConfig.baseUrl,
+				api: providerConfig.api,
+				models: defaultModels.map((m) => ({ ...m })),
+			};
+			writeFileSync(modelsPath, JSON.stringify(data, null, 2), "utf-8");
+			return;
+		}
+
+		const models = (Array.isArray(existingProvider.models) ? [...existingProvider.models] : []) as Record<
+			string,
+			unknown
+		>[];
+		const byId = new Map<string, Record<string, unknown>>();
+		for (const m of models) {
+			const id = m?.id;
+			if (typeof id === "string") byId.set(id, m);
+		}
+
+		let changed = false;
+		if (typeof existingProvider.baseUrl !== "string" || !existingProvider.baseUrl.trim()) {
+			existingProvider.baseUrl = providerConfig.baseUrl;
+			changed = true;
+		}
+		if (typeof existingProvider.api !== "string" || !existingProvider.api.trim()) {
+			existingProvider.api = providerConfig.api;
+			changed = true;
+		}
+
+		for (const def of defaultModels) {
+			const id = def.id;
+			if (typeof id !== "string") continue;
+
+			const existing = byId.get(id);
+			if (!existing) {
+				models.push({ ...def });
+				byId.set(id, models[models.length - 1]);
+				changed = true;
+				continue;
+			}
+
+			for (const field of ["name", "reasoning", "contextWindow", "maxTokens"] as const) {
+				if (existing[field] !== def[field]) {
+					existing[field] = def[field];
+					changed = true;
+				}
+			}
+			if (JSON.stringify(existing.compat) !== JSON.stringify(def.compat)) {
+				existing.compat = def.compat;
+				changed = true;
+			}
+			if (JSON.stringify(existing.input) !== JSON.stringify(def.input)) {
+				existing.input = def.input;
+				changed = true;
+			}
+		}
+
+		if (changed) {
+			(data.providers![providerName] as { models: unknown[] }).models = models;
+			writeFileSync(modelsPath, JSON.stringify(data, null, 2), "utf-8");
+		}
+	};
+
 	const provider = data.providers[NANOPENCIL_DEFAULT_PROVIDER];
 	const providerConfig = NANOPENCIL_DEFAULT_MODELS_JSON.providers[NANOPENCIL_DEFAULT_PROVIDER];
 
@@ -449,6 +630,17 @@ function mergeNanopencilModelsIfNeeded(modelsPath: string): void {
 		(data.providers[NANOPENCIL_DEFAULT_PROVIDER] as { models: unknown[] }).models = models;
 		writeFileSync(modelsPath, JSON.stringify(data, null, 2), "utf-8");
 	}
+
+	mergeProviderModels(
+		NANOPENCIL_ALI_TOKEN_PLAN_OPENAI_PROVIDER,
+		NANOPENCIL_DEFAULT_MODELS_JSON.providers[NANOPENCIL_ALI_TOKEN_PLAN_OPENAI_PROVIDER],
+		DEFAULT_ALI_TOKEN_PLAN_OPENAI_MODELS,
+	);
+	mergeProviderModels(
+		NANOPENCIL_ALI_TOKEN_PLAN_ANTHROPIC_PROVIDER,
+		NANOPENCIL_DEFAULT_MODELS_JSON.providers[NANOPENCIL_ALI_TOKEN_PLAN_ANTHROPIC_PROVIDER],
+		DEFAULT_ALI_TOKEN_PLAN_ANTHROPIC_MODELS,
+	);
 
 	// Merge qianfan-coding: add default config if not present, supplement default models if exists
 	const qianfanProvider = data.providers[NANOPENCIL_QIANFAN_CODING_PROVIDER];
@@ -729,7 +921,7 @@ export async function ensureNanopencilCodingPlanAuth(
 		const rl = createInterface({ input: process.stdin, output: process.stdout });
 		const choice = await new Promise<string>((resolve) => {
 			rl.question(
-				"Choose a Coding Plan provider to configure: 1) Alibaba DashScope 2) Baidu Qianfan 3) Volcano Ark [1]: ",
+				"Choose a Coding Plan provider to configure: 1) Alibaba DashScope 2) Baidu Qianfan 3) Volcano Ark 4) Alibaba Token Plan [1]: ",
 				(line) => resolve((line ?? "1").trim() || "1"),
 			);
 		});
@@ -738,13 +930,17 @@ export async function ensureNanopencilCodingPlanAuth(
 				? NANOPENCIL_QIANFAN_CODING_PROVIDER
 				: choice === "3"
 					? NANOPENCIL_ARK_CODING_PROVIDER
-					: NANOPENCIL_DEFAULT_PROVIDER;
+					: choice === "4"
+						? NANOPENCIL_ALI_TOKEN_PLAN_OPENAI_PROVIDER
+						: NANOPENCIL_DEFAULT_PROVIDER;
 		const hint =
 			choice === "2"
 				? "Qianfan API key (from https://console.bce.baidu.com/qianfan/resource/subscribe)"
 				: choice === "3"
 					? "Ark API key (from https://console.volcengine.com/ark/region:ark+cn-beijing/apikey)"
-					: "DashScope API key (sk-sp-...)";
+					: choice === "4"
+						? "Ali Token Plan API key (from https://bailian.console.aliyun.com/?tab=plan#/efm/subscription/overview)"
+						: "DashScope API key (sk-sp-...)";
 		const answer = await new Promise<string>((resolve) => {
 			rl.question(`Enter ${hint}: `, (line) => {
 				rl.close();
@@ -756,6 +952,9 @@ export async function ensureNanopencilCodingPlanAuth(
 			process.exit(1);
 		}
 		authStorage.set(provider, { type: "api_key", key: answer });
+		if (provider === NANOPENCIL_ALI_TOKEN_PLAN_OPENAI_PROVIDER) {
+			authStorage.set(NANOPENCIL_ALI_TOKEN_PLAN_ANTHROPIC_PROVIDER, { type: "api_key", key: answer });
+		}
 		modelRegistry.refresh();
 		return;
 	}

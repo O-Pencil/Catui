@@ -8,7 +8,7 @@ This file provides guidance for **@o-pencil-agent** tooling and contributors whe
 
 ## Project Overview
 
-**nanoPencil** (formerly nano-pencil) is a terminal-native AI coding agent with persistent memory and evolving AI personality. Built with TypeScript, it provides an interactive TUI for conversational coding with multi-model support (Anthropic, OpenAI, Gemini, Alibaba DashScope, Ollama).
+**nanoPencil** (formerly nano-pencil) is a terminal-native AI coding agent with persistent memory and evolving AI personality. Built with TypeScript, it provides an interactive TUI for conversational coding with multi-model support (Anthropic, OpenAI, Gemini, Alibaba DashScope/Token Plan, Ollama).
 
 **Core Pillars:**
 - Terminal First - No Electron, no browser, pure terminal

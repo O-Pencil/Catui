@@ -104,7 +104,7 @@ Built-in tools include:
 ### 🌐 Multi-Model Support
 Use the best model for each task.
 
-- 🇨🇳 **Alibaba DashScope** — Qwen series (optimized for coding)
+- 🇨🇳 **Alibaba DashScope / Token Plan** — Qwen, GLM, MiniMax, DeepSeek text models
 - 🤖 **OpenAI** — GPT-4, GPT-3.5
 - 💬 **Anthropic** — Claude 3 Opus/Sonnet/Haiku
 - 🔍 **Google** — Gemini Pro/Ultra

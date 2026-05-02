@@ -1335,6 +1335,76 @@ async function generateModels() {
 		}
 	}
 
+	// Alibaba Cloud Token Plan Team Edition.
+	// Text generation only; image generation must be integrated through tool-specific extension mechanisms.
+	const ALI_TOKEN_PLAN_OPENAI_BASE_URL = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1";
+	const ALI_TOKEN_PLAN_ANTHROPIC_BASE_URL = "https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic";
+	const aliTokenPlanTextModels = [
+		{
+			id: "qwen3.6-plus",
+			name: "Qwen3.6 Plus",
+			reasoning: true,
+			contextWindow: 262144,
+			maxTokens: 65536,
+		},
+		{
+			id: "glm-5",
+			name: "GLM-5",
+			reasoning: true,
+			contextWindow: 202752,
+			maxTokens: 16384,
+		},
+		{
+			id: "MiniMax-M2.5",
+			name: "MiniMax M2.5",
+			reasoning: true,
+			contextWindow: 204800,
+			maxTokens: 65536,
+		},
+		{
+			id: "deepseek-v3.2",
+			name: "DeepSeek V3.2",
+			reasoning: false,
+			contextWindow: 262144,
+			maxTokens: 65536,
+		},
+	] as const;
+
+	for (const model of aliTokenPlanTextModels) {
+		allModels.push({
+			id: model.id,
+			name: `${model.name} (Ali Token Plan OpenAI)`,
+			api: "openai-completions",
+			provider: "ali-token-plan-openai",
+			baseUrl: ALI_TOKEN_PLAN_OPENAI_BASE_URL,
+			reasoning: model.reasoning,
+			input: ["text"],
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			contextWindow: model.contextWindow,
+			maxTokens: model.maxTokens,
+			compat: {
+				supportsStore: false,
+				supportsDeveloperRole: false,
+				supportsReasoningEffort: false,
+			},
+		});
+
+		if (model.id !== "deepseek-v3.2") {
+			allModels.push({
+				id: model.id,
+				name: `${model.name} (Ali Token Plan Anthropic)`,
+				api: "anthropic-messages",
+				provider: "ali-token-plan-anthropic",
+				baseUrl: ALI_TOKEN_PLAN_ANTHROPIC_BASE_URL,
+				reasoning: model.reasoning,
+				input: ["text"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: model.contextWindow,
+				maxTokens: model.maxTokens,
+			});
+		}
+	}
+
 	const azureOpenAiModels: Model<Api>[] = allModels
 		.filter((model) => model.provider === "openai" && model.api === "openai-responses")
 		.map((model) => ({

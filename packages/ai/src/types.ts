@@ -45,7 +45,9 @@ export type KnownProvider =
 	| "huggingface"
 	| "opencode"
 	| "opencode-go"
-	| "kimi-coding";
+	| "kimi-coding"
+	| "ali-token-plan-openai"
+	| "ali-token-plan-anthropic";
 export type Provider = KnownProvider | string;
 
 export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh";

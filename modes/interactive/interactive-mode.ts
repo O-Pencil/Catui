@@ -106,7 +106,11 @@ import {
   toAbsolutePath,
 } from "../../core/persona/persona-manager.js";
 import type { TruncationResult } from "../../core/tools/truncate.js";
-import { NANOPENCIL_WHATS_NEW } from "../../nanopencil-defaults.js";
+import {
+  NANOPENCIL_ALI_TOKEN_PLAN_ANTHROPIC_PROVIDER,
+  NANOPENCIL_ALI_TOKEN_PLAN_OPENAI_PROVIDER,
+  NANOPENCIL_WHATS_NEW,
+} from "../../nanopencil-defaults.js";
 import { getChangelogPath, parseChangelog } from "../../utils/changelog.js";
 import { copyToClipboard } from "../utils/clipboard.js";
 import {
@@ -4722,6 +4726,23 @@ export class InteractiveMode {
       type: "api_key",
       key: trimmedApiKey,
     });
+    if (provider === NANOPENCIL_ALI_TOKEN_PLAN_OPENAI_PROVIDER) {
+      this.session.modelRegistry.authStorage.set(
+        NANOPENCIL_ALI_TOKEN_PLAN_ANTHROPIC_PROVIDER,
+        {
+          type: "api_key",
+          key: trimmedApiKey,
+        },
+      );
+    } else if (provider === NANOPENCIL_ALI_TOKEN_PLAN_ANTHROPIC_PROVIDER) {
+      this.session.modelRegistry.authStorage.set(
+        NANOPENCIL_ALI_TOKEN_PLAN_OPENAI_PROVIDER,
+        {
+          type: "api_key",
+          key: trimmedApiKey,
+        },
+      );
+    }
     this.session.modelRegistry.refresh();
     this.showStatus(`Updated API key for ${provider}`);
     return true;
