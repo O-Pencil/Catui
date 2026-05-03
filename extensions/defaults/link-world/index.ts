@@ -18,6 +18,7 @@ import type {
 	ResourcesDiscoverResult,
 	ToolDefinition,
 } from "../../../core/extensions/types.js";
+import { getLinkWorldWorkspaceDir } from "../../../config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = join(__dirname, "linkworld.md");
@@ -87,14 +88,14 @@ interface LinkWorldCapabilities {
 	fetch: boolean;
 }
 
-function linkWorldWorkspacePath(cwd: string): string {
-	return join(cwd, ".nanopencil", "link-world-workspace");
+function linkWorldWorkspacePath(): string {
+	return getLinkWorldWorkspaceDir();
 }
 
-function ensureLinkWorldWorkspace(cwd: string): string {
-	const target = linkWorldWorkspacePath(cwd);
+function ensureLinkWorldWorkspace(): string {
+	const target = linkWorldWorkspacePath();
 	if (!existsSync(target)) {
-		mkdirSync(dirname(target), { recursive: true });
+		mkdirSync(target, { recursive: true });
 		if (existsSync(WORKSPACE_TEMPLATE_PATH)) {
 			cpSync(WORKSPACE_TEMPLATE_PATH, target, { recursive: true });
 		} else {
@@ -412,7 +413,7 @@ export default function linkWorldExtension(api: ExtensionAPI) {
 	}
 
 	api.on("session_start", (_event, ctx) => {
-		ensureLinkWorldWorkspace(ctx.cwd);
+		ensureLinkWorldWorkspace();
 	});
 
 	api.registerCommand("link-world", {
@@ -455,7 +456,7 @@ export default function linkWorldExtension(api: ExtensionAPI) {
 			if (action === "workspace") {
 				api.sendMessage({
 					customType: LINK_WORLD_CUSTOM_TYPE,
-					content: `Link-world workspace: ${resolve(ensureLinkWorldWorkspace(api.cwd))}`,
+					content: `Link-world workspace: ${resolve(ensureLinkWorldWorkspace())}`,
 					display: true,
 				});
 				return;
@@ -507,7 +508,7 @@ export default function linkWorldExtension(api: ExtensionAPI) {
 	});
 
 	api.on("resources_discover", async (_event: ResourcesDiscoverEvent): Promise<ResourcesDiscoverResult> => {
-		const workspace = ensureLinkWorldWorkspace(api.cwd);
+		const workspace = ensureLinkWorldWorkspace();
 		const skillPaths = [
 			...new Set([
 				NETWORK_ROUTING_SKILL_PATH,

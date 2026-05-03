@@ -259,3 +259,34 @@ export function getSessionsDir(): string {
 export function getDebugLogPath(): string {
 	return join(getAgentDir(), `${APP_NAME}-debug.log`);
 }
+
+// =============================================================================
+// Global Workspace Directories (browser-workspace, link-world-workspace)
+// =============================================================================
+
+/** Get the root nanopencil config directory (e.g., ~/.nanopencil/) */
+export function getConfigRoot(): string {
+	const envDir = process.env[ENV_AGENT_DIR];
+	if (envDir) {
+		// ENV_AGENT_DIR points to the agent subdir (e.g., ~/.nanopencil/agent)
+		// We need the parent for workspace dirs
+		if (envDir === "~") return homedir();
+		if (envDir.startsWith("~/")) return homedir() + envDir.slice(1);
+		// Strip /agent suffix if present
+		if (envDir.endsWith("/agent") || envDir.endsWith("\\agent")) {
+			return dirname(envDir);
+		}
+		return dirname(envDir);
+	}
+	return join(homedir(), CONFIG_DIR_NAME);
+}
+
+/** Get path to global browser-workspace directory (e.g., ~/.nanopencil/browser-workspace) */
+export function getBrowserWorkspaceDir(): string {
+	return join(getConfigRoot(), "browser-workspace");
+}
+
+/** Get path to global link-world-workspace directory (e.g., ~/.nanopencil/link-world-workspace) */
+export function getLinkWorldWorkspaceDir(): string {
+	return join(getConfigRoot(), "link-world-workspace");
+}

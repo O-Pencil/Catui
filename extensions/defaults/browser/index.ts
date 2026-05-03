@@ -19,6 +19,7 @@ import type {
 	ToolDefinition,
 } from "../../../core/extensions/types.js";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, truncateTail } from "../../../core/tools/truncate.js";
+import { getBrowserWorkspaceDir } from "../../../config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BROWSER_SKILL_PATH = join(__dirname, "browser.md");
@@ -75,14 +76,14 @@ function isMissingPythonRuntime(result: ProcessResult): boolean {
 	);
 }
 
-function browserWorkspacePath(cwd: string): string {
-	return join(cwd, ".nanopencil", "browser-workspace");
+function browserWorkspacePath(): string {
+	return getBrowserWorkspaceDir();
 }
 
-function ensureBrowserWorkspace(cwd: string): string {
-	const target = browserWorkspacePath(cwd);
+function ensureBrowserWorkspace(): string {
+	const target = browserWorkspacePath();
 	if (!existsSync(target)) {
-		mkdirSync(dirname(target), { recursive: true });
+		mkdirSync(target, { recursive: true });
 		cpSync(WORKSPACE_TEMPLATE_PATH, target, { recursive: true });
 	}
 	return target;
@@ -109,7 +110,7 @@ function collectMarkdownFiles(root: string): string[] {
 }
 
 function buildHarnessEnv(ctx: ExtensionContext, name?: string): NodeJS.ProcessEnv {
-	const workspace = ensureBrowserWorkspace(ctx.cwd);
+	const workspace = ensureBrowserWorkspace();
 	const pythonPath = process.env.PYTHONPATH ? `${HARNESS_SRC_PATH}${process.platform === "win32" ? ";" : ":"}${process.env.PYTHONPATH}` : HARNESS_SRC_PATH;
 	return {
 		...process.env,
@@ -398,7 +399,7 @@ export default function browserExtension(api: ExtensionAPI) {
 	api.registerTool(createBrowserAdminTool());
 
 	api.on("session_start", (_event, ctx) => {
-		ensureBrowserWorkspace(ctx.cwd);
+		ensureBrowserWorkspace();
 	});
 
 	api.registerCommand("browser", {
@@ -415,7 +416,7 @@ export default function browserExtension(api: ExtensionAPI) {
 			if (action === "workspace") {
 				api.sendMessage({
 					customType: "text",
-					content: `Browser workspace: ${resolve(ensureBrowserWorkspace(ctx.cwd))}`,
+					content: `Browser workspace: ${resolve(ensureBrowserWorkspace())}`,
 					display: true,
 				});
 				return;
@@ -456,7 +457,7 @@ export default function browserExtension(api: ExtensionAPI) {
 	});
 
 	api.on("resources_discover", async (_event: ResourcesDiscoverEvent): Promise<ResourcesDiscoverResult> => {
-		const workspace = ensureBrowserWorkspace(api.cwd);
+		const workspace = ensureBrowserWorkspace();
 		const skillPaths = [
 			...new Set([
 				...collectMarkdownFiles(INTERACTION_SKILLS_PATH),
