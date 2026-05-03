@@ -12,6 +12,7 @@ import { request as httpsRequest } from "node:https";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { URL } from "node:url";
+import { VERSION } from "../../../config.js";
 import type { ExtensionContext } from "../../../core/extensions/types.js";
 import type { DiagnosticRecord, DiagnosticReportPayload } from "./types.js";
 import { sanitizeDiagnosticValue } from "./redaction.js";
@@ -68,7 +69,7 @@ export function buildReportPayload(
 	const context = primary?.context ?? {};
 	return {
 		session_id: str(context.session_id) ?? sessionId,
-		version: str(context.version),
+		version: str(context.version) ?? VERSION,
 		commit_hash: str(context.commit_hash),
 		mode: str(context.mode),
 		source: primary?.source,
