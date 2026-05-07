@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.15] - 2026-05-07
+
+### Added
+- docs: 多 Agent 核心文档 v2.1 — 修正 callsite 数据 + 新增分工总览 + ws_id URL 归一化
+
+### Fixed
+- fix(idle-think): default to OFF and reset idle timer after exploration
+- fix(workspace): unify browser/link-world workspace to global ~/.nanopencil/
+- fix(diagnostics): include package version in issue reports
+- fix(update): avoid shell args warning on windows
+- fix(team): improve collaboration stream and browser packaging
+
+### Performance
+- perf(cli,theme): defer main.ts and cli-highlight imports until needed
+
+### Documentation
+- docs: add project structure and build optimization plan
+- docs: add multi-agent local file system design spec
+
+### Maintenance
+- chore: remove legacy memory-experiments directory
+
+
 ## [1.13.14] - 2026-05-03
 
 ### Fixed
