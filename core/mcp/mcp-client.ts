@@ -180,9 +180,16 @@ export class MCPClient {
   private serverTools = new Map<string, MCPTool[]>();
   private httpSessions = new Map<string, HTTPSession>();
   private authStorage: AuthStorage;
+  private agentDir?: string;
 
-  constructor() {
-    this.authStorage = AuthStorage.create(join(getAgentDir(), "auth.json"));
+  /**
+   * @param authStoragePath Optional path to auth.json. If omitted, uses getAgentDir()/auth.json.
+   * @param agentDir Optional agent directory for config path resolution. If omitted, uses getAgentDir().
+   */
+  constructor(authStoragePath?: string, agentDir?: string) {
+    this.agentDir = agentDir;
+    const authPath = authStoragePath ?? join(agentDir ?? getAgentDir(), "auth.json");
+    this.authStorage = AuthStorage.create(authPath);
     this.loadServersFromConfig();
   }
 
@@ -190,7 +197,7 @@ export class MCPClient {
    * Load MCP server configurations from config file
    */
   private loadServersFromConfig(): void {
-    const configPath = getMCPConfigPath();
+    const configPath = getMCPConfigPath(this.agentDir);
 
     if (!existsSync(configPath)) {
       return;

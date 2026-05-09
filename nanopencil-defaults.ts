@@ -51,7 +51,7 @@ const OLLAMA_BASE_URL = "http://localhost:11434/v1";
  * What's new message displayed in TUI header at startup (about 50 words). Update on release.
  */
 export const NANOPENCIL_WHATS_NEW =
-	"Lightweight CLI writing agent: read, write, edit, bash. DashScope, Ali Token Plan, Qianfan, Ark Coding Plan, local Ollama. Optional nanomem. Type / for commands, ! for bash. Config in ~/.nanopencil/agent/.";
+	"Lightweight CLI writing agent: read, write, edit, bash. DashScope, Ali Token Plan, Qianfan, Ark Coding Plan, local Ollama. Optional nanomem. Type / for commands, ! for bash. Config in ~/.pencils/agents/.";
 
 type DefaultModelDef =
 	(typeof NANOPENCIL_DEFAULT_MODELS_JSON.providers)[typeof NANOPENCIL_DEFAULT_PROVIDER]["models"][number];
@@ -881,9 +881,7 @@ You are a **versatile human-like AI assistant**, collaborating with users in the
 - \`.PENCIL.md\` in project root is only effective for current project.
 - \`AGENT.md\` (and legacy \`CLAUDE.md\`) and \`AGENTS.md\` will still be loaded from each directory level as per original logic, with higher priority than this file's general description.
 `;
-
-export function ensureNanopencilDefaultConfig(): void {
-	const agentDir = getAgentDir();
+export function ensureNanopencilDefaultConfig(agentDir: string = getAgentDir()): void {
 	if (!existsSync(agentDir)) {
 		mkdirSync(agentDir, { recursive: true, mode: 0o700 });
 	}
@@ -891,14 +889,13 @@ export function ensureNanopencilDefaultConfig(): void {
 	if (!existsSync(pencilPath)) {
 		writeFileSync(pencilPath, DEFAULT_PENCIL_MD, "utf-8");
 	}
-	const modelsPath = getModelsPath();
+	const modelsPath = join(agentDir, "models.json");
 	if (!existsSync(modelsPath)) {
 		writeFileSync(modelsPath, JSON.stringify(NANOPENCIL_DEFAULT_MODELS_JSON, null, 2), "utf-8");
 		ensureCustomProtocolProvidersInModels(modelsPath);
 		return;
 	}
 	mergeNanopencilModelsIfNeeded(modelsPath);
-	ensureCustomProtocolProvidersInModels(modelsPath);
 }
 
 /**

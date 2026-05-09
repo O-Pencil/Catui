@@ -1,6 +1,6 @@
 {
   "name": "@pencil-agent/nano-pencil",
-  "version": "1.13.16",
+  "version": "1.14.0",
   "description": "CLI writing agent with read, bash, edit, write tools and session management. Supports DashScope and Ali Token Plan. Soul enabled by default for AI personality evolution.",
   "type": "module",
   "bin": {
@@ -124,7 +124,7 @@
   },
   "nanopencilConfig": {
     "name": "nanopencil",
-    "configDir": ".nanopencil"
+    "configDir": ".pencils"
   },
   "repository": {
     "type": "git",

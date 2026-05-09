@@ -20,66 +20,63 @@ function generateId(): string {
 }
 
 /**
- * Get audit log file path
- */
-function getLogPath(): string {
-	const agentDir = getAgentDir();
-	return join(agentDir, "security-audit.json");
-}
-
-/**
- * Ensure log directory exists
- */
-function ensureLogDir(): void {
-	const agentDir = getAgentDir();
-	if (!existsSync(agentDir)) {
-		mkdirSync(agentDir, { recursive: true });
-	}
-}
-
-/**
- * Load existing logs
- */
-function loadLogs(): AuditEvent[] {
-	const logPath = getLogPath();
-	try {
-		if (existsSync(logPath)) {
-			const content = readFileSync(logPath, "utf-8");
-			const logs = JSON.parse(content);
-			return Array.isArray(logs) ? logs : [];
-		}
-	} catch {
-		// If error, return empty array
-	}
-	return [];
-}
-
-/**
- * Save logs to file
- */
-function saveLogs(logs: AuditEvent[]): void {
-	ensureLogDir();
-	const logPath = getLogPath();
-	writeFileSync(logPath, JSON.stringify(logs, null, 2), "utf-8");
-}
-
-/**
  * Audit Logger class
  */
 export class AuditLogger {
 	private logs: AuditEvent[] = [];
 	private maxEntries: number;
+	private agentDir: string;
 
-	constructor(maxEntries: number = 10000) {
+	/**
+	 * @param maxEntries Maximum number of entries to keep
+	 * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
+	 */
+	constructor(maxEntries: number = 10000, agentDir?: string) {
 		this.maxEntries = maxEntries;
+		this.agentDir = agentDir ?? getAgentDir();
 		this.load();
+	}
+
+	/**
+	 * Get audit log file path
+	 */
+	private getLogPath(): string {
+		return join(this.agentDir, "security-audit.json");
+	}
+
+	/**
+	 * Ensure log directory exists
+	 */
+	private ensureLogDir(): void {
+		if (!existsSync(this.agentDir)) {
+			mkdirSync(this.agentDir, { recursive: true });
+		}
 	}
 
 	/**
 	 * Load logs from disk
 	 */
 	load(): void {
-		this.logs = loadLogs();
+		const logPath = this.getLogPath();
+		try {
+			if (existsSync(logPath)) {
+				const content = readFileSync(logPath, "utf-8");
+				const logs = JSON.parse(content);
+				this.logs = Array.isArray(logs) ? logs : [];
+			}
+		} catch {
+			// If error, return empty array
+			this.logs = [];
+		}
+	}
+
+	/**
+	 * Save logs to file
+	 */
+	private saveLogs(): void {
+		this.ensureLogDir();
+		const logPath = this.getLogPath();
+		writeFileSync(logPath, JSON.stringify(this.logs, null, 2), "utf-8");
 	}
 
 	/**
@@ -101,7 +98,7 @@ export class AuditLogger {
 		}
 
 		// Persist to disk
-		saveLogs(this.logs);
+		this.saveLogs();
 
 		return auditEvent;
 	}
@@ -222,7 +219,7 @@ export class AuditLogger {
 	 */
 	clear(): void {
 		this.logs = [];
-		saveLogs([]);
+		this.saveLogs();
 	}
 
 	/**

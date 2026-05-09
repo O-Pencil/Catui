@@ -158,6 +158,9 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 - [FROM]: mcp/
 - [TO]: (check imports)
 - [HERE]: MCP orchestration
+
+`agent-dir/`: Multi-agent directory and metadata management
+
 `persona/`: Persona management
 
 `export-html/`: HTML export functionality with templates

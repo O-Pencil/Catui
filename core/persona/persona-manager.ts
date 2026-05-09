@@ -1,24 +1,16 @@
 /**
  * [WHO]: PersonaManager class, persona state and path management
- * [FROM]: Depends on node:fs, node:path, config
+ * [FROM]: Depends on node:fs, node:path, agent-dir-context
  * [TO]: Consumed by core/config/resource-loader.ts
  * [HERE]: core/persona/persona-manager.ts - persona management layer
  */
 import { existsSync, readdirSync, readFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { getAgentDir } from "../../config.js";
+import { defaultAgentDirContext, type AgentDirContext } from "../agent-dir/agent-dir-context.js";
 
 type PersonaState = {
 	activePersonaId?: string;
 };
-
-const PERSONAS_DIR = join(getAgentDir(), "personas");
-// active persona state: ~/.nanopencil/agent/persona.json
-const ACTIVE_PERSONA_STATE_PATH = join(getAgentDir(), "persona.json");
-
-function ensurePersonasDir(): void {
-	if (!existsSync(PERSONAS_DIR)) mkdirSync(PERSONAS_DIR, { recursive: true });
-}
 
 function normalizePersonaId(personaId: string): string {
 	// Allow alphanumeric, underscore, and hyphen; prevent path traversal
@@ -27,86 +19,153 @@ function normalizePersonaId(personaId: string): string {
 	return trimmed.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
+export class PersonaManager {
+	private readonly ctx: AgentDirContext;
+
+	constructor(ctx: AgentDirContext = defaultAgentDirContext()) {
+		this.ctx = ctx;
+	}
+
+	private get personasDir(): string {
+		return join(this.ctx.path, "personas");
+	}
+
+	private get activePersonaStatePath(): string {
+		return join(this.ctx.path, "persona.json");
+	}
+
+	private ensurePersonasDir(): void {
+		if (!existsSync(this.personasDir)) mkdirSync(this.personasDir, { recursive: true });
+	}
+
+	getPersonasDir(): string {
+		return this.personasDir;
+	}
+
+	getActivePersonaId(): string | undefined {
+		try {
+			if (!existsSync(this.activePersonaStatePath)) return undefined;
+			const raw = readFileSync(this.activePersonaStatePath, "utf-8");
+			const parsed = JSON.parse(raw) as PersonaState;
+			if (!parsed?.activePersonaId) return undefined;
+			return normalizePersonaId(String(parsed.activePersonaId));
+		} catch {
+			return undefined;
+		}
+	}
+
+	setActivePersonaId(personaId: string | undefined): void {
+		this.ensurePersonasDir();
+		if (!personaId) {
+			// Deleting state file means returning to general (disable persona override)
+			try {
+				writeFileSync(this.activePersonaStatePath, JSON.stringify({}, null, 2), "utf-8");
+			} catch {
+				// ignore
+			}
+			return;
+		}
+
+		const normalized = normalizePersonaId(personaId);
+		const personaDir = this.getPersonaDir(normalized);
+		if (!existsSync(personaDir)) {
+			// Ensure path exists to avoid reload failures from user typos
+			mkdirSync(personaDir, { recursive: true });
+		}
+		const state: PersonaState = { activePersonaId: normalized };
+		writeFileSync(this.activePersonaStatePath, JSON.stringify(state, null, 2), "utf-8");
+	}
+
+	listPersonas(): string[] {
+		try {
+			this.ensurePersonasDir();
+			return readdirSync(this.personasDir)
+				.map((entry) => normalizePersonaId(entry))
+				.filter((id) => {
+					const p = this.getPersonaDir(id);
+					try {
+						return statSync(p).isDirectory();
+					} catch {
+						return false;
+					}
+				})
+				.sort((a, b) => a.localeCompare(b));
+		} catch {
+			return [];
+		}
+	}
+
+	getPersonaDir(personaId: string): string {
+		const normalized = normalizePersonaId(personaId);
+		return join(this.personasDir, normalized);
+	}
+
+	getPersonaPencilPath(personaId: string): string {
+		return join(this.getPersonaDir(personaId), "PENCIL.md");
+	}
+
+	getPersonaSkillsDir(personaId: string): string {
+		return join(this.getPersonaDir(personaId), "skills");
+	}
+
+	getPersonaSoulDir(personaId: string): string {
+		return join(this.getPersonaDir(personaId), "soul");
+	}
+
+	getPersonaMemoryDir(personaId: string): string {
+		return join(this.getPersonaDir(personaId), "memory");
+	}
+
+	getPersonaMcpConfigPath(personaId: string): string {
+		return join(this.getPersonaDir(personaId), "mcp.json");
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Default singleton for backward compatibility
+// ---------------------------------------------------------------------------
+
+const defaultManager = new PersonaManager();
+
+/** Get path to personas directory (default agent context). */
 export function getPersonasDir(): string {
-	return PERSONAS_DIR;
+	return defaultManager.getPersonasDir();
 }
 
 export function getActivePersonaId(): string | undefined {
-	try {
-		if (!existsSync(ACTIVE_PERSONA_STATE_PATH)) return undefined;
-		const raw = readFileSync(ACTIVE_PERSONA_STATE_PATH, "utf-8");
-		const parsed = JSON.parse(raw) as PersonaState;
-		if (!parsed?.activePersonaId) return undefined;
-		return normalizePersonaId(String(parsed.activePersonaId));
-	} catch {
-		return undefined;
-	}
+	return defaultManager.getActivePersonaId();
 }
 
 export function setActivePersonaId(personaId: string | undefined): void {
-	ensurePersonasDir();
-	if (!personaId) {
-		// Deleting state file means returning to general (disable persona override)
-		try {
-			writeFileSync(ACTIVE_PERSONA_STATE_PATH, JSON.stringify({}, null, 2), "utf-8");
-		} catch {
-			// ignore
-		}
-		return;
-	}
-
-	const normalized = normalizePersonaId(personaId);
-	const personaDir = getPersonaDir(normalized);
-	if (!existsSync(personaDir)) {
-		// Ensure path exists to avoid reload failures from user typos
-		mkdirSync(personaDir, { recursive: true });
-	}
-	const state: PersonaState = { activePersonaId: normalized };
-	writeFileSync(ACTIVE_PERSONA_STATE_PATH, JSON.stringify(state, null, 2), "utf-8");
+	defaultManager.setActivePersonaId(personaId);
 }
 
 export function listPersonas(): string[] {
-	try {
-		ensurePersonasDir();
-		return readdirSync(PERSONAS_DIR)
-			.map((entry) => normalizePersonaId(entry))
-			.filter((id) => {
-				const p = getPersonaDir(id);
-				try {
-					return statSync(p).isDirectory();
-				} catch {
-					return false;
-				}
-			})
-			.sort((a, b) => a.localeCompare(b));
-	} catch {
-		return [];
-	}
+	return defaultManager.listPersonas();
 }
 
 export function getPersonaDir(personaId: string): string {
-	const normalized = normalizePersonaId(personaId);
-	return join(PERSONAS_DIR, normalized);
+	return defaultManager.getPersonaDir(personaId);
 }
 
 export function getPersonaPencilPath(personaId: string): string {
-	return join(getPersonaDir(personaId), "PENCIL.md");
+	return defaultManager.getPersonaPencilPath(personaId);
 }
 
 export function getPersonaSkillsDir(personaId: string): string {
-	return join(getPersonaDir(personaId), "skills");
+	return defaultManager.getPersonaSkillsDir(personaId);
 }
 
 export function getPersonaSoulDir(personaId: string): string {
-	return join(getPersonaDir(personaId), "soul");
+	return defaultManager.getPersonaSoulDir(personaId);
 }
 
 export function getPersonaMemoryDir(personaId: string): string {
-	return join(getPersonaDir(personaId), "memory");
+	return defaultManager.getPersonaMemoryDir(personaId);
 }
 
 export function getPersonaMcpConfigPath(personaId: string): string {
-	return join(getPersonaDir(personaId), "mcp.json");
+	return defaultManager.getPersonaMcpConfigPath(personaId);
 }
 
 /**
@@ -117,4 +176,3 @@ export function toAbsolutePath(p: string): string {
 	if (!trimmed) return trimmed;
 	return resolve(trimmed);
 }
-

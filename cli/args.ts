@@ -49,6 +49,8 @@ export interface Args {
 	disableSoul?: boolean;
 	/** Enable ACP (Agent Client Protocol) mode for editor integration */
 	acp?: boolean;
+	/** Multi-Agent: ID of the agent to use. Default: "default" */
+	agent?: string;
 	messages: string[];
 	fileArgs: string[];
 	/** Unknown flags (potentially extension flags) - map of flag name to value */
@@ -171,6 +173,8 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			result.noMcp = true;
 		} else if (arg === "--acp") {
 			result.acp = true;
+		} else if (arg === "--agent" && i + 1 < args.length) {
+			result.agent = args[++i];
 		} else if (arg.startsWith("@")) {
 			result.fileArgs.push(arg.slice(1)); // Remove @ prefix
 		} else if (arg.startsWith("--") && extensionFlags) {
@@ -205,7 +209,8 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} update [source]          Update installed extensions (skips pinned sources)
   ${APP_NAME} list                     List installed extensions from settings
   ${APP_NAME} config                   Open TUI to enable/disable package resources
-  ${APP_NAME} <command> --help         Show help for install/remove/update/list
+  ${APP_NAME} migrate                  Migrate data from legacy ~/.nanopencil to ~/.pencils
+  ${APP_NAME} <command> --help         Show help for commands
 
 ${chalk.bold("Options:")}
   --provider <name>              Provider name (default: google)
@@ -242,6 +247,7 @@ ${chalk.bold("Options:")}
   --disable-soul                 Disable Soul (AI personality evolution)
   --no-mcp                       Disable MCP (Model Context Protocol) tools
   --acp                         Run as ACP Agent (for editor integration)
+  --agent <id>                   Multi-Agent: Select a specific agent by ID (default: "default")
   --help, -h                     Show this help
   --version, -v                  Show version number
 

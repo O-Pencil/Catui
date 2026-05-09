@@ -127,7 +127,7 @@ nanopencil
 ```
 
 1. **Select your model** — Choose from available providers
-2. **Enter API key** — Securely stored in `~/.nanopencil/agent/auth.json`
+2. **Enter API key** — Securely stored in `~/.pencils/agents/default/auth.json`
 3. **Start coding** — Just type what you want to build
 
 ### Example Session

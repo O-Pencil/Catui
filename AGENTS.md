@@ -318,12 +318,12 @@ Extensions can:
 
 | Path | Purpose |
 |------|---------|
-| `~/.nanopencil/agent/` | Global config root |
-| `~/.nanopencil/agent/models.json` | Model definitions |
-| `~/.nanopencil/agent/auth.json` | API keys & OAuth |
-| `~/.nanopencil/agent/settings.json` | User preferences |
-| `~/.nanopencil/agent/sessions/` | Conversation history |
-| `~/.nanopencil/agent/extensions/` | User extensions |
+| `~/.pencils/agents/` | Global config root |
+| `~/.pencils/agents/<id>/models.json` | Model definitions |
+| `~/.pencils/agents/<id>/auth.json` | API keys & OAuth |
+| `~/.pencils/agents/<id>/settings.json` | User preferences |
+| `~/.pencils/agents/<id>/sessions/` | Conversation history |
+| `~/.pencils/agents/<id>/extensions/` | User extensions |
 | `NANOPENCIL_CODING_AGENT_DIR` | Override config root |
 
 ---

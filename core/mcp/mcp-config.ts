@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
 import { homedir } from "os";
 import { getAgentDir } from "../../config.js";
+import { defaultAgentDirContext, type AgentDirContext } from "../agent-dir/agent-dir-context.js";
 import type { MCPServerConfig } from "./mcp-client.js";
 
 export interface MCPConfig {
@@ -137,8 +138,9 @@ const DEFAULT_MCP_CONFIG: MCPConfig = {
 
 /**
  * Get the path to the MCP configuration file
+ * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
  */
-export function getMCPConfigPath(): string {
+export function getMCPConfigPath(agentDir?: string): string {
 	const env = process.env.MCP_CONFIG_PATH;
 	if (env && env.trim()) {
 		const trimmed = env.trim();
@@ -147,18 +149,21 @@ export function getMCPConfigPath(): string {
 		if (trimmed.startsWith("~")) return join(homedir(), trimmed.slice(1));
 		return resolve(trimmed);
 	}
-	return join(getAgentDir(), "mcp.json");
+	const baseAgentDir = agentDir ?? getAgentDir();
+	return join(baseAgentDir, "mcp.json");
 }
 
 /**
  * Load MCP configuration from file
+ * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
  */
-export function loadMCPConfig(): MCPConfig {
-  const configPath = getMCPConfigPath();
+export function loadMCPConfig(agentDir?: string): MCPConfig {
+  const configPath = getMCPConfigPath(agentDir);
+  const baseAgentDir = agentDir ?? getAgentDir();
 
   if (!existsSync(configPath)) {
     // Create default config
-    const configDir = getAgentDir();
+    const configDir = baseAgentDir;
     if (!existsSync(configDir)) {
       mkdirSync(configDir, { recursive: true });
     }
@@ -186,7 +191,7 @@ export function loadMCPConfig(): MCPConfig {
     const mergedConfig: MCPConfig = {
       mcpServers: [...existingServers, ...missingDefaults],
     };
-    saveMCPConfig(mergedConfig);
+    saveMCPConfig(mergedConfig, agentDir);
     return mergedConfig;
   } catch (error) {
     console.error(`Failed to load MCP config: ${error}`);
@@ -196,13 +201,15 @@ export function loadMCPConfig(): MCPConfig {
 
 /**
  * Save MCP configuration to file
+ * @param config MCP configuration to save
+ * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
  */
-export function saveMCPConfig(config: MCPConfig): void {
-  const configPath = getMCPConfigPath();
-  const configDir = getAgentDir();
+export function saveMCPConfig(config: MCPConfig, agentDir?: string): void {
+  const configPath = getMCPConfigPath(agentDir);
+  const baseAgentDir = agentDir ?? getAgentDir();
 
-  if (!existsSync(configDir)) {
-    mkdirSync(configDir, { recursive: true });
+  if (!existsSync(baseAgentDir)) {
+    mkdirSync(baseAgentDir, { recursive: true });
   }
 
   writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
@@ -210,9 +217,10 @@ export function saveMCPConfig(config: MCPConfig): void {
 
 /**
  * Add an MCP server configuration
+ * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
  */
-export function addMCPServer(server: MCPServerConfig): void {
-  const config = loadMCPConfig();
+export function addMCPServer(server: MCPServerConfig, agentDir?: string): void {
+  const config = loadMCPConfig(agentDir);
 
   // Remove existing server with same ID
   config.mcpServers = config.mcpServers.filter((s) => s.id !== server.id);
@@ -220,61 +228,68 @@ export function addMCPServer(server: MCPServerConfig): void {
   // Add new server
   config.mcpServers.push(server);
 
-  saveMCPConfig(config);
+  saveMCPConfig(config, agentDir);
 }
 
 /**
  * Remove an MCP server configuration
+ * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
  */
-export function removeMCPServer(serverId: string): void {
-  const config = loadMCPConfig();
+export function removeMCPServer(serverId: string, agentDir?: string): void {
+  const config = loadMCPConfig(agentDir);
   config.mcpServers = config.mcpServers.filter((s) => s.id !== serverId);
-  saveMCPConfig(config);
+  saveMCPConfig(config, agentDir);
 }
 
 /**
  * Update an MCP server configuration
+ * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
  */
 export function updateMCPServer(
   serverId: string,
   updates: Partial<MCPServerConfig>,
+  agentDir?: string,
 ): void {
-  const config = loadMCPConfig();
+  const config = loadMCPConfig(agentDir);
   const server = config.mcpServers.find((s) => s.id === serverId);
 
   if (server) {
     Object.assign(server, updates);
-    saveMCPConfig(config);
+    saveMCPConfig(config, agentDir);
   }
 }
 
 /**
  * Enable/disable an MCP server
+ * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
  */
-export function setMCPServerEnabled(serverId: string, enabled: boolean): void {
-  updateMCPServer(serverId, { enabled });
+export function setMCPServerEnabled(serverId: string, enabled: boolean, agentDir?: string): void {
+  updateMCPServer(serverId, { enabled }, agentDir);
 }
 
 /**
  * Get an MCP server by ID
+ * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
  */
-export function getMCPServer(serverId: string): MCPServerConfig | undefined {
-  const config = loadMCPConfig();
+export function getMCPServer(serverId: string, agentDir?: string): MCPServerConfig | undefined {
+  const config = loadMCPConfig(agentDir);
   return config.mcpServers.find((s) => s.id === serverId);
 }
 
 /**
  * List all MCP servers
+ * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
  */
-export function listMCPServers(): MCPServerConfig[] {
-  const config = loadMCPConfig();
+export function listMCPServers(agentDir?: string): MCPServerConfig[] {
+  const config = loadMCPConfig(agentDir);
   return config.mcpServers;
 }
 
 /**
  * List enabled MCP servers
+ * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
  */
-export function listEnabledMCPServers(): MCPServerConfig[] {
-  const config = loadMCPConfig();
+export function listEnabledMCPServers(agentDir?: string): MCPServerConfig[] {
+  const config = loadMCPConfig(agentDir);
   return config.mcpServers.filter((s) => s.enabled !== false);
 }

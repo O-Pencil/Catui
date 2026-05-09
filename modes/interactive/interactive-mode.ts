@@ -6912,7 +6912,7 @@ export class InteractiveMode {
       lines.push(theme.bold("Personas"));
       lines.push("");
       if (personas.length === 0) {
-        lines.push(theme.fg("dim", "No personas found under ~/.nanopencil/agent/personas/"));
+        lines.push(theme.fg("dim", `No personas found under ${this.session.agentDir}/personas/`));
       } else {
         for (const id of personas) {
           const marker = active === id ? "*" : " ";
@@ -6999,7 +6999,7 @@ export class InteractiveMode {
     const lines: string[] = [];
     lines.push(theme.fg("accent", "📚 Project Memory - NanoMem"));
     lines.push("");
-    lines.push(theme.fg("dim", "Storage: ~/.nanopencil/agent/memory/"));
+    lines.push(theme.fg("dim", `Storage: ${this.session.agentDir}/memory/`));
     lines.push(theme.fg("dim", "  - knowledge.json  (project knowledge)"));
     lines.push(theme.fg("dim", "  - lessons.json    (lessons learned)"));
     lines.push(theme.fg("dim", "  - preferences.json (user preferences)"));

@@ -127,7 +127,7 @@ nanopencil
 ```
 
 1. **选择模型** — 从可用提供商中选择
-2. **输入 API Key** — 安全存储在 `~/.nanopencil/agent/auth.json`
+2. **输入 API Key** — 安全存储在 `~/.pencils/agents/default/auth.json`
 3. **开始编码** — 输入你想构建的内容
 
 ### 示例会话

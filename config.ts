@@ -200,19 +200,12 @@ export function getShareViewerUrl(gistId: string): string {
 }
 
 // =============================================================================
-// User Config Paths (~/.nanopencil/agent/*)
+// User Config Paths (~/.pencils/agents/default/*)
 // =============================================================================
 
-/** Get the agent config directory (e.g., ~/.nanopencil/agent/) */
+/** Get the agent config directory (e.g., ~/.pencils/agents/default/) */
 export function getAgentDir(): string {
-	const envDir = process.env[ENV_AGENT_DIR];
-	if (envDir) {
-		// Expand tilde to home directory
-		if (envDir === "~") return homedir();
-		if (envDir.startsWith("~/")) return homedir() + envDir.slice(1);
-		return envDir;
-	}
-	return join(homedir(), CONFIG_DIR_NAME, "agent");
+	return resolveAgentDirContext().path;
 }
 
 /** Get path to user's custom themes directory */
@@ -281,12 +274,84 @@ export function getConfigRoot(): string {
 	return join(homedir(), CONFIG_DIR_NAME);
 }
 
-/** Get path to global browser-workspace directory (e.g., ~/.nanopencil/browser-workspace) */
-export function getBrowserWorkspaceDir(): string {
-	return join(getConfigRoot(), "browser-workspace");
+// =============================================================================
+// Multi-Agent: PENCILS_HOME & AgentDirContext support (N2)
+// =============================================================================
+
+import { validateAgentId } from "./core/agent-dir/agent-dir-context.js";
+
+/**
+ * Resolve the Pencils ecosystem root directory.
+ * Priority: PENCILS_HOME > NANOPENCIL_HOME > ~/.pencils
+ *
+ * Design doc §3: only PENCILS_HOME is the canonical name;
+ * NANOPENCIL_HOME is a compat alias for existing users.
+ */
+export function getPencilsHome(): string {
+	const envPencils = process.env.PENCILS_HOME;
+	if (envPencils) {
+		if (envPencils === "~") return homedir();
+		if (envPencils.startsWith("~/")) return homedir() + envPencils.slice(1);
+		return envPencils;
+	}
+	// Compat alias
+	const envNano = process.env.NANOPENCIL_HOME;
+	if (envNano) {
+		if (envNano === "~") return homedir();
+		if (envNano.startsWith("~/")) return homedir() + envNano.slice(1);
+		return envNano;
+	}
+	// Default: ~/.pencils (future target; for now fallback to legacy behavior)
+	return join(homedir(), ".pencils");
 }
 
-/** Get path to global link-world-workspace directory (e.g., ~/.nanopencil/link-world-workspace) */
+/**
+ * Resolve an agent directory context for a given agent id.
+ * If no id is provided, returns the legacy single-agent context.
+ *
+ * Resolution order for per-agent path:
+ * 1. NANOPENCIL_CODING_AGENT_DIR env (legacy single-agent override)
+ * 2. PENCILS_AGENTS_DIR/<id> (new multi-agent path)
+ * 3. ~/.pencils/agents/<id> (default)
+ */
+export function resolveAgentDirContext(agentId?: string) {
+	const id = agentId || "default";
+
+	validateAgentId(id);
+
+	// 1. Check legacy env override first (single-agent mode)
+	const envDir = process.env[ENV_AGENT_DIR];
+	if (envDir && id === "default") {
+		const resolvedEnv = envDir.startsWith("~/") ? homedir() + envDir.slice(1) : envDir;
+		return { id: id as const, path: resolvedEnv };
+	}
+
+	// 2. Check explicit per-agent env override
+	const envAgentsDir = process.env.PENCILS_AGENTS_DIR;
+	if (envAgentsDir) {
+		const base = envAgentsDir.startsWith("~/") ? homedir() + envAgentsDir.slice(1) : envAgentsDir;
+		return { id, path: join(base, id) };
+	}
+
+	// 3. Check for data in legacy ~/.nanopencil/agent/ (Backward Compatibility)
+	// If it's the default agent and the new path doesn't exist but the old one does, use the old one.
+	const legacyPath = join(homedir(), ".nanopencil", "agent");
+	const newDefaultPath = join(getPencilsHome(), "agents", "default");
+
+	if (id === "default" && !existsSync(newDefaultPath) && existsSync(legacyPath)) {
+		return { id: "default" as const, path: legacyPath };
+	}
+
+	// 4. Default multi-agent path under PENCILS_HOME
+	return { id, path: join(getPencilsHome(), "agents", id) };
+}
+
+/** Get path to global browser-workspace directory (e.g., ~/.pencils/workspaces/browser-workspace) */
+export function getBrowserWorkspaceDir(): string {
+	return join(getConfigRoot(), "workspaces", "browser-workspace");
+}
+
+/** Get path to global link-world-workspace directory (e.g., ~/.pencils/workspaces/link-world-workspace) */
 export function getLinkWorldWorkspaceDir(): string {
-	return join(getConfigRoot(), "link-world-workspace");
+	return join(getConfigRoot(), "workspaces", "link-world-workspace");
 }
