@@ -111,19 +111,20 @@ import type {
 } from "../session/session-manager.js";
 import { getLatestCompactionEntry } from "../session/session-manager.js";
 import type { SettingsManager } from "../config/settings-manager.js";
-import {
-  BUILTIN_SLASH_COMMANDS,
-  getLocalizedCommands,
-  type SlashCommandInfo,
-} from "../slash-commands.js";
 import { t } from "../i18n/index.js";
 import { toSoulContext, extractSessionContext } from "../soul-integration.js";
 import { buildSystemPrompt } from "../prompt/system-prompt.js";
 import type { BashOperations } from "../tools/bash.js";
 import { createDefaultRuntimeTools } from "./default-tools.js";
 import { bindExtensionCore } from "./extension-core-bindings.js";
+import {
+  buildSessionSlashCommands,
+  type SessionSlashCommandDescriptor,
+} from "./slash-command-catalog.js";
 import { RetryCoordinator, type RetryCoordinatorHost, type RetrySessionEvent } from "./retry-coordinator.js";
 import { createLogger, type AgentLogger } from "../utils/logger.js";
+
+export type { SessionSlashCommandDescriptor } from "./slash-command-catalog.js";
 
 // ============================================================================
 // Skill Block Parsing
@@ -268,12 +269,6 @@ export interface SessionStats {
     total: number;
   };
   cost: number;
-}
-
-export interface SessionSlashCommandDescriptor {
-  name: string;
-  description?: string;
-  source: "builtin" | SlashCommandInfo["source"];
 }
 
 export type SlashCommandExecutor = (text: string) => Promise<boolean>;
@@ -519,51 +514,14 @@ export class AgentSession {
    * Includes built-in commands, extension commands, prompt templates, and skills.
    */
   getSlashCommands(): SessionSlashCommandDescriptor[] {
-    // Get localized builtin commands
-    const localizedBuiltins = getLocalizedCommands(t);
-    const builtins: SessionSlashCommandDescriptor[] = localizedBuiltins.map(
-      (command) => ({
-        name: command.name,
-        description: command.description,
-        source: "builtin",
-      }),
+    return buildSessionSlashCommands(
+      {
+        promptTemplates: this.promptTemplates,
+        resourceLoader: this._resourceLoader,
+        extensionRunner: this._extensionRunner,
+      },
+      t,
     );
-
-    const reservedBuiltins = new Set(
-      BUILTIN_SLASH_COMMANDS.map((command) => command.name),
-    );
-    const extensionCommands: SessionSlashCommandDescriptor[] =
-      this._extensionRunner
-        ?.getRegisteredCommandsWithPaths()
-        .filter(({ command }) => !reservedBuiltins.has(command.name))
-        .map(({ command }) => ({
-          name: command.name,
-          description: command.description,
-          source: "extension" as const,
-        })) ?? [];
-
-    const promptCommands: SessionSlashCommandDescriptor[] = this.promptTemplates.map(
-      (template) => ({
-        name: template.name,
-        description: template.description,
-        source: "prompt",
-      }),
-    );
-
-    const skillCommands: SessionSlashCommandDescriptor[] = this._resourceLoader
-      .getSkills()
-      .skills.map((skill) => ({
-        name: `skill:${skill.name}`,
-        description: skill.description,
-        source: "skill",
-      }));
-
-    return [
-      ...builtins,
-      ...extensionCommands,
-      ...promptCommands,
-      ...skillCommands,
-    ];
   }
 
   /**

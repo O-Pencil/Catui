@@ -18,13 +18,9 @@ import type {
 import type { ModelRegistry } from "../model-registry.js";
 import type { PromptTemplate } from "../prompt/prompt-templates.js";
 import type { SessionManager } from "../session/session-manager.js";
-import {
-	BUILTIN_SLASH_COMMANDS,
-	type SlashCommandInfo,
-	type SlashCommandLocation,
-} from "../slash-commands.js";
 import type { ContextUsage } from "../extensions/types.js";
 import type { CompactionResult } from "../session/compaction/index.js";
+import { buildExtensionSlashCommands } from "./slash-command-catalog.js";
 
 function getStructuredToolChoice(model: Model<any>, toolName: string): unknown {
 	switch (model.api) {
@@ -77,44 +73,6 @@ export interface ExtensionCoreBindingHost {
 	abort(): Promise<void> | void;
 	getContextUsage(): ContextUsage | undefined;
 	compact(customInstructions?: string): Promise<CompactionResult>;
-}
-
-function normalizeLocation(source: string): SlashCommandLocation | undefined {
-	if (source === "user" || source === "project" || source === "path") {
-		return source;
-	}
-	return undefined;
-}
-
-function buildCommandList(runner: ExtensionRunner, host: ExtensionCoreBindingHost): SlashCommandInfo[] {
-	const reservedBuiltins = new Set(BUILTIN_SLASH_COMMANDS.map((command) => command.name));
-	const extensionCommands: SlashCommandInfo[] = runner
-		.getRegisteredCommandsWithPaths()
-		.filter(({ command }) => !reservedBuiltins.has(command.name))
-		.map(({ command, extensionPath }) => ({
-			name: command.name,
-			description: command.description,
-			source: "extension",
-			path: extensionPath,
-		}));
-
-	const templates: SlashCommandInfo[] = host.promptTemplates.map((template) => ({
-		name: template.name,
-		description: template.description,
-		source: "prompt",
-		location: normalizeLocation(template.source),
-		path: template.filePath,
-	}));
-
-	const skills: SlashCommandInfo[] = host.resourceLoader.getSkills().skills.map((skill) => ({
-		name: `skill:${skill.name}`,
-		description: skill.description,
-		source: "skill",
-		location: normalizeLocation(skill.source),
-		path: skill.filePath,
-	}));
-
-	return [...extensionCommands, ...templates, ...skills];
 }
 
 async function completeTextWithCurrentModel(
@@ -235,7 +193,12 @@ export function bindExtensionCore(runner: ExtensionRunner, host: ExtensionCoreBi
 			getActiveTools: () => host.getActiveToolNames(),
 			getAllTools: () => host.getAllTools(),
 			setActiveTools: (toolNames) => host.setActiveToolsByName(toolNames),
-			getCommands: () => buildCommandList(runner, host),
+			getCommands: () =>
+				buildExtensionSlashCommands({
+					promptTemplates: host.promptTemplates,
+					resourceLoader: host.resourceLoader,
+					extensionRunner: runner,
+				}),
 			setModel: async (model) => {
 				const key = await host.modelRegistry.getApiKey(model);
 				if (!key) return false;

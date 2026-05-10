@@ -49,6 +49,11 @@ jobs:
         env:
           CI: true
 
+      - name: Run slash command catalog tests
+        run: npm run test:commands
+        env:
+          CI: true
+
       - name: Run tool boundary tests
         run: npm run test:tools
         env:

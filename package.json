@@ -43,6 +43,7 @@
     "test:subagent": "node --test --import tsx test/subagent-parser.test.ts test/worktree-manager.test.ts test/bash-sandbox.test.ts",
     "test:team": "node --test --import tsx test/team-parser.test.ts test/team-runtime.test.ts",
     "test:plan": "node --test --import tsx test/plan-mode.test.ts",
+    "test:commands": "node --test --import tsx test/slash-command-catalog.test.ts",
     "test:security": "node --test --import tsx test/security-audit.test.ts",
     "test:tools": "node --test --import tsx test/workspace-write-guard.test.ts",
     "test:presence": "node --test --import tsx test/presence-opening.test.ts",
