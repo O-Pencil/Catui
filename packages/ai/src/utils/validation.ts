@@ -15,9 +15,18 @@ const addFormats = (addFormatsModule as any).default || addFormatsModule;
 
 import type { Tool, ToolCall } from "../types.js";
 
+interface BrowserExtensionGlobal {
+	chrome?: {
+		runtime?: {
+			id?: unknown;
+		};
+	};
+}
+
 // Detect if we're in a browser extension environment with strict CSP
 // Chrome extensions with Manifest V3 don't allow eval/Function constructor
-const isBrowserExtension = typeof globalThis !== "undefined" && (globalThis as any).chrome?.runtime?.id !== undefined;
+const browserGlobal = globalThis as BrowserExtensionGlobal;
+const isBrowserExtension = browserGlobal.chrome?.runtime?.id !== undefined;
 
 // Create a singleton AJV instance with formats (only if not in browser extension)
 // AJV requires 'unsafe-eval' CSP which is not allowed in Manifest V3
