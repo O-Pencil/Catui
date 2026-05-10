@@ -16,6 +16,7 @@ import type {
   SuccessMemory,
   FailureMemory,
   PersonalityVector,
+  ValueSystem,
 } from "./types.js";
 import type { SoulConfig } from "./config.js";
 
@@ -162,22 +163,22 @@ export class SoulEvolutionEngine {
    * Apply delta to profile
    */
   applyEvolution(profile: SoulProfile, evolution: SoulEvolution): SoulProfile {
-    const updated = { ...profile };
+    const updated: SoulProfile = {
+      ...profile,
+      personality: { ...profile.personality },
+      values: { ...profile.values },
+    };
 
     // Apply personality delta
     for (const [key, value] of Object.entries(evolution.personalityDelta)) {
-      (updated.personality as any)[key] = Math.max(
-        0,
-        Math.min(1, (updated.personality as any)[key] + value),
-      );
+      const personalityKey = key as keyof PersonalityVector;
+      updated.personality[personalityKey] = clamp01(updated.personality[personalityKey] + value);
     }
 
     // Apply value delta
     for (const [key, value] of Object.entries(evolution.valueDelta)) {
-      (updated.values as any)[key] = Math.max(
-        0,
-        Math.min(1, (updated.values as any)[key] + value),
-      );
+      const valueKey = key as keyof ValueSystem;
+      updated.values[valueKey] = clamp01(updated.values[valueKey] + value);
     }
 
     // Update metadata
@@ -380,6 +381,10 @@ export class SoulEvolutionEngine {
     const oldestRecentFailure = recentFailures[0].timestamp.getTime();
     return now.getTime() - oldestRecentFailure <= this.crisisWindowMs;
   }
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
 /**
