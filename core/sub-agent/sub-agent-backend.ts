@@ -6,6 +6,7 @@
  */
 
 import { createAgentSession, type CreateAgentSessionOptions } from "../runtime/sdk.js";
+import type { AgentMessage } from "@pencil-agent/agent-core";
 import type { AgentSessionEvent } from "../runtime/agent-session.js";
 import type { SubAgentBackend, SubAgentEvent, SubAgentHandle, SubAgentSpec, SubAgentResult } from "./sub-agent-types.js";
 import { readFile } from "node:fs/promises";
@@ -71,8 +72,7 @@ export class InProcessSubAgentBackend implements SubAgentBackend {
         status = "done";
 
         // Extract the last assistant message as the result
-        const messages = (session as any).messages ?? [];
-        const assistantMessages = messages.filter((m: any) => m.role === "assistant");
+        const assistantMessages = session.messages.filter(isAssistantMessage);
         const lastAssistant = assistantMessages[assistantMessages.length - 1];
         const responseText = lastAssistant ? extractTextFromContent(lastAssistant.content) : "";
 
@@ -146,6 +146,10 @@ export class InProcessSubAgentBackend implements SubAgentBackend {
       },
     };
   }
+}
+
+function isAssistantMessage(message: AgentMessage): message is AgentMessage & { role: "assistant"; content: unknown } {
+  return message.role === "assistant" && "content" in message;
 }
 
 function toSubAgentEvent(subAgentId: string, event: AgentSessionEvent): SubAgentEvent | undefined {
