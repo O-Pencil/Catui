@@ -25,7 +25,7 @@
     "build": "node ../../node_modules/typescript/bin/tsc",
     "dev": "node ../../node_modules/typescript/bin/tsc --watch",
     "clean": "rm -rf dist",
-    "test": "node --test --import tsx test/dream-lock.test.ts test/dream-abort-and-scan.test.ts test/hash-embedding.test.ts test/procedural-v2.test.ts test/consolidate-v2.test.ts test/reconsolidate-v2.test.ts test/engine-v2-links.test.ts test/archive-maintenance.test.ts test/archive-restore.test.ts test/injection-v2-preferred.test.ts test/search-v2-first.test.ts test/extraction-v2-dual-write.test.ts test/conversation-preferences.test.ts test/extension-commands.test.ts",
+    "test": "node --test --import tsx test/dream-lock.test.ts test/dream-abort-and-scan.test.ts test/hash-embedding.test.ts test/procedural-v2.test.ts test/consolidate-v2.test.ts test/reconsolidate-v2.test.ts test/engine-v2-links.test.ts test/archive-maintenance.test.ts test/archive-restore.test.ts test/injection-v2-preferred.test.ts test/search-v2-first.test.ts test/extraction-v2-dual-write.test.ts test/conversation-preferences.test.ts test/extension-commands.test.ts test/structural-anchor.test.ts",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

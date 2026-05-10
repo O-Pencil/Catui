@@ -9,6 +9,8 @@ import { daysSince, extractTags, tagOverlap } from "./scoring.js";
 import { getTurnContext } from "./turn-context.js";
 import type { BaseMemoryV2, EpisodeFacet, EpisodeMemory, ProceduralMemory, SemanticMemory } from "./types-v2.js";
 
+type MemoryWithModifiedFiles = BaseMemoryV2 & { filesModified?: unknown };
+
 /** Read the current structural anchor (or undefined when no producer has published one). */
 export function currentStructuralAnchor(): { modulePath?: string; filePath?: string } | undefined {
 	const anchor = getTurnContext("structuralAnchor");
@@ -48,9 +50,9 @@ export function computeStructuralBoost(entry: BaseMemoryV2): number {
 			if (ev.filePath) entryPaths.push(ev.filePath);
 		}
 	}
-	const ep = entry as any;
-	if (Array.isArray(ep.filesModified)) {
-		for (const f of ep.filesModified) {
+	const modifiedFiles = (entry as MemoryWithModifiedFiles).filesModified;
+	if (Array.isArray(modifiedFiles)) {
+		for (const f of modifiedFiles) {
 			if (typeof f === "string") entryPaths.push(f);
 		}
 	}
