@@ -35,7 +35,7 @@ export interface AgentMetadata {
 	};
 	tags: string[];
 	engine: string;
-	extensions: Record<string, any>;
+	extensions: Record<string, unknown>;
 }
 
 export const CURRENT_METADATA_VERSION = "1.0.0";
