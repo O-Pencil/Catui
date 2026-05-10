@@ -38,6 +38,7 @@
     "benchmark": "node scripts/startup-benchmark.cjs",
     "benchmark:save": "node scripts/startup-benchmark.cjs --output .benchmarks/baseline.json",
     "benchmark:compare": "node scripts/startup-benchmark.cjs --baseline .benchmarks/baseline.json",
+    "verify:dip": "node --import tsx scripts/verify-dip.ts",
     "watch": "tsc --watch",
     "test:subagent": "node --test --import tsx test/subagent-parser.test.ts test/worktree-manager.test.ts test/bash-sandbox.test.ts",
     "test:team": "node --test --import tsx test/team-parser.test.ts test/team-runtime.test.ts",

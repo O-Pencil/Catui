@@ -22,7 +22,8 @@ const __dirname = dirname(__filename);
 
 // Root is one level up from scripts/
 const ROOT = join(__dirname, "..");
-const CLAUDE_md = "CLAUDE.md";
+const P2_DOC = "AGENT.md";
+const LEGACY_DOC = "CLAUDE.md";
 
 interface Violation {
   type: "FATAL" | "SEVERE";
@@ -36,16 +37,16 @@ const violations: Violation[] = [];
 // P2 Module Member List Extraction
 // ============================================================================
 
-function extractMemberList(claudePath: string): Map<string, string> {
-  // For P2 CLAUDE.md files with Member List sections
-  const content = readFileSync(claudePath, "utf-8");
+function extractMemberList(p2Path: string): Map<string, string> {
+  // For P2 AGENT.md files with Member List sections
+  const content = readFileSync(p2Path, "utf-8");
   const members = new Map<string, string>();
 
-  // Match lines like: `index.ts`: description or `src/file.ts`: description
-  const regex = /`([`\w./-]+)`:\s*(.+)/g;
-  let match;
-  while ((match = regex.exec(content)) !== null) {
-    const [_, key, description] = match;
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const match = line.match(/^(?:[-*]\s+)?`?([\w./-]+(?:\.ts|\/))`?:\s*(.+)$/);
+    if (!match) continue;
+    const [, key, description] = match;
     members.set(key, description);
   }
 
@@ -60,7 +61,7 @@ function getActualFiles(dir: string): string[] {
       const entries = readdirSync(currentDir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git") continue;
-        if (entry.name === "CLAUDE.md") continue;
+        if (entry.name === P2_DOC || entry.name === "AGENTS.md" || entry.name === LEGACY_DOC) continue;
 
         const fullPath = join(currentDir, entry.name);
 
@@ -157,7 +158,7 @@ function verifyP3Header(filePath: string): Violation | null {
 // ============================================================================
 
 interface P2Module {
-  claudePath: string;
+  p2Path: string;
   baseDir: string;
   memberList: Map<string, string>;
 }
@@ -165,18 +166,18 @@ interface P2Module {
 function findP2Modules(): P2Module[] {
   const modules: P2Module[] = [];
 
-  function findClaues(startDir: string, depth: number = 0) {
-    const claudePath = join(startDir, CLAUDE_md);
-    if (existsSync(claudePath) && depth > 0) {
+  function findP2Docs(startDir: string, depth: number = 0) {
+    const p2Path = join(startDir, P2_DOC);
+    if (existsSync(p2Path) && depth > 0) {
       // This is a P2 module (not the root P1)
-      const content = readFileSync(claudePath, "utf-8");
+      const content = readFileSync(p2Path, "utf-8");
 
       // Check if this is a P2 (has "Member List" section)
-      if (content.includes("## Member List")) {
+      if (content.includes("Member List")) {
         modules.push({
-          claudePath,
+          p2Path,
           baseDir: startDir,
-          memberList: extractMemberList(claudePath)
+          memberList: extractMemberList(p2Path)
         });
       }
     }
@@ -192,14 +193,14 @@ function findP2Modules(): P2Module[] {
         // Skip certain directories
         if (["test", "tests", "__tests__", "scripts", ".claude"].includes(entry.name)) continue;
 
-        findClaues(join(startDir, entry.name), depth + 1);
+        findP2Docs(join(startDir, entry.name), depth + 1);
       }
     } catch {
       // Skip inaccessible
     }
   }
 
-  findClaues(ROOT, 0);
+  findP2Docs(ROOT, 0);
   return modules;
 }
 
@@ -249,7 +250,7 @@ function verifyP2Module(module: P2Module) {
       violations.push({
         type: "SEVERE",
         file: `${baseRel}/${rel}`,
-        message: `File exists but not listed in ${CLAUDE_md} Member List`
+        message: `File exists but not listed in ${P2_DOC} Member List`
       });
     }
   }

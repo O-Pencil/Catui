@@ -44,6 +44,7 @@ utils/oauth/decode-credential.ts: decodeOAuthCredentialSegment, safe base64 deco
 utils/oauth/github-copilot.ts: normalizeDomain, getGitHubCopilotBaseUrl, githubCopilotOAuthProvider, GitHub Copilot OAuth flow
 utils/oauth/index.ts: OAuth barrel exports, exports all OAuth providers and management functions
 utils/oauth/pkce.ts: generatePKCE, PKCE utilities using Web Crypto API (Node.js 20+ and browsers)
+vitest.config.ts: Vitest configuration for AI package provider and utility tests
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
 

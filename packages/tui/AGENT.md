@@ -28,6 +28,7 @@ components/spacer.ts: Spacer class, spacer element rendering empty lines
 components/box.ts: Box class, box/drawing primitive with background and child rendering
 components/truncated-text.ts: TruncatedText class, text truncation to fit viewport width
 components/select-list.ts: SelectItem, SelectListTheme, SelectList class, selectable list with keyboard navigation
+vitest.config.ts: Vitest configuration for TUI package tests
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
 

@@ -95,6 +95,8 @@ interactive/
 
 Non-interactive mode for scripting and piping.
 
+`print-mode.ts`: Provides runPrintMode(options), batch/stdin/stdout execution mode consumed by main.ts
+
 **P3 Contract:**
 `print-mode.ts`:
 - [WHO]: Provides runPrintMode(options)

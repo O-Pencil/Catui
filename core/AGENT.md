@@ -150,6 +150,14 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 
 `bash-executor.ts`: Shared bash execution logic
 
+`exec.ts`: Shared child-process execution helper for extension and package manager commands
+
+`package-manager.ts`: Package source installation, update, removal, and resource discovery for npm/git/local packages
+
+`soul-integration.ts`: Soul manager loading, prompt injection, and session context extraction bridge
+
+`timings.ts`: Startup/runtime checkpoint timing helper for profiling initialization phases
+
 `custom-providers.ts`: Custom provider registration
 
 `footer-data-provider.ts`: Footer information for TUI

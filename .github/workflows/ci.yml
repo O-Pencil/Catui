@@ -39,6 +39,11 @@ jobs:
         env:
           CI: true
 
+      - name: Verify DIP documentation map
+        run: npm run verify:dip
+        env:
+          CI: true
+
       - name: Run security boundary tests
         run: npm run test:security
         env:
