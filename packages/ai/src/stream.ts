@@ -17,6 +17,7 @@ import type {
 	ProviderStreamOptions,
 	SimpleStreamOptions,
 	StreamOptions,
+	Usage,
 } from "./types.js";
 import { AssistantMessageEventStream } from "./utils/event-stream.js";
 import { isContextOverflow } from "./utils/overflow.js";
@@ -44,6 +45,17 @@ const DEFAULT_RETRY_OPTIONS: Required<RetryOptions> = {
 	maxDelayMs: 30000,
 	jitter: true,
 };
+
+function emptyUsage(): Usage {
+	return {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 0,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
+}
 
 /** Status codes and patterns that indicate a retriable error */
 const RETRIABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
@@ -133,6 +145,7 @@ export function stream<TApi extends Api>(
 		...options?.retry,
 	};
 	return wrapWithRetry(
+		model,
 		() => provider.stream(model, context, options as StreamOptions),
 		retryOptions,
 		options?.signal,
@@ -159,6 +172,7 @@ export function streamSimple<TApi extends Api>(
 		...options?.retry,
 	};
 	return wrapWithRetry(
+		model,
 		() => provider.streamSimple(model, context, options),
 		retryOptions,
 		options?.signal,
@@ -182,7 +196,8 @@ export async function completeSimple<TApi extends Api>(
  * Wraps a stream factory with automatic retry on retriable errors.
  * On retriable failure, creates a new stream and replays it transparently.
  */
-function wrapWithRetry(
+function wrapWithRetry<TApi extends Api>(
+	model: Pick<Model<TApi>, "api" | "provider" | "id">,
 	createStream: () => AssistantMessageEventStream,
 	retryOptions: Required<RetryOptions>,
 	signal?: AbortSignal,
@@ -197,11 +212,14 @@ function wrapWithRetry(
 				outerStream.end({
 					role: "assistant",
 					content: [],
+					api: model.api,
+					provider: model.provider,
+					model: model.id,
 					stopReason: "error",
 					errorMessage: "Request was aborted",
-					usage: { input: 0, output: 0, cacheRead: 0 },
+					usage: emptyUsage(),
 					timestamp: Date.now(),
-				} as any);
+				});
 				return;
 			}
 
