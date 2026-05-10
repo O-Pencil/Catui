@@ -17,6 +17,7 @@ import type {
 	FailureMemory,
 	PatternMemory,
 	DecisionMemory,
+	ExpertiseArea,
 } from "./types.js";
 import type { SoulConfig } from "./config.js";
 import { reportDiagnostic } from "./diagnostics.js";
@@ -83,12 +84,12 @@ export class SoulStore {
 			if (!raw.trim()) {
 				return null;
 			}
-			const data = JSON.parse(raw);
+			const data = JSON.parse(raw) as SoulProfile;
 			// Convert date strings back to Date objects
 			data.createdAt = new Date(data.createdAt);
 			data.lastEvolved = new Date(data.lastEvolved);
 			data.emotionalState.lastUpdate = new Date(data.emotionalState.lastUpdate);
-			data.expertise = data.expertise.map((e: any) => ({
+			data.expertise = data.expertise.map((e: ExpertiseArea) => ({
 				...e,
 				lastUsed: new Date(e.lastUsed),
 			}));
@@ -141,13 +142,13 @@ export class SoulStore {
 					decisions: [],
 				};
 			}
-			const data = JSON.parse(raw);
+			const data = JSON.parse(raw) as SoulMemory;
 			// Convert date strings back to Date objects
 			return {
-				successes: data.successes.map((s: any) => ({ ...s, timestamp: new Date(s.timestamp) })),
-				failures: data.failures.map((f: any) => ({ ...f, timestamp: new Date(f.timestamp) })),
-				patterns: data.patterns.map((p: any) => ({ ...p, lastSeen: new Date(p.lastSeen) })),
-				decisions: data.decisions.map((d: any) => ({ ...d, timestamp: new Date(d.timestamp) })),
+				successes: data.successes.map((s: SuccessMemory) => ({ ...s, timestamp: new Date(s.timestamp) })),
+				failures: data.failures.map((f: FailureMemory) => ({ ...f, timestamp: new Date(f.timestamp) })),
+				patterns: data.patterns.map((p: PatternMemory) => ({ ...p, lastSeen: new Date(p.lastSeen) })),
+				decisions: data.decisions.map((d: DecisionMemory) => ({ ...d, timestamp: new Date(d.timestamp) })),
 			};
 		} catch (error) {
 			const kind = classifyLoadError(error);
@@ -208,8 +209,8 @@ export class SoulStore {
 			if (!raw.trim()) {
 				return [];
 			}
-			const data = JSON.parse(raw);
-			return data.map((e: any) => ({ ...e, timestamp: new Date(e.timestamp) }));
+			const data = JSON.parse(raw) as SoulEvolution[];
+			return data.map((e: SoulEvolution) => ({ ...e, timestamp: new Date(e.timestamp) }));
 		} catch (error) {
 			const kind = classifyLoadError(error);
 			const msg = error instanceof Error ? error.message : String(error);
