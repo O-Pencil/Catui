@@ -31,11 +31,36 @@ declare module "@pencil-agent/nano-pencil" {
 		};
 	};
 
+	export type ExtensionEventMap = {
+		session_start: unknown;
+		turn_end: unknown;
+		before_agent_start: { prompt?: string };
+		tool_execution_start: {
+			toolCallId: string;
+			toolName: string;
+			args: Record<string, unknown>;
+		};
+		tool_execution_end: {
+			toolCallId: string;
+			toolName: string;
+			result: unknown;
+			isError: boolean;
+		};
+		agent_end: {
+			messages: Array<{ role: string; content?: unknown }>;
+		};
+		session_shutdown: unknown;
+	};
+
 	export type ExtensionAPI = {
 		events: {
 			emit(channel: string, data: unknown): void;
 		};
-		on(event: string, handler: (event: any, context: ExtensionContext) => unknown): void;
+		on<TEvent extends keyof ExtensionEventMap>(
+			event: TEvent,
+			handler: (event: ExtensionEventMap[TEvent], context: ExtensionContext) => unknown,
+		): void;
+		on(event: string, handler: (event: unknown, context: ExtensionContext) => unknown): void;
 		registerCommand(
 			name: string,
 			command: {
