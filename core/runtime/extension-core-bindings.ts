@@ -4,8 +4,15 @@
  * [TO]: Consumed by AgentSession when initializing extension runtime capabilities
  * [HERE]: core/runtime/extension-core-bindings.ts - adapts AgentSession host methods to ExtensionRunner APIs
  */
-import type { ImageContent, Model, TextContent } from "@pencil-agent/ai";
-import { completeSimple, type ToolCall } from "@pencil-agent/ai";
+import type {
+	ImageContent,
+	Model,
+	SimpleStreamOptions,
+	TextContent,
+	ToolCall,
+	TSchema,
+} from "@pencil-agent/ai";
+import { completeSimple } from "@pencil-agent/ai";
 import type { ThinkingLevel } from "@pencil-agent/agent-core";
 import type { SettingsManager } from "../config/settings-manager.js";
 import type { ResourceLoader } from "../config/resource-loader.js";
@@ -40,6 +47,14 @@ function getStructuredToolChoice(model: Model<any>, toolName: string): unknown {
 
 type SendMessage = ExtensionActions["sendMessage"];
 type SendUserMessage = ExtensionActions["sendUserMessage"];
+
+function isTextContent(block: { type: string }): block is TextContent {
+	return block.type === "text";
+}
+
+function isNamedToolCall(block: { type: string }, toolName: string): block is ToolCall {
+	return block.type === "toolCall" && "name" in block && block.name === toolName;
+}
 
 export interface ExtensionCoreBindingHost {
 	promptTemplates: ReadonlyArray<PromptTemplate>;
@@ -94,8 +109,8 @@ async function completeTextWithCurrentModel(
 			{ maxTokens: 1500, temperature: 0.2, apiKey },
 		);
 		return response.content
-			?.filter((block) => block.type === "text")
-			.map((block) => (block as TextContent).text ?? "")
+			?.filter(isTextContent)
+			.map((block) => block.text ?? "")
 			.join("") ?? "";
 	} catch {
 		return undefined;
@@ -116,6 +131,14 @@ async function completeJsonWithCurrentModel(
 
 	const toolName = options?.toolName || "submit_json";
 	try {
+		const toolSchema = schema as unknown as TSchema;
+		const completionOptions = {
+			maxTokens: 1500,
+			temperature: 0,
+			apiKey,
+			toolChoice: getStructuredToolChoice(model, toolName),
+		} satisfies SimpleStreamOptions;
+
 		const response = await completeSimple(
 			model,
 			{
@@ -125,20 +148,13 @@ async function completeJsonWithCurrentModel(
 					{
 						name: toolName,
 						description: "Submit the final structured JSON payload.",
-						parameters: schema as any,
+						parameters: toolSchema,
 					},
 				],
 			},
-			{
-				maxTokens: 1500,
-				temperature: 0,
-				apiKey,
-				toolChoice: getStructuredToolChoice(model, toolName),
-			} as any,
+			completionOptions,
 		);
-		const toolCall = response.content?.find(
-			(block) => block.type === "toolCall" && (block as ToolCall).name === toolName,
-		) as ToolCall | undefined;
+		const toolCall = response.content?.find((block) => isNamedToolCall(block, toolName));
 		if (!toolCall) return undefined;
 		const payload = options?.resultKey ? toolCall.arguments?.[options.resultKey] : toolCall.arguments;
 		return JSON.stringify(payload);
