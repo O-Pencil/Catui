@@ -71,7 +71,7 @@ type IdleThinkSettings = {
 
 function getSettings(ctx: ExtensionContext): IdleThinkSettings {
 	const settings = ctx.getSettings?.();
-	return (settings as any)?.idleThink ?? {};
+	return settings?.idleThink ?? {};
 }
 
 // ── Budget check ─────────────────────────────────────────────────────────────
