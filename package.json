@@ -45,7 +45,7 @@
     "test:plan": "node --test --import tsx test/plan-mode.test.ts",
     "test:commands": "node --test --import tsx test/slash-command-catalog.test.ts",
     "test:security": "node --test --import tsx test/security-audit.test.ts",
-    "test:tools": "node --test --import tsx test/workspace-write-guard.test.ts",
+    "test:tools": "node --test --import tsx test/workspace-write-guard.test.ts test/read-tool.test.ts",
     "test:presence": "node --test --import tsx test/presence-opening.test.ts",
     "test:interactive-memory-notify": "node --test --import tsx test/interactive-memory-notify.test.ts",
     "start": "npx cross-env NODE_ENV=production node --no-deprecation dist/cli.js",

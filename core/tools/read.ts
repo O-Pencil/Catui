@@ -16,8 +16,8 @@ import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult
 
 const readSchema = Type.Object({
 	path: Type.String({ description: "Path to the file to read (relative or absolute)" }),
-	offset: Type.Optional(Type.Number({ description: "Line number to start reading from (1-indexed)" })),
-	limit: Type.Optional(Type.Number({ description: "Maximum number of lines to read" })),
+	offset: Type.Optional(Type.Integer({ minimum: 1, description: "Line number to start reading from (1-indexed)" })),
+	limit: Type.Optional(Type.Integer({ minimum: 1, description: "Maximum number of lines to read" })),
 });
 
 export type ReadToolInput = Static<typeof readSchema>;
@@ -52,6 +52,13 @@ export interface ReadToolOptions {
 	operations?: ReadOperations;
 }
 
+function validatePositiveInteger(value: number | undefined, name: string): void {
+	if (value === undefined) return;
+	if (!Number.isInteger(value) || value < 1) {
+		throw new Error(`${name} must be a positive integer`);
+	}
+}
+
 export function createReadTool(cwd: string, options?: ReadToolOptions): AgentTool<typeof readSchema> {
 	const autoResizeImages = options?.autoResizeImages ?? true;
 	const ops = options?.operations ?? defaultReadOperations;
@@ -66,6 +73,9 @@ export function createReadTool(cwd: string, options?: ReadToolOptions): AgentToo
 			{ path, offset, limit }: { path: string; offset?: number; limit?: number },
 			signal?: AbortSignal,
 		) => {
+			validatePositiveInteger(offset, "offset");
+			validatePositiveInteger(limit, "limit");
+
 			const absolutePath = resolveReadPath(path, cwd);
 
 			return new Promise<{ content: (TextContent | ImageContent)[]; details: ReadToolDetails | undefined }>(
