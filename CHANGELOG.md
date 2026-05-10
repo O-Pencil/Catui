@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.14.0] - 2026-05-11
+
+### Added
+- **Multi-Agent Infrastructure**: Full support for `--agent <id>` to isolate configurations, sessions, and logs.
+- **Auto-Migration Tool**: Automatic, safe migration from legacy `~/.nanopencil` to new `~/.pencils` layout on startup.
+- **Agent Metadata**: Added `agent.json` support for rich agent identity management.
+- **Isolated Security Audit**: Audit logs are now correctly scoped per-agent.
+
+### Changed
+- Rebranded default configuration directory to `~/.pencils/`.
+- Enhanced `SessionManager` and `AuthStorage` with full `AgentDirContext` awareness.
+
+### Fixed
+- Fixed 401 errors caused by incorrect provider selection after migration.
+- Resolved circular dependencies in configuration loading.
+
 ## [1.13.15] - 2026-05-07
 
 ### Added

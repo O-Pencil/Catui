@@ -81,6 +81,33 @@ export class MigrationManager {
 		console.log("You can safely delete it after verifying your data in the new environment.");
 	}
 
+	/**
+	 * Check if any migration is currently needed (legacy data exists and hasn't been migrated).
+	 */
+	isMigrationNeeded(): boolean {
+		return this.plan().length > 0;
+	}
+
+	/**
+	 * Run migration silently (no preview, direct apply) and return the list of migrated labels.
+	 */
+	runSilent(): string[] {
+		const tasks = this.plan();
+		const migrated: string[] = [];
+
+		for (const task of tasks) {
+			try {
+				this.execute(task, true);
+				this.logMigration(task);
+				migrated.push(task.label);
+			} catch {
+				// Silent fail
+			}
+		}
+
+		return migrated;
+	}
+
 	private plan(): MigrationTask[] {
 		const tasks: MigrationTask[] = [];
 

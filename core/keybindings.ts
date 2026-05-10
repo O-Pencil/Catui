@@ -16,6 +16,7 @@ import {
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { getAgentDir } from "../config.js";
+import { defaultAgentDirContext, type AgentDirContext } from "./agent-dir/agent-dir-context.js";
 
 /**
  * Application-level actions (coding agent specific).
@@ -135,8 +136,8 @@ export class KeybindingsManager {
 	/**
 	 * Create from config file and set up editor keybindings.
 	 */
-	static create(agentDir: string = getAgentDir()): KeybindingsManager {
-		const configPath = join(agentDir, "keybindings.json");
+	static create(ctx: AgentDirContext = defaultAgentDirContext()): KeybindingsManager {
+		const configPath = join(ctx.path, "keybindings.json");
 		const config = KeybindingsManager.loadFromFile(configPath);
 		const manager = new KeybindingsManager(config);
 

@@ -105,13 +105,10 @@ import type {
   ResourceExtensionPaths,
   ResourceLoader,
 } from "../config/resource-loader.js";
-import type {
-  BranchSummaryEntry,
-  CompactionEntry,
-  SessionManager,
-} from "../session/session-manager.js";
-import { getLatestCompactionEntry } from "../session/session-manager.js";
+import { getLatestCompactionEntry, SessionManager, type SessionEntry, type BranchSummaryEntry, type CompactionEntry } from "../session/session-manager.js";
 import type { SettingsManager } from "../config/settings-manager.js";
+import { AgentDirContext } from "../agent-dir/agent-dir-context.js";
+
 import { t } from "../i18n/index.js";
 import { toSoulContext, extractSessionContext } from "../soul-integration.js";
 import { buildSystemPrompt } from "../prompt/system-prompt.js";
@@ -202,6 +199,8 @@ export interface AgentSessionConfig {
   cwd: string;
   /** Global agent config directory for user-scoped resources. */
   agentDir: string;
+  /** Multi-agent context. */
+  agentCtx: AgentDirContext;
   /** Models to cycle through with Ctrl+P (from --models flag) */
   scopedModels?: Array<{ model: Model<any>; thinkingLevel: ThinkingLevel }>;
   /** Resource loader for skills, prompts, themes, context files, system prompt */
@@ -307,6 +306,7 @@ export class AgentSession {
   readonly agent: Agent;
   readonly sessionManager: SessionManager;
   readonly settingsManager: SettingsManager;
+  readonly agentCtx: AgentDirContext;
 
   private _scopedModels: Array<{
     model: Model<any>;
@@ -386,6 +386,7 @@ export class AgentSession {
     this.agent = config.agent;
     this.sessionManager = config.sessionManager;
     this.settingsManager = config.settingsManager;
+    this.agentCtx = config.agentCtx;
     this._scopedModels = config.scopedModels ?? [];
     this._resourceLoader = config.resourceLoader;
     this._staticCustomTools = config.customTools ?? [];

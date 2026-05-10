@@ -26,6 +26,7 @@ import { DefaultPackageManager, type PathMetadata } from "../package-manager.js"
 import type { PromptTemplate } from "../prompt/prompt-templates.js";
 import { loadPromptTemplates } from "../prompt/prompt-templates.js";
 import { SettingsManager } from "./settings-manager.js";
+import { AgentDirContext, defaultAgentDirContext } from "../agent-dir/agent-dir-context.js";
 import type { Skill } from "../skills.js";
 import { loadSkills } from "../skills.js";
 
@@ -158,6 +159,7 @@ function loadProjectContextFiles(
 export interface DefaultResourceLoaderOptions {
 	cwd?: string;
 	agentDir?: string;
+	agentCtx?: AgentDirContext;
 	settingsManager?: SettingsManager;
 	eventBus?: EventBus;
 	additionalExtensionPaths?: string[];
@@ -194,6 +196,7 @@ export interface DefaultResourceLoaderOptions {
 export class DefaultResourceLoader implements ResourceLoader {
 	private cwd: string;
 	private agentDir: string;
+	private agentCtx: AgentDirContext;
 	private settingsManager: SettingsManager;
 	private eventBus: EventBus;
 	private packageManager: DefaultPackageManager;
@@ -244,8 +247,9 @@ export class DefaultResourceLoader implements ResourceLoader {
 
 	constructor(options: DefaultResourceLoaderOptions) {
 		this.cwd = options.cwd ?? process.cwd();
-		this.agentDir = options.agentDir ?? getAgentDir();
-		this.settingsManager = options.settingsManager ?? SettingsManager.create(this.cwd, this.agentDir);
+		this.agentCtx = options.agentCtx ?? defaultAgentDirContext();
+		this.agentDir = options.agentDir ?? this.agentCtx.path;
+		this.settingsManager = options.settingsManager ?? SettingsManager.create(this.cwd, this.agentCtx);
 		this.eventBus = options.eventBus ?? createEventBus();
 		this.packageManager = new DefaultPackageManager({
 			cwd: this.cwd,

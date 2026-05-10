@@ -343,7 +343,7 @@ export default async function exportHtmlExtension(api: ExtensionAPI) {
 			// Export the session (use default output path)
 			// Pass undefined for state since we don't have access to it here
 			const filePath = await extExportSessionToHtml(
-				sessionManager as SessionManager,
+				sessionManager as unknown as SessionManager,
 				undefined,
 			);
 

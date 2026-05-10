@@ -3,15 +3,11 @@
  * [FROM]: Depends on config.ts (getAgentDir)
  * [TO]: Consumed by core/persona, core/session, core/soul-integration, core/mcp, extensions, future --agent flag
  * [HERE]: core/agent-dir/agent-dir-context.ts - multi-agent directory abstraction
- *
- * Design doc: docs/multi-agent-fs-design.md §9.2
- *
- * Every module that resolves per-agent paths should accept AgentDirContext
- * (with default = legacy single-agent path). This allows future --agent <id>
- * to inject a different context without touching callers.
  */
 
-import { getAgentDir } from "../../config.js";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { getAgentDir, getPencilsAgentsDir } from "../../config.js";
 
 // ---------------------------------------------------------------------------
 // ID validation
@@ -40,6 +36,17 @@ export function validateAgentId(id: string): string {
 // AgentDirContext
 // ---------------------------------------------------------------------------
 
+export interface AgentOriginMetadata {
+	type: "local" | "cloud-adopted" | "imported";
+	asgard?: {
+		templateId: string;
+		templateVersion: string;
+		originUrl: string;
+		externalId: string;
+		lastSyncedAt: string;
+	};
+}
+
 /**
  * Represents the resolved filesystem context for one agent.
  *
@@ -52,12 +59,14 @@ export interface AgentDirContext {
 	readonly id: string;
 	/** Absolute path; trusted to exist or be creatable. */
 	readonly path: string;
+	/** Optional — if the agent was adopted from cloud, the origin metadata. */
+	readonly origin?: AgentOriginMetadata;
 }
 
 /**
  * Build the default context for the legacy single-agent path.
  * This is the fallback when no `--agent` flag is provided.
- * Resolves to whatever `getAgentDir()` returns today (~/.nanopencil/agent/).
+ * Resolves to whatever `getAgentDir()` returns today (~/.pencils/agents/default).
  */
 export function defaultAgentDirContext(): AgentDirContext {
 	return { id: "default", path: getAgentDir() };
@@ -67,7 +76,54 @@ export function defaultAgentDirContext(): AgentDirContext {
  * Build an AgentDirContext for a specific agent id + resolved path.
  * Throws if the id fails validation.
  */
-export function agentDirContextOf(id: string, path: string): AgentDirContext {
+export function agentDirContextOf(id: string, path: string, origin?: AgentOriginMetadata): AgentDirContext {
 	validateAgentId(id);
-	return { id, path };
+	return { id, path, origin };
+}
+
+/**
+ * Load AgentDirContext from an agent directory (loads agent.json if it exists).
+ */
+export function loadAgentDirContext(id: string): AgentDirContext {
+	const path = join(getPencilsAgentsDir(), id);
+	const agentJsonPath = join(path, "agent.json");
+
+	if (existsSync(agentJsonPath)) {
+		try {
+			const content = readFileSync(agentJsonPath, "utf-8");
+			const metadata = JSON.parse(content);
+			return {
+				id: metadata.id || id,
+				path,
+				origin: metadata.origin,
+			};
+		} catch {
+			// Fallback on parse error
+		}
+	}
+
+	// Default for agents under PENCILS_AGENTS_DIR
+	if (id !== "default" || existsSync(path)) {
+		return { id, path };
+	}
+
+	// Ultimate fallback to legacy default
+	return defaultAgentDirContext();
+}
+
+/**
+ * Save AgentDirContext to agent.json.
+ */
+export function saveAgentDirContext(ctx: AgentDirContext): void {
+	if (!existsSync(ctx.path)) {
+		mkdirSync(ctx.path, { recursive: true });
+	}
+
+	const agentJsonPath = join(ctx.path, "agent.json");
+	const metadata = {
+		id: ctx.id,
+		origin: ctx.origin,
+	};
+
+	writeFileSync(agentJsonPath, JSON.stringify(metadata, null, 2), "utf-8");
 }

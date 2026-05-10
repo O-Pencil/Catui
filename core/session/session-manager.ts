@@ -208,6 +208,7 @@ export type ReadonlySessionManager = Pick<
 	| "getEntries"
 	| "getTree"
 	| "getSessionName"
+	| "getAgentCtx"
 >;
 
 /** Generate a unique short ID (8 hex chars, collision-checked) */
@@ -431,12 +432,11 @@ export function buildSessionContext(
 
 /**
  * Compute the default session directory for a cwd.
- * Encodes cwd into a safe directory name under ~/.nanopencil/agent/sessions/.
+ * Encodes cwd into a safe directory name under agents/<id>/sessions/.
  */
-function getDefaultSessionDir(cwd: string, agentDir?: string): string {
+function getDefaultSessionDir(cwd: string, ctx: AgentDirContext = defaultAgentDirContext()): string {
 	const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-	const baseAgentDir = agentDir ?? getDefaultAgentDir();
-	const sessionDir = join(baseAgentDir, "sessions", safePath);
+	const sessionDir = join(ctx.path, "sessions", safePath);
 	if (!existsSync(sessionDir)) {
 		mkdirSync(sessionDir, { recursive: true });
 	}
@@ -709,11 +709,13 @@ export class SessionManager {
 	private byId: Map<string, SessionEntry> = new Map();
 	private labelsById: Map<string, string> = new Map();
 	private leafId: string | null = null;
+	private agentCtx: AgentDirContext;
 
-	private constructor(cwd: string, sessionDir: string, sessionFile: string | undefined, persist: boolean) {
+	private constructor(cwd: string, sessionDir: string, sessionFile: string | undefined, persist: boolean, agentCtx: AgentDirContext = defaultAgentDirContext()) {
 		this.cwd = cwd;
 		this.sessionDir = sessionDir;
 		this.persist = persist;
+		this.agentCtx = agentCtx;
 		if (persist && sessionDir && !existsSync(sessionDir)) {
 			mkdirSync(sessionDir, { recursive: true });
 		}
@@ -812,6 +814,10 @@ export class SessionManager {
 
 	getCwd(): string {
 		return this.cwd;
+	}
+
+	getAgentCtx(): AgentDirContext {
+		return this.agentCtx;
 	}
 
 	getSessionDir(): string {
@@ -1274,48 +1280,48 @@ export class SessionManager {
 	/**
 	 * Create a new session.
 	 * @param cwd Working directory (stored in session header)
-	 * @param sessionDir Optional session directory. If omitted, uses default (~/.nanopencil/agent/sessions/<encoded-cwd>/).
-	 * @param agentDir Optional agent directory. If omitted, uses default agent dir.
+	 * @param sessionDir Optional session directory. If omitted, uses default (~/.pencils/agents/<id>/sessions/<encoded-cwd>/).
+	 * @param ctx Optional agent directory context. If omitted, uses default context.
 	 */
-	static create(cwd: string, sessionDir?: string, agentDir?: string): SessionManager {
-		const dir = sessionDir ?? getDefaultSessionDir(cwd, agentDir);
-		return new SessionManager(cwd, dir, undefined, true);
+	static create(cwd: string, sessionDir?: string, ctx: AgentDirContext = defaultAgentDirContext()): SessionManager {
+		const dir = sessionDir ?? getDefaultSessionDir(cwd, ctx);
+		return new SessionManager(cwd, dir, undefined, true, ctx);
 	}
 
 	/**
 	 * Open a specific session file.
 	 * @param path Path to session file
 	 * @param sessionDir Optional session directory for /new or /branch. If omitted, derives from file's parent.
-	 * @param agentDir Optional agent directory (unused for open, but kept for API consistency).
+	 * @param ctx Optional agent directory context.
 	 */
-	static open(path: string, sessionDir?: string, agentDir?: string): SessionManager {
+	static open(path: string, sessionDir?: string, ctx: AgentDirContext = defaultAgentDirContext()): SessionManager {
 		// Extract cwd from session header if possible, otherwise use process.cwd()
 		const entries = loadEntriesFromFile(path);
 		const header = entries.find((e) => e.type === "session") as SessionHeader | undefined;
 		const cwd = header?.cwd ?? process.cwd();
 		// If no sessionDir provided, derive from file's parent directory
 		const dir = sessionDir ?? resolve(path, "..");
-		return new SessionManager(cwd, dir, path, true);
+		return new SessionManager(cwd, dir, path, true, ctx);
 	}
 
 	/**
 	 * Continue the most recent session, or create new if none.
 	 * @param cwd Working directory
-	 * @param sessionDir Optional session directory. If omitted, uses default (~/.nanopencil/agent/sessions/<encoded-cwd>/).
-	 * @param agentDir Optional agent directory. If omitted, uses default agent dir.
+	 * @param sessionDir Optional session directory. If omitted, uses default (~/.pencils/agents/<id>/sessions/<encoded-cwd>/).
+	 * @param ctx Optional agent directory context.
 	 */
-	static continueRecent(cwd: string, sessionDir?: string, agentDir?: string): SessionManager {
-		const dir = sessionDir ?? getDefaultSessionDir(cwd, agentDir);
+	static continueRecent(cwd: string, sessionDir?: string, ctx: AgentDirContext = defaultAgentDirContext()): SessionManager {
+		const dir = sessionDir ?? getDefaultSessionDir(cwd, ctx);
 		const mostRecent = findMostRecentSession(dir);
 		if (mostRecent) {
-			return new SessionManager(cwd, dir, mostRecent, true);
+			return new SessionManager(cwd, dir, mostRecent, true, ctx);
 		}
-		return new SessionManager(cwd, dir, undefined, true);
+		return new SessionManager(cwd, dir, undefined, true, ctx);
 	}
 
 	/** Create an in-memory session (no file persistence) */
-	static inMemory(cwd: string = process.cwd()): SessionManager {
-		return new SessionManager(cwd, "", undefined, false);
+	static inMemory(cwd: string = process.cwd(), ctx: AgentDirContext = defaultAgentDirContext()): SessionManager {
+		return new SessionManager(cwd, "", undefined, false, ctx);
 	}
 
 	/**
@@ -1324,9 +1330,9 @@ export class SessionManager {
 	 * @param sourcePath Path to the source session file
 	 * @param targetCwd Target working directory (where the new session will be stored)
 	 * @param sessionDir Optional session directory. If omitted, uses default for targetCwd.
-	 * @param agentDir Optional agent directory. If omitted, uses default agent dir.
+	 * @param ctx Optional agent directory context.
 	 */
-	static forkFrom(sourcePath: string, targetCwd: string, sessionDir?: string, agentDir?: string): SessionManager {
+	static forkFrom(sourcePath: string, targetCwd: string, sessionDir?: string, ctx: AgentDirContext = defaultAgentDirContext()): SessionManager {
 		const sourceEntries = loadEntriesFromFile(sourcePath);
 		if (sourceEntries.length === 0) {
 			throw new Error(`Cannot fork: source session file is empty or invalid: ${sourcePath}`);
@@ -1337,7 +1343,7 @@ export class SessionManager {
 			throw new Error(`Cannot fork: source session has no header: ${sourcePath}`);
 		}
 
-		const dir = sessionDir ?? getDefaultSessionDir(targetCwd, agentDir);
+		const dir = sessionDir ?? getDefaultSessionDir(targetCwd, ctx);
 		if (!existsSync(dir)) {
 			mkdirSync(dir, { recursive: true });
 		}
@@ -1366,18 +1372,18 @@ export class SessionManager {
 			}
 		}
 
-		return new SessionManager(targetCwd, dir, newSessionFile, true);
+		return new SessionManager(targetCwd, dir, newSessionFile, true, ctx);
 	}
 
 	/**
 	 * List all sessions for a directory.
 	 * @param cwd Working directory (used to compute default session directory)
-	 * @param sessionDir Optional session directory. If omitted, uses default (~/.nanopencil/agent/sessions/<encoded-cwd>/).
+	 * @param sessionDir Optional session directory. If omitted, uses default (~/.pencils/agents/<id>/sessions/<encoded-cwd>/).
 	 * @param onProgress Optional callback for progress updates (loaded, total)
-	 * @param agentDir Optional agent directory. If omitted, uses default agent dir.
+	 * @param ctx Optional agent directory context.
 	 */
-	static async list(cwd: string, sessionDir?: string, onProgress?: SessionListProgress, agentDir?: string): Promise<SessionInfo[]> {
-		const dir = sessionDir ?? getDefaultSessionDir(cwd, agentDir);
+	static async list(cwd: string, sessionDir?: string, onProgress?: SessionListProgress, ctx: AgentDirContext = defaultAgentDirContext()): Promise<SessionInfo[]> {
+		const dir = sessionDir ?? getDefaultSessionDir(cwd, ctx);
 		const sessions = await listSessionsFromDir(dir, onProgress);
 		sessions.sort((a, b) => b.modified.getTime() - a.modified.getTime());
 		return sessions;
@@ -1386,11 +1392,10 @@ export class SessionManager {
 	/**
 	 * List all sessions across all project directories.
 	 * @param onProgress Optional callback for progress updates (loaded, total)
-	 * @param agentDir Optional agent directory. If omitted, uses default agent dir.
+	 * @param ctx Optional agent directory context.
 	 */
-	static async listAll(onProgress?: SessionListProgress, agentDir?: string): Promise<SessionInfo[]> {
-		const baseAgentDir = agentDir ?? getDefaultAgentDir();
-		const sessionsDir = join(baseAgentDir, "sessions");
+	static async listAll(onProgress?: SessionListProgress, ctx: AgentDirContext = defaultAgentDirContext()): Promise<SessionInfo[]> {
+		const sessionsDir = join(ctx.path, "sessions");
 
 		try {
 			if (!existsSync(sessionsDir)) {
@@ -1442,14 +1447,14 @@ export class SessionManager {
 	/**
 	 * Lightweight scan: count session files with mtime > sinceMs without reading file contents.
 	 * Designed for gate checks (e.g., auto-dream) where approximate counts are OK.
-	 * @param agentDir Optional agent directory. If omitted, uses default agent dir.
+	 * @param ctx Optional agent directory context.
 	 */
 	static async countTouchedSince(
 		cwd: string,
 		sinceMs: number,
-		options?: { sessionDir?: string; excludeBasename?: string; concurrency?: number; agentDir?: string },
+		options?: { sessionDir?: string; excludeBasename?: string; concurrency?: number; ctx?: AgentDirContext },
 	): Promise<number> {
-		const dir = options?.sessionDir ?? getDefaultSessionDir(cwd, options?.agentDir);
+		const dir = options?.sessionDir ?? getDefaultSessionDir(cwd, options?.ctx);
 		const concurrency = options?.concurrency ?? 64;
 		try {
 			if (!existsSync(dir)) return 0;

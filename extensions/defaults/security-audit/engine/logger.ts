@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import type { AuditEvent, LogQueryOptions, SecurityStats, AuditEventType, SecurityLevel, AuditEventStatus } from "../interface.js";
-import { getAgentDir } from "../../../../config.js";
+import { AgentDirContext, defaultAgentDirContext } from "../../../../core/agent-dir/agent-dir-context.js";
 
 /**
  * Generate unique event ID
@@ -25,15 +25,15 @@ function generateId(): string {
 export class AuditLogger {
 	private logs: AuditEvent[] = [];
 	private maxEntries: number;
-	private agentDir: string;
+	private ctx: AgentDirContext;
 
 	/**
 	 * @param maxEntries Maximum number of entries to keep
-	 * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
+	 * @param ctx Agent directory context.
 	 */
-	constructor(maxEntries: number = 10000, agentDir?: string) {
+	constructor(maxEntries: number = 10000, ctx: AgentDirContext = defaultAgentDirContext()) {
 		this.maxEntries = maxEntries;
-		this.agentDir = agentDir ?? getAgentDir();
+		this.ctx = ctx;
 		this.load();
 	}
 
@@ -41,15 +41,15 @@ export class AuditLogger {
 	 * Get audit log file path
 	 */
 	private getLogPath(): string {
-		return join(this.agentDir, "security-audit.json");
+		return join(this.ctx.path, "security-audit.json");
 	}
 
 	/**
 	 * Ensure log directory exists
 	 */
 	private ensureLogDir(): void {
-		if (!existsSync(this.agentDir)) {
-			mkdirSync(this.agentDir, { recursive: true });
+		if (!existsSync(this.ctx.path)) {
+			mkdirSync(this.ctx.path, { recursive: true });
 		}
 	}
 

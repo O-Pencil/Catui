@@ -41,12 +41,11 @@ function resolveBundledSoulEntry(): string | undefined {
 
 /**
  * Default Soul configuration for NanoPencil
- * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
+ * @param ctx Agent directory context.
  */
-export function getSoulConfig(agentDir?: string) {
+export function getSoulConfig(ctx: AgentDirContext = defaultAgentDirContext()) {
   const envSoulDir = process.env.SOUL_DIR;
-  const baseAgentDir = agentDir ?? getAgentDir();
-  let soulDir = join(baseAgentDir, "soul");
+  let soulDir = join(ctx.path, "soul");
 
   if (envSoulDir && envSoulDir.trim()) {
     const trimmed = envSoulDir.trim();
@@ -92,9 +91,9 @@ export function getSoulConfig(agentDir?: string) {
 /**
  * Create a SoulManager instance for NanoPencil
  * Returns null if nanosoul is not installed
- * @param agentDir Optional agent directory. If omitted, uses getAgentDir().
+ * @param ctx Agent directory context.
  */
-export async function createSoulManager(agentDir?: string): Promise<SoulManagerType | null> {
+export async function createSoulManager(ctx: AgentDirContext = defaultAgentDirContext()): Promise<SoulManagerType | null> {
   // Try bundled package first
   const bundledEntry = resolveBundledSoulEntry();
   if (bundledEntry) {
@@ -103,7 +102,7 @@ export async function createSoulManager(agentDir?: string): Promise<SoulManagerT
       const bundledUrl = pathToFileURL(bundledEntry).href;
       const { SoulManager: SM } = await import(bundledUrl);
       return new SM({
-        config: getSoulConfig(agentDir),
+        config: getSoulConfig(ctx),
       });
     } catch {
       // Continue to node_modules fallback
@@ -115,21 +114,21 @@ export async function createSoulManager(agentDir?: string): Promise<SoulManagerT
     // @ts-ignore - runtime dynamic import
     const { SoulManager: SM } = await import("@pencil-agent/soul-core");
     return new SM({
-      config: getSoulConfig(agentDir),
+      config: getSoulConfig(ctx),
     });
   } catch {
     try {
       // @ts-ignore - runtime dynamic import for backwards compatibility
       const { SoulManager: SM } = await import("@pencil-agent/soul");
       return new SM({
-        config: getSoulConfig(agentDir),
+        config: getSoulConfig(ctx),
       });
     } catch {
       try {
         // @ts-ignore - runtime dynamic import for backwards compatibility
         const { SoulManager: SM } = await import("nanosoul");
         return new SM({
-          config: getSoulConfig(agentDir),
+          config: getSoulConfig(ctx),
         });
       } catch {
         // Neither package available

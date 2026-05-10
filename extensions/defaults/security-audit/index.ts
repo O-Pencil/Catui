@@ -11,25 +11,28 @@
  */
 
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
+import { AuditLogger } from "./engine/logger.js";
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
+	ExtensionContext,
 	ToolCallEvent,
 	ToolCallEventResult,
 } from "../../../core/extensions/types.js";
 import type {
-	AuditEvent,
-	AuditEventStatus,
-	AuditEventType,
-	LogQueryOptions,
+	SecurityConfig,
 	SecurityCheckResult,
-	SecurityLevel,
+	AuditEvent,
+	LogQueryOptions,
 	SecurityStats,
+	SecurityLevel,
+	AuditEventType,
+	AuditEventStatus,
 } from "./interface.js";
+import { DEFAULT_SECURITY_CONFIG } from "./interface.js";
+import { AgentDirContext } from "../../../core/agent-dir/agent-dir-context.js";
 
 // ============================================================
 // Types
@@ -45,43 +48,11 @@ interface InterceptorResult {
 // Utility Functions
 // ============================================================
 
-function generateId(): string {
-	return randomBytes(8).toString("hex");
-}
-
 function expandHome(path: string): string {
 	if (path.startsWith("~")) {
 		return join(homedir(), path.slice(1));
 	}
 	return path;
-}
-
-function getLogPath(): string {
-	const agentDir = process.env.NANOPENCIL_AGENT_DIR || join(homedir(), ".nanopencil", "agent");
-	return join(agentDir, "security-audit.json");
-}
-
-function loadLogs(): AuditEvent[] {
-	const logPath = getLogPath();
-	try {
-		if (existsSync(logPath)) {
-			const content = readFileSync(logPath, "utf-8");
-			const logs = JSON.parse(content);
-			return Array.isArray(logs) ? logs : [];
-		}
-	} catch {
-		// If error, return empty array
-	}
-	return [];
-}
-
-function saveLogs(logs: AuditEvent[]): void {
-	const logPath = getLogPath();
-	const dir = dirname(logPath);
-	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
-	}
-	writeFileSync(logPath, JSON.stringify(logs, null, 2), "utf-8");
 }
 
 // ============================================================
@@ -163,107 +134,6 @@ function checkSensitiveFile(path: string): SecurityCheckResult {
 }
 
 // ============================================================
-// Audit Logger
-// ============================================================
-
-class AuditLogger {
-	private logs: AuditEvent[] = [];
-
-	constructor() {
-		this.logs = loadLogs();
-	}
-
-	log(event: Omit<AuditEvent, "id" | "timestamp">): AuditEvent {
-		const auditEvent: AuditEvent = {
-			...event,
-			id: generateId(),
-			timestamp: new Date().toISOString(),
-		};
-
-		this.logs.push(auditEvent);
-
-		// Keep only last 10000 entries
-		if (this.logs.length > 10000) {
-			this.logs = this.logs.slice(-10000);
-		}
-
-		saveLogs(this.logs);
-		return auditEvent;
-	}
-
-	query(options?: LogQueryOptions): AuditEvent[] {
-		let filtered = [...this.logs];
-
-		if (options?.limit) {
-			filtered = filtered.slice(-options.limit);
-		}
-
-		return filtered;
-	}
-
-	getStats(): SecurityStats {
-		const byType: Record<AuditEventType, number> = {
-			command: 0,
-			file_read: 0,
-			file_write: 0,
-			file_edit: 0,
-			network: 0,
-			extension: 0,
-			session_start: 0,
-			session_end: 0,
-		};
-
-		const byLevel: Record<SecurityLevel, number> = {
-			safe: 0,
-			warning: 0,
-			dangerous: 0,
-		};
-
-		const byStatus: Record<AuditEventStatus, number> = {
-			allowed: 0,
-			blocked: 0,
-			warning: 0,
-			confirmed: 0,
-		};
-
-		const patternCounts = new Map<string, number>();
-
-		for (const log of this.logs) {
-			if (log.type in byType) byType[log.type]++;
-			if (log.level in byLevel) byLevel[log.level]++;
-			if (log.status in byStatus) byStatus[log.status]++;
-			if (log.pattern) {
-				patternCounts.set(log.pattern, (patternCounts.get(log.pattern) || 0) + 1);
-			}
-		}
-
-		const dangerousPatterns = Array.from(patternCounts.entries())
-			.map(([pattern, count]) => ({ pattern, count }))
-			.sort((a, b) => b.count - a.count)
-			.slice(0, 10);
-
-		return {
-			totalEvents: this.logs.length,
-			byType,
-			byLevel,
-			byStatus,
-			dangerousPatterns,
-			periodStart: this.logs[0]?.timestamp || new Date().toISOString(),
-			periodEnd: this.logs[this.logs.length - 1]?.timestamp || new Date().toISOString(),
-		};
-	}
-
-	clear(): void {
-		this.logs = [];
-		saveLogs([]);
-	}
-
-	exportJson(): string {
-		return JSON.stringify(this.logs, null, 2);
-	}
-}
-
-// ============================================================
 // Security Audit Extension
 // ============================================================
 
@@ -272,7 +142,18 @@ const SECURITY_MESSAGE_TYPE = "security-audit";
 // Security mode: "audit" (warn only), "strict" (block dangerous)
 const SECURITY_MODE = process.env.SECURITY_MODE as string || "strict";
 
-const logger = new AuditLogger();
+// Cache loggers per agent to support multi-agent
+const loggers = new Map<string, AuditLogger>();
+
+function getLogger(ctx: ExtensionContext): AuditLogger {
+	const agentCtx = (ctx.sessionManager as any).getAgentCtx?.() || { id: "default", path: (ctx as any).agentDir };
+	let logger = loggers.get(agentCtx.id);
+	if (!logger) {
+		logger = new AuditLogger(10000, agentCtx);
+		loggers.set(agentCtx.id, logger);
+	}
+	return logger;
+}
 
 function sendSecurityNotice(api: ExtensionAPI, content: string): void {
 	api.sendMessage(
@@ -285,7 +166,8 @@ function sendSecurityNotice(api: ExtensionAPI, content: string): void {
 	);
 }
 
-function auditAndGateToolCall(api: ExtensionAPI, event: ToolCallEvent): ToolCallEventResult | void {
+function auditAndGateToolCall(api: ExtensionAPI, event: ToolCallEvent, ctx: ExtensionContext): ToolCallEventResult | void {
+	const logger = getLogger(ctx);
 	const toolName = event.toolName;
 	const args = event.input || {};
 
@@ -353,7 +235,8 @@ export default function securityAuditExtension(api: ExtensionAPI) {
 	// /security - Show security dashboard
 	api.registerCommand("security", {
 		description: "Show security audit dashboard and logs",
-		handler: async (_args: string, _ctx: ExtensionCommandContext) => {
+		handler: async (_args: string, ctx: ExtensionCommandContext) => {
+			const logger = getLogger(ctx);
 			const stats = logger.getStats();
 			const logs = logger.query({ limit: 20 });
 
@@ -394,7 +277,8 @@ export default function securityAuditExtension(api: ExtensionAPI) {
 	// /security-logs - Show detailed logs
 	api.registerCommand("security-logs", {
 		description: "Show detailed security audit logs",
-		handler: async (args: string, _ctx: ExtensionCommandContext) => {
+		handler: async (args: string, ctx: ExtensionCommandContext) => {
+			const logger = getLogger(ctx);
 			const limit = parseInt(args) || 50;
 			const logs = logger.query({ limit });
 
@@ -425,7 +309,8 @@ export default function securityAuditExtension(api: ExtensionAPI) {
 	// /security-stats - Show statistics
 	api.registerCommand("security-stats", {
 		description: "Show security audit statistics",
-		handler: async (_args: string, _ctx: ExtensionCommandContext) => {
+		handler: async (_args: string, ctx: ExtensionCommandContext) => {
+			const logger = getLogger(ctx);
 			const stats = logger.getStats();
 
 			let content = `# Security Statistics\n\n`;
@@ -464,7 +349,8 @@ export default function securityAuditExtension(api: ExtensionAPI) {
 	// /security-clear - Clear logs
 	api.registerCommand("security-clear", {
 		description: "Clear security audit logs",
-		handler: async (_args: string, _ctx: ExtensionCommandContext) => {
+		handler: async (_args: string, ctx: ExtensionCommandContext) => {
+			const logger = getLogger(ctx);
 			logger.clear();
 			api.sendMessage(
 				{
@@ -479,5 +365,5 @@ export default function securityAuditExtension(api: ExtensionAPI) {
 
 	// Tool call is the authoritative pre-execution boundary. Returning
 	// `{ block: true }` here prevents the wrapped tool from running.
-	api.on("tool_call", (event: ToolCallEvent): ToolCallEventResult | void => auditAndGateToolCall(api, event));
+	api.on("tool_call", (event: ToolCallEvent, ctx: ExtensionContext): ToolCallEventResult | void => auditAndGateToolCall(api, event, ctx));
 }

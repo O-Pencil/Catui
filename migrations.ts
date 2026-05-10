@@ -8,6 +8,7 @@ import chalk from "chalk";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { CONFIG_DIR_NAME, getAgentDir, getBinDir } from "./config.js";
+import { defaultAgentDirContext, type AgentDirContext } from "./core/agent-dir/agent-dir-context.js";
 
 const MIGRATION_GUIDE_URL =
 	"https://github.com/O-Pencil/nanoPencil/blob/main/packages/coding-agent/CHANGELOG.md#extensions-migration";
@@ -280,10 +281,11 @@ export async function showDeprecationWarnings(warnings: string[]): Promise<void>
  *
  * @returns Object with migration results and deprecation warnings
  */
-export function runMigrations(cwd: string = process.cwd(), agentDir: string = getAgentDir()): {
+export function runMigrations(cwd: string = process.cwd(), ctx: AgentDirContext = defaultAgentDirContext()): {
 	migratedAuthProviders: string[];
 	deprecationWarnings: string[];
 } {
+	const agentDir = ctx.path;
 	const migratedAuthProviders = migrateAuthToAuthJson(agentDir);
 	migrateSessionsFromAgentRoot(agentDir);
 	migrateToolsToBin(agentDir);

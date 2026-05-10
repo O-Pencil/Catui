@@ -29,6 +29,7 @@ import type { ResourceLoader } from "../config/resource-loader.js";
 import { DefaultResourceLoader } from "../config/resource-loader.js";
 import { SessionManager } from "../session/session-manager.js";
 import { SettingsManager } from "../config/settings-manager.js";
+import { AgentDirContext, defaultAgentDirContext } from "../agent-dir/agent-dir-context.js";
 import { time } from "../timings.js";
 import {
   isSoulEnabled,
@@ -96,8 +97,10 @@ export const defaultLogger: SDKLogger = {
 export interface CreateAgentSessionOptions {
   /** Working directory for project-local discovery. Default: process.cwd() */
   cwd?: string;
-  /** Global config directory. Default: ~/.nanopencil/agent */
+  /** Global config directory. Default: ~/.pencils/agents/default */
   agentDir?: string;
+  /** Multi-agent context. */
+  agentCtx?: AgentDirContext;
 
   /** Auth storage for credentials. Default: AuthStorage.create(agentDir/auth.json) */
   authStorage?: AuthStorage;
@@ -198,13 +201,13 @@ export {
 function normalizeSettingsManager(
   candidate: SettingsManagerLike | undefined,
   cwd: string,
-  agentDir: string,
+  ctx: AgentDirContext,
 ): SettingsManager {
   if (candidate instanceof SettingsManager) {
     return candidate;
   }
 
-  const fallback = SettingsManager.create(cwd, agentDir);
+  const fallback = SettingsManager.create(cwd, ctx);
   if (!candidate || typeof candidate !== "object") {
     return fallback;
   }
@@ -278,13 +281,14 @@ export async function createAgentSession(
   const logger = options.silent ? silentLogger : (options.logger ?? defaultLogger);
 
   const cwd = options.cwd ?? process.cwd();
-  const agentDir = options.agentDir ?? getDefaultAgentDir();
+  const agentCtx = options.agentCtx ?? defaultAgentDirContext();
+  const agentDir = options.agentDir ?? agentCtx.path;
   let resourceLoader = options.resourceLoader;
 
   const settingsManager = normalizeSettingsManager(
     options.settingsManager as SettingsManagerLike | undefined,
     cwd,
-    agentDir,
+    agentCtx,
   );
 
   // Initialize i18n with locale from settings (or default to English)
@@ -293,21 +297,19 @@ export async function createAgentSession(
   setLocale(locale);
 
   // Use provided or create AuthStorage and ModelRegistry
-  const authPath = options.agentDir ? join(agentDir, "auth.json") : undefined;
-  const modelsPath = options.agentDir
-    ? join(agentDir, "models.json")
-    : undefined;
-  const authStorage = options.authStorage ?? AuthStorage.create(authPath);
+  const authStorage = options.authStorage ?? AuthStorage.create(agentCtx);
+  const modelsPath = join(agentDir, "models.json");
   const modelRegistry =
     options.modelRegistry ?? new ModelRegistry(authStorage, modelsPath);
 
-  const sessionManager = options.sessionManager ?? SessionManager.create(cwd);
+  const sessionManager = options.sessionManager ?? SessionManager.create(cwd, undefined, agentCtx);
 
   if (!resourceLoader) {
     resourceLoader = new DefaultResourceLoader({
       cwd,
       agentDir,
       settingsManager,
+      agentCtx,
     });
     await resourceLoader.reload();
     time("resourceLoader.reload");
@@ -556,7 +558,7 @@ export async function createAgentSession(
   let soulManagerFactory: (() => Promise<SoulManager | null>) | undefined;
   if (isSoulEnabled(options)) {
     try {
-      const soulMgr = await createSoulManager();
+      const soulMgr = await createSoulManager(agentCtx);
       if (soulMgr) {
         soulManager = soulMgr;
         await soulMgr.initialize();
@@ -572,7 +574,7 @@ export async function createAgentSession(
 
     soulManagerFactory = async () => {
       try {
-        const mgr = await createSoulManager();
+        const mgr = await createSoulManager(agentCtx);
         if (!mgr) return null;
         await mgr.initialize();
         time("soul.initialize");
@@ -590,6 +592,7 @@ export async function createAgentSession(
     settingsManager,
     cwd,
     agentDir,
+    agentCtx,
     scopedModels: options.scopedModels,
     resourceLoader,
     customTools: staticCustomTools,

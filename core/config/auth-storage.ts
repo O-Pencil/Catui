@@ -17,6 +17,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "f
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
 import { getAgentDir } from "../../config.js";
+import { defaultAgentDirContext, type AgentDirContext } from "../agent-dir/agent-dir-context.js";
 import { resolveConfigValue } from "./resolve-config-value.js";
 
 export type ApiKeyCredential = {
@@ -165,8 +166,9 @@ export class AuthStorage {
 		this.reload();
 	}
 
-	static create(authPath?: string): AuthStorage {
-		return new AuthStorage(new FileAuthStorageBackend(authPath ?? join(getAgentDir(), "auth.json")));
+	static create(ctxOrPath: string | AgentDirContext = defaultAgentDirContext()): AuthStorage {
+		const authPath = typeof ctxOrPath === "string" ? ctxOrPath : join(ctxOrPath.path, "auth.json");
+		return new AuthStorage(new FileAuthStorageBackend(authPath));
 	}
 
 	static fromStorage(storage: AuthStorageBackend): AuthStorage {

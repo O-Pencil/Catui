@@ -278,7 +278,24 @@ export function getConfigRoot(): string {
 // Multi-Agent: PENCILS_HOME & AgentDirContext support (N2)
 // =============================================================================
 
-import { validateAgentId } from "./core/agent-dir/agent-dir-context.js";
+/**
+ * Regex for a valid agent <id>.
+ * ASCII slug: lowercase alphanumeric start, then [a-z0-9._-], max 64 chars.
+ * Design doc §4.1.
+ */
+const AGENT_ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+/**
+ * Validate an agent id. Returns the id if valid, throws otherwise.
+ */
+function validateAgentId(id: string): string {
+	if (!AGENT_ID_RE.test(id)) {
+		throw new Error(
+			`Invalid agent id "${id}". Must match ${AGENT_ID_RE.source} (lowercase ASCII slug, max 64 chars).`,
+		);
+	}
+	return id;
+}
 
 /**
  * Resolve the Pencils ecosystem root directory.
@@ -303,6 +320,17 @@ export function getPencilsHome(): string {
 	}
 	// Default: ~/.pencils (future target; for now fallback to legacy behavior)
 	return join(homedir(), ".pencils");
+}
+
+/** New Pencils agents root (e.g., ~/.pencils/agents/) */
+export function getPencilsAgentsDir(): string {
+	const envAgents = process.env.PENCILS_AGENTS_DIR;
+	if (envAgents) {
+		if (envAgents === "~") return homedir();
+		if (envAgents.startsWith("~/")) return homedir() + envAgents.slice(1);
+		return envAgents;
+	}
+	return join(getPencilsHome(), "agents");
 }
 
 /**
@@ -333,16 +361,7 @@ export function resolveAgentDirContext(agentId?: string) {
 		return { id, path: join(base, id) };
 	}
 
-	// 3. Check for data in legacy ~/.nanopencil/agent/ (Backward Compatibility)
-	// If it's the default agent and the new path doesn't exist but the old one does, use the old one.
-	const legacyPath = join(homedir(), ".nanopencil", "agent");
-	const newDefaultPath = join(getPencilsHome(), "agents", "default");
-
-	if (id === "default" && !existsSync(newDefaultPath) && existsSync(legacyPath)) {
-		return { id: "default" as const, path: legacyPath };
-	}
-
-	// 4. Default multi-agent path under PENCILS_HOME
+	// 3. Default multi-agent path under PENCILS_HOME
 	return { id, path: join(getPencilsHome(), "agents", id) };
 }
 

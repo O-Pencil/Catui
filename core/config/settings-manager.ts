@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
 import { APP_NAME, CONFIG_DIR_NAME, getAgentDir } from "../../config.js";
+import { defaultAgentDirContext, type AgentDirContext } from "../agent-dir/agent-dir-context.js";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 
 export interface CompactionSettings {
@@ -183,8 +184,8 @@ export class FileSettingsStorage implements SettingsStorage {
 	private globalSettingsPath: string;
 	private projectSettingsPath: string;
 
-	constructor(cwd: string = process.cwd(), agentDir: string = getAgentDir()) {
-		this.globalSettingsPath = join(agentDir, "settings.json");
+	constructor(cwd: string = process.cwd(), ctx: AgentDirContext = defaultAgentDirContext()) {
+		this.globalSettingsPath = join(ctx.path, "settings.json");
 		this.projectSettingsPath = join(cwd, CONFIG_DIR_NAME, "settings.json");
 	}
 
@@ -328,14 +329,16 @@ export class SettingsManager {
 	}
 
 	/** Create a SettingsManager that loads from files */
-	static create(cwd: string = process.cwd(), agentDir: string = getAgentDir()): SettingsManager {
-		const storage = new FileSettingsStorage(cwd, agentDir);
+	static create(cwd: string = process.cwd(), ctxOrPath: string | AgentDirContext = defaultAgentDirContext()): SettingsManager {
+		const ctx = typeof ctxOrPath === "string" ? { id: "legacy", path: ctxOrPath } : ctxOrPath;
+		const storage = new FileSettingsStorage(cwd, ctx);
 		return SettingsManager.fromStorage(storage);
 	}
 
 	/** Create a SettingsManager that loads from files async */
-	static async createAsync(cwd: string = process.cwd(), agentDir: string = getAgentDir()): Promise<SettingsManager> {
-		const storage = new FileSettingsStorage(cwd, agentDir);
+	static async createAsync(cwd: string = process.cwd(), ctxOrPath: string | AgentDirContext = defaultAgentDirContext()): Promise<SettingsManager> {
+		const ctx = typeof ctxOrPath === "string" ? { id: "legacy", path: ctxOrPath } : ctxOrPath;
+		const storage = new FileSettingsStorage(cwd, ctx);
 		return SettingsManager.fromStorageAsync(storage);
 	}
 

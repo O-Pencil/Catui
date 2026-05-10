@@ -8,6 +8,7 @@
 import { type ImageContent, modelsAreEqual, supportsXhigh } from "@pencil-agent/ai";
 import chalk from "chalk";
 import { join, resolve } from "path";
+import { homedir } from "node:os";
 import { createInterface } from "readline";
 import { type Args, parseArgs, printHelp } from "./cli/args.js";
 import { selectConfig } from "./cli/config-selector.js";
@@ -25,9 +26,11 @@ import { ModelRegistry } from "./core/model-registry.js";
 import { resolveCliModel, resolveModelScope, type ScopedModel } from "./core/model-resolver.js";
 import { DefaultPackageManager } from "./core/package-manager.js";
 import { DefaultResourceLoader } from "./core/config/resource-loader.js";
-import { type CreateAgentSessionOptions, createAgentSession } from "./core/runtime/sdk.js";
+import { CreateAgentSessionOptions, createAgentSession } from "./core/runtime/sdk.js";
 import { SessionManager } from "./core/session/session-manager.js";
 import { SettingsManager } from "./core/config/settings-manager.js";
+import { AgentDirContext, defaultAgentDirContext, loadAgentDirContext } from "./core/agent-dir/agent-dir-context.js";
+
 import { time } from "./core/timings.js";
 import { allTools } from "./core/tools/index.js";
 import { runMigrations, showDeprecationWarnings } from "./migrations.js";
@@ -312,7 +315,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 	return { command, source, local, help, invalidOption };
 }
 
-async function handlePackageCommand(args: string[], agentDir: string): Promise<boolean> {
+async function handlePackageCommand(args: string[], ctx: AgentDirContext): Promise<boolean> {
 	const options = parsePackageCommand(args);
 	if (!options) {
 		return false;
@@ -339,7 +342,8 @@ async function handlePackageCommand(args: string[], agentDir: string): Promise<b
 	}
 
 	const cwd = process.cwd();
-	const settingsManager = SettingsManager.create(cwd, agentDir);
+	const agentDir = ctx.path;
+	const settingsManager = SettingsManager.create(cwd, ctx);
 	reportSettingsErrors(settingsManager, "package command");
 	const packageManager = new DefaultPackageManager({ cwd, agentDir, settingsManager });
 
@@ -505,9 +509,9 @@ async function promptConfirm(message: string): Promise<boolean> {
 	});
 }
 
-async function createSessionManager(parsed: Args, cwd: string, agentDir?: string): Promise<SessionManager | undefined> {
+async function createSessionManager(parsed: Args, cwd: string, ctx: AgentDirContext): Promise<SessionManager | undefined> {
 	if (parsed.noSession) {
-		return SessionManager.inMemory();
+		return SessionManager.inMemory(cwd, ctx);
 	}
 	if (parsed.session) {
 		const resolved = await resolveSessionPath(parsed.session, cwd, parsed.sessionDir);
@@ -515,7 +519,7 @@ async function createSessionManager(parsed: Args, cwd: string, agentDir?: string
 		switch (resolved.type) {
 			case "path":
 			case "local":
-				return SessionManager.open(resolved.path, parsed.sessionDir, agentDir);
+				return SessionManager.open(resolved.path, parsed.sessionDir, ctx);
 
 			case "global": {
 				// Session found in different project - ask user if they want to fork
@@ -525,7 +529,7 @@ async function createSessionManager(parsed: Args, cwd: string, agentDir?: string
 					console.log(chalk.dim("Aborted."));
 					process.exit(0);
 				}
-				return SessionManager.forkFrom(resolved.path, cwd, parsed.sessionDir, agentDir);
+				return SessionManager.forkFrom(resolved.path, cwd, parsed.sessionDir, ctx);
 			}
 
 			case "not_found":
@@ -534,12 +538,12 @@ async function createSessionManager(parsed: Args, cwd: string, agentDir?: string
 		}
 	}
 	if (parsed.continue) {
-		return SessionManager.continueRecent(cwd, parsed.sessionDir, agentDir);
+		return SessionManager.continueRecent(cwd, parsed.sessionDir, ctx);
 	}
 	// --resume is handled separately (needs picker UI)
 	// If --session-dir provided without --continue/--resume, create new session there
 	if (parsed.sessionDir) {
-		return SessionManager.create(cwd, parsed.sessionDir, agentDir);
+		return SessionManager.create(cwd, parsed.sessionDir, ctx);
 	}
 	// Default case (new session) returns undefined, SDK will create one
 	return undefined;
@@ -551,10 +555,11 @@ function buildSessionOptions(
 	sessionManager: SessionManager | undefined,
 	modelRegistry: ModelRegistry,
 	settingsManager: SettingsManager,
-	agentDir?: string,
+	ctx: AgentDirContext,
 ): { options: CreateAgentSessionOptions; cliThinkingFromModel: boolean } {
 	const options: CreateAgentSessionOptions = {
-		agentDir,
+		agentDir: ctx.path,
+		agentCtx: ctx,
 	};
 	let cliThinkingFromModel = false;
 
@@ -644,13 +649,14 @@ function buildSessionOptions(
 	return { options, cliThinkingFromModel };
 }
 
-async function handleConfigCommand(args: string[], agentDir: string): Promise<boolean> {
+async function handleConfigCommand(args: string[], ctx: AgentDirContext): Promise<boolean> {
 	if (args[0] !== "config") {
 		return false;
 	}
 
 	const cwd = process.cwd();
-	const settingsManager = SettingsManager.create(cwd, agentDir);
+	const agentDir = ctx.path;
+	const settingsManager = SettingsManager.create(cwd, ctx);
 	reportSettingsErrors(settingsManager, "config command");
 	const packageManager = new DefaultPackageManager({ cwd, agentDir, settingsManager });
 
@@ -685,6 +691,17 @@ async function handleMigrateCommand(args: string[]): Promise<boolean> {
 export async function main(args: string[]) {
 	profileCheckpoint("main_entry");
 
+	// Auto-migration check: ~/.nanopencil -> ~/.pencils
+	const migrationManager = new MigrationManager();
+	if (migrationManager.isMigrationNeeded()) {
+		console.log(chalk.blue(`\n🚀 Initializing Pencils ecosystem...`));
+		const migrated = migrationManager.runSilent();
+		if (migrated.length > 0) {
+			console.log(chalk.green(`✅ Successfully migrated legacy data: ${migrated.join(", ")}`));
+			console.log(chalk.dim(`New home: ${join(homedir(), ".pencils/")}\n`));
+		}
+	}
+
 	// Initial parse to get agent and basic flags
 	const firstPass = parseArgs(args);
 	const agentDirCtx = resolveAgentDirContext(firstPass.agent);
@@ -701,27 +718,28 @@ export async function main(args: string[]) {
 		return;
 	}
 
-	if (await handlePackageCommand(args, agentDir)) {
+	if (await handlePackageCommand(args, agentDirCtx)) {
 		return;
 	}
 
-	if (await handleConfigCommand(args, agentDir)) {
+	if (await handleConfigCommand(args, agentDirCtx)) {
 		return;
 	}
+
 
 	// Run migrations (pass cwd for project-local migrations)
 	const cwd = resolveWorkingDirectory(firstPass.cwd);
-	const { migratedAuthProviders: migratedProviders, deprecationWarnings } = runMigrations(cwd, agentDir);
+	const { migratedAuthProviders: migratedProviders, deprecationWarnings } = runMigrations(cwd, agentDirCtx);
 	profileCheckpoint("after_migrations");
 
 	// Early load extensions to discover their CLI flags
 	profileCheckpoint("before_settings_manager");
-	const settingsManager = SettingsManager.create(cwd, agentDir);
+	const settingsManager = SettingsManager.create(cwd, agentDirCtx);
 	profileCheckpoint("settings_manager_ready");
 	profileCheckpoint("auth_storage_created", "settings_manager_ready");
 	reportSettingsErrors(settingsManager, "startup");
 
-	const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
+	const authStorage = AuthStorage.create(agentDirCtx);
 	if (APP_NAME === "nanopencil") {
 		ensureNanopencilDefaultConfig(agentDir);
 		// Let nanomem use nanopencil's config directory to store memory
@@ -895,23 +913,23 @@ export async function main(args: string[]) {
 	}
 
 	// Create session manager based on CLI flags
-	let sessionManager = await createSessionManager(parsed, parsedCwd, agentDir);
+	let sessionManager = await createSessionManager(parsed, parsedCwd, agentDirCtx);
 
 	// Handle --resume: show session picker
 	if (parsed.resume) {
 		// Initialize keybindings so session picker respects user config
-		KeybindingsManager.create(agentDir);
+		KeybindingsManager.create(agentDirCtx);
 
 		const selectedPath = await selectSession(
-			(onProgress) => SessionManager.list(parsedCwd, parsed.sessionDir, onProgress, agentDir),
-			(onProgress) => SessionManager.listAll(onProgress, agentDir),
+			(onProgress) => SessionManager.list(parsedCwd, parsed.sessionDir, onProgress, agentDirCtx),
+			(onProgress) => SessionManager.listAll(onProgress, agentDirCtx),
 		);
 		if (!selectedPath) {
 			console.log(chalk.dim("No session selected"));
 			stopThemeWatcher();
 			process.exit(0);
 		}
-		sessionManager = SessionManager.open(selectedPath, undefined, agentDir);
+		sessionManager = SessionManager.open(selectedPath, undefined, agentDirCtx);
 	}
 
 	const { options: sessionOptions, cliThinkingFromModel } = buildSessionOptions(
@@ -920,7 +938,7 @@ export async function main(args: string[]) {
 		sessionManager,
 		modelRegistry,
 		settingsManager,
-		agentDir,
+		agentDirCtx,
 	);
 	// NanoPencil enables MCP by default; disabled in offline mode or with --no-mcp flag
 	sessionOptions.agentDir = agentDir;
@@ -972,13 +990,14 @@ export async function main(args: string[]) {
 		const { runAcpMode } = await import("./modes/acp/acp-mode.js");
 		const createAcpSessionForCwd = async (workspaceCwd: string) => {
 			const resolvedWorkspaceCwd = resolveWorkingDirectory(workspaceCwd);
-			const workspaceSettingsManager = SettingsManager.create(resolvedWorkspaceCwd, agentDir);
+			const workspaceSettingsManager = SettingsManager.create(resolvedWorkspaceCwd, agentDirCtx);
 			reportSettingsErrors(workspaceSettingsManager, "acp startup");
 
 			const workspaceResourceLoader = new DefaultResourceLoader({
 				cwd: resolvedWorkspaceCwd,
 				agentDir,
 				settingsManager: workspaceSettingsManager,
+				agentCtx: agentDirCtx,
 				additionalExtensionPaths: [...defaultExtPaths, ...(parsed.extensions ?? [])],
 				additionalSkillPaths: parsed.skills,
 				additionalPromptTemplatePaths: parsed.promptTemplates,
@@ -1007,14 +1026,15 @@ export async function main(args: string[]) {
 			}
 
 			const workspaceSessionManager = parsed.noSession
-				? SessionManager.inMemory(resolvedWorkspaceCwd)
-				: SessionManager.create(resolvedWorkspaceCwd, parsed.sessionDir);
+				? SessionManager.inMemory(resolvedWorkspaceCwd, agentDirCtx)
+				: SessionManager.create(resolvedWorkspaceCwd, parsed.sessionDir, agentDirCtx);
 			const { options: workspaceSessionOptions } = buildSessionOptions(
 				parsed,
 				workspaceScopedModels,
 				workspaceSessionManager,
 				modelRegistry,
 				workspaceSettingsManager,
+				agentDirCtx,
 			);
 			workspaceSessionOptions.cwd = resolvedWorkspaceCwd;
 			workspaceSessionOptions.authStorage = authStorage;
