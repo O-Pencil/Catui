@@ -75,6 +75,7 @@ export function createGrepTool(cwd: string, options?: GrepToolOptions): AgentToo
 		label: "grep",
 		description: `Search file contents for a pattern. Returns matching lines with file paths and line numbers. Respects .gitignore. Output is truncated to ${DEFAULT_LIMIT} matches or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Long lines are truncated to ${GREP_MAX_LINE_LENGTH} chars.`,
 		parameters: grepSchema,
+		isConcurrencySafe: true,
 		execute: async (
 			_toolCallId: string,
 			{

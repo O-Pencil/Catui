@@ -4,7 +4,7 @@
  */
 /**
  * [WHO]: AgentOptions, Agent
- * [FROM]: Depends on ./agent-loop.js
+ * [FROM]: Depends on ./agent-loop.js and ./structured-adaptive-agent-loop.js
  * [TO]: Consumed by packages/agent-core/src/index.ts
  * [HERE]: packages/agent-core/src/agent.ts -
  */
@@ -21,9 +21,13 @@ import {
 	type Transport,
 } from "@pencil-agent/ai";
 import { agentLoop, agentLoopContinue } from "./agent-loop.js";
+import { structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue } from "./structured-adaptive-agent-loop.js";
+import { normalizeAgentLoopFramework } from "./types.js";
 import type {
 	AgentContext,
 	AgentEvent,
+	AgentLoopFramework,
+	AgentLoopFrameworkInput,
 	AgentLoopConfig,
 	AgentMessage,
 	AgentState,
@@ -31,6 +35,8 @@ import type {
 	StreamFn,
 	ThinkingLevel,
 } from "./types.js";
+
+type ModelWithAgentLoopFramework = Model<any> & { agentLoopFramework?: AgentLoopFramework };
 
 /**
  * Default convertToLlm: Keep only LLM-compatible messages, convert attachments.
@@ -98,6 +104,17 @@ export interface AgentOptions {
 	 * Default: 60000 (60 seconds). Set to 0 to disable the cap.
 	 */
 	maxRetryDelayMs?: number;
+
+	/**
+	 * Force a loop framework for all models in this Agent.
+	 * When omitted, the current model's `agentLoopFramework` setting is used.
+	 */
+	agentLoopFramework?: AgentLoopFrameworkInput;
+
+	/**
+	 * Optional tool permission gate used by low-intelligence-adaptation loop execution.
+	 */
+	canUseTool?: AgentLoopConfig["canUseTool"];
 }
 
 export class Agent {
@@ -129,6 +146,8 @@ export class Agent {
 	private _thinkingBudgets?: ThinkingBudgets;
 	private _transport: Transport;
 	private _maxRetryDelayMs?: number;
+	private _agentLoopFramework?: AgentLoopFramework;
+	private canUseTool?: AgentLoopConfig["canUseTool"];
 
 	constructor(opts: AgentOptions = {}) {
 		this._state = { ...this._state, ...opts.initialState };
@@ -142,6 +161,8 @@ export class Agent {
 		this._thinkingBudgets = opts.thinkingBudgets;
 		this._transport = opts.transport ?? "sse";
 		this._maxRetryDelayMs = opts.maxRetryDelayMs;
+		this._agentLoopFramework = normalizeAgentLoopFramework(opts.agentLoopFramework);
+		this.canUseTool = opts.canUseTool;
 	}
 
 	/**
@@ -200,6 +221,16 @@ export class Agent {
 	 */
 	set maxRetryDelayMs(value: number | undefined) {
 		this._maxRetryDelayMs = value;
+	}
+
+	get agentLoopFramework(): AgentLoopFramework {
+		return normalizeAgentLoopFramework(
+			this._agentLoopFramework ?? (this._state.model as ModelWithAgentLoopFramework).agentLoopFramework,
+		) ?? "high-intelligence";
+	}
+
+	setAgentLoopFramework(value: AgentLoopFrameworkInput | undefined) {
+		this._agentLoopFramework = normalizeAgentLoopFramework(value);
 	}
 
 	get state(): AgentState {
@@ -434,6 +465,7 @@ export class Agent {
 
 		const config: AgentLoopConfig = {
 			model,
+			loopFramework: this.agentLoopFramework,
 			reasoning,
 			sessionId: this._sessionId,
 			transport: this._transport,
@@ -442,6 +474,7 @@ export class Agent {
 			convertToLlm: this.convertToLlm,
 			transformContext: this.transformContext,
 			getApiKey: this.getApiKey,
+			canUseTool: this.canUseTool,
 			getSteeringMessages: async () => {
 				if (skipInitialSteeringPoll) {
 					skipInitialSteeringPoll = false;
@@ -455,9 +488,14 @@ export class Agent {
 		let partial: AgentMessage | null = null;
 
 		try {
+			const useStructuredAdaptiveLoop = config.loopFramework === "low-intelligence";
 			const stream = messages
-				? agentLoop(messages, context, config, this.abortController.signal, this.streamFn)
-				: agentLoopContinue(context, config, this.abortController.signal, this.streamFn);
+				? useStructuredAdaptiveLoop
+					? structuredAdaptiveAgentLoop(messages, context, config, this.abortController.signal, this.streamFn)
+					: agentLoop(messages, context, config, this.abortController.signal, this.streamFn)
+				: useStructuredAdaptiveLoop
+					? structuredAdaptiveAgentLoopContinue(context, config, this.abortController.signal, this.streamFn)
+					: agentLoopContinue(context, config, this.abortController.signal, this.streamFn);
 
 			for await (const event of stream) {
 				// Update internal state based on events

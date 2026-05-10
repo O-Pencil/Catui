@@ -375,6 +375,7 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 				const state: RpcSessionState = {
 					model: session.model,
 					thinkingLevel: session.thinkingLevel,
+					agentLoopFramework: session.agentLoopFramework,
 					isStreaming: session.isStreaming,
 					isCompacting: session.isCompacting,
 					steeringMode: session.steeringMode,
@@ -431,6 +432,15 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 					return success(id, "cycle_thinking_level", null);
 				}
 				return success(id, "cycle_thinking_level", { level });
+			}
+
+			// =================================================================
+			// Agent Loop
+			// =================================================================
+
+			case "set_agent_loop_framework": {
+				session.setAgentLoopFramework(command.framework ?? undefined);
+				return success(id, "set_agent_loop_framework");
 			}
 
 			// =================================================================

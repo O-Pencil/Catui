@@ -54,6 +54,7 @@ export function createTimeTool(): AgentTool<typeof timeSchema> {
 		description:
 			"Get the current system time. You must use this for time-sensitive questions such as 'what time is it', 'what day is it', 'today', 'tomorrow', 'yesterday', deadlines, schedules, elapsed time, or any request that depends on the real current date/time instead of prompt context.",
 		parameters: timeSchema,
+		isConcurrencySafe: true,
 		execute: async (_toolCallId, { timeZone, locale }: TimeToolInput) => {
 			return {
 				content: [{ type: "text", text: formatTimeSnapshot(timeZone, locale) }],

@@ -23,6 +23,8 @@ export interface BashExecutorOptions {
 	onChunk?: (chunk: string) => void;
 	/** AbortSignal for cancellation */
 	signal?: AbortSignal;
+	/** Working directory for the command. Defaults to process cwd. */
+	cwd?: string;
 }
 
 export interface BashResult {
@@ -60,6 +62,7 @@ export function executeBash(command: string, options?: BashExecutorOptions): Pro
 	return new Promise((resolve, reject) => {
 		const { shell, args } = getShellConfig();
 		const child: ChildProcess = spawn(shell, [...args, command], {
+			cwd: options?.cwd,
 			detached: true,
 			env: getShellEnv(),
 			stdio: ["ignore", "pipe", "pipe"],

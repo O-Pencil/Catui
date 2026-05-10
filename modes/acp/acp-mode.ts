@@ -86,6 +86,7 @@ const BUILTIN_SLASH_COMMAND_NAME_SET = new Set(
 );
 const ACP_SUPPORTED_BUILTIN_COMMANDS = new Set([
 	"compact",
+	"agent-loop",
 	"model",
 	"name",
 	"new",
@@ -97,6 +98,7 @@ const ACP_SUPPORTED_BUILTIN_COMMANDS = new Set([
 ]);
 const ACP_COMMAND_INPUT_HINTS = new Map<string, string>([
 	["compact", "Optional compaction instructions"],
+	["agent-loop", "high-intelligence or low-intelligence"],
 	["model", "provider/model or model id"],
 	["name", "New session name"],
 	["resume", "Session id or title"],
@@ -852,6 +854,7 @@ class NanoPencilAgent implements acp.Agent {
 				`Session file: ${stats.sessionFile ?? "(in-memory)"}`,
 				`Model: ${current ? `${current.provider}/${current.id}` : "none"}`,
 				`Thinking: ${this.session.thinkingLevel}`,
+				`Agent loop: ${this.session.agentLoopFramework}`,
 				`Messages: ${stats.totalMessages} total (${stats.userMessages} user, ${stats.assistantMessages} assistant, ${stats.toolResults} tool results)`,
 				`Tool calls: ${stats.toolCalls}`,
 			];
@@ -962,6 +965,32 @@ class NanoPencilAgent implements acp.Agent {
 
 			this.session.setThinkingLevel(arg as any);
 			await this.sendAssistantText(sessionId, `Thinking level set to ${this.session.thinkingLevel}.`);
+			return true;
+		}
+
+		if (trimmed === "/agent-loop" || trimmed.startsWith("/agent-loop ")) {
+			const arg = trimmed.slice("/agent-loop".length).trim().toLowerCase();
+			const choices = ["high-intelligence", "low-intelligence"] as const;
+			const normalized =
+				arg === "standard" ? "high-intelligence" :
+				arg === "structured-adaptive" ? "low-intelligence" :
+				arg;
+			if (!arg) {
+				await this.sendAssistantText(
+					sessionId,
+					`Current agent loop: ${this.session.agentLoopFramework}\nAvailable frameworks: ${choices.join(", ")}`,
+				);
+				return true;
+			}
+			if (!choices.includes(normalized as any)) {
+				await this.sendAssistantText(
+					sessionId,
+					`Unknown agent loop framework: ${arg}\nAvailable frameworks: ${choices.join(", ")}`,
+				);
+				return true;
+			}
+			this.session.setAgentLoopFramework(normalized as any);
+			await this.sendAssistantText(sessionId, `Agent loop framework set to ${this.session.agentLoopFramework}.`);
 			return true;
 		}
 

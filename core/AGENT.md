@@ -58,9 +58,9 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 - [FROM]: loader.ts
 - [TO]: (check imports)
 - [HERE]: extension orchestration
-`wrapper.ts`: Wraps user tools with extension before/after hooks
+`wrapper.ts`: Wraps user tools with extension before/after hooks; lets tool_result hooks replace both successful output and error text
 
-`types.ts`: All extension-related TypeScript types and interfaces
+`types.ts`: All extension-related TypeScript types and interfaces, including tool_call input replacement results
 
 `index.ts`: Barrel exports for extension system
 
@@ -148,7 +148,7 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 
 `slash-commands.ts`: Built-in slash command implementations
 
-`bash-executor.ts`: Shared bash execution logic
+`bash-executor.ts`: Shared bash execution logic with streaming, truncation, cancellation, and explicit cwd support
 
 `exec.ts`: Shared child-process execution helper for extension and package manager commands
 

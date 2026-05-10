@@ -6,7 +6,7 @@
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import * as readline from "node:readline";
-import type { AgentEvent, AgentMessage, ThinkingLevel } from "@pencil-agent/agent-core";
+import type { AgentEvent, AgentLoopFramework, AgentMessage, ThinkingLevel } from "@pencil-agent/agent-core";
 import type { ImageContent } from "@pencil-agent/ai";
 import type { SessionStats } from "../../core/runtime/agent-session.js";
 import type { BashResult } from "../../core/bash-executor.js";
@@ -19,6 +19,7 @@ import type { RpcCommand, RpcResponse, RpcSessionState, RpcSlashCommand } from "
 
 /** Distributive Omit that works with union types */
 type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
+type AgentLoopFrameworkInput = AgentLoopFramework | "standard" | "structured-adaptive";
 
 /** RpcCommand without the id field (for internal send) */
 type RpcCommandBody = DistributiveOmit<RpcCommand, "id">;
@@ -252,6 +253,13 @@ export class RpcClient {
 	async cycleThinkingLevel(): Promise<{ level: ThinkingLevel } | null> {
 		const response = await this.send({ type: "cycle_thinking_level" });
 		return this.getData(response);
+	}
+
+	/**
+	 * Set agent loop framework for this session. Pass null to use the model default.
+	 */
+	async setAgentLoopFramework(framework: AgentLoopFrameworkInput | null): Promise<void> {
+		await this.send({ type: "set_agent_loop_framework", framework });
 	}
 
 	/**

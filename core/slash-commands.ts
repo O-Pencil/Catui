@@ -24,6 +24,7 @@ export interface BuiltinSlashCommand {
 export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "settings", descriptionKey: "slash.settings" },
 	{ name: "model", descriptionKey: "slash.model" },
+	{ name: "agent-loop", descriptionKey: "slash.agent-loop" },
 	{ name: "scoped-models", descriptionKey: "slash.scoped-models" },
 	{ name: "apikey", descriptionKey: "slash.apikey" },
 	{ name: "mcp", descriptionKey: "slash.mcp" },

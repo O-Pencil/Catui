@@ -4,11 +4,13 @@
  * [TO]: Consumed by modes/index.ts, modes/rpc/rpc-client.ts, modes/rpc/rpc-mode.ts
  * [HERE]: modes/rpc/rpc-types.ts - RPC protocol type definitions
  */
-import type { AgentMessage, ThinkingLevel } from "@pencil-agent/agent-core";
+import type { AgentLoopFramework, AgentMessage, ThinkingLevel } from "@pencil-agent/agent-core";
 import type { ImageContent, Model } from "@pencil-agent/ai";
 import type { SessionStats } from "../../core/runtime/agent-session.js";
 import type { BashResult } from "../../core/bash-executor.js";
 import type { CompactionResult } from "../../core/session/compaction/index.js";
+
+type AgentLoopFrameworkInput = AgentLoopFramework | "standard" | "structured-adaptive";
 
 // ============================================================================
 // RPC Commands (stdin)
@@ -33,6 +35,9 @@ export type RpcCommand =
 	// Thinking
 	| { id?: string; type: "set_thinking_level"; level: ThinkingLevel }
 	| { id?: string; type: "cycle_thinking_level" }
+
+	// Agent loop
+	| { id?: string; type: "set_agent_loop_framework"; framework: AgentLoopFrameworkInput | null }
 
 	// Queue modes
 	| { id?: string; type: "set_steering_mode"; mode: "all" | "one-at-a-time" }
@@ -90,6 +95,7 @@ export interface RpcSlashCommand {
 export interface RpcSessionState {
 	model?: Model<any>;
 	thinkingLevel: ThinkingLevel;
+	agentLoopFramework: AgentLoopFramework;
 	isStreaming: boolean;
 	isCompacting: boolean;
 	steeringMode: "all" | "one-at-a-time";
@@ -150,6 +156,9 @@ export type RpcResponse =
 			success: true;
 			data: { level: ThinkingLevel } | null;
 	  }
+
+	// Agent loop
+	| { id?: string; type: "response"; command: "set_agent_loop_framework"; success: true }
 
 	// Queue modes
 	| { id?: string; type: "response"; command: "set_steering_mode"; success: true }

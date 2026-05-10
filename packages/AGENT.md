@@ -19,12 +19,14 @@ The `packages/` directory contains bundled npm packages that are compiled and in
 
 **P3 Contract (index.ts):**
 `index.ts`: - [WHO]: Agent class, AgentConfig
-    - [FROM]: agent-loop.ts, agent.ts, proxy.ts
+    - [FROM]: agent-loop.ts, structured-adaptive-agent-loop.ts, agent.ts, proxy.ts
     - [HERE]: agent core barrel
 
 **Files:**
 `agent.ts`: Main agent class with message loop
 `agent-loop.ts`: Agent execution loop and state machine
+`structured-adaptive-agent-loop.ts`: low-intelligence adaptation loop implementation with scaffolded, stronger-control runs
+`structured-adaptive-tool-orchestration.ts`: low-intelligence adaptation tool batching/execution layer
 `proxy.ts`: Agent proxy for session isolation
 `types.ts`: Agent-related type definitions
 
@@ -46,7 +48,7 @@ The `packages/` directory contains bundled npm packages that are compiled and in
 `stream.ts`: Streaming utilities
 `types.ts`: Core AI types
 `providers/`: Provider implementations
-  - `anthropic.ts`: Anthropic Claude API
+  - `anthropic.ts`: Anthropic API
   - `openai-responses.ts`: OpenAI Responses API
   - `openai-completions.ts`: OpenAI Completions API
   - `google.ts`: Google Gemini API

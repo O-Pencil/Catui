@@ -8,6 +8,7 @@ import type {
 	AgentMessage,
 	AgentToolResult,
 	AgentToolUpdateCallback,
+	AgentLoopFramework,
 	ThinkingLevel,
 } from "@pencil-agent/agent-core";
 import type {
@@ -357,6 +358,16 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	description: string;
 	/** Parameter schema (TypeBox) */
 	parameters: TParams;
+	/** Alternative model-facing names accepted for transcript/tool compatibility. */
+	aliases?: string[];
+	/** Whether the tool can safely run alongside other concurrency-safe tools. */
+	isConcurrencySafe?: boolean;
+	/** How the tool should behave if the user interrupts while it is running. */
+	interruptBehavior?: "cancel" | "block";
+	/** Optional semantic validation after schema validation and before execute. */
+	validateInput?: (params: Static<TParams>) => void | string | Promise<void | string>;
+	/** Optional maximum text result size enforced by low-intelligence-adaptation tool orchestration. */
+	maxResultSizeChars?: number;
 
 	/** Usage guidance for system prompt (optional) */
 	guidance?: string;
@@ -852,6 +863,8 @@ export interface ContextEventResult {
 export interface ToolCallEventResult {
 	block?: boolean;
 	reason?: string;
+	/** Optional replacement input for the tool call. Extensions must preserve tool semantics. */
+	input?: Record<string, unknown>;
 }
 
 /** Result from user_bash event handler */
@@ -1116,13 +1129,14 @@ export interface ExtensionAPI {
 	 *   api: "anthropic-messages",
 	 *   models: [
 	 *     {
-	 *       id: "claude-sonnet-4-20250514",
-	 *       name: "Claude 4 Sonnet (proxy)",
+	 *       id: "high-intelligence-model",
+	 *       name: "High Intelligence Model (proxy)",
 	 *       reasoning: false,
 	 *       input: ["text", "image"],
 	 *       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 	 *       contextWindow: 200000,
-	 *       maxTokens: 16384
+	 *       maxTokens: 16384,
+	 *       agentLoopFramework: "low-intelligence"
 	 *     }
 	 *   ]
 	 * });
@@ -1190,9 +1204,9 @@ export interface ProviderConfig {
 
 /** Configuration for a model within a provider. */
 export interface ProviderModelConfig {
-	/** Model ID (e.g., "claude-sonnet-4-20250514"). */
+	/** Model ID (e.g., "high-intelligence-model"). */
 	id: string;
-	/** Display name (e.g., "Claude 4 Sonnet"). */
+	/** Display name (e.g., "High Intelligence Model"). */
 	name: string;
 	/** API type override for this model. */
 	api?: Api;
@@ -1208,6 +1222,8 @@ export interface ProviderModelConfig {
 	maxTokens: number;
 	/** Custom headers for this model. */
 	headers?: Record<string, string>;
+	/** Agent loop framework for this model. Defaults to the built-in nanoPencil loop. */
+	agentLoopFramework?: AgentLoopFramework;
 	/** OpenAI compatibility settings. */
 	compat?: Model<Api>["compat"];
 }

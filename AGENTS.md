@@ -274,6 +274,7 @@ Extensions can:
 | `mcp` | MCP protocol support |
 | `security-audit` | Security vulnerability detection |
 | `soul` | AI personality evolution and memory |
+| `token-save` | Default-on bash output filtering, token savings tracking, and `/tokensave` stats |
 
 ### Tools (`core/tools/`)
 
@@ -335,6 +336,7 @@ Built-in commands (`core/slash-commands.ts`):
 | Command | Purpose |
 |---------|---------|
 | `/model` | Select model |
+| `/agent-loop` | Select high-intelligence or low-intelligence loop adaptation for the current session |
 | `/thinking` | Set thinking level |
 | `/clear` | Clear conversation |
 | `/fork` | Fork session |

@@ -39,6 +39,36 @@ Auto-loaded extensions available to all users.
 - Diagnostics policy, buffering, UI prompts, and reporting live in the extension layer.
 - Core and producer extensions emit only structured observations through the extension event bus.
 
+#### token-save/ — Default Token Savings
+
+**P3 Contract:**
+`index.ts`: - [WHO]: Extension with bash tool_result/user_bash filtering, savings tracking, and /tokensave command
+    - [FROM]: core/extensions/types, core/bash-executor, token-save filters/tracking helpers
+    - [TO]: Auto-loaded by builtin-extensions.ts
+    - [HERE]: token-save extension entry
+
+`filters.ts`: Command classification and pure output filters for git, file reads, search, TS/test, JSON, and generic output
+
+`config.ts`: Trusted user/project filter loader; user filters load from `~/.pencils/token-save/filters.json`, project filters require `.nanopencil/token-save/trust.json`
+
+`lexer.ts`: Quote-aware shell segment splitter for compound command and pipe planning
+
+`rewrite.ts`: Central TokenSave rewrite registry that maps high-noise commands to internal TokenSave execution plans
+
+`runner.ts`: Capture/stream/passthrough contract that combines rewrite decisions, filters, raw recovery, and token accounting
+
+`stream.ts`: Bounded stream accumulator used by stream-mode runner paths to cap raw capture without changing process exit semantics
+
+`recovery.ts`: Raw output recovery writer for filtered command output
+
+`toml-dsl.ts`: Configuration-driven filter pipeline with strip/replace/match/keep/truncate/head/tail/max-lines stages
+
+`tracking.ts`: Session-local token savings aggregate and JSONL history persistence under `.nanopencil/token-save/`
+
+**Design Principle:**
+- Token savings must not change command execution semantics.
+- Execution planning happens before bash, while filtering occurs after bash completes; raw output recovery is written for filtered results, and small/no-op savings fall back to raw output.
+
 #### interview/ — Requirement Clarification
 
 **P3 Contract:**

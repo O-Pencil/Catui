@@ -8,6 +8,7 @@
 export const slashCommands = {
 	settings: "Open settings menu",
 	model: "Select model (opens selector UI)",
+	"agent-loop": "Set high/low-intelligence agent loop adaptation for this session",
 	"scoped-models": "Enable/disable models for Ctrl+P cycling",
 	apikey: "Update API key for current provider",
 	mcp: "Manage MCP servers (list, enable, disable)",

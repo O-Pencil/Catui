@@ -19,9 +19,14 @@ export function wrapRegisteredTool(registeredTool: RegisteredTool, runner: Exten
 		label: definition.label,
 		description: definition.description,
 		parameters: definition.parameters,
+		aliases: definition.aliases,
+		isConcurrencySafe: definition.isConcurrencySafe,
+		interruptBehavior: definition.interruptBehavior,
+		validateInput: definition.validateInput,
+		maxResultSizeChars: definition.maxResultSizeChars,
 		execute: (toolCallId, params, signal, onUpdate) =>
 			definition.execute(toolCallId, params, signal, onUpdate, runner.createContext()),
-	};
+	} as AgentTool;
 }
 
 /**
@@ -46,6 +51,7 @@ export function wrapToolWithExtensions<T>(tool: AgentTool<any, T>, runner: Exten
 			signal?: AbortSignal,
 			onUpdate?: AgentToolUpdateCallback<T>,
 		) => {
+			let toolInput = params;
 			// Emit tool_call event - extensions can block execution
 			if (runner.hasHandlers("tool_call")) {
 				try {
@@ -53,12 +59,15 @@ export function wrapToolWithExtensions<T>(tool: AgentTool<any, T>, runner: Exten
 						type: "tool_call",
 						toolName: tool.name,
 						toolCallId,
-						input: params,
+						input: toolInput,
 					})) as ToolCallEventResult | undefined;
 
 					if (callResult?.block) {
 						const reason = callResult.reason || "Tool execution was blocked by an extension";
 						throw new Error(reason);
+					}
+					if (callResult?.input) {
+						toolInput = callResult.input;
 					}
 				} catch (err) {
 					if (err instanceof Error) {
@@ -70,7 +79,7 @@ export function wrapToolWithExtensions<T>(tool: AgentTool<any, T>, runner: Exten
 
 			// Execute the actual tool
 			try {
-				const result = await tool.execute(toolCallId, params, signal, onUpdate);
+				const result = await tool.execute(toolCallId, toolInput, signal, onUpdate);
 
 				// Emit tool_result event - extensions can modify the result
 				if (runner.hasHandlers("tool_result")) {
@@ -78,7 +87,7 @@ export function wrapToolWithExtensions<T>(tool: AgentTool<any, T>, runner: Exten
 						type: "tool_result",
 						toolName: tool.name,
 						toolCallId,
-						input: params,
+						input: toolInput,
 						content: result.content,
 						details: result.details,
 						isError: false,
@@ -96,15 +105,23 @@ export function wrapToolWithExtensions<T>(tool: AgentTool<any, T>, runner: Exten
 			} catch (err) {
 				// Emit tool_result event for errors
 				if (runner.hasHandlers("tool_result")) {
-					await runner.emitToolResult({
+					const resultResult = await runner.emitToolResult({
 						type: "tool_result",
 						toolName: tool.name,
 						toolCallId,
-						input: params,
+						input: toolInput,
 						content: [{ type: "text", text: err instanceof Error ? err.message : String(err) }],
 						details: undefined,
 						isError: true,
 					});
+
+					if (resultResult?.content) {
+						const message = resultResult.content
+							.filter((part): part is { type: "text"; text: string } => part.type === "text")
+							.map((part) => part.text)
+							.join("\n");
+						throw new Error(message || (err instanceof Error ? err.message : String(err)));
+					}
 				}
 				throw err;
 			}

@@ -1,5 +1,5 @@
 /**
- * [WHO]: ThinkingBudgets, StreamOptions, SimpleStreamOptions, TextContent, ThinkingContent
+ * [WHO]: ThinkingBudgets, StreamOptions, SimpleStreamOptions, TextContent, ThinkingContent, Model
  * [FROM]: No external dependencies
  * [TO]: Consumed by packages/ai/src/index.ts
  * [HERE]: packages/ai/src/types.ts -
@@ -328,6 +328,13 @@ export interface Model<TApi extends Api> {
 	contextWindow: number;
 	maxTokens: number;
 	headers?: Record<string, string>;
+	/**
+	 * Agent loop framework used by higher-level agent runtimes.
+	 * "high-intelligence" keeps the existing high-autonomy loop; "low-intelligence"
+	 * opts into stronger scaffolding for lower-intelligence adaptation or
+	 * high-intelligence runs that need tighter control.
+	 */
+	agentLoopFramework?: "high-intelligence" | "low-intelligence";
 	/** Compatibility overrides for OpenAI-compatible APIs. If not set, auto-detected from baseUrl. */
 	compat?: TApi extends "openai-completions"
 		? OpenAICompletionsCompat

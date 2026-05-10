@@ -26,6 +26,7 @@ const BUNDLED_LOOP_EXTENSION = join(__dirname, "extensions", "defaults", "loop",
 const BUNDLED_PLAN_EXTENSION = join(__dirname, "extensions", "defaults", "plan", "index.js");
 const BUNDLED_DIAGNOSTICS_EXTENSION = join(__dirname, "extensions", "defaults", "diagnostics", "index.js");
 const BUNDLED_SAL_EXTENSION = join(__dirname, "extensions", "defaults", "sal", "index.js");
+const BUNDLED_TOKEN_SAVE_EXTENSION = join(__dirname, "extensions", "defaults", "token-save", "index.js");
 const BUNDLED_GRUB_EXTENSION = join(__dirname, "extensions", "defaults", "grub", "index.js");
 const BUNDLED_SUBAGENT_EXTENSION = join(__dirname, "extensions", "defaults", "subagent", "index.js");
 const BUNDLED_TEAM_EXTENSION = join(__dirname, "extensions", "defaults", "team", "index.js");
@@ -94,6 +95,14 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const salTs = join(__dirname, "extensions", "defaults", "sal", "index.ts");
 		if (existsSync(salTs)) paths.push(salTs);
+	}
+
+	// === TokenSave extension (default-on command output filtering and savings analytics) ===
+	if (existsSync(BUNDLED_TOKEN_SAVE_EXTENSION)) {
+		paths.push(BUNDLED_TOKEN_SAVE_EXTENSION);
+	} else {
+		const tokenSaveTs = join(__dirname, "extensions", "defaults", "token-save", "index.ts");
+		if (existsSync(tokenSaveTs)) paths.push(tokenSaveTs);
 	}
 
 	// === NanoMem extension ===

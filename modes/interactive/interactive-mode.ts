@@ -339,7 +339,7 @@ export class InteractiveMode {
   >();
   private widgetContainerAbove!: Container;
   private widgetContainerBelow!: Container;
-  /** Pet column next to the input (right side, Claude Code–style). */
+  /** Pet column next to the input (right side, compact coding-agent style). */
   private buddySlot!: Container;
   private editorBuddyLayout!: EditorBuddyLayout;
 
@@ -463,7 +463,7 @@ export class InteractiveMode {
           label: `${m.provider}/${m.id}`,
         }));
 
-        // Fuzzy filter by model ID + provider (allows "opus anthropic" to match)
+        // Fuzzy filter by model ID + provider (allows cross-token model/provider matching)
         const filtered = fuzzyFilter(
           items,
           prefix,
@@ -3031,6 +3031,11 @@ export class InteractiveMode {
       await this.handleModelCommand(searchTerm);
       return true;
     }
+    if (text === "/agent-loop" || text.startsWith("/agent-loop ")) {
+      this.handleAgentLoopCommand(text);
+      clear();
+      return true;
+    }
     if (text === "/mcp" || text.startsWith("/mcp ")) {
       await this.handleMcpCommand(text);
       clear();
@@ -4152,6 +4157,33 @@ export class InteractiveMode {
       this.updateEditorBorderColor();
       this.showStatus(`Thinking level: ${newLevel}`);
     }
+  }
+
+  private handleAgentLoopCommand(text: string): void {
+    const arg = text.slice("/agent-loop".length).trim().toLowerCase();
+    const choices = ["high-intelligence", "low-intelligence"] as const;
+    const normalized =
+      arg === "standard" ? "high-intelligence" :
+      arg === "structured-adaptive" ? "low-intelligence" :
+      arg;
+
+    if (!arg) {
+      this.showStatus(
+        `Agent loop: ${this.session.agentLoopFramework} (available: ${choices.join(", ")})`,
+      );
+      return;
+    }
+
+    if (!choices.includes(normalized as any)) {
+      this.showError(
+        `Unknown agent loop framework: ${arg}\nAvailable: ${choices.join(", ")}`,
+      );
+      return;
+    }
+
+    this.session.setAgentLoopFramework(normalized as any);
+    this.footer.invalidate();
+    this.showStatus(`Agent loop framework: ${this.session.agentLoopFramework}`);
   }
 
   private async cycleModel(direction: "forward" | "backward"): Promise<void> {
@@ -6073,6 +6105,8 @@ export class InteractiveMode {
     const reasoning = state.model?.reasoning ? `reasoning ${thinkingLevel}` : "";
     const modelLine = `  Model:                ${modelId}${reasoning ? ` (${reasoning})` : ""}`;
     lines.push(theme.fg("border", `│`) + padLine(modelLine, width) + theme.fg("border", `│`));
+    const loopLine = `  Agent loop:           ${this.session.agentLoopFramework}`;
+    lines.push(theme.fg("border", `│`) + padLine(loopLine, width) + theme.fg("border", `│`));
 
     // Directory (with git branch if available)
     let cwd = this.session.cwd;

@@ -1,6 +1,7 @@
-import { type AssistantMessage, type AssistantMessageEvent, EventStream, getModel } from "@pencil-agent/ai";
+import { type AssistantMessage, type AssistantMessageEvent, EventStream, getModel, type Model } from "@pencil-agent/ai";
+import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
-import { Agent } from "../src/index.js";
+import { Agent, type AgentTool } from "../src/index.js";
 
 // Mock stream that mimics AssistantMessageEventStream
 class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
@@ -36,6 +37,14 @@ function createAssistantMessage(text: string): AssistantMessage {
 	};
 }
 
+function createToolUseMessage(content: AssistantMessage["content"]): AssistantMessage {
+	return {
+		...createAssistantMessage(""),
+		content,
+		stopReason: "toolUse",
+	};
+}
+
 describe("Agent", () => {
 	it("should create an agent instance with default state", () => {
 		const agent = new Agent();
@@ -65,6 +74,157 @@ describe("Agent", () => {
 		expect(agent.state.systemPrompt).toBe("You are a helpful assistant.");
 		expect(agent.state.model).toBe(customModel);
 		expect(agent.state.thinkingLevel).toBe("low");
+	});
+
+	it("should select the model configured agent loop framework", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const executionOrder: string[] = [];
+		let releaseFirst!: () => void;
+		const firstGate = new Promise<void>((resolve) => {
+			releaseFirst = resolve;
+		});
+
+		const slowTool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "slow_read",
+			label: "Slow read",
+			description: "Safe slow tool",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute(_toolCallId, params) {
+				executionOrder.push(`start:${params.value}`);
+				await firstGate;
+				executionOrder.push(`end:${params.value}`);
+				return { content: [{ type: "text", text: params.value }], details: { value: params.value } };
+			},
+		};
+		const fastTool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "fast_read",
+			label: "Fast read",
+			description: "Safe fast tool",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute(_toolCallId, params) {
+				executionOrder.push(`start:${params.value}`);
+				releaseFirst();
+				executionOrder.push(`end:${params.value}`);
+				return { content: [{ type: "text", text: params.value }], details: { value: params.value } };
+			},
+		};
+
+		const model = {
+			...getModel("openai", "gpt-4o-mini"),
+			agentLoopFramework: "low-intelligence",
+		} as Model<any> & { agentLoopFramework: "low-intelligence" };
+		let callIndex = 0;
+		const agent = new Agent({
+			initialState: {
+				model,
+				tools: [slowTool, fastTool],
+			},
+			streamFn: () => {
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => {
+					if (callIndex === 0) {
+						stream.push({
+							type: "done",
+							reason: "toolUse",
+							message: createToolUseMessage([
+								{ type: "toolCall", id: "tool-1", name: "slow_read", arguments: { value: "first" } },
+								{ type: "toolCall", id: "tool-2", name: "fast_read", arguments: { value: "second" } },
+							]),
+						});
+					} else {
+						stream.push({ type: "done", reason: "stop", message: createAssistantMessage("done") });
+					}
+					callIndex++;
+				});
+				return stream;
+			},
+		});
+
+		expect(agent.agentLoopFramework).toBe("low-intelligence");
+		await agent.prompt("read both");
+
+		expect(executionOrder.slice(0, 2)).toEqual(["start:first", "start:second"]);
+		const toolResults = agent.state.messages
+			.filter((message) => message.role === "toolResult")
+			.map((message) => message.toolCallId);
+		expect(toolResults).toEqual(["tool-1", "tool-2"]);
+	});
+
+	it("should keep low-intelligence behavior opt-in so the default high-intelligence loop is unchanged", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const executionOrder: string[] = [];
+		const events: string[] = [];
+		let permissionChecks = 0;
+
+		const slowTool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "slow_read",
+			label: "Slow read",
+			description: "Safe slow tool",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute(_toolCallId, params) {
+				executionOrder.push(`start:${params.value}`);
+				await new Promise((resolve) => setTimeout(resolve, 0));
+				executionOrder.push(`end:${params.value}`);
+				return { content: [{ type: "text", text: params.value }], details: { value: params.value } };
+			},
+		};
+		const fastTool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "fast_read",
+			label: "Fast read",
+			description: "Safe fast tool",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute(_toolCallId, params) {
+				executionOrder.push(`start:${params.value}`);
+				executionOrder.push(`end:${params.value}`);
+				return { content: [{ type: "text", text: params.value }], details: { value: params.value } };
+			},
+		};
+
+		let callIndex = 0;
+		const agent = new Agent({
+			initialState: {
+				tools: [slowTool, fastTool],
+			},
+			canUseTool() {
+				permissionChecks++;
+				return { decision: "deny", reason: "low-intelligence only" };
+			},
+			streamFn: () => {
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => {
+					if (callIndex === 0) {
+						stream.push({
+							type: "done",
+							reason: "toolUse",
+							message: createToolUseMessage([
+								{ type: "toolCall", id: "tool-1", name: "slow_read", arguments: { value: "first" } },
+								{ type: "toolCall", id: "tool-2", name: "fast_read", arguments: { value: "second" } },
+							]),
+						});
+					} else {
+						stream.push({ type: "done", reason: "stop", message: createAssistantMessage("done") });
+					}
+					callIndex++;
+				});
+				return stream;
+			},
+		});
+		agent.subscribe((event) => events.push(event.type));
+
+		expect(agent.agentLoopFramework).toBe("high-intelligence");
+		await agent.prompt("read both");
+
+		expect(executionOrder).toEqual(["start:first", "end:first", "start:second", "end:second"]);
+		expect(permissionChecks).toBe(0);
+		expect(events).not.toContain("stream_request_start");
+		expect(events).not.toContain("agent_result");
+		const toolResults = agent.state.messages.filter((message) => message.role === "toolResult");
+		expect(toolResults).toHaveLength(2);
+		expect(toolResults.every((message) => message.isError === false)).toBe(true);
 	});
 
 	it("should subscribe to events", () => {

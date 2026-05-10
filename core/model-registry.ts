@@ -62,6 +62,15 @@ const OpenAIResponsesCompatSchema = Type.Object({
 });
 
 const OpenAICompatSchema = Type.Union([OpenAICompletionsCompatSchema, OpenAIResponsesCompatSchema]);
+const AgentLoopFrameworkSchema = Type.Union([
+	Type.Literal("high-intelligence"),
+	Type.Literal("low-intelligence"),
+	Type.Literal("standard"),
+	Type.Literal("structured-adaptive"),
+]);
+type AgentLoopFramework = "high-intelligence" | "low-intelligence";
+type AgentLoopFrameworkInput = AgentLoopFramework | "standard" | "structured-adaptive";
+type ModelWithAgentLoop = Omit<Model<Api>, "agentLoopFramework"> & { agentLoopFramework?: AgentLoopFramework };
 
 // Schema for custom model definition
 // Most fields are optional with sensible defaults for local models (Ollama, LM Studio, etc.)
@@ -82,6 +91,7 @@ const ModelDefinitionSchema = Type.Object({
 	contextWindow: Type.Optional(Type.Number()),
 	maxTokens: Type.Optional(Type.Number()),
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
+	agentLoopFramework: Type.Optional(AgentLoopFrameworkSchema),
 	compat: Type.Optional(OpenAICompatSchema),
 });
 
@@ -101,10 +111,19 @@ const ModelOverrideSchema = Type.Object({
 	contextWindow: Type.Optional(Type.Number()),
 	maxTokens: Type.Optional(Type.Number()),
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
+	agentLoopFramework: Type.Optional(AgentLoopFrameworkSchema),
 	compat: Type.Optional(OpenAICompatSchema),
 });
 
 type ModelOverride = Static<typeof ModelOverrideSchema>;
+
+function normalizeAgentLoopFramework(
+	value: AgentLoopFrameworkInput | undefined,
+): AgentLoopFramework | undefined {
+	if (value === "standard") return "high-intelligence";
+	if (value === "structured-adaptive") return "low-intelligence";
+	return value;
+}
 
 const ProviderConfigSchema = Type.Object({
 	baseUrl: Type.Optional(Type.String({ minLength: 1 })),
@@ -179,7 +198,7 @@ function mergeCompat(
  * Handles nested objects (cost, compat) by merging rather than replacing.
  */
 function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<Api> {
-	const result = { ...model };
+	const result: ModelWithAgentLoop = { ...(model as Omit<Model<Api>, "agentLoopFramework">) };
 
 	// Simple field overrides
 	if (override.name !== undefined) result.name = override.name;
@@ -187,6 +206,9 @@ function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<A
 	if (override.input !== undefined) result.input = override.input as ("text" | "image")[];
 	if (override.contextWindow !== undefined) result.contextWindow = override.contextWindow;
 	if (override.maxTokens !== undefined) result.maxTokens = override.maxTokens;
+	if (override.agentLoopFramework !== undefined) {
+		result.agentLoopFramework = normalizeAgentLoopFramework(override.agentLoopFramework);
+	}
 
 	// Merge cost (partial override)
 	if (override.cost) {
@@ -207,7 +229,7 @@ function applyModelOverride(model: Model<Api>, override: ModelOverride): Model<A
 	// Deep merge compat
 	result.compat = mergeCompat(model.compat, override.compat);
 
-	return result;
+	return result as Model<Api>;
 }
 
 /** Clear the config value command cache. Exported for testing. */
@@ -525,6 +547,7 @@ export class ModelRegistry {
 					contextWindow: modelDef.contextWindow ?? 128000,
 					maxTokens: modelDef.maxTokens ?? 16384,
 					headers,
+					agentLoopFramework: normalizeAgentLoopFramework(modelDef.agentLoopFramework),
 					compat: modelDef.compat,
 				} as Model<Api>);
 			}
@@ -677,6 +700,7 @@ export class ModelRegistry {
 					contextWindow: modelDef.contextWindow,
 					maxTokens: modelDef.maxTokens,
 					headers,
+					agentLoopFramework: normalizeAgentLoopFramework(modelDef.agentLoopFramework),
 					compat: modelDef.compat,
 				} as Model<Api>);
 			}
@@ -787,6 +811,7 @@ export interface ProviderConfigInput {
 		contextWindow: number;
 		maxTokens: number;
 		headers?: Record<string, string>;
+		agentLoopFramework?: AgentLoopFrameworkInput;
 		compat?: Model<Api>["compat"];
 	}>;
 }

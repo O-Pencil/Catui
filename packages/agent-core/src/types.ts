@@ -1,5 +1,5 @@
 /**
- * [WHO]: AgentLoopConfig, CustomAgentMessages, AgentState, AgentToolResult, AgentTool
+ * [WHO]: AgentLoopFramework, AgentLoopConfig, CustomAgentMessages, AgentState, AgentToolResult, AgentTool
  * [FROM]: No external dependencies
  * [TO]: Consumed by packages/agent-core/src/index.ts
  * [HERE]: packages/agent-core/src/types.ts -
@@ -15,6 +15,7 @@ import type {
 	TextContent,
 	Tool,
 	ToolResultMessage,
+	Usage,
 } from "@pencil-agent/ai";
 import type { Static, TSchema } from "@sinclair/typebox";
 
@@ -23,11 +24,33 @@ export type StreamFn = (
 	...args: Parameters<typeof streamSimple>
 ) => ReturnType<typeof streamSimple> | Promise<ReturnType<typeof streamSimple>>;
 
+export type AgentLoopFramework = "high-intelligence" | "low-intelligence";
+export type AgentLoopFrameworkInput = AgentLoopFramework | "standard" | "structured-adaptive";
+
+export function normalizeAgentLoopFramework(
+	value: AgentLoopFrameworkInput | undefined,
+): AgentLoopFramework | undefined {
+	if (value === "standard") return "high-intelligence";
+	if (value === "structured-adaptive") return "low-intelligence";
+	return value;
+}
+
+export type AgentToolPermissionDecision =
+	| { decision: "allow" }
+	| { decision: "deny"; reason?: string };
+
+export interface AgentToolPermissionDenial {
+	toolCallId: string;
+	toolName: string;
+	reason?: string;
+}
+
 /**
  * Configuration for the agent loop.
  */
 export interface AgentLoopConfig extends SimpleStreamOptions {
 	model: Model<any>;
+	loopFramework?: AgentLoopFrameworkInput;
 
 	/**
 	 * Converts AgentMessage[] to LLM-compatible Message[] before each LLM call.
@@ -104,6 +127,22 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	getFollowUpMessages?: () => Promise<AgentMessage[]>;
 
 	/**
+	 * Optional tool permission gate for low-intelligence-adaptation execution.
+	 *
+	 * Called after schema/custom validation and before the tool executes.
+	 * Return "deny" to feed a permission-denied tool_result back to the model
+	 * without crashing the loop.
+	 */
+	canUseTool?: (event: {
+		toolCallId: string;
+		toolName: string;
+		requestedToolName: string;
+		input: unknown;
+		rawInput: unknown;
+		tool: AgentTool<any>;
+	}) => Promise<AgentToolPermissionDecision> | AgentToolPermissionDecision;
+
+	/**
 	 * Maximum assistant turns allowed for one prompt/continue loop.
 	 *
 	 * Prevents runaway model/tool/follow-up cycles from consuming unbounded
@@ -119,7 +158,38 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * emits a controlled assistant error message.
 	 */
 	maxToolCallsPerPrompt?: number;
+
+	/**
+	 * Maximum concurrency for one batch of concurrency-safe tool calls in the
+	 * low-intelligence-adaptation loop. Defaults to 10.
+	 */
+	maxToolConcurrency?: number;
+
+	/**
+	 * Maximum automatic continuations after a model stops because it hit its
+	 * output-token limit in the low-intelligence-adaptation loop. Defaults to 1.
+	 */
+	maxOutputTokenRecoveryAttempts?: number;
+
+	/**
+	 * Optional low-intelligence-adaptation stop hook. Called when the assistant would stop
+	 * without tool calls. Return action "continue" with messages to force a
+	 * correction/validation turn; return "stop" to allow completion.
+	 */
+	runStopHooks?: (event: {
+		message: AgentMessage;
+		messages: AgentMessage[];
+	}) => Promise<StructuredAdaptiveStopHookResult> | StructuredAdaptiveStopHookResult;
+
+	/**
+	 * Maximum stop-hook continuation turns for one prompt. Defaults to 3.
+	 */
+	maxStopHookContinuations?: number;
 }
+
+export type StructuredAdaptiveStopHookResult =
+	| { action: "stop" }
+	| { action: "continue"; messages: AgentMessage[]; reason?: string };
 
 /**
  * Thinking/reasoning level for models that support it.
@@ -172,6 +242,12 @@ export interface AgentToolResult<T> {
 	content: (TextContent | ImageContent)[];
 	// Details to be displayed in a UI or logged
 	details: T;
+	/**
+	 * Optional messages appended after the corresponding tool_result messages.
+	 * Use this for tool-generated attachments or context updates that should not
+	 * interrupt assistant tool_use -> tool_result pairing.
+	 */
+	contextMessages?: AgentMessage[];
 }
 
 // Callback for streaming tool execution updates
@@ -181,6 +257,19 @@ export type AgentToolUpdateCallback<T = any> = (partialResult: AgentToolResult<T
 export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any> extends Tool<TParameters> {
 	// A human-readable label for the tool to be displayed in UI
 	label: string;
+	/** Alternative model-facing names accepted for transcript/tool compatibility. */
+	aliases?: string[];
+	/**
+	 * Whether the tool can safely run alongside other concurrency-safe tools.
+	 * The low-intelligence-adaptation loop uses this to batch read-only work while keeping
+	 * stateful tools such as edit/write/bash serialized.
+	 */
+	isConcurrencySafe?: boolean;
+	interruptBehavior?: "cancel" | "block";
+	/** Optional semantic validation after schema validation and before execute. */
+	validateInput?: (params: Static<TParameters>) => void | string | Promise<void | string>;
+	/** Optional maximum text result size enforced by low-intelligence-adaptation tool orchestration. */
+	maxResultSizeChars?: number;
 	execute: (
 		toolCallId: string,
 		params: Static<TParameters>,
@@ -204,6 +293,26 @@ export type AgentEvent =
 	// Agent lifecycle
 	| { type: "agent_start" }
 	| { type: "agent_end"; messages: AgentMessage[] }
+	| {
+			type: "agent_result";
+			stopReason: string;
+			turnCount: number;
+			toolCallCount: number;
+			durationMs: number;
+			usage?: Usage;
+			permissionDenialCount?: number;
+			permissionDenials?: AgentToolPermissionDenial[];
+			errorMessage?: string;
+			errorSubtype?: string;
+	  }
+	| {
+			type: "stream_request_start";
+			model: string;
+			provider: string;
+			api: string;
+			messageCount: number;
+			maxTokens?: number;
+	  }
 	// Turn lifecycle - a turn is one assistant response + any tool calls/results
 	| { type: "turn_start" }
 	| { type: "turn_end"; message: AgentMessage; toolResults: ToolResultMessage[] }
@@ -215,4 +324,11 @@ export type AgentEvent =
 	// Tool execution lifecycle
 	| { type: "tool_execution_start"; toolCallId: string; toolName: string; args: any }
 	| { type: "tool_execution_update"; toolCallId: string; toolName: string; args: any; partialResult: any }
-	| { type: "tool_execution_end"; toolCallId: string; toolName: string; result: any; isError: boolean };
+	| {
+			type: "tool_execution_end";
+			toolCallId: string;
+			toolName: string;
+			result: any;
+			isError: boolean;
+			durationMs?: number;
+	  };

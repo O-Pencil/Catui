@@ -9,6 +9,7 @@ import { basename, dirname, join } from "node:path";
 import type {
   Agent,
   AgentEvent,
+  AgentLoopFramework,
   AgentMessage,
   AgentState,
   AgentTool,
@@ -125,6 +126,8 @@ import { RetryCoordinator, type RetryCoordinatorHost, type RetrySessionEvent } f
 import { createLogger, type AgentLogger } from "../utils/logger.js";
 
 export type { SessionSlashCommandDescriptor } from "./slash-command-catalog.js";
+
+type AgentLoopFrameworkInput = AgentLoopFramework | "standard" | "structured-adaptive";
 
 // ============================================================================
 // Skill Block Parsing
@@ -847,6 +850,11 @@ export class AgentSession {
   /** Current thinking level */
   get thinkingLevel(): ThinkingLevel {
     return this.agent.state.thinkingLevel;
+  }
+
+  /** Current effective agent loop framework. */
+  get agentLoopFramework(): AgentLoopFramework {
+    return this.agent.agentLoopFramework;
   }
 
   /** Whether agent is currently streaming a response */
@@ -1809,6 +1817,11 @@ export class AgentSession {
     }
   }
 
+  /** Set the session-level agent loop framework override. */
+  setAgentLoopFramework(framework: AgentLoopFrameworkInput | undefined): void {
+    this.agent.setAgentLoopFramework(framework);
+  }
+
   /**
    * Cycle to next thinking level.
    * @returns New level, or undefined if model doesn't support thinking
@@ -2712,6 +2725,7 @@ export class AgentSession {
         : await executeBashCommand(resolvedCommand, {
             onChunk,
             signal: this._bashAbortController.signal,
+            cwd: this._cwd,
           });
 
       this.recordBashResult(command, result, options);
