@@ -20,10 +20,8 @@ import type {
   Message,
   Model,
   TextContent,
-  ToolCall,
 } from "@pencil-agent/ai";
 import {
-  completeSimple,
   isContextOverflow,
   modelsAreEqual,
   resetApiProviders,
@@ -32,22 +30,6 @@ import {
 import { getDocsPath } from "../../config.js";
 import { theme } from "../../modes/interactive/theme/theme.js";
 import { stripFrontmatter } from "../../utils/frontmatter.js";
-
-function getStructuredToolChoice(model: Model<any>, toolName: string): unknown {
-  switch (model.api) {
-    case "openai-completions":
-      return { type: "function", function: { name: toolName } };
-    case "anthropic-messages":
-    case "bedrock-converse-stream":
-      return { type: "tool", name: toolName };
-    case "google-generative-ai":
-    case "google-gemini-cli":
-    case "google-vertex":
-      return "any";
-    default:
-      return "required";
-  }
-}
 
 /**
  * Custom error for model cycling with additional context.
@@ -133,13 +115,13 @@ import {
   BUILTIN_SLASH_COMMANDS,
   getLocalizedCommands,
   type SlashCommandInfo,
-  type SlashCommandLocation,
 } from "../slash-commands.js";
 import { t } from "../i18n/index.js";
 import { toSoulContext, extractSessionContext } from "../soul-integration.js";
 import { buildSystemPrompt } from "../prompt/system-prompt.js";
 import type { BashOperations } from "../tools/bash.js";
 import { createDefaultRuntimeTools } from "./default-tools.js";
+import { bindExtensionCore } from "./extension-core-bindings.js";
 import { RetryCoordinator, type RetryCoordinatorHost, type RetrySessionEvent } from "./retry-coordinator.js";
 import { createLogger, type AgentLogger } from "../utils/logger.js";
 
@@ -2467,209 +2449,45 @@ export class AgentSession {
   }
 
   private _bindExtensionCore(runner: ExtensionRunner): void {
-    const normalizeLocation = (
-      source: string,
-    ): SlashCommandLocation | undefined => {
-      if (source === "user" || source === "project" || source === "path") {
-        return source;
-      }
-      return undefined;
-    };
-
-    const reservedBuiltins = new Set(
-      BUILTIN_SLASH_COMMANDS.map((command) => command.name),
-    );
-
-    const getCommands = (): SlashCommandInfo[] => {
-      const extensionCommands: SlashCommandInfo[] = runner
-        .getRegisteredCommandsWithPaths()
-        .filter(({ command }) => !reservedBuiltins.has(command.name))
-        .map(({ command, extensionPath }) => ({
-          name: command.name,
-          description: command.description,
-          source: "extension",
-          path: extensionPath,
-        }));
-
-      const templates: SlashCommandInfo[] = this.promptTemplates.map(
-        (template) => ({
-          name: template.name,
-          description: template.description,
-          source: "prompt",
-          location: normalizeLocation(template.source),
-          path: template.filePath,
-        }),
-      );
-
-      const skills: SlashCommandInfo[] = this._resourceLoader
-        .getSkills()
-        .skills.map((skill) => ({
-          name: `skill:${skill.name}`,
-          description: skill.description,
-          source: "skill",
-          location: normalizeLocation(skill.source),
-          path: skill.filePath,
-        }));
-
-      return [...extensionCommands, ...templates, ...skills];
-    };
-
-    runner.bindCore(
-      {
-        sendMessage: (message, options) => {
-          this.sendCustomMessage(message, options).catch((err) => {
-            runner.emitError({
-              extensionPath: "<runtime>",
-              event: "send_message",
-              error: err instanceof Error ? err.message : String(err),
-            });
-          });
-        },
-        sendUserMessage: (content, options) => {
-          this.sendUserMessage(content, options).catch((err) => {
-            runner.emitError({
-              extensionPath: "<runtime>",
-              event: "send_user_message",
-              error: err instanceof Error ? err.message : String(err),
-            });
-          });
-        },
-        executeCommand: async (text) => {
-          try {
-            return await this.executeSlashCommand(text);
-          } catch (err) {
-            runner.emitError({
-              extensionPath: "<runtime>",
-              event: "execute_command",
-              error: err instanceof Error ? err.message : String(err),
-            });
-            return false;
-          }
-        },
-        appendEntry: (customType, data) => {
-          this.sessionManager.appendCustomEntry(customType, data);
-        },
-        setSessionName: (name) => {
-          this.sessionManager.appendSessionInfo(name);
-        },
-        getSessionName: () => {
-          return this.sessionManager.getSessionName();
-        },
-        setLabel: (entryId, label) => {
-          this.sessionManager.appendLabelChange(entryId, label);
-        },
-        getActiveTools: () => this.getActiveToolNames(),
-        getAllTools: () => this.getAllTools(),
-        setActiveTools: (toolNames) => this.setActiveToolsByName(toolNames),
-        getCommands,
-        setModel: async (model) => {
-          const key = await this.modelRegistry.getApiKey(model);
-          if (!key) return false;
-          await this.setModel(model);
-          return true;
-        },
-        getThinkingLevel: () => this.thinkingLevel,
-        setThinkingLevel: (level) => this.setThinkingLevel(level),
+    const thisSession = this;
+    bindExtensionCore(runner, {
+      promptTemplates: this.promptTemplates,
+      resourceLoader: this._resourceLoader,
+      modelRegistry: this.modelRegistry,
+      sessionManager: this.sessionManager,
+      settingsManager: this.settingsManager,
+      shutdownHandler: this._extensionShutdownHandler,
+      soulManager: this._soulManager,
+      get model() {
+        return thisSession.model;
       },
-      {
-        getModel: () => this.model,
-        completeSimple: async (systemPrompt: string, userMessage: string) => {
-          const model = this.model;
-          if (!model) return undefined;
-          const apiKey = await this.modelRegistry.getApiKey(model);
-          if (!apiKey) return undefined;
-          try {
-            const response = await completeSimple(
-              model,
-              {
-                systemPrompt,
-                messages: [
-                  { role: "user", content: userMessage, timestamp: Date.now() },
-                ],
-              },
-              { maxTokens: 1500, temperature: 0.2, apiKey },
-            );
-            const text =
-              response.content
-                ?.filter((b) => b.type === "text")
-                .map((b) => (b as TextContent).text ?? "")
-                .join("") ?? "";
-            return text;
-          } catch {
-            return undefined;
-          }
-        },
-        completeJson: async (
-          systemPrompt: string,
-          userMessage: string,
-          schema: Record<string, unknown>,
-          options?: { toolName?: string; resultKey?: string },
-        ) => {
-          const model = this.model;
-          if (!model) return undefined;
-          const apiKey = await this.modelRegistry.getApiKey(model);
-          if (!apiKey) return undefined;
-
-          const toolName = options?.toolName || "submit_json";
-          try {
-            const response = await completeSimple(
-              model,
-              {
-                systemPrompt: `${systemPrompt}\n\nYou must call the ${toolName} tool exactly once with the final structured JSON payload. Do not answer in prose.`,
-                messages: [
-                  { role: "user", content: userMessage, timestamp: Date.now() },
-                ],
-                tools: [
-                  {
-                    name: toolName,
-                    description: "Submit the final structured JSON payload.",
-                    parameters: schema as any,
-                  },
-                ],
-              },
-              {
-                maxTokens: 1500,
-                temperature: 0,
-                apiKey,
-                toolChoice: getStructuredToolChoice(model, toolName),
-              } as any,
-            );
-            const toolCall = response.content?.find(
-              (b) => b.type === "toolCall" && (b as ToolCall).name === toolName,
-            ) as ToolCall | undefined;
-            if (!toolCall) return undefined;
-            const payload = options?.resultKey
-              ? toolCall.arguments?.[options.resultKey]
-              : toolCall.arguments;
-            return JSON.stringify(payload);
-          } catch {
-            return undefined;
-          }
-        },
-        getSettings: () => this.settingsManager.getSettings(),
-        isIdle: () => !this.isStreaming,
-        abort: () => this.abort(),
-        hasPendingMessages: () => this.pendingMessageCount > 0,
-        shutdown: () => {
-          this._extensionShutdownHandler?.();
-        },
-        getContextUsage: () => this.getContextUsage(),
-        compact: (options) => {
-          void (async () => {
-            try {
-              const result = await this.compact(options?.customInstructions);
-              options?.onComplete?.(result);
-            } catch (error) {
-              const err =
-                error instanceof Error ? error : new Error(String(error));
-              options?.onError?.(err);
-            }
-          })();
-        },
-        getSystemPrompt: () => this.systemPrompt,
-        getSoulManager: () => this._soulManager,
+      get thinkingLevel() {
+        return thisSession.thinkingLevel;
       },
-    );
+      get isStreaming() {
+        return thisSession.isStreaming;
+      },
+      get pendingMessageCount() {
+        return thisSession.pendingMessageCount;
+      },
+      get systemPrompt() {
+        return thisSession.systemPrompt;
+      },
+      sendCustomMessage: (message, options) =>
+        this.sendCustomMessage(message, options),
+      sendUserMessage: (content, options) =>
+        this.sendUserMessage(content, options),
+      executeSlashCommand: (text) => this.executeSlashCommand(text),
+      getActiveToolNames: () => this.getActiveToolNames(),
+      getAllTools: () => this.getAllTools(),
+      setActiveToolsByName: (toolNames) =>
+        this.setActiveToolsByName(toolNames),
+      setModel: (model) => this.setModel(model),
+      setThinkingLevel: (level) => this.setThinkingLevel(level),
+      abort: () => this.abort(),
+      getContextUsage: () => this.getContextUsage(),
+      compact: (customInstructions) => this.compact(customInstructions),
+    });
   }
 
   private _buildRuntime(options: {
