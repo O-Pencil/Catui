@@ -7,6 +7,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { Model } from "@pencil-agent/ai";
 import { SubAgentRuntime } from "../../../core/sub-agent/index.js";
 import type { WorkspacePath } from "../../../core/workspace/index.js";
 import { WorktreeManager } from "../../../core/workspace/index.js";
@@ -43,7 +44,7 @@ export class SubAgentRunner {
    */
   async run(
     task: string,
-    options?: { runRole?: "research" | "implement"; model?: any; cwd?: string; timeoutMs?: number },
+    options?: { runRole?: "research" | "implement"; model?: Model<any>; cwd?: string; timeoutMs?: number },
   ): Promise<SubAgentRunReport> {
     if (this.currentState && (this.currentState.phase === "planning" || this.currentState.phase === "research" || this.currentState.phase === "implementing" || this.currentState.phase === "reviewing")) {
       throw new Error("A SubAgent run is already active. Stop it before starting a new one.");
