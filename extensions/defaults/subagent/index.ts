@@ -69,7 +69,7 @@ export default async function subagentExtension(api: ExtensionAPI): Promise<void
 							return;
 						}
 
-						const model = (ctx as any).model;
+						const model = ctx.model;
 
 						api.sendMessage({
 							customType: SUBAGENT_MESSAGE_TYPE,
