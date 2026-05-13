@@ -792,35 +792,87 @@ Step G  (清理)           Gateway 移除 env 兜底；editor 统一 connection 
 
 ### 10.4 SuperAgent / Derived / Custom 产品演进路线（P0–P5）
 
-> 为 §7.5 三种 Agent 形态分类落地的分阶段计划。P0 已在 commit `1df2380` 完成。
+> 为 §7.5 三种 Agent 形态分类落地的分阶段计划。P0 / P0.5 / P1 已完成。
 
 | 阶段 | 改动 | 范围 | 状态 |
 |---|---|---|---|
 | **P0** | 每个 Agent 独立 `~/.pencils/agents/<id>/` 目录 + 写 `agent.json` 元数据。Gateway 端 default agentDir 派生从 `getAgentDir()` 改为 `~/.pencils/agents/<config.id>/`；register/update 时调用 `writeAgentMetadata()` 落 doc 16 §11.2.1 schema 的 agent.json | Gateway 单方 | ✅ 已落（2026-05-13, commit `1df2380`）|
-| **P0.5** | 修每个 agentDir 内**自动 seed** 一份 `.PENCIL.md`（基于 soul），或在 SDK 加 `noProjectContext` flag，避免 nano-pencil DefaultResourceLoader fallback 读 `process.cwd()` 的 AGENTS.md 污染 agent 身份 | Gateway 或 nanoPencil | ⏳ 待办 |
-| **P1** | Asgard schema 加 `kind` / `parent_template_id` / `soul_policy` 字段；UI 区分"市场 SuperAgent"和"我的 Agent"两个列表；不同可见性规则（super public、derived/custom private to creator） | Asgard | ⏳ 待办（业务侧排期）|
-| **P2** | 派生接口 `POST /api/v1/agents/pencil/<super_id>/derive`——Asgard 复制 super 的 soul template + memory seed 到新 agent 记录（kind=derived, parent=<super_id>）；Gateway 接收 origin metadata 写入 agent.json | Asgard + Gateway | ⏳ 待办 |
-| **P3** | Gateway 端 soul policy 强制：nano-adapter / agent metadata 读 `agent.json.soulPolicy`，immutable 时禁写 `soul/profile.json` 与 `memory/seed/`；任何破坏性写入返回 403 | Gateway | ⏳ 待办 |
+| **P0.5** | 防止 nano-pencil DefaultResourceLoader fallback 读 `process.cwd()` 的 AGENTS.md 污染 agent 身份。实际方案（非原计划的 `.PENCIL.md` seed）：在 `nano-adapter.ts` 把 `cwd` 钉死到 `agentDir`，并显式 `await loader.reload()` 让 SDK 把 `systemPromptSource` 提升到 `systemPrompt`——绕过 SDK 不会自动 reload 外部传入 ResourceLoader 的限制 | Gateway 单方 | ✅ 已落（2026-05-13, commit `48fe4ea`）|
+| **P1** | Asgard schema 加 `kind` / `parent_template_id` / `soul_policy` 三列；`POST /agents/pencil` 仅接受 `kind=custom`（super 由 ops 注入、derived 走 P2 派生端点）；`PencilAgentDetail` 把三个字段暴露给前端；Asgard→Gateway 的 POST/PUT 体新增 `kind` / `origin` / `parentTemplateId`；Gateway `AgentConfig` 同步加这三字段；`registry.writeAgentMetadata` 不再硬编码 `kind:'custom'`，按收到的值写入 `agent.json` | Asgard + Gateway | ✅ 已落（2026-05-13）|
+| **P2** | 派生接口 `POST /api/v1/agents/pencil/<super_id>/derive`——Asgard 复制 super 的 soul template + memory seed 到新 agent 记录（kind=derived, parent=<super_id>）；前端在"市场"页面提供"派生我的副本"按钮 | Asgard + Gateway | ⏳ 待办 |
+| **P3** | Gateway 端 soul policy 强制：nano-adapter / agent metadata 读 `agent.json.soulPolicy`（或 `AgentConfig.kind==='super'`），immutable 时禁写 `soul/profile.json` 与 `memory/seed/`；任何破坏性写入返回 403 | Gateway | ⏳ 待办 |
 | **P4** | Custom Agent memory 上传——UI 文件上传组件 + Asgard 接 multipart 接口（限格式：JSONL / Markdown / 限大小）+ Gateway 落 `memory/imported/`；仅 custom/derived kind 可调用，super 拒绝 | Asgard UI + Asgard API + Gateway | ⏳ 待办 |
 | **P5** | SuperAgent 版本管理——`agent.json.origin.asgard.templateVersion` 字段 + 平台 push 新版本通知；用户在 UI 看到"新版本可用"，可选"采纳"（同步覆盖 `soul/template.json`、保留本地 profile）或"保持当前版本" | Asgard + UI + Gateway | ⏳ 待办 |
 
-### 10.5 P0 已落地的具体行为差异
+### 10.5 P0–P1 已落地的具体行为差异
+
+**P0 — 每 Agent 独立目录（commit `1df2380`）：**
 
 ```
-Before commit 1df2380 (P0 之前)：
+Before：
   ~/.pencils/agents/default/          ← 所有 agent 共享这一个目录
   ~/.pencils/gateway/agents/<id>.json ← Gateway 注册体（OK）
 
-After commit 1df2380 (P0 之后)：
+After：
   ~/.pencils/agents/default/                  ← nano-pencil CLI 兼容槽
-  ~/.pencils/agents/asgard-u1-41c65fc9/       ← 你 UI 建的"Pencil Demo"
-  │   └── agent.json                            kind=custom（P1 起按平台标识）
-  ~/.pencils/agents/asgard-u1-5e3139d6/       ← 你 UI 建的"测试"
+  ~/.pencils/agents/asgard-u1-41c65fc9/       ← UI 建的"Pencil Demo"
+  │   └── agent.json
+  ~/.pencils/agents/asgard-u1-5e3139d6/       ← UI 建的"测试"
   │   └── agent.json
   ~/.pencils/gateway/agents/<id>.json         ← Gateway 注册体（不变）
 ```
 
-每个 Agent 现在有"心智"目录的雏形——但里面只有 agent.json，soul/memory 等子目录还**没自动创建**（因为 Gateway 当前还用 in-memory SessionManager 跑，没有真持久化）。P0.5 + P1 之后逐步补齐。
+**P0.5 — Soul 不再被 cwd 污染（commit `48fe4ea`）：**
+
+修前症状：UI 建的"测试 Agent"（soul=`你是雷姆`）问"你是谁"会答"我是 nanopencil 写作助手"——原因是 `DefaultResourceLoader` 构造时把 `systemPrompt` 写到 `systemPromptSource`，必须 `reload()` 才会提升到 `systemPrompt`；SDK 仅在自己 new 的 ResourceLoader 上自动 reload，外部传入的不管，于是 `agent-session` 拿不到 systemPrompt → fallback 到 SDK 默认提示词。修后："雷姆"和"Pencil Demo"各答各的身份。
+
+**P1 — Agent 三态分类落地（2026-05-13）：**
+
+Asgard `asgard_agents` 表加列：
+
+```sql
+ALTER TABLE asgard_agents
+  ADD COLUMN kind VARCHAR(16) NOT NULL DEFAULT 'custom',
+  ADD COLUMN parent_template_id INTEGER NULL,
+  ADD COLUMN soul_policy VARCHAR(16) NOT NULL DEFAULT 'overridable';
+CREATE INDEX ix_asgard_agents_kind ON asgard_agents(kind);
+CREATE INDEX ix_asgard_agents_parent_template_id ON asgard_agents(parent_template_id);
+```
+
+Asgard → Gateway 透传：`POST/PUT /v1/agents` 体新增
+
+```json
+{
+  "kind": "custom",                                  // super | derived | custom
+  "parentTemplateId": 42,                            // 仅 derived 出现
+  "origin": {
+    "type": "asgard",
+    "asgardAgentId": "pencil/<gw_id>",
+    "ownerUserUuid": "<user.uuid>"
+  }
+}
+```
+
+Gateway `registry.writeAgentMetadata` 写入：
+
+```json
+{
+  "version": "1.0.0",
+  "id": "<gateway_agent_id>",
+  "displayName": "...",
+  "createdAt": "...",
+  "updatedAt": "...",
+  "kind": "custom",                  // ← 不再硬编码，按 AgentConfig.kind 取
+  "origin": {...},                   // ← 按 AgentConfig.origin 取，缺省 {type:'local'}
+  "parentTemplateId": 42,            // ← 仅 derived 写入
+  "engine": "nano-pencil",
+  "extensions": {}
+}
+```
+
+`POST /api/v1/agents/pencil` 仅接受 `kind=custom`（其他形态走 P2 派生端点 / ops 注入），避免静默降级用户意图。`_to_pencil_detail` 把三个字段回给前端 UI，方便后续渲染"派生自 X"徽章、锁定 Soul 编辑器等。
+
+soul/memory 等子目录仍**没自动创建**（Gateway 当前还用 in-memory SessionManager），P3 起再补齐。
 
 ---
 
@@ -1064,3 +1116,4 @@ $ pencils migrate --apply              # 实际执行；默认使用拷贝模式
 | 2026-05-06 | v2.1 | 修正 callsite 数据（34/53/47 而非 72，经实际 grep 验证）；§0.4 新增分工总览表；§5.2 ws_id 派生加 URL 归一化；§15 待确认问题加建议答案。Gateway doc 16 改为行动手册、doc 17 归档。 |
 | 2026-05-09 | v2.2 | **Phase 1-3 任务（N1-N12）宣告完成**：正式支持 `--agent <id>`、`agent.json` 元数据、`pencils migrate` 安全拷贝工具；默认根目录切至 `~/.pencils/`；更新文档以符合 release 状态。 |
 | 2026-05-13 | v2.3 | 新增 §7.5「Agent 三种形态分类」——SuperAgent / Derived / Custom 的产品语义、文件系统对照、Soul/Memory merge 规则、Asgard schema 字段、用户操作流程。新增 §10.4「P0–P5 产品演进路线」明确分阶段计划。**P0（每 Agent 独立 agentDir + agent.json）已在 Pencil-Agent-Gateway commit `1df2380` 落地**。 |
+| 2026-05-13 | v2.4 | **P0.5（Soul 不被 cwd 污染，commit `48fe4ea`）+ P1（Agent 三态分类全链路 schema）落地**：§10.4 P0.5/P1 标 ✅；§10.5 改写为"P0–P1 已落地的具体行为差异"，新增 P0.5 修复说明、P1 Asgard DDL + Gateway/Asgard 透传 contract、Gateway `writeAgentMetadata` 行为变化。P0.5 实际方案与原计划不同：未做 `.PENCIL.md` seed，而是把 `cwd` 钉死到 agentDir + 显式 `resourceLoader.reload()` 绕过 SDK 限制。 |
