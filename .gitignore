@@ -12,6 +12,11 @@ coverage/
 .claude/
 # Project-local NanoPencil workspace (skills copies, browser workspace, etc.)
 .nanopencil/
+# Daily pencil-on-pencil self-study runtime artifacts (task prompts + outputs)
+.pencil-self-study/
+# scripts/self-diagnosis/ per-run artifacts (task + output + analysis, gitkeep stays)
+scripts/self-diagnosis/runs/*
+!scripts/self-diagnosis/runs/.gitkeep
 _clipboard_*
 _paste/
 .nexus/
