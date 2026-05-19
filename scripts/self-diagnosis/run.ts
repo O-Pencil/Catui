@@ -9,6 +9,7 @@ import { parseArgs } from "node:util";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { VARIANT } from "./lib/eval-sink.js";
 
 interface RunOptions {
@@ -134,7 +135,11 @@ When done, write your report and finish with verbatim: ${SENTINEL}`;
 	});
 }
 
-const isDirectInvocation = import.meta.url === `file://${process.argv[1]}`;
+// Cross-platform entry-point check. On Windows `process.argv[1]` is a backslash
+// path like `D:\...\run.ts` while `import.meta.url` is `file:///D:/.../run.ts`;
+// a naive string concat won't match. `pathToFileURL` normalises both ends.
+const isDirectInvocation =
+	process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isDirectInvocation) {
 	selfDiagnosisCli(process.argv.slice(2)).then(
 		(code) => process.exit(code),
