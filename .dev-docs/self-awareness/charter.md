@@ -119,13 +119,14 @@ The exit criterion of this whole program is **not** "pencil's behavior shifts." 
 
 ---
 
-## 6. Open questions
+## 6. Open questions / known gaps
 
-These are not blockers; revisit as needed.
+These are not blockers for the next run; revisit when scope allows.
 
 1. **Dispatch cadence.** Each archetype probably wants a different rhythm. Archetype A is one-shot per maintenance window. Archetype B (A/B comparison) is one-shot per code change. Don't pre-commit to "daily."
 2. **Per-run artifact retention.** `scripts/self-diagnosis/runs/<date>/` is gitignored. Keep forever, or rotate older than 90 days? Decide once we have ≥ ~10 runs.
 3. **Cross-archetype synthesis cadence.** S4 says "when enough rows exist." How many is enough? Probably 20 for any single archetype, 50 total across archetypes. Tune by feel.
+4. **Runaway containment gap — failsafe watchdog (filed 2026-05-18, deferred).** Today `scripts/self-diagnosis/run.ts` has only two kill paths: the sentinel marker (only flips a flag — doesn't actually kill), and OS signal forwarding (only fires if the maintainer interrupts). There is **no wall-clock timeout, no byte-size cap, no inactivity-based kill, no per-turn detector that reliably triggers**. If pencil hangs without crashing or model output stalls, the script waits forever. The originally-intended post-sentinel turn counter at `run.ts:97` references a stderr marker `route_turn_anchor` that SAL does not actually emit (SAL's `turn_anchor` is an eval event that goes to InsForge, not stderr); the counter is dead code. **Acceptable for now** because each run is maintainer-initiated and they can Ctrl-C. **Pre-conditions for closing this gap**: (a) decide whether to implement wall-clock kill + buffer cap, or whether to require pencil itself to expose a structured `--max-turns` flag and `--quiet-after-sentinel` mode; (b) the second path crosses SOP §3.2 (touches `cli.ts` and the agent loop), so prefer (a) for self-diagnosis scope.
 
 ---
 

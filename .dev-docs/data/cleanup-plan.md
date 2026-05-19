@@ -12,9 +12,10 @@
 2. **B2** — `pencil_issue_events` type-fix (decision 3; 5 columns; 11 rows)
 3. **B4** — Mark 53 abandoned `eval_runs` rows (decision 5 reapplied as cleanup; janitor lives in `scripts/` per decision 5, but the one-shot SQL is here for the initial sweep)
 4. **B5** — Add `eval_turns.thinking` column (decision 4 hybrid)
-5. **B3** — Writer migration `eval_tool_traces` → `eval_tool_calls` (decision 1, **REVIEW ticket required** — code change in `extensions/defaults/sal/eval/insforge-sink.ts`)
+5. **B6** — `eval_runs.variant` CHECK constraint (forward-compat note — do NOT apply standalone; included with the next variant addition)
+6. **B3** — Writer migration `eval_tool_traces` → `eval_tool_calls` (decision 1, **REVIEW ticket required** — code change in `extensions/defaults/sal/eval/insforge-sink.ts`)
 
-B3 is last because it requires a code-side change reviewed separately. B1–B5 are pure DDL/DML on the developer database.
+B3 is last because it requires a code-side change reviewed separately. B1–B5 are pure DDL/DML on the developer database; B6 is documentation-only until triggered.
 
 ---
 
@@ -198,6 +199,35 @@ WHERE thinking IS NOT NULL;
 ```
 
 The corresponding writer change in `extensions/defaults/sal/eval/insforge-sink.ts:handleTurnAnchor()` is a separate REVIEW ticket — see C below.
+
+---
+
+## B6 — `eval_runs.variant` enum constraint (forward-compatibility)
+
+> Status: forward-compat note, not for immediate execution. Recorded because the working scripts already depend on this being correct.
+
+The matrix's "Variant enum (new, blocking S3+)" section recommends formalizing `eval_runs.variant` as a CHECK constraint. Today the column is plain `varchar` with no validation; both `'sal'` and `'self-diagnosis'` rows write fine. The risk window opens **the day a future migration adds the constraint** — if `'self-diagnosis'` is forgotten from the allowed set, every `scripts/self-diagnosis/` run starts failing at `run_start` (PostgREST returns 23514).
+
+When the constraint is added, the SQL must include all of:
+
+```sql
+ALTER TABLE eval_runs
+  ADD CONSTRAINT eval_runs_variant_chk
+  CHECK (variant IN ('sal', 'control', 'baseline', 'self-diagnosis'));
+```
+
+Sources of truth that need to stay in lockstep with this list:
+
+| Layer | File / location |
+|-------|-----------------|
+| Database CHECK constraint | this SQL (when applied) |
+| SAL extension TypeScript type | `extensions/defaults/sal/eval/types.ts:14` (`EvalVariant` union) |
+| SAL extension env-var whitelist | `extensions/defaults/sal/index.ts:755` (the `evalVariantEnv === ...` chain) |
+| scripts side | `scripts/self-diagnosis/lib/eval-sink.ts` `VARIANT` const |
+
+As of 2026-05-18, all four layers list `"self-diagnosis"` (the SAL pair was added in this branch). Any new variant — e.g. a future `"perf-baseline"` archetype — must update all four.
+
+Drop the constraint and re-add as part of the same migration when a new variant is needed; this is the simplest safe path.
 
 ---
 

@@ -1,22 +1,24 @@
 /**
  * [WHO]: Provides selfDiagnosisCli() entrypoint for maintainer-invoked reflexive self-study runs
- * [FROM]: Depends on ./archetypes/* for task prompt construction, ./lib/eval-sink for insforge writes, node:child_process for pencil invocation
- * [TO]: Consumed by maintainers via `node --import tsx scripts/self-diagnosis/run.ts --archetype=<id>`; not imported by any extension or runtime
- * [HERE]: scripts/self-diagnosis/run.ts — orchestration shell; loads archetype, invokes pencil, captures output, writes one eval_metric_results row with variant='self-diagnosis'
+ * [FROM]: Depends on ./lib/eval-sink for the metric writer + VARIANT constant, node:child_process for pencil invocation, node:fs / node:path / node:util built-ins
+ * [TO]: Consumed by maintainers via `npx tsx scripts/self-diagnosis/run.ts --archetype=<id>`; not imported by any extension or runtime
+ * [HERE]: scripts/self-diagnosis/run.ts — orchestration shell. Variant tagging on eval_runs happens at child run_start via the NANOPENCIL_EVAL_VARIANT env var (read by extensions/defaults/sal/index.ts:755); no post-exit PATCH is performed.
  */
 
-// SKELETON — implementation pending. See .dev-docs/self-awareness/charter.md §4 S2/S3.
-
 import { parseArgs } from "node:util";
+import { spawn } from "node:child_process";
+import { join } from "node:path";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { VARIANT } from "./lib/eval-sink.js";
 
 interface RunOptions {
 	archetype: "A";
 	dryRun: boolean;
 }
 
-/**
- * Parse CLI args. Currently only --archetype=A is supported.
- */
+const SENTINEL = "SELF-STUDY COMPLETE";
+const MAX_POST_SENTINEL_TURNS = 2; // Allow some slack after sentinel
+
 export function parseRunArgs(argv: string[]): RunOptions {
 	const { values } = parseArgs({
 		args: argv,
@@ -30,28 +32,95 @@ export function parseRunArgs(argv: string[]): RunOptions {
 		throw new Error(`Unknown archetype: ${values.archetype}. Supported: A.`);
 	}
 	return {
-		archetype: values.archetype,
+		archetype: values.archetype as "A",
 		dryRun: values["dry-run"] === true,
 	};
 }
 
-/**
- * Main entry. Currently a stub: prints the resolved plan and exits.
- *
- * When implemented:
- *   1. Resolve archetype task prompt (from ./archetypes/<id>-*.ts)
- *   2. Write task.md to scripts/self-diagnosis/runs/<date>/
- *   3. Spawn `npx tsx cli.ts --print` with the task as stdin
- *   4. Capture stdout → output.md (stderr separately → run.log)
- *   5. Query eval_runs/eval_turns/eval_tool_traces for the new run_id
- *   6. Compute structured analysis (per archetype) → analysis.json
- *   7. Write one row to eval_metric_results with variant='self-diagnosis'
- */
 export async function selfDiagnosisCli(argv: string[]): Promise<number> {
 	const opts = parseRunArgs(argv);
-	console.error(`[self-diagnosis] STUB — archetype=${opts.archetype} dryRun=${opts.dryRun}`);
-	console.error(`[self-diagnosis] Implementation pending; see .dev-docs/self-awareness/charter.md §4`);
-	return 0;
+	const date = new Date().toISOString().split("T")[0];
+	const runDir = join("scripts/self-diagnosis/runs", date);
+	if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
+
+	const runId = `sd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+	const taskFile = join(runDir, "task.md");
+	const outputFile = join(runDir, "output.md");
+	const logFile = join(runDir, "run.log");
+
+	// Archetype A prompt (placeholder logic - would eventually load from ./archetypes/A-*.ts)
+	const taskPrompt = `Perform Archetype A: Reflexive Self-Trace.
+Read your own eval_tool_traces for the last 100 turns. 
+Pick 3 turns that show interesting patterns.
+When done, write your report and finish with verbatim: ${SENTINEL}`;
+
+	writeFileSync(taskFile, taskPrompt, "utf-8");
+
+	if (opts.dryRun) {
+		console.log(`[self-diagnosis] Dry run — Task written to ${taskFile}`);
+		return 0;
+	}
+
+	console.error(`[self-diagnosis] Starting run ${runId} with archetype ${opts.archetype}...`);
+
+	const child = spawn("npx", ["tsx", "cli.ts", "--print"], {
+		env: {
+			...process.env,
+			NANOPENCIL_EVAL_RUN_ID: runId,
+			NANOPENCIL_EVAL_VARIANT: VARIANT,
+			NANOPENCIL_EVAL_ENABLED: "true",
+		},
+		stdio: ["pipe", "pipe", "pipe"],
+	});
+
+	let outputData = "";
+	let logData = "";
+	let sentinelFound = false;
+	let turnsSinceSentinel = 0;
+
+	// Instruction Interceptor: monitor stdout for sentinel
+	child.stdout.on("data", (chunk) => {
+		const text = chunk.toString();
+		outputData += text;
+		if (text.includes(SENTINEL)) {
+			console.error(`[self-diagnosis] Sentinel detected! Initiating graceful shutdown...`);
+			sentinelFound = true;
+		}
+	});
+
+	child.stderr.on("data", (chunk) => {
+		const text = chunk.toString();
+		logData += text;
+		// Count turns via [sal][eval] route_turn_anchor log markers if present
+		if (text.includes("route_turn_anchor")) {
+			if (sentinelFound) {
+				turnsSinceSentinel++;
+				if (turnsSinceSentinel >= MAX_POST_SENTINEL_TURNS) {
+					console.error(`[self-diagnosis] Runaway guard triggered! Killing child...`);
+					child.kill("SIGTERM");
+				}
+			}
+		}
+	});
+
+	child.stdin.write(taskPrompt);
+	child.stdin.end();
+
+	return new Promise((resolve) => {
+		child.on("exit", (code) => {
+			writeFileSync(outputFile, outputData, "utf-8");
+			writeFileSync(logFile, logData, "utf-8");
+			console.error(`[self-diagnosis] Child exited with code ${code}. Variant tagging owned by SAL at run_start; no post-exit PATCH performed.`);
+			resolve(code ?? 0);
+		});
+
+		// Emergency cleanup for the orchestrator itself
+		process.on("SIGINT", () => child.kill("SIGINT"));
+		process.on("SIGTERM", () => child.kill("SIGTERM"));
+		process.on("exit", () => {
+			if (!child.killed) child.kill("SIGTERM");
+		});
+	});
 }
 
 const isDirectInvocation = import.meta.url === `file://${process.argv[1]}`;

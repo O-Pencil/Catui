@@ -753,7 +753,10 @@ export default async function salExtension(api: ExtensionAPI) {
 	const evalEndpoint = process.env[EVAL_ENDPOINT_ENV] ?? credentials?.insforge_url ?? credentials?.endpoint;
 	const evalVariantEnv = process.env[EVAL_VARIANT_ENV];
 	const evalVariantOverride =
-		evalVariantEnv === "control" || evalVariantEnv === "sal" || evalVariantEnv === "baseline"
+		evalVariantEnv === "control"
+		|| evalVariantEnv === "sal"
+		|| evalVariantEnv === "baseline"
+		|| evalVariantEnv === "self-diagnosis"
 			? (evalVariantEnv as EvalVariant)
 			: undefined;
 	const evalApiKey = process.env[EVAL_API_KEY_ENV] ?? credentials?.api_key;
