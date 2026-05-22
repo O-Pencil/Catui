@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 // Event domain
 // ----------------------------------------------------------------------------
 
-export type EvalVariant = "sal" | "control" | "baseline";
+export type EvalVariant = "sal" | "control" | "baseline" | "self-diagnosis";
 
 export type EvalEventType = "run_start" | "run_end" | "turn_anchor" | "memory_recalls" | "tool_trace";
 
