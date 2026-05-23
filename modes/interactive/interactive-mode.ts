@@ -11,7 +11,6 @@ import * as path from "node:path";
 import type { AgentMessage } from "@pencil-agent/agent-core";
 import {
   type AssistantMessage,
-  completeSimple,
   getOAuthProviders,
   type ImageContent,
   type Message,
@@ -74,7 +73,6 @@ import {
 } from "../../core/runtime/agent-session.js";
 import type { CompactionResult } from "../../core/session/compaction/index.js";
 import type {
-  ExtensionContext,
   ExtensionRunner,
   ExtensionUIContext,
   ExtensionUIDialogOptions,
@@ -1417,77 +1415,15 @@ export class InteractiveMode {
     );
     if (shortcuts.size === 0) return;
 
-    // Create a context for shortcut handlers
-    const createContext = (): ExtensionContext => ({
-      ui: this.createExtensionUIContext(),
-      hasUI: true,
-      cwd: this.session.cwd,
-      agentDir: this.session.agentDir,
-      sessionManager: this.sessionManager,
-      modelRegistry: this.session.modelRegistry,
-      model: this.session.model,
-      getSettings: () => this.session.settingsManager.getSettings(),
-      completeSimple: async (systemPrompt: string, userMessage: string) => {
-        const model = this.session.model;
-        if (!model) return undefined;
-        const apiKey = await this.session.modelRegistry.getApiKey(model);
-        if (!apiKey) return undefined;
-        try {
-          const response = await completeSimple(
-            model,
-            {
-              systemPrompt,
-              messages: [
-                { role: "user", content: userMessage, timestamp: Date.now() },
-              ],
-            },
-            { maxTokens: 1500, temperature: 0.2, apiKey },
-          );
-          return (
-            response.content
-              ?.filter((b) => b.type === "text")
-              .map((b) => (b as TextContent).text ?? "")
-              .join("") ?? ""
-          );
-        } catch {
-          return undefined;
-        }
-      },
-      isIdle: () => !this.session.isStreaming,
-      abort: () => this.session.abort(),
-      hasPendingMessages: () => this.session.pendingMessageCount > 0,
-      shutdown: () => {
-        this.shutdownRequested = true;
-      },
-      getContextUsage: () => this.session.getContextUsage(),
-      compact: (options) => {
-        void (async () => {
-          try {
-            const result = await this.executeCompaction(
-              options?.customInstructions,
-              false,
-            );
-            if (result) {
-              options?.onComplete?.(result);
-            }
-          } catch (error) {
-            const err =
-              error instanceof Error ? error : new Error(String(error));
-            options?.onError?.(err);
-          }
-        })();
-      },
-      getSystemPrompt: () => this.session.systemPrompt,
-      getSoulManager: () => this.session.soulManager,
-    });
-
-    // Set up the extension shortcut handler on the default editor
+    // Reuse the runner's canonical ExtensionContext — the UI context and core
+    // bindings were already attached via session.bindExtensions(), so this
+    // returns a fully-wired context that stays in sync with model/session state.
     this.defaultEditor.onExtensionShortcut = (data: string) => {
       for (const [shortcutStr, shortcut] of shortcuts) {
         // Cast to KeyId - extension shortcuts use the same format
         if (matchesKey(data, shortcutStr as KeyId)) {
           // Run handler async, don't block input
-          Promise.resolve(shortcut.handler(createContext())).catch((err) => {
+          Promise.resolve(shortcut.handler(extensionRunner.createContext())).catch((err) => {
             this.showError(
               `Shortcut handler error: ${err instanceof Error ? err.message : String(err)}`,
             );
