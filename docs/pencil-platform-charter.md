@@ -1,9 +1,10 @@
 # Pencil 生态平台 Charter — 唯一发展路线源头
 
-> **状态**：active（2026-05-21 创建）
+> **状态**：active（2026-05-21 创建，2026-05-23 同步检测自动化生效）
 > **角色**：本文档是 Pencil 生态四项目的**单一发展路线源头**。所有跨项目级别的事实（拓扑、术语、阶段、决策、里程碑）以本文为准；各项目仓库内仅保留与自身实施相关的细节文档，并显式指回本 charter。
 > **宿主**：nanoPencil 仓库。理由——nano-pencil 是引擎核心，上层 Gateway / Asgard / editor 都是它的应用层；charter 放在核心层是最稳的源头。
 > **修改流程**：任何对 §2–§8 的修改必须通过 nanoPencil 仓库 PR；上层应用文档发现 charter 失同步时，应在 issue/PR 中引用 charter 路径 + 行号，由 charter 维护者更新。
+> **自动化**：每次本文档在 main 上更新（且 commit message 不含 `[skip-charter-sync]`），`.github/workflows/charter-sync-notify.yml` 会在 5 个应用仓各开一个 `charter-sync` issue。详见 §10.3。
 
 ---
 
