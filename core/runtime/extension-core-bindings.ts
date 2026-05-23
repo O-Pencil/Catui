@@ -11,6 +11,7 @@ import type {
 	TextContent,
 	ToolCall,
 	TSchema,
+	Usage,
 } from "@pencil-agent/ai";
 import { completeSimple } from "@pencil-agent/ai";
 import type { ThinkingLevel } from "@pencil-agent/agent-core";
@@ -95,6 +96,15 @@ async function completeTextWithCurrentModel(
 	systemPrompt: string,
 	userMessage: string,
 ): Promise<string | undefined> {
+	const result = await completeTextWithUsage(host, systemPrompt, userMessage);
+	return result?.text;
+}
+
+async function completeTextWithUsage(
+	host: ExtensionCoreBindingHost,
+	systemPrompt: string,
+	userMessage: string,
+): Promise<{ text: string; usage: Usage } | undefined> {
 	const model = host.model;
 	if (!model) return undefined;
 	const apiKey = await host.modelRegistry.getApiKey(model);
@@ -108,10 +118,12 @@ async function completeTextWithCurrentModel(
 			},
 			{ maxTokens: 1500, temperature: 0.2, apiKey },
 		);
-		return response.content
-			?.filter(isTextContent)
-			.map((block) => block.text ?? "")
-			.join("") ?? "";
+		const text =
+			response.content
+				?.filter(isTextContent)
+				.map((block) => block.text ?? "")
+				.join("") ?? "";
+		return { text, usage: response.usage };
 	} catch {
 		return undefined;
 	}
@@ -228,6 +240,8 @@ export function bindExtensionCore(runner: ExtensionRunner, host: ExtensionCoreBi
 			getModel: () => host.model,
 			completeSimple: (systemPrompt, userMessage) =>
 				completeTextWithCurrentModel(host, systemPrompt, userMessage),
+			completeSimpleWithUsage: (systemPrompt, userMessage) =>
+				completeTextWithUsage(host, systemPrompt, userMessage),
 			completeJson: (systemPrompt, userMessage, schema, options) =>
 				completeJsonWithCurrentModel(host, systemPrompt, userMessage, schema, options),
 			getSettings: () => host.settingsManager.getSettings(),

@@ -16,6 +16,7 @@ import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
 	CompactOptions,
+	CompletionResult,
 	ContextEvent,
 	ContextEventResult,
 	ContextUsage,
@@ -209,6 +210,10 @@ export class ExtensionRunner {
 	private getModel: () => Model<any> | undefined = () => undefined;
 	private completeSimpleFn: (systemPrompt: string, userMessage: string) => Promise<string | undefined> = async () =>
 		undefined;
+	private completeSimpleWithUsageFn: (
+		systemPrompt: string,
+		userMessage: string,
+	) => Promise<CompletionResult | undefined> = async () => undefined;
 	private completeJsonFn:
 		| ((
 				systemPrompt: string,
@@ -306,6 +311,7 @@ export class ExtensionRunner {
 		// Context actions (required)
 		this.getModel = contextActions.getModel;
 		this.completeSimpleFn = contextActions.completeSimple;
+		this.completeSimpleWithUsageFn = contextActions.completeSimpleWithUsage;
 		this.completeJsonFn = contextActions.completeJson;
 		this.isIdleFn = contextActions.isIdle;
 		this.runtime.isIdle = () => this.isIdleFn();
@@ -586,6 +592,8 @@ export class ExtensionRunner {
 			},
 			completeSimple: (systemPrompt: string, userMessage: string) =>
 				this.completeSimpleFn(systemPrompt, userMessage),
+			completeSimpleWithUsage: (systemPrompt: string, userMessage: string) =>
+				this.completeSimpleWithUsageFn(systemPrompt, userMessage),
 			completeJson: this.completeJsonFn
 				? (systemPrompt, userMessage, schema, options) =>
 						this.completeJsonFn!(systemPrompt, userMessage, schema, options)

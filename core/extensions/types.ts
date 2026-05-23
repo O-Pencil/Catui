@@ -23,6 +23,7 @@ import type {
 	SimpleStreamOptions,
 	TextContent,
 	ToolResultMessage,
+	Usage,
 } from "@pencil-agent/ai";
 import type {
 	AutocompleteItem,
@@ -258,6 +259,18 @@ export interface CompactOptions {
 }
 
 /**
+ * Result of a one-shot LLM completion that exposes token accounting so
+ * extensions can attribute cost to specific call sites. Use this in preference
+ * to `completeSimple` when the extension surfaces cost to the user.
+ */
+export interface CompletionResult {
+	/** Concatenated text of the assistant's content blocks. */
+	text: string;
+	/** Provider-reported token usage and pre-computed cost for this call. */
+	usage: Usage;
+}
+
+/**
  * Context passed to extension event handlers.
  */
 export interface ExtensionContext {
@@ -277,6 +290,15 @@ export interface ExtensionContext {
 	model: Model<any> | undefined;
 	/** One-shot LLM completion with current model (e.g. for memory extraction). Undefined when no model or no API key. */
 	completeSimple(systemPrompt: string, userMessage: string): Promise<string | undefined>;
+	/**
+	 * One-shot LLM completion that also returns provider token usage and cost.
+	 * Prefer this over `completeSimple` when the call's cost is surfaced to the
+	 * user (e.g. inline accounting badges, per-extension budgets).
+	 */
+	completeSimpleWithUsage(
+		systemPrompt: string,
+		userMessage: string,
+	): Promise<CompletionResult | undefined>;
 	/** One-shot structured JSON completion with current model. Uses provider tool-calling when available. */
 	completeJson?(
 		systemPrompt: string,
@@ -1336,6 +1358,11 @@ export interface ExtensionContextActions {
 	getModel: () => Model<any> | undefined;
 	/** One-shot completion with current model for extensions (e.g. memory extraction). Returns undefined if no model or no API key. */
 	completeSimple: (systemPrompt: string, userMessage: string) => Promise<string | undefined>;
+	/** One-shot completion that also returns provider token usage for cost-aware extensions. Returns undefined if no model or no API key. */
+	completeSimpleWithUsage: (
+		systemPrompt: string,
+		userMessage: string,
+	) => Promise<CompletionResult | undefined>;
 	/** One-shot structured JSON completion with current model. Returns undefined if no model, no API key, or no structured payload. */
 	completeJson?: (
 		systemPrompt: string,
