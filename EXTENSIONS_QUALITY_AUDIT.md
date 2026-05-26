@@ -1,0 +1,241 @@
+# nanoPencil Extensions Quality Audit
+
+Date: 2026-05-26
+
+Scope: `extensions/defaults/*`, `extensions/optional/*`, and the built-in extension registry in `builtin-extensions.ts`. The bundled `packages/mem-core` extension is noted as part of load order, but this audit focuses on extensions under `extensions/`.
+
+## Remediation Status
+
+Updated on 2026-05-26 after the first repair pass:
+
+- Fixed `presence` locale fallback, macOS realpath normalization, no-API fallback behavior, and slow/flaky timing tests.
+- Stopped default-loading `extensions/optional/*`; `simplify` and `export-html` now require explicit opt-in.
+- Hardened `simplify` git/test execution to use argument arrays instead of shell strings and added workspace path guards.
+- Unified `security-audit` tool gating through `DangerDetector` and switched audit cwd logging to extension context cwd.
+- Added direct smoke/hardening tests for lightly covered extensions (`btw`, `debug`, `idle-think`, `recap`, `export-html`, `simplify`) and SAL listener cleanup.
+- Added explicit `builtInExtensions` metadata (`defaultEnabled`, `riskLevel`, lifecycle and write/process flags) plus registry policy tests.
+- Restored the missing `core/export-html/template.html` runtime asset and added a real export smoke test that writes and decodes standalone HTML output.
+- Fixed unresolved timeout handles in fast `btw` and Smart `recap` completions; behavior tests now prove these commands return without waiting for their 30s timeout fallback.
+- Added lifecycle coverage for `idle-think` enabled/disabled startup and `session_shutdown` interval cleanup.
+- Added behavior coverage for debug credential redaction, `recap` budget-blocked calls, `discipline` skill discovery/prompt injection, and `export-html` custom tool HTML pre-rendering.
+- Split AgentTeam UI/rendering/observer helpers from `team/index.ts` into `team-ui.ts`, reducing the entry file from ~1035 lines to 707 lines while preserving focused team tests.
+- Split `presence` memory/path/language highlight logic into `presence-memory.ts`, reducing `presence/index.ts` from ~932 lines to 752 lines while preserving focused presence tests.
+- Fixed `presence` memory locale detection to include the mem-core `preferences` store rather than only `knowledge`/`lessons`, and aligned the locale fixture with the `MemoryEntry` storage contract.
+- Fixed mem-core archive cooldown logic to evaluate `revivedAt` and age against the explicit archive run timestamp instead of the wall clock, making archive maintenance deterministic.
+- Fixed related test fragility in SAL batch ordering, Grub persisted-state fixture shape, and TUI viewport cursor movement.
+
+Post-fix verification:
+
+- `npx tsc -p tsconfig.build.json --noEmit`: pass.
+- `npm run verify:dip`: pass, `411/411` files with valid P3 headers.
+- Node test suite, excluding Vitest-style files: `233/233` pass.
+- Vitest-style tests: `48` pass, `43` skipped.
+- `packages/mem-core/test/extension-commands.test.ts`: pass.
+- `npm run build`: pass.
+
+## Executive Summary
+
+Overall quality moved from uneven to release-candidate for the audited extension risks. The extension system has strong local contracts, good DIP hygiene, and several mature modules (`token-save`, `diagnostics`, `plan`, `grub`, `team`). The first repair pass resolved the operational blockers found in the audit: optional/default semantics, `presence` instability, `simplify` shell/write boundaries, duplicated `security-audit` detection, and missing smoke tests for lightly covered extensions.
+
+Quality grade after repair: **B+ overall**.
+
+Remaining risk is structural rather than immediate correctness: three extension files still exceed the local ~800 line guideline (`sal/index.ts`, `team-runtime.ts`, and `interview/index.ts`). These should be split in follow-up work when there is a dedicated design pass for each module; the current repair pass avoided broad behavior-preserving moves in the most stateful extensions after all verification gates were green.
+
+Current evidence:
+
+- `npm run verify:dip`: passed, `411/411` files with valid P3 headers and 30 P2 modules checked.
+- `npx tsc -p tsconfig.build.json --noEmit`: passed.
+- Node test suite excluding Vitest-style files: `233/233` passed.
+- Vitest-style tests: `48` passed, `43` skipped.
+- `packages/mem-core/test/extension-commands.test.ts`: passed.
+- `npm run build`: passed.
+
+## High-Priority Findings
+
+### 1. Optional extensions are loaded by default
+
+Status: **resolved**.
+
+Original evidence:
+
+- `builtin-extensions.ts:71-73` says optional extensions need explicit enablement.
+- `builtin-extensions.ts:134-140` pushes `extensions/optional/simplify`.
+- `builtin-extensions.ts:272-278` pushes `extensions/optional/export-html`.
+
+Impact: "Optional" is only a directory label, not runtime behavior. This is highest risk for `simplify` because it can rewrite workspace files, run tests, and bind `ctrl+shift+s`.
+
+Resolution:
+
+- `getBuiltinExtensionPaths()` no longer returns `extensions/optional/*`.
+- `test/browser-extension-registration.test.ts` now asserts optional extensions are not loaded by default.
+- Optional extensions can still be loaded through explicit extension paths/configuration.
+
+### 2. `presence` is not release-stable
+
+Status: **resolved**.
+
+Original evidence:
+
+- `presence` starts timers at `extensions/defaults/presence/index.ts:799-801`.
+- It resolves bundled packages through cwd-based candidates at `extensions/defaults/presence/index.ts:109-123`.
+- It relies on memory-derived language detection at `extensions/defaults/presence/index.ts:230-240`.
+- Test failure: `presence-locale: Chinese greeting when memory has Chinese preference` expected Chinese but got `Any ideas?`.
+- Test failure: `presence-runtime: resolves bundled packages from dist/packages` fails on `/private/var/...` vs `/var/...`.
+
+Impact: default-on UI behavior can be linguistically wrong, path-sensitive on macOS, and slow/flaky in test runs. Because it injects recent presence lines into the main system prompt at `extensions/defaults/presence/index.ts:851-875`, incorrect presence output can leak into actual agent behavior.
+
+Resolution:
+
+- Runtime bundled package entries are realpath-normalized.
+- Explicit memory language preference now controls fallback locale instead of falling through to process locale.
+- No-API-key runtime falls back immediately instead of waiting for a slow completion path.
+- Presence tests use a short explicit test delay and polling wait, reducing runtime from ~70s to a few seconds.
+
+### 3. `simplify` has unsafe write and shell boundaries
+
+Status: **resolved**.
+
+Original evidence:
+
+- Shell string interpolation: `execSync(\`git diff HEAD -- "${file}"\`)` at `extensions/optional/simplify/index.ts:57-60`.
+- Test command is selected and executed as a shell command at `extensions/optional/simplify/index.ts:123-130`.
+- It writes model-generated content directly to workspace files at `extensions/optional/simplify/index.ts:445-451`.
+- It registers `ctrl+shift+s` at `extensions/optional/simplify/index.ts:529-535`.
+- No direct tests found for `simplify`.
+
+Impact: filenames with quotes or shell metacharacters can break the command boundary. More importantly, default-loading a model-driven rewrite command increases accidental modification risk.
+
+Resolution:
+
+- Git and test execution now use `execFileSync` with argument arrays.
+- Workspace path guards reject writes outside `ctx.cwd`.
+- `simplify` is no longer default-loaded.
+- `test/simplify-extension.test.ts` covers shell-metacharacter filenames, outside-workspace rejection, and test command detection.
+
+### 4. Registry and P2 documentation drift
+
+Status: **resolved for audited drift**.
+
+Original evidence:
+
+- `extensions/AGENT.md:21` describes default extensions but the detailed list starts with a subset and older contracts.
+- `extensions/AGENT.md:120-129` still references `linkworld.ts`, but the current implementation is `link-world/index.ts`.
+- `extensions/AGENT.md:167-170` references `team-controller.ts`, while the actual module has `team-runtime.ts`, `team-orchestrator.ts`, stores, mailbox, permissions, dashboard, and harness.
+- The accurate list exists in `extensions/defaults/AGENT.md`, but the parent map is stale.
+
+Impact: DIP verification passes structurally, but the human navigation map is partially stale. This weakens the intended P1/P2/P3 evidence chain.
+
+Resolution:
+
+- `extensions/AGENT.md` now lists current default extension directories.
+- Stale `linkworld.ts` and `team-controller.ts` references were replaced with current `index.ts`, `team-runtime.ts`, and `team-orchestrator.ts` boundaries.
+- `npm run verify:dip` passes after the documentation update.
+
+### 5. `security-audit` has duplicated detection paths
+
+Status: **resolved**.
+
+Original evidence:
+
+- `security-audit/index.ts:91-113` defines inline command detection.
+- `security-audit/engine/detector.ts` defines `DangerDetector`, and `security-audit/engine/interceptor.ts` depends on it, but the extension entry does not use that interceptor path.
+- Audit logs use `process.cwd()` at `security-audit/index.ts:181-185` and `security-audit/index.ts:216-220` instead of event/session cwd.
+
+Impact: policy changes can be applied to the engine but not the active extension path. Logging cwd can be wrong in multi-workspace or embedded sessions.
+
+Resolution:
+
+- `security-audit/index.ts` now gates tool calls through `DangerDetector`.
+- Audit events use `ctx.cwd` rather than `process.cwd()`.
+- `test/security-audit.test.ts` now proves dangerous blocks, safe allows, sensitive write blocks, and warning patterns are logged without blocking.
+
+## Per-Extension Assessment
+
+| Extension | Grade | Evidence-based assessment | Main recommendation |
+|---|---:|---|---|
+| `diagnostics` | A- | Good bus boundary and dedupe; subscribes to canonical diagnostics at `diagnostics/index.ts:37-43`; covered by buffer/reporter/runtime tests. Silent auto-upload from `agent_end` is intentional but sensitive. | Document consent/config behavior clearly and keep uploads warning/error only. |
+| `token-save` | A- | Strong pure helpers and recovery path; handles `tool_call`, `user_bash`, and `tool_result` at `token-save/index.ts:64-99`; broad direct tests pass. | Add failure-mode tests for bad user config regex and async config load race. |
+| `plan` | A- | Cohesive permission model, validation, tools, and commands; direct tests pass. | Keep plan-file write boundaries exact; avoid expanding allowlist without tests. |
+| `grub` | B+ | Durable state, feature-list gating, parser/controller tests pass; implementation is large but well decomposed. | Continue splitting entry orchestration from UI rendering as features grow. |
+| `team` | B+ | Rich persistence, mailbox, permissions, worktree controls, and strong tests. `team/index.ts` is now 707 lines after moving rendering/dashboard/observer helpers to `team-ui.ts`; remaining size risk is `team-runtime.ts` at ~1188 lines. | Split runtime permission/worktree/send orchestration from `team-runtime.ts` in a dedicated design pass. |
+| `sal` | B+ | Ambitious and mostly isolated; has eval adapter tests and DIP coverage command. Process signal hooks are now removed on `session_shutdown` and covered by `test/sal-lifecycle.test.ts`. Complexity remains high. | Split setup/eval lifecycle orchestration from the large entry file in a future design pass. |
+| `browser` | B | Good subprocess timeout/abort cleanup at `browser/index.ts:170-213`; resource discovery is explicit at `browser/index.ts:459-470`; registration tests pass. | Add tests for install/doctor failure formatting and workspace seeding. |
+| `link-world` | B | Uses `execFile` for agent-reach execution at `link-world/index.ts:165-177`; capability-gated tools at `link-world/index.ts:405-413`; registration tests pass. | Cache capability probing or make it async to avoid startup sync command cost. |
+| `mcp` | B- | Useful Figma setup workflow and resource discovery; command is long and provider-specific. | Split Figma auth/setup into a dedicated helper module with tests. |
+| `loop` | B- | Cron tools and scheduler are useful; parser/scheduler structure is reasonable. Tests emitted lock/ticker logs and long-running process behavior. | Make scheduler test mode quiet and ensure every interval is owned and stopped deterministically. |
+| `subagent` | B | Parser covered; runner isolates write mode via worktree flow. | Add integration tests for apply/cancel paths and failure cleanup. |
+| `recap` | B+ | Small command and deterministic extractor; Free and Smart command paths are now covered, including usage emission, budget-blocked preflight, and timeout cleanup. | Add renderer accounting tests. |
+| `debug` | B+ | Good operational intent; collectors are separated; command/renderer registration, no-model quick diagnostic behavior, and nested credential redaction are covered by tests. | Add pending prompt cleanup tests for the full diagnostic turn path. |
+| `interview` | C+ | Important behavior fixed: before-agent hook is lightweight at `interview/index.ts:1096-1118`. But the file is ~1125 lines. | Split heuristics, grill flow, UI, and tool schema into modules. |
+| `presence` | B+ | Default-on user-visible extension now has deterministic locale/path behavior, fast tests, and memory/language helpers isolated in `presence-memory.ts`; entry file is 752 lines. It remains a background/UI subsystem, so lifecycle changes need targeted tests. | Keep timer and language behavior covered whenever changing memory or i18n integration. |
+| `idle-think` | B- | Default-loaded but default-disabled; guards budget and idle state; tests now prove disabled startup does not create timers and enabled startup clears its interval on shutdown. Silent catch still hides failures. | Add tests for budget reset, abort cleanup, and insight injection. |
+| `security-audit` | B | Active gate now uses `DangerDetector`, logs `ctx.cwd`, and has tests for dangerous/safe/warning/sensitive file paths. | Move config loading into the extension when user-facing policy configuration is introduced. |
+| `btw` | B | Small command, low blast radius; command/renderer registration, no-argument validation, no-tool prompt constraint, response emission, and timeout cleanup are covered. | Add explicit slow-timeout notification test with fake timers if the test harness gains timer control. |
+| `soul` | B | Thin compatibility shim; real implementation lives in `packages/soul-core`. | Keep it thin; audit `soul-core` separately. |
+| `export-html` | B+ | Useful command; now optional-only, ships the required HTML template asset, writes standalone HTML with decodable session data, and pre-renders custom tool call/result HTML in tests. File still has cleanup opportunities around import grouping and export adapter boundaries. | Add richer HTML snapshot coverage for branch navigation. |
+| `simplify` | C+ | Write-capable LLM refactor command is now optional-only, uses argument-array process execution, and rejects paths outside the workspace. | Add rollback/no-UI integration tests before considering broader promotion. |
+| `discipline` | B+ | Passive default extension that discovers bundled engineering workflow skills and appends a bootstrap prompt only when its skills directory exists; metadata/path and direct resources_discover/before_agent_start behavior are covered. | Keep skill asset packaging covered by build/copy-assets checks. |
+
+## Cross-Cutting Quality Themes
+
+### What is working
+
+- DIP hygiene is good at the mechanical level: P3 coverage passed for all checked files.
+- Mature extensions increasingly use small pure helpers (`token-save`, `recap`, `plan`, `grub`, `team` parsers/stores).
+- The extension event surface is capable enough to implement tools, slash commands, resources, renderers, and lifecycle hooks without modifying core for every feature.
+
+### What is breaking
+
+- Runtime category semantics are not encoded. A path under `optional/` can still be default-loaded.
+- Default-on extensions can start timers, perform sync capability checks, or attach process hooks. These need stronger lifecycle contracts than ordinary command-only extensions.
+- Some modules exceed the local quality metric of ~800 lines per file, especially `sal/index.ts`, `team-runtime.ts`, and `interview/index.ts`.
+- Test coverage is concentrated around parsers and core helpers; command/UI/resource paths are thinner.
+
+### Design direction
+
+Use extension metadata as the invariant, not directory names or comments. The registry now declares these fields for built-in extensions:
+
+- `defaultEnabled`: boolean
+- `riskLevel`: `passive | command | tool | background | write-capable`
+- `requiresUI`: boolean
+- `startsTimers`: boolean
+- `writesWorkspace`: boolean
+- `externalProcess`: boolean
+- `testContract`: required smoke tests by risk level
+
+The current registry tests enforce the first policy layer:
+
+- default-on write-capable extensions require explicit approval;
+- every `extensions/defaults/*` directory has metadata;
+- every default-enabled default extension has a load path;
+- optional extensions are metadata-visible but not default-loaded.
+
+Next policy layers should enforce:
+
+- background extensions require shutdown tests;
+- external-process extensions require timeout/abort tests;
+- resource-discovery extensions require skill path smoke tests.
+
+## Remaining Structural Work
+
+The repair pass closed the high-priority defects. Remaining work is lower urgency and mostly architectural:
+
+1. Split large extension files where command parsing, lifecycle, rendering, and persistence are mixed, especially `sal/index.ts`, `team-runtime.ts`, and `interview/index.ts`.
+2. Add deeper behavior tests beyond current coverage for debug pending cleanup, idle-think budget/abort/insight paths, recap renderer accounting, and branch-heavy `export-html` output.
+3. Expand metadata-based enforcement so background, external-process, and resource-discovery extensions must carry matching lifecycle/failure-mode tests.
+
+## Verification Log
+
+Commands run from `/Users/cunyu666/Dev/nanoPencil`:
+
+```bash
+npm run verify:dip
+npx tsc -p tsconfig.build.json --noEmit
+npm run build
+node --test --import tsx packages/mem-core/test/archive-maintenance.test.ts test/presence-locale.test.ts
+node --test --import tsx packages/mem-core/test/extension-commands.test.ts
+node --test --import tsx $(rg --files test packages/mem-core/test packages/agent-core/test | rg '\.test\.ts$' | rg -v 'packages/agent-core/test/(agent-loop|agent|e2e|bedrock-models)\.test\.ts|test/(settings-agent-loop|model-registry-agent-loop)\.test\.ts')
+npx vitest run packages/agent-core/test/agent-loop.test.ts packages/agent-core/test/agent.test.ts packages/agent-core/test/e2e.test.ts packages/agent-core/test/bedrock-models.test.ts test/settings-agent-loop.test.ts test/model-registry-agent-loop.test.ts
+```
+
+Current final verification is recorded in the remediation status at the top of this report.

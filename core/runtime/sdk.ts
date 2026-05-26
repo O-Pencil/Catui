@@ -448,6 +448,7 @@ export async function createAgentSession(
     steeringMode: settingsManager.getSteeringMode(),
     followUpMode: settingsManager.getFollowUpMode(),
     transport: settingsManager.getTransport(),
+    agentLoopFramework: settingsManager.getAgentLoopFramework() as any,
     thinkingBudgets: settingsManager.getThinkingBudgets(),
     maxRetryDelayMs: settingsManager.getRetrySettings().maxDelayMs,
     getApiKey: async (provider) => {

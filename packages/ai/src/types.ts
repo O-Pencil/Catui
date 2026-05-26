@@ -330,11 +330,11 @@ export interface Model<TApi extends Api> {
 	headers?: Record<string, string>;
 	/**
 	 * Agent loop framework used by higher-level agent runtimes.
-	 * "high-intelligence" keeps the existing high-autonomy loop; "low-intelligence"
+	 * "standard" keeps the existing high-autonomy loop; "weak-model-compatible"
 	 * opts into stronger scaffolding for lower-intelligence adaptation or
-	 * high-intelligence runs that need tighter control.
+	 * stronger-model runs that need tighter control.
 	 */
-	agentLoopFramework?: "high-intelligence" | "low-intelligence";
+	agentLoopFramework?: "standard" | "weak-model-compatible";
 	/** Compatibility overrides for OpenAI-compatible APIs. If not set, auto-detected from baseUrl. */
 	compat?: TApi extends "openai-completions"
 		? OpenAICompletionsCompat

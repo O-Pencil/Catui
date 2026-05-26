@@ -14,9 +14,9 @@
 
 import { complete, getModel } from "@pencil-agent/ai";
 import { Container, Markdown, matchesKey, Text } from "@pencil-agent/tui";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { isAbsolute, join, relative, resolve } from "path";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../core/extensions/types.js";
 import { DynamicBorder } from "../../../modes/interactive/components/dynamic-border.js";
 import { getMarkdownTheme } from "../../../modes/interactive/theme/theme.js";
@@ -45,8 +45,8 @@ interface SimplifyOptions {
 function getGitDiff(cwd: string): string {
 	try {
 		// Get both staged and unstaged changes
-		const staged = execSync("git diff --cached --name-only", { cwd, encoding: "utf-8" });
-		const unstaged = execSync("git diff --name-only", { cwd, encoding: "utf-8" });
+		const staged = execFileSync("git", ["diff", "--cached", "--name-only"], { cwd, encoding: "utf-8" });
+		const unstaged = execFileSync("git", ["diff", "--name-only"], { cwd, encoding: "utf-8" });
 		const combined = [...new Set([...staged.split("\n"), ...unstaged.split("\n")])];
 		return combined.filter((f) => f.trim()).join("\n");
 	} catch {
@@ -56,11 +56,18 @@ function getGitDiff(cwd: string): string {
 
 function getFileDiff(cwd: string, file: string): string {
 	try {
-		const diff = execSync(`git diff HEAD -- "${file}"`, { cwd, encoding: "utf-8" });
+		const diff = execFileSync("git", ["diff", "HEAD", "--", file], { cwd, encoding: "utf-8" });
 		return diff || "";
 	} catch {
 		return "";
 	}
+}
+
+function resolveWorkspaceFile(cwd: string, filePath: string): string | undefined {
+	const fullPath = resolve(cwd, filePath);
+	const rel = relative(cwd, fullPath);
+	if (!rel || rel.startsWith("..") || isAbsolute(rel)) return undefined;
+	return fullPath;
 }
 
 // =============================================================================
@@ -90,13 +97,19 @@ function loadProjectRules(cwd: string): string {
 // Test Runner
 // =============================================================================
 
-function detectTestCommand(cwd: string): string | null {
+interface TestCommand {
+	command: string;
+	args: string[];
+	label: string;
+}
+
+function detectTestCommand(cwd: string): TestCommand | null {
 	const packageJsonPath = join(cwd, "package.json");
 	if (existsSync(packageJsonPath)) {
 		try {
 			const pkg = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
 			if (pkg.scripts?.test) {
-				return "npm test";
+				return { command: "npm", args: ["test"], label: "npm test" };
 			}
 		} catch {
 			// ignore
@@ -105,15 +118,15 @@ function detectTestCommand(cwd: string): string | null {
 
 	// Check for common test files
 	const testPatterns = [
-		{ pattern: "pytest.ini", cmd: "pytest" },
-		{ pattern: "setup.py", cmd: "python -m pytest" },
-		{ pattern: "Cargo.toml", cmd: "cargo test" },
-		{ pattern: "go.mod", cmd: "go test ./..." },
+		{ pattern: "pytest.ini", command: "pytest", args: [], label: "pytest" },
+		{ pattern: "setup.py", command: "python", args: ["-m", "pytest"], label: "python -m pytest" },
+		{ pattern: "Cargo.toml", command: "cargo", args: ["test"], label: "cargo test" },
+		{ pattern: "go.mod", command: "go", args: ["test", "./..."], label: "go test ./..." },
 	];
 
-	for (const { pattern, cmd } of testPatterns) {
+	for (const { pattern, command, args, label } of testPatterns) {
 		if (existsSync(join(cwd, pattern))) {
-			return cmd;
+			return { command, args, label };
 		}
 	}
 
@@ -127,7 +140,7 @@ function runTests(cwd: string): { success: boolean; output: string } {
 	}
 
 	try {
-		const output = execSync(testCmd, { cwd, encoding: "utf-8", timeout: 120000 });
+		const output = execFileSync(testCmd.command, testCmd.args, { cwd, encoding: "utf-8", timeout: 120000 });
 		return { success: true, output };
 	} catch (error: unknown) {
 		const err = error as { stdout?: string; stderr?: string };
@@ -351,7 +364,11 @@ async function simplifyFile(
 	rules: string,
 	ctx: ExtensionCommandContext,
 ): Promise<SimplifyResult | null> {
-	const fullPath = join(cwd, filePath);
+	const fullPath = resolveWorkspaceFile(cwd, filePath);
+	if (!fullPath) {
+		ctx.ui.notify(`Refusing to simplify file outside workspace: ${filePath}`, "warning");
+		return null;
+	}
 	if (!existsSync(fullPath)) {
 		ctx.ui.notify(`File not found: ${filePath}`, "warning");
 		return null;
@@ -437,7 +454,8 @@ async function executeSimplify(options: SimplifyOptions, ctx: ExtensionCommandCo
 			ctx.ui.notify("Simplification cancelled", "info");
 			// Rollback any applied changes
 			for (const [file, content] of backups) {
-				writeFileSync(join(cwd, file), content, "utf-8");
+				const fullPath = resolveWorkspaceFile(cwd, file);
+				if (fullPath) writeFileSync(fullPath, content, "utf-8");
 			}
 			return;
 		}
@@ -447,7 +465,12 @@ async function executeSimplify(options: SimplifyOptions, ctx: ExtensionCommandCo
 			backups.set(result.file, result.original);
 
 			// Apply change
-			writeFileSync(join(cwd, result.file), result.simplified, "utf-8");
+			const fullPath = resolveWorkspaceFile(cwd, result.file);
+			if (!fullPath) {
+				ctx.ui.notify(`Refusing to write outside workspace: ${result.file}`, "error");
+				continue;
+			}
+			writeFileSync(fullPath, result.simplified, "utf-8");
 			applied.push(result);
 			ctx.ui.notify(`Applied: ${result.file}`, "info");
 		}
@@ -468,7 +491,8 @@ async function executeSimplify(options: SimplifyOptions, ctx: ExtensionCommandCo
 
 			// Rollback all changes
 			for (const [file, content] of backups) {
-				writeFileSync(join(cwd, file), content, "utf-8");
+				const fullPath = resolveWorkspaceFile(cwd, file);
+				if (fullPath) writeFileSync(fullPath, content, "utf-8");
 			}
 
 			ctx.ui.notify(
@@ -535,3 +559,11 @@ export default function simplifyExtension(api: ExtensionAPI) {
 		},
 	});
 }
+
+export const __testUtils = {
+	getGitDiff,
+	getFileDiff,
+	resolveWorkspaceFile,
+	detectTestCommand,
+	runTests,
+};

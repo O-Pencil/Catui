@@ -98,7 +98,7 @@ const ACP_SUPPORTED_BUILTIN_COMMANDS = new Set([
 ]);
 const ACP_COMMAND_INPUT_HINTS = new Map<string, string>([
 	["compact", "Optional compaction instructions"],
-	["agent-loop", "high-intelligence or low-intelligence"],
+	["agent-loop", "standard or weak-model-compatible"],
 	["model", "provider/model or model id"],
 	["name", "New session name"],
 	["resume", "Session id or title"],
@@ -970,10 +970,10 @@ class NanoPencilAgent implements acp.Agent {
 
 		if (trimmed === "/agent-loop" || trimmed.startsWith("/agent-loop ")) {
 			const arg = trimmed.slice("/agent-loop".length).trim().toLowerCase();
-			const choices = ["high-intelligence", "low-intelligence"] as const;
+			const choices = ["standard", "weak-model-compatible"] as const;
 			const normalized =
-				arg === "standard" ? "high-intelligence" :
-				arg === "structured-adaptive" ? "low-intelligence" :
+				arg === "high-intelligence" ? "standard" :
+				arg === "low-intelligence" || arg === "structured-adaptive" ? "weak-model-compatible" :
 				arg;
 			if (!arg) {
 				await this.sendAssistantText(

@@ -112,7 +112,7 @@ export interface AgentOptions {
 	agentLoopFramework?: AgentLoopFrameworkInput;
 
 	/**
-	 * Optional tool permission gate used by low-intelligence-adaptation loop execution.
+	 * Optional tool permission gate used by weak-model-compatible loop execution.
 	 */
 	canUseTool?: AgentLoopConfig["canUseTool"];
 }
@@ -226,7 +226,7 @@ export class Agent {
 	get agentLoopFramework(): AgentLoopFramework {
 		return normalizeAgentLoopFramework(
 			this._agentLoopFramework ?? (this._state.model as ModelWithAgentLoopFramework).agentLoopFramework,
-		) ?? "high-intelligence";
+		) ?? "standard";
 	}
 
 	setAgentLoopFramework(value: AgentLoopFrameworkInput | undefined) {
@@ -488,7 +488,7 @@ export class Agent {
 		let partial: AgentMessage | null = null;
 
 		try {
-			const useStructuredAdaptiveLoop = config.loopFramework === "low-intelligence";
+			const useStructuredAdaptiveLoop = config.loopFramework === "weak-model-compatible";
 			const stream = messages
 				? useStructuredAdaptiveLoop
 					? structuredAdaptiveAgentLoop(messages, context, config, this.abortController.signal, this.streamFn)

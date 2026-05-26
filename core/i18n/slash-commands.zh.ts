@@ -8,7 +8,7 @@
 export const slashCommands = {
 	settings: "打开设置菜单",
 	model: "选择模型（打开选择器界面）",
-	"agent-loop": "设置本会话的高智能/低智能 agent loop 适配",
+	"agent-loop": "设置本会话的 standard/弱模型兼容 agent loop",
 	"scoped-models": "启用/禁用 Ctrl+P 循环的模型",
 	apikey: "更新当前提供商的 API 密钥",
 	mcp: "管理 MCP 服务器（列出、启用、禁用）",

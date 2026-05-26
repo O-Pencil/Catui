@@ -1,6 +1,6 @@
 /**
  * [WHO]: SecurityAudit extension - audit logging and dangerous pattern detection
- * [FROM]: Depends on node:fs, node:path, node:crypto, node:os, core/extensions/types, ./interface
+ * [FROM]: Depends on core/extensions/types, ./engine/detector, ./engine/logger, ./interface
  * [TO]: Consumed by builtin-extensions.ts as default extension
  * [HERE]: extensions/defaults/security-audit/index.ts - security auditing for NanoPencil operations
  *
@@ -11,9 +11,8 @@
  */
 
 
-import { join, dirname } from "node:path";
-import { homedir } from "node:os";
 import { AuditLogger } from "./engine/logger.js";
+import { DangerDetector } from "./engine/detector.js";
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
@@ -21,117 +20,8 @@ import type {
 	ToolCallEvent,
 	ToolCallEventResult,
 } from "../../../core/extensions/types.js";
-import type {
-	SecurityConfig,
-	SecurityCheckResult,
-	AuditEvent,
-	LogQueryOptions,
-	SecurityStats,
-	SecurityLevel,
-	AuditEventType,
-	AuditEventStatus,
-} from "./interface.js";
+import type { AuditEventType } from "./interface.js";
 import { DEFAULT_SECURITY_CONFIG } from "./interface.js";
-import { AgentDirContext } from "../../../core/agent-dir/agent-dir-context.js";
-
-// ============================================================
-// Types
-// ============================================================
-
-interface InterceptorResult {
-	proceed: boolean;
-	event?: AuditEvent;
-	message?: string;
-}
-
-// ============================================================
-// Utility Functions
-// ============================================================
-
-function expandHome(path: string): string {
-	if (path.startsWith("~")) {
-		return join(homedir(), path.slice(1));
-	}
-	return path;
-}
-
-// ============================================================
-// Danger Detector
-// ============================================================
-
-const DEFAULT_DANGEROUS_PATTERNS = [
-	"rm\\s+-rf",
-	"rmdir\\s+/s",
-	"del\\s+/s",
-	"sudo\\s+",
-	"chmod\\s+777",
-	"chown\\s+",
-	"kill\\s+-9",
-	"pkill\\s+-9",
-	"killall\\s+",
-	"curl\\s+.*\\|\\s*sh",
-	"wget\\s+.*\\|\\s*sh",
-	"git\\s+push\\s+--force",
-	"git\\s+push\\s+-f",
-	"docker\\s+rm\\s+-f",
-	"docker\\s+run\\s+--rm",
-	"systemctl\\s+stop",
-	"systemctl\\s+restart",
-];
-
-const DEFAULT_SENSITIVE_PATHS = [
-	"~/.ssh/",
-	"~/.aws/",
-	"~/.azure/",
-	".env",
-	".env.local",
-	".env.production",
-];
-
-function checkDangerousCommand(command: string): SecurityCheckResult {
-	const normalized = command.toLowerCase().trim();
-
-	// Check dangerous patterns
-	for (const pattern of DEFAULT_DANGEROUS_PATTERNS) {
-		const regex = new RegExp(pattern, "i");
-		if (regex.test(command)) {
-			return {
-				allowed: false,
-				level: "dangerous",
-				reason: `Command matches dangerous pattern: ${pattern}`,
-				pattern,
-				requiresConfirm: true,
-			};
-		}
-	}
-
-	return {
-		allowed: true,
-		level: "safe",
-		reason: "Command appears safe",
-	};
-}
-
-function checkSensitiveFile(path: string): SecurityCheckResult {
-	const expanded = expandHome(path);
-
-	for (const sensitive of DEFAULT_SENSITIVE_PATHS) {
-		const expandedSensitive = expandHome(sensitive);
-		if (expanded.includes(expandedSensitive)) {
-			return {
-				allowed: false,
-				level: "dangerous",
-				reason: `Path contains sensitive data: ${sensitive}`,
-				requiresConfirm: true,
-			};
-		}
-	}
-
-	return {
-		allowed: true,
-		level: "safe",
-	};
-}
 
 // ============================================================
 // Security Audit Extension
@@ -141,6 +31,12 @@ const SECURITY_MESSAGE_TYPE = "security-audit";
 
 // Security mode: "audit" (warn only), "strict" (block dangerous)
 const SECURITY_MODE = process.env.SECURITY_MODE as string || "strict";
+const detector = new DangerDetector({
+	...DEFAULT_SECURITY_CONFIG,
+	mode: SECURITY_MODE === "audit" || SECURITY_MODE === "confirm" || SECURITY_MODE === "strict"
+		? SECURITY_MODE
+		: "strict",
+});
 
 // Cache loggers per agent to support multi-agent
 const loggers = new Map<string, AuditLogger>();
@@ -175,16 +71,16 @@ function auditAndGateToolCall(api: ExtensionAPI, event: ToolCallEvent, ctx: Exte
 		const command = (args as Record<string, unknown>).command as string | undefined;
 		if (!command) return;
 
-		const result = checkDangerousCommand(command);
+		const result = detector.checkCommand(command);
 		const shouldBlock = result.level === "dangerous" && SECURITY_MODE === "strict";
 
 		logger.log({
 			type: "command",
 			operation: "bash",
 			target: command,
-			cwd: process.cwd(),
+			cwd: ctx.cwd,
 			level: result.level,
-			status: shouldBlock ? "blocked" : result.level === "dangerous" ? "warning" : "allowed",
+			status: shouldBlock ? "blocked" : result.level === "safe" ? "allowed" : "warning",
 			reason: result.reason,
 			pattern: result.pattern,
 		});
@@ -209,17 +105,17 @@ function auditAndGateToolCall(api: ExtensionAPI, event: ToolCallEvent, ctx: Exte
 		const filePath = input.file_path || input.path || input.filePath;
 		if (!filePath) return;
 
-		const result = checkSensitiveFile(filePath as string);
 		const operation = toolName === "write" || toolName === "Write" ? "write" : "edit";
+		const result = detector.checkFileOperation(operation, filePath as string);
 		const shouldBlock = result.level === "dangerous";
 
 		logger.log({
 			type: `file_${operation}` as AuditEventType,
 			operation,
 			target: filePath as string,
-			cwd: process.cwd(),
+			cwd: ctx.cwd,
 			level: result.level,
-			status: shouldBlock ? "blocked" : "allowed",
+			status: shouldBlock ? "blocked" : result.level === "safe" ? "allowed" : "warning",
 			reason: result.reason,
 		});
 

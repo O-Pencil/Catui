@@ -1,40 +1,25 @@
 /**
- * [WHO]: storeInsight(), loadRecentInsights(), buildInsightInjection() — nanomem-persisted insight storage and injection
- * [FROM]: Depends on node:fs, node:path, node:os, packages/mem-core/src/store (loadEntries/saveEntries)
+ * [WHO]: storeInsight(), loadRecentInsights(), buildInsightInjection(), projectKeyFromCwd() — project-scoped nanomem insight storage and injection
+ * [FROM]: Depends on node:fs, node:path, node:os, packages/mem-core/src/store and packages/mem-core/src/types for validated persistent memory entries
  * [TO]: Consumed by ./index.ts (idle-think extension entry)
  * [HERE]: extensions/defaults/idle-think/insights.ts - persistent insight storage via nanomem knowledge.json
  *
- * Insights are stored directly in nanomem's knowledge.json with tag "idle-think".
- * This ensures they persist across sessions and benefit from nanomem's existing
- * utility scoring and eviction logic.
+ * Insights are stored in nanomem's knowledge.json with tag "idle-think".
+ * This keeps persistence compatible with nanomem's entry migration and
+ * avoids injecting notes from unrelated projects.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { homedir } from "node:os";
+import { loadEntries, saveEntries } from "../../../packages/mem-core/src/store.js";
+import type { MemoryEntry } from "../../../packages/mem-core/src/types.js";
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-type KnowledgeEntry = {
-	id: string;
-	type: string;
-	name?: string;
-	summary?: string;
-	detail?: string;
-	tags: string[];
-	project: string;
-	importance: number;
-	created: string;
-	accessCount: number;
-	lastAccessed?: string;
-	content?: string; // backward compat
-};
+const MAX_IDLE_INSIGHTS = 100;
+const IDLE_THINK_TAG = "idle-think";
+const AUTO_EXPLORATION_TAG = "auto-exploration";
 
 // ── Path resolution ──────────────────────────────────────────────────────────
-
-function getKnowledgePath(): string {
-	return join(homedir(), ".nanopencil", "agent", "memory", "knowledge.json");
-}
 
 function getMemoryDir(): string {
 	if (process.env.NANOMEM_MEMORY_DIR) return process.env.NANOMEM_MEMORY_DIR;
@@ -43,27 +28,44 @@ function getMemoryDir(): string {
 	return join(homedir(), ".nanomem", "memory");
 }
 
-// ── Direct file I/O (no engine dependency) ───────────────────────────────────
+function getKnowledgePath(): string {
+	return join(getMemoryDir(), "knowledge.json");
+}
 
-function loadKnowledge(): KnowledgeEntry[] {
-	const path = join(getMemoryDir(), "knowledge.json");
-	if (!existsSync(path)) return [];
+export function projectKeyFromCwd(cwd: string): string {
+	const parts = cwd.split(/[\\/]+/).filter(Boolean);
+	return parts.slice(-2).join("/") || parts[0] || "default";
+}
+
+// ── Store helpers ────────────────────────────────────────────────────────────
+
+async function loadKnowledge(): Promise<MemoryEntry[]> {
 	try {
-		const raw = readFileSync(path, "utf-8");
-		return JSON.parse(raw) as KnowledgeEntry[];
+		return await loadEntries(getKnowledgePath());
 	} catch {
 		return [];
 	}
 }
 
-function saveKnowledge(entries: KnowledgeEntry[]): void {
-	const path = join(getMemoryDir(), "knowledge.json");
-	try {
-		mkdirSync(dirname(path), { recursive: true });
-		writeFileSync(path, JSON.stringify(entries, null, 2), "utf-8");
-	} catch {
-		// fail-soft
-	}
+async function saveKnowledge(entries: MemoryEntry[]): Promise<void> {
+	await saveEntries(getKnowledgePath(), entries, Number.MAX_SAFE_INTEGER, insightUtility);
+}
+
+function insightUtility(entry: MemoryEntry): number {
+	return (entry.importance ?? 0) * (entry.accessCount + 1);
+}
+
+function isIdleInsight(entry: MemoryEntry): boolean {
+	return Array.isArray(entry.tags) && entry.tags.includes(IDLE_THINK_TAG);
+}
+
+function pruneIdleInsights(entries: MemoryEntry[]): MemoryEntry[] {
+	const idle = entries
+		.filter(isIdleInsight)
+		.sort((a, b) => b.created.localeCompare(a.created))
+		.slice(0, MAX_IDLE_INSIGHTS);
+	const keepIdleIds = new Set(idle.map((entry) => entry.id));
+	return entries.filter((entry) => !isIdleInsight(entry) || keepIdleIds.has(entry.id));
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -72,47 +74,42 @@ function saveKnowledge(entries: KnowledgeEntry[]): void {
  * Store an insight as a nanomem knowledge entry.
  * Entry is tagged "idle-think" for traceability and filtering.
  */
-export function storeInsight(insightText: string, project: string): void {
-	const entries = loadKnowledge();
+export async function storeInsight(insightText: string, project: string): Promise<void> {
+	const trimmed = insightText.trim();
+	if (!trimmed) return;
+
+	const entries = await loadKnowledge();
 	const now = new Date().toISOString();
 	const dateStamp = now.slice(0, 10);
 
 	// Generate a short summary from the first line or first 150 chars
-	const firstLine = insightText.split("\n").find((l) => l.trim().length > 0)?.trim() ?? "";
+	const firstLine = trimmed.split("\n").find((l) => l.trim().length > 0)?.trim() ?? "";
 	const summary = firstLine.length > 150 ? firstLine.slice(0, 147) + "..." : firstLine;
 
-	const entry: KnowledgeEntry = {
+	const entry: MemoryEntry = {
 		id: `idle-think-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 		type: "fact",
 		name: `idle-think:${dateStamp}`,
 		summary,
-		detail: insightText.slice(0, 2000),
-		tags: ["idle-think", "auto-exploration"],
+		detail: trimmed.slice(0, 2000),
+		tags: [IDLE_THINK_TAG, AUTO_EXPLORATION_TAG],
 		project,
 		importance: 0.5, // moderate — not a core preference or lesson
 		created: now,
 		accessCount: 0,
 	};
 
-	entries.push(entry);
-
-	// Keep knowledge.json manageable — cap at 500 entries
-	if (entries.length > 500) {
-		entries.sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0));
-		entries.length = 500;
-	}
-
-	saveKnowledge(entries);
+	await saveKnowledge(pruneIdleInsights([...entries, entry]));
 }
 
 /**
  * Load recent idle-think insights from nanomem.
  * Returns the last `count` entries, newest first.
  */
-export function loadRecentInsights(count: number = 5): KnowledgeEntry[] {
-	const entries = loadKnowledge();
+export async function loadRecentInsights(count: number = 5, project?: string): Promise<MemoryEntry[]> {
+	const entries = await loadKnowledge();
 	return entries
-		.filter((e) => e.tags.includes("idle-think"))
+		.filter((entry) => isIdleInsight(entry) && (!project || entry.project === project))
 		.sort((a, b) => b.created.localeCompare(a.created))
 		.slice(0, count);
 }
@@ -121,8 +118,8 @@ export function loadRecentInsights(count: number = 5): KnowledgeEntry[] {
  * Build a system prompt injection for before_agent_start.
  * Reads from nanomem (persistent), not session state.
  */
-export function buildInsightInjection(): string | undefined {
-	const insights = loadRecentInsights(3);
+export async function buildInsightInjection(project?: string): Promise<string | undefined> {
+	const insights = await loadRecentInsights(3, project);
 	if (!insights.length) return undefined;
 
 	const items = insights
@@ -140,7 +137,7 @@ export function buildInsightInjection(): string | undefined {
 		"## Idle Exploration Notes",
 		"",
 		"While the user was away, background code exploration found these insights",
-		"about the current project:",
+		project ? "about this project:" : "about recent projects:",
 		"",
 		items,
 		"",

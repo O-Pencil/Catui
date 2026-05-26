@@ -113,8 +113,8 @@ describe("Agent", () => {
 
 		const model = {
 			...getModel("openai", "gpt-4o-mini"),
-			agentLoopFramework: "low-intelligence",
-		} as Model<any> & { agentLoopFramework: "low-intelligence" };
+			agentLoopFramework: "weak-model-compatible",
+		} as Model<any> & { agentLoopFramework: "weak-model-compatible" };
 		let callIndex = 0;
 		const agent = new Agent({
 			initialState: {
@@ -142,7 +142,7 @@ describe("Agent", () => {
 			},
 		});
 
-		expect(agent.agentLoopFramework).toBe("low-intelligence");
+		expect(agent.agentLoopFramework).toBe("weak-model-compatible");
 		await agent.prompt("read both");
 
 		expect(executionOrder.slice(0, 2)).toEqual(["start:first", "start:second"]);
@@ -152,7 +152,7 @@ describe("Agent", () => {
 		expect(toolResults).toEqual(["tool-1", "tool-2"]);
 	});
 
-	it("should keep low-intelligence behavior opt-in so the default high-intelligence loop is unchanged", async () => {
+	it("should keep weak-model-compatible behavior opt-in so the default standard loop is unchanged", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		const executionOrder: string[] = [];
 		const events: string[] = [];
@@ -191,7 +191,7 @@ describe("Agent", () => {
 			},
 			canUseTool() {
 				permissionChecks++;
-				return { decision: "deny", reason: "low-intelligence only" };
+				return { decision: "deny", reason: "weak-model-compatible only" };
 			},
 			streamFn: () => {
 				const stream = new MockAssistantStream();
@@ -215,7 +215,7 @@ describe("Agent", () => {
 		});
 		agent.subscribe((event) => events.push(event.type));
 
-		expect(agent.agentLoopFramework).toBe("high-intelligence");
+		expect(agent.agentLoopFramework).toBe("standard");
 		await agent.prompt("read both");
 
 		expect(executionOrder).toEqual(["start:first", "end:first", "start:second", "end:second"]);

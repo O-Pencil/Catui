@@ -19,7 +19,11 @@ import type { RpcCommand, RpcResponse, RpcSessionState, RpcSlashCommand } from "
 
 /** Distributive Omit that works with union types */
 type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
-type AgentLoopFrameworkInput = AgentLoopFramework | "standard" | "structured-adaptive";
+type AgentLoopFrameworkInput =
+	| AgentLoopFramework
+	| "high-intelligence"
+	| "low-intelligence"
+	| "structured-adaptive";
 
 /** RpcCommand without the id field (for internal send) */
 type RpcCommandBody = DistributiveOmit<RpcCommand, "id">;

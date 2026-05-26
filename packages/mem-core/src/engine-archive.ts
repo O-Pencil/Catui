@@ -5,7 +5,6 @@
  * [HERE]: packages/mem-core/src/engine-archive.ts - archive partitioning, merging, and staleness detection
  */
 
-import { daysSince } from "./scoring.js";
 import type { MemoryEntry, WorkEntry } from "./types.js";
 import type { ProceduralMemory, SemanticMemory } from "./types-v2.js";
 
@@ -13,6 +12,10 @@ export interface ForgettingConfig {
 	ambientTtlDays: number;
 	workTtlDays: number;
 	reviveCooldownDays: number;
+}
+
+function daysBetween(iso: string, now: string): number {
+	return Math.max(0, (new Date(now).getTime() - new Date(iso).getTime()) / 86_400_000);
 }
 
 // ── Merge helpers ──────────────────────────────────────────
@@ -37,11 +40,11 @@ export function mergeArchivedV2<T extends { id: string; createdAt: string; archi
 
 // ── Archive reason detection ───────────────────────────────
 
-function getLegacyArchiveReason(entry: MemoryEntry, forgetting: ForgettingConfig): string | undefined {
+function getLegacyArchiveReason(entry: MemoryEntry, now: string, forgetting: ForgettingConfig): string | undefined {
 	if (entry.archivedAt) return entry.archiveReason ?? "pre-archived";
-	if (entry.revivedAt && daysSince(entry.revivedAt) <= forgetting.reviveCooldownDays) return undefined;
+	if (entry.revivedAt && daysBetween(entry.revivedAt, now) <= forgetting.reviveCooldownDays) return undefined;
 	const anchor = entry.lastAccessed ?? entry.eventTime ?? entry.created;
-	const ageDays = daysSince(anchor);
+	const ageDays = daysBetween(anchor, now);
 	const lowSignal = (entry.accessCount ?? 0) <= 1 && entry.importance <= 6 && (entry.salience ?? entry.importance) <= 6;
 	if (entry.retention === "ambient" && lowSignal && ageDays > forgetting.ambientTtlDays) {
 		return "stale-ambient-memory";
@@ -49,22 +52,22 @@ function getLegacyArchiveReason(entry: MemoryEntry, forgetting: ForgettingConfig
 	return undefined;
 }
 
-function getWorkArchiveReason(entry: WorkEntry, forgetting: ForgettingConfig): string | undefined {
+function getWorkArchiveReason(entry: WorkEntry, now: string, forgetting: ForgettingConfig): string | undefined {
 	if (entry.archivedAt) return entry.archiveReason ?? "pre-archived";
-	if (entry.revivedAt && daysSince(entry.revivedAt) <= forgetting.reviveCooldownDays) return undefined;
+	if (entry.revivedAt && daysBetween(entry.revivedAt, now) <= forgetting.reviveCooldownDays) return undefined;
 	const anchor = entry.lastAccessed ?? entry.eventTime ?? entry.created;
-	const ageDays = daysSince(anchor);
+	const ageDays = daysBetween(anchor, now);
 	if ((entry.accessCount ?? 0) <= 1 && entry.importance <= 6 && ageDays > forgetting.workTtlDays) {
 		return "stale-work-memory";
 	}
 	return undefined;
 }
 
-function getSemanticArchiveReason(entry: SemanticMemory, forgetting: ForgettingConfig): string | undefined {
+function getSemanticArchiveReason(entry: SemanticMemory, now: string, forgetting: ForgettingConfig): string | undefined {
 	if (entry.archivedAt) return entry.archiveReason ?? "pre-archived";
-	if (entry.revivedAt && daysSince(entry.revivedAt) <= forgetting.reviveCooldownDays) return undefined;
+	if (entry.revivedAt && daysBetween(entry.revivedAt, now) <= forgetting.reviveCooldownDays) return undefined;
 	const anchor = entry.lastAccessedAt ?? entry.updatedAt ?? entry.createdAt;
-	const ageDays = daysSince(anchor);
+	const ageDays = daysBetween(anchor, now);
 	if (entry.supersededById && ageDays > forgetting.ambientTtlDays) {
 		return "superseded-semantic-memory";
 	}
@@ -75,11 +78,11 @@ function getSemanticArchiveReason(entry: SemanticMemory, forgetting: ForgettingC
 	return undefined;
 }
 
-function getProceduralArchiveReason(entry: ProceduralMemory, forgetting: ForgettingConfig): string | undefined {
+function getProceduralArchiveReason(entry: ProceduralMemory, now: string, forgetting: ForgettingConfig): string | undefined {
 	if (entry.archivedAt) return entry.archiveReason ?? "pre-archived";
-	if (entry.revivedAt && daysSince(entry.revivedAt) <= forgetting.reviveCooldownDays) return undefined;
+	if (entry.revivedAt && daysBetween(entry.revivedAt, now) <= forgetting.reviveCooldownDays) return undefined;
 	const anchor = entry.lastAccessedAt ?? entry.updatedAt ?? entry.createdAt;
-	const ageDays = daysSince(anchor);
+	const ageDays = daysBetween(anchor, now);
 	if ((entry.status === "superseded" || entry.status === "deprecated") && ageDays > forgetting.ambientTtlDays) {
 		return "stale-procedure-version";
 	}
@@ -95,7 +98,7 @@ export function partitionArchivedEntries(entries: MemoryEntry[], now: string, fo
 	const active: MemoryEntry[] = [];
 	const archived: MemoryEntry[] = [];
 	for (const entry of entries) {
-		const reason = getLegacyArchiveReason(entry, forgetting);
+		const reason = getLegacyArchiveReason(entry, now, forgetting);
 		if (!reason) {
 			active.push(entry);
 			continue;
@@ -113,7 +116,7 @@ export function partitionArchivedWork(entries: WorkEntry[], now: string, forgett
 	const active: WorkEntry[] = [];
 	const archived: WorkEntry[] = [];
 	for (const entry of entries) {
-		const reason = getWorkArchiveReason(entry, forgetting);
+		const reason = getWorkArchiveReason(entry, now, forgetting);
 		if (!reason) {
 			active.push(entry);
 			continue;
@@ -131,7 +134,7 @@ export function partitionArchivedSemantic(entries: SemanticMemory[], now: string
 	const active: SemanticMemory[] = [];
 	const archived: SemanticMemory[] = [];
 	for (const entry of entries) {
-		const reason = getSemanticArchiveReason(entry, forgetting);
+		const reason = getSemanticArchiveReason(entry, now, forgetting);
 		if (!reason) {
 			active.push(entry);
 			continue;
@@ -149,7 +152,7 @@ export function partitionArchivedProcedural(entries: ProceduralMemory[], now: st
 	const active: ProceduralMemory[] = [];
 	const archived: ProceduralMemory[] = [];
 	for (const entry of entries) {
-		const reason = getProceduralArchiveReason(entry, forgetting);
+		const reason = getProceduralArchiveReason(entry, now, forgetting);
 		if (!reason) {
 			active.push(entry);
 			continue;

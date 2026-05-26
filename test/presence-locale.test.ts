@@ -8,7 +8,6 @@ import { join } from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createAgentSession } from "../core/runtime/sdk.js";
-import { getBuiltinExtensionPaths } from "../builtin-extensions.js";
 import { DefaultResourceLoader } from "../core/config/resource-loader.js";
 import { SettingsManager } from "../core/config/settings-manager.js";
 import { SessionManager } from "../core/session/session-manager.js";
@@ -17,9 +16,25 @@ import { ModelRegistry } from "../core/model-registry.js";
 import { allTools } from "../core/tools/index.js";
 import { setLocale, getLocale } from "../core/i18n/index.js";
 
-test("presence-locale: Chinese greeting when memory has Chinese preference", async () => {
+function presenceExtensionPath(cwd: string): string {
+	return join(cwd, "extensions", "defaults", "presence", "index.ts");
+}
+
+async function waitForPresenceMessage(messages: Array<{ customType: string; content: unknown }>) {
+	const deadline = Date.now() + 1000;
+	while (Date.now() < deadline) {
+		const opening = messages.find((message) => message.customType === "presence");
+		if (opening) return opening;
+		await new Promise((resolve) => setTimeout(resolve, 20));
+	}
+	return messages.find((message) => message.customType === "presence");
+}
+
+test("presence-locale: Chinese greeting when memory has Chinese preference", { concurrency: false }, async (t) => {
 	const cwd = process.cwd();
 	const agentDir = mkdtempSync(join(tmpdir(), "nanopencil-locale-"));
+	const originalMemoryDir = process.env.NANOMEM_MEMORY_DIR;
+	const originalDelay = process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS;
 
 	// Create memory directory with Chinese preference
 	const memoryDir = join(agentDir, "memory");
@@ -36,6 +51,7 @@ test("presence-locale: Chinese greeting when memory has Chinese preference", asy
 			detail: "用户明确表示希望用中文交流",
 			content: "用户希望用中文回复",
 			tags: ["语言", "中文", "locale"],
+			project: "test/project",
 			importance: 6,
 			strength: 100,
 			created: new Date().toISOString(),
@@ -52,13 +68,14 @@ test("presence-locale: Chinese greeting when memory has Chinese preference", asy
 	writeFileSync(join(memoryDir, "episodes.json"), JSON.stringify([]));
 
 	process.env.NANOMEM_MEMORY_DIR = memoryDir;
+	process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS = "10";
 
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	const resourceLoader = new DefaultResourceLoader({
 		cwd,
 		agentDir,
 		settingsManager,
-		additionalExtensionPaths: getBuiltinExtensionPaths(),
+		additionalExtensionPaths: [presenceExtensionPath(cwd)],
 	});
 	await resourceLoader.reload();
 
@@ -75,6 +92,20 @@ test("presence-locale: Chinese greeting when memory has Chinese preference", asy
 		authStorage,
 		modelRegistry,
 		tools: Object.values(allTools),
+	});
+	t.after(async () => {
+		await session.extensionRunner?.emit({ type: "session_shutdown" });
+		if (originalMemoryDir === undefined) {
+			delete process.env.NANOMEM_MEMORY_DIR;
+		} else {
+			process.env.NANOMEM_MEMORY_DIR = originalMemoryDir;
+		}
+		if (originalDelay === undefined) {
+			delete process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS;
+		} else {
+			process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS = originalDelay;
+		}
+		rmSync(agentDir, { recursive: true, force: true });
 	});
 
 	const customMessages: Array<{ customType: string; content: unknown }> = [];
@@ -126,9 +157,8 @@ test("presence-locale: Chinese greeting when memory has Chinese preference", asy
 	});
 
 	await session.extensionRunner?.emit({ type: "session_ready" });
-	await new Promise((resolve) => setTimeout(resolve, 2000));
 
-	const opening = customMessages.find((message) => message.customType === "presence");
+	const opening = await waitForPresenceMessage(customMessages);
 	assert.ok(opening, "Should have received a presence message");
 	assert.equal(typeof opening.content, "string");
 
@@ -137,13 +167,13 @@ test("presence-locale: Chinese greeting when memory has Chinese preference", asy
 	const hasChinese = /[\u4e00-\u9fff]/.test(content);
 	assert.ok(hasChinese, `Opening message should contain Chinese. Got: ${content}`);
 
-	// Cleanup
-	rmSync(agentDir, { recursive: true, force: true });
 });
 
-test("presence-locale: English greeting when no Chinese preference", async () => {
+test("presence-locale: English greeting when no Chinese preference", { concurrency: false }, async (t) => {
 	const cwd = process.cwd();
 	const agentDir = mkdtempSync(join(tmpdir(), "nanopencil-locale-en-"));
+	const originalMemoryDir = process.env.NANOMEM_MEMORY_DIR;
+	const originalDelay = process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS;
 
 	// Create memory directory with NO language preference
 	const memoryDir = join(agentDir, "memory");
@@ -155,13 +185,14 @@ test("presence-locale: English greeting when no Chinese preference", async () =>
 	writeFileSync(join(memoryDir, "episodes.json"), JSON.stringify([]));
 
 	process.env.NANOMEM_MEMORY_DIR = memoryDir;
+	process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS = "10";
 
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	const resourceLoader = new DefaultResourceLoader({
 		cwd,
 		agentDir,
 		settingsManager,
-		additionalExtensionPaths: getBuiltinExtensionPaths(),
+		additionalExtensionPaths: [presenceExtensionPath(cwd)],
 	});
 	await resourceLoader.reload();
 
@@ -178,6 +209,20 @@ test("presence-locale: English greeting when no Chinese preference", async () =>
 		authStorage,
 		modelRegistry,
 		tools: Object.values(allTools),
+	});
+	t.after(async () => {
+		await session.extensionRunner?.emit({ type: "session_shutdown" });
+		if (originalMemoryDir === undefined) {
+			delete process.env.NANOMEM_MEMORY_DIR;
+		} else {
+			process.env.NANOMEM_MEMORY_DIR = originalMemoryDir;
+		}
+		if (originalDelay === undefined) {
+			delete process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS;
+		} else {
+			process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS = originalDelay;
+		}
+		rmSync(agentDir, { recursive: true, force: true });
 	});
 
 	const customMessages: Array<{ customType: string; content: unknown }> = [];
@@ -229,9 +274,8 @@ test("presence-locale: English greeting when no Chinese preference", async () =>
 	});
 
 	await session.extensionRunner?.emit({ type: "session_ready" });
-	await new Promise((resolve) => setTimeout(resolve, 2000));
 
-	const opening = customMessages.find((message) => message.customType === "presence");
+	const opening = await waitForPresenceMessage(customMessages);
 	assert.ok(opening, "Should have received a presence message");
 	assert.equal(typeof opening.content, "string");
 
@@ -240,6 +284,4 @@ test("presence-locale: English greeting when no Chinese preference", async () =>
 	const hasChinese = /[\u4e00-\u9fff]/.test(content);
 	assert.equal(hasChinese, false, `Opening message should be English. Got: ${content}`);
 
-	// Cleanup
-	rmSync(agentDir, { recursive: true, force: true });
 });

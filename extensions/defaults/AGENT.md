@@ -21,7 +21,8 @@ link-world/link-world-agent.md: Agent-facing skill that tells models to prefer w
 link-world/network-routing.md: Routing skill that tells models when to use web_search/web_fetch/link-world versus browser automation
 link-world/agent-workspace/: Seed workspace copied to .nanopencil/link-world-workspace for project-local domain skills and notes
 mcp/index.ts: MCP protocol integration extension, MCP guidance resources
-presence/index.ts: AI-driven opening + idle presence lines, uses NanoMemEngine episodes/preferences/lessons + git/cwd snapshot, injects latest line into agent systemPrompt every turn for main-conversation perception, 30s debounce + idle in-flight lock, configurable via settings.presence.enabled, PRESENCE_MESSAGE_TYPE renderer
+presence/index.ts: AI-driven opening + idle presence lines, git/cwd snapshot, systemPrompt injection of recent presence lines, timers/debounce/idle in-flight lock, settings.presence.enabled guard, PRESENCE_MESSAGE_TYPE renderer
+presence/presence-memory.ts: Presence memory boundary - NanoMem directory/project discovery, memory-derived locale detection, randomized preference/lesson highlight selection for greeting prompts
 plan/index.ts: Plan Mode extension entry, /plan /plan:validate /plan:approve commands, EnterPlanMode/ExitPlanMode tools, permission gating, TUI status/widget, workflow prompt injection
 plan/types.ts: Plan mode types, persisted state payload, attachment variants, permission result model
 plan/plan-file-manager.ts: Plan file path management, slug generation, settings-aware plans directory, plan state hydration/serialization, resume/fork copy helpers
@@ -71,7 +72,8 @@ sal/eval/noop-sink.ts: noopSink — silent EvalSink used when eval disabled or n
 sal/eval/insforge-sink.ts: InsForgeEvalSink — PostgREST adapter, routes run_start→eval_runs INSERT (merge-duplicates) with legacy-schema fallback, writes turn_anchor/tool_trace/memory_recalls/run_end only after parent run confirmation, tool_trace→eval_tool_traces with PGRST204 fallback, memory_recalls→eval_memory_recalls batch INSERT, run_end→eval_runs PATCH; allowSelfSigned TLS option logs only in development runtime, batching with default 2000ms interval
 sal/eval/jsonl-sink.ts: JsonlEvalSink — append-only filesystem adapter, one JSON object per line, accepts file:// URLs or plain paths, auto-creates parent dir, batched writes
 sal/README.md: SAL extension usage, sidecar output layout, weights override, pluggability contract
-team/index.ts: AgentTeam extension entry, /team <task>, /team:spawn/:preset/:send/:status/:progress/:psyche/:dashboard/:task/:mail/:allow-path/:stop/:terminate/:approve/:mode commands, TEAM_MESSAGE_TYPE speaker-stream renderer, realtime status/dashboard updates
+team/index.ts: AgentTeam extension entry, /team <task>, /team:spawn/:preset/:send/:status/:progress/:psyche/:dashboard/:task/:mail/:allow-path/:stop/:terminate/:approve/:mode command registration and dispatch
+team/team-ui.ts: AgentTeam message renderer, list/status/task formatting, dashboard visibility/timer ownership, realtime observer, speaker-stream emission helpers
 team/team-types.ts: TeammateRole/TeammateMode/TeammateStatus/TeamTask/HarnessState/PsycheWeights/TeamUtterance/Handoff/LeaderPlan/AgentLiveView/TeammateIdentity/PersistedTeammate/TeamSpawnSpec/TeamSendResult types
 team/team-state-store.ts: TeamStateStore class - durable teammate persistence via JSON files in <agentDir>/teams/
 team/team-parser.ts: Team command parser - parseTeamCommand/buildTeamHelp for /team:* subcommands

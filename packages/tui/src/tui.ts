@@ -1200,7 +1200,12 @@ export class TUI extends Container {
 	 * @param cursorPos The cursor position extracted from rendered output, or null
 	 * @param totalLines Total number of rendered lines
 	 */
-	private positionHardwareCursor(cursorPos: { row: number; col: number } | null, totalLines: number): void {
+	private positionHardwareCursor(
+		cursorPos: { row: number; col: number } | null,
+		totalLines: number,
+		prevViewportTop: number = this.previousViewportTop,
+		viewportTop: number = Math.max(0, totalLines - this.terminal.rows),
+	): void {
 		if (!cursorPos || totalLines <= 0) {
 			this.terminal.hideCursor();
 			return;
@@ -1209,9 +1214,11 @@ export class TUI extends Container {
 		// Clamp cursor position to valid range
 		const targetRow = Math.max(0, Math.min(cursorPos.row, totalLines - 1));
 		const targetCol = Math.max(0, cursorPos.col);
+		const currentScreenRow = this.hardwareCursorRow - prevViewportTop;
+		const targetScreenRow = targetRow - viewportTop;
 
 		// Move cursor from current position to target
-		const rowDelta = targetRow - this.hardwareCursorRow;
+		const rowDelta = targetScreenRow - currentScreenRow;
 		let buffer = "";
 		if (rowDelta > 0) {
 			buffer += `\x1b[${rowDelta}B`; // Move down

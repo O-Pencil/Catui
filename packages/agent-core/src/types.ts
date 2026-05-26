@@ -24,14 +24,18 @@ export type StreamFn = (
 	...args: Parameters<typeof streamSimple>
 ) => ReturnType<typeof streamSimple> | Promise<ReturnType<typeof streamSimple>>;
 
-export type AgentLoopFramework = "high-intelligence" | "low-intelligence";
-export type AgentLoopFrameworkInput = AgentLoopFramework | "standard" | "structured-adaptive";
+export type AgentLoopFramework = "standard" | "weak-model-compatible";
+export type AgentLoopFrameworkInput =
+	| AgentLoopFramework
+	| "high-intelligence"
+	| "low-intelligence"
+	| "structured-adaptive";
 
 export function normalizeAgentLoopFramework(
 	value: AgentLoopFrameworkInput | undefined,
 ): AgentLoopFramework | undefined {
-	if (value === "standard") return "high-intelligence";
-	if (value === "structured-adaptive") return "low-intelligence";
+	if (value === "high-intelligence") return "standard";
+	if (value === "low-intelligence" || value === "structured-adaptive") return "weak-model-compatible";
 	return value;
 }
 
@@ -127,7 +131,7 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	getFollowUpMessages?: () => Promise<AgentMessage[]>;
 
 	/**
-	 * Optional tool permission gate for low-intelligence-adaptation execution.
+	 * Optional tool permission gate for weak-model-compatible execution.
 	 *
 	 * Called after schema/custom validation and before the tool executes.
 	 * Return "deny" to feed a permission-denied tool_result back to the model
@@ -161,18 +165,18 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 
 	/**
 	 * Maximum concurrency for one batch of concurrency-safe tool calls in the
-	 * low-intelligence-adaptation loop. Defaults to 10.
+	 * weak-model-compatible loop. Defaults to 10.
 	 */
 	maxToolConcurrency?: number;
 
 	/**
 	 * Maximum automatic continuations after a model stops because it hit its
-	 * output-token limit in the low-intelligence-adaptation loop. Defaults to 1.
+	 * output-token limit in the weak-model-compatible loop. Defaults to 1.
 	 */
 	maxOutputTokenRecoveryAttempts?: number;
 
 	/**
-	 * Optional low-intelligence-adaptation stop hook. Called when the assistant would stop
+	 * Optional weak-model-compatible stop hook. Called when the assistant would stop
 	 * without tool calls. Return action "continue" with messages to force a
 	 * correction/validation turn; return "stop" to allow completion.
 	 */
@@ -261,14 +265,14 @@ export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any
 	aliases?: string[];
 	/**
 	 * Whether the tool can safely run alongside other concurrency-safe tools.
-	 * The low-intelligence-adaptation loop uses this to batch read-only work while keeping
+	 * The weak-model-compatible loop uses this to batch read-only work while keeping
 	 * stateful tools such as edit/write/bash serialized.
 	 */
 	isConcurrencySafe?: boolean;
 	interruptBehavior?: "cancel" | "block";
 	/** Optional semantic validation after schema validation and before execute. */
 	validateInput?: (params: Static<TParameters>) => void | string | Promise<void | string>;
-	/** Optional maximum text result size enforced by low-intelligence-adaptation tool orchestration. */
+	/** Optional maximum text result size enforced by weak-model-compatible tool orchestration. */
 	maxResultSizeChars?: number;
 	execute: (
 		toolCallId: string,

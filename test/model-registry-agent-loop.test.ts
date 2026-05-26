@@ -29,7 +29,7 @@ describe("ModelRegistry agentLoopFramework config", () => {
 									{
 										id: "qwen-test",
 										name: "Qwen Test",
-										agentLoopFramework: "low-intelligence",
+										agentLoopFramework: "weak-model-compatible",
 									},
 								],
 							},
@@ -46,7 +46,7 @@ describe("ModelRegistry agentLoopFramework config", () => {
 			});
 
 			expect(registry.getError()).toBeUndefined();
-			expect(registry.find("local", "qwen-test")?.agentLoopFramework).toBe("low-intelligence");
+			expect(registry.find("local", "qwen-test")?.agentLoopFramework).toBe("weak-model-compatible");
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
@@ -64,7 +64,7 @@ describe("ModelRegistry agentLoopFramework config", () => {
 							openai: {
 								modelOverrides: {
 									"gpt-4o-mini": {
-										agentLoopFramework: "low-intelligence",
+										agentLoopFramework: "weak-model-compatible",
 									},
 								},
 							},
@@ -79,7 +79,7 @@ describe("ModelRegistry agentLoopFramework config", () => {
 			const registry = new ModelRegistry(AuthStorage.inMemory(), modelsPath);
 
 			expect(registry.getError()).toBeUndefined();
-			expect(registry.find("openai", "gpt-4o-mini")?.agentLoopFramework).toBe("low-intelligence");
+			expect(registry.find("openai", "gpt-4o-mini")?.agentLoopFramework).toBe("weak-model-compatible");
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
@@ -119,7 +119,53 @@ describe("ModelRegistry agentLoopFramework config", () => {
 			});
 
 			expect(registry.getError()).toBeUndefined();
-			expect(registry.find("local", "qwen-compat")?.agentLoopFramework).toBe("low-intelligence");
+			expect(registry.find("local", "qwen-compat")?.agentLoopFramework).toBe("weak-model-compatible");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("normalizes high-intelligence and low-intelligence aliases while loading config", () => {
+		const dir = mkdtempSync(join(tmpdir(), "nanopencil-model-loop-legacy-alias-"));
+		try {
+			const modelsPath = join(dir, "models.json");
+			writeFileSync(
+				modelsPath,
+				JSON.stringify(
+					{
+						providers: {
+							local: {
+								baseUrl: "http://localhost:11434/v1",
+								api: "openai-completions",
+								apiKey: "test-key",
+								models: [
+									{
+										id: "qwen-low-compat",
+										name: "Qwen Low Compat",
+										agentLoopFramework: "low-intelligence",
+									},
+									{
+										id: "qwen-high-compat",
+										name: "Qwen High Compat",
+										agentLoopFramework: "high-intelligence",
+									},
+								],
+							},
+						},
+					},
+					null,
+					2,
+				),
+				"utf-8",
+			);
+
+			const registry = new ModelRegistry(AuthStorage.inMemory(), modelsPath, {
+				useOnlyCustomModels: true,
+			});
+
+			expect(registry.getError()).toBeUndefined();
+			expect(registry.find("local", "qwen-low-compat")?.agentLoopFramework).toBe("weak-model-compatible");
+			expect(registry.find("local", "qwen-high-compat")?.agentLoopFramework).toBe("standard");
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}

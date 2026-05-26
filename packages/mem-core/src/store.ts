@@ -65,8 +65,23 @@ function migrateEntry(entry: MemoryEntry): MemoryEntry {
 // ─── MemoryEntry CRUD ───────────────────────────────────────
 
 export async function loadEntries(path: string): Promise<MemoryEntry[]> {
-	const entries = await readJson<MemoryEntry[]>(path, []);
-	return entries.map(migrateEntry);
+	const entries = await readJson<unknown>(path, []);
+	if (!Array.isArray(entries)) return [];
+	return entries.filter(isMemoryEntryLike).map(migrateEntry);
+}
+
+function isMemoryEntryLike(value: unknown): value is MemoryEntry {
+	if (typeof value !== "object" || value === null) return false;
+	const entry = value as Partial<MemoryEntry>;
+	return (
+		typeof entry.id === "string" &&
+		typeof entry.type === "string" &&
+		Array.isArray(entry.tags) &&
+		typeof entry.project === "string" &&
+		typeof entry.importance === "number" &&
+		typeof entry.created === "string" &&
+		typeof entry.accessCount === "number"
+	);
 }
 
 export async function saveEntries(

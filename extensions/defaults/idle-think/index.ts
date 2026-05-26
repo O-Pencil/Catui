@@ -1,6 +1,6 @@
 /**
  * [WHO]: IdleThink extension interface — idle detection, background code exploration orchestration
- * [FROM]: Depends on core/extensions/types, ./thinker (runExploration), ./insights (storeInsight, buildInsightInjection), ./curiosity (loadCuriosityQueue, saveCuriosityQueue, pickNextTopics, addTopicsFromInsight, extractTopicsFromInsight, markExplored)
+ * [FROM]: Depends on core/extensions/types, ./thinker (runExploration), ./insights (storeInsight, buildInsightInjection, loadRecentInsights, projectKeyFromCwd), ./curiosity (loadCuriosityQueue, saveCuriosityQueue, pickNextTopics, addTopicsFromInsight, extractTopicsFromInsight, markExplored)
  * [TO]: Loaded by builtin-extensions.ts as default extension
  * [HERE]: extensions/defaults/idle-think/index.ts - background code archaeology during idle time
  *
@@ -14,7 +14,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "../../../core/extensions/types.js";
 import { runExploration, type ThinkResult } from "./thinker.js";
-import { storeInsight, buildInsightInjection, loadRecentInsights } from "./insights.js";
+import { storeInsight, buildInsightInjection, loadRecentInsights, projectKeyFromCwd } from "./insights.js";
 import {
 	loadCuriosityQueue,
 	saveCuriosityQueue,
@@ -145,7 +145,8 @@ async function maybeRunExploration(
 	if (ctx.hasPendingMessages() || !ctx.isIdle()) return;
 
 	// Load context from persistent stores
-	const recentInsights = loadRecentInsights(3).map(
+	const project = projectKeyFromCwd(ctx.cwd);
+	const recentInsights = (await loadRecentInsights(3, project)).map(
 		(e) => e.summary || e.detail || "",
 	);
 	const curiosityQueue = loadCuriosityQueue();
@@ -170,8 +171,7 @@ async function maybeRunExploration(
 
 		if (result.success && result.insights) {
 			// Persist insight to nanomem
-			const project = ctx.cwd.split("/").filter(Boolean).slice(-2).join("/");
-			storeInsight(result.insights, project);
+			await storeInsight(result.insights, project);
 
 			// Extract and store new curiosity topics
 			const newTopics = extractTopicsFromInsight(result.insights);
@@ -232,8 +232,8 @@ export default async function idleThinkExtension(api: ExtensionAPI): Promise<voi
 
 	// ── System prompt injection (reads from nanomem, persistent) ──────────
 
-	api.on("before_agent_start", () => {
-		const injection = buildInsightInjection();
+	api.on("before_agent_start", async (_event, ctx) => {
+		const injection = await buildInsightInjection(projectKeyFromCwd(ctx.cwd));
 		if (!injection) return undefined;
 		return { appendSystemPrompt: injection };
 	});

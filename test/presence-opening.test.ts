@@ -1,10 +1,9 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createAgentSession } from "../core/runtime/sdk.js";
-import { getBuiltinExtensionPaths } from "../builtin-extensions.js";
 import { DefaultResourceLoader } from "../core/config/resource-loader.js";
 import { SettingsManager } from "../core/config/settings-manager.js";
 import { SessionManager } from "../core/session/session-manager.js";
@@ -14,17 +13,34 @@ import { allTools } from "../core/tools/index.js";
 import { setLocale, tValue } from "../core/i18n/index.js";
 import { __testUtils } from "../extensions/defaults/presence/index.js";
 
-test("presence-opening: emits an opening message after session_ready", async () => {
+function presenceExtensionPath(cwd: string): string {
+	return join(cwd, "extensions", "defaults", "presence", "index.ts");
+}
+
+async function waitForPresenceMessage(messages: Array<{ customType: string; content: unknown }>) {
+	const deadline = Date.now() + 1000;
+	while (Date.now() < deadline) {
+		const opening = messages.find((message) => message.customType === "presence");
+		if (opening) return opening;
+		await new Promise((resolve) => setTimeout(resolve, 20));
+	}
+	return messages.find((message) => message.customType === "presence");
+}
+
+test("presence-opening: emits an opening message after session_ready", async (t) => {
 	const cwd = process.cwd();
 	const agentDir = mkdtempSync(join(tmpdir(), "nanopencil-presence-"));
+	const originalMemoryDir = process.env.NANOMEM_MEMORY_DIR;
+	const originalDelay = process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS;
 	process.env.NANOMEM_MEMORY_DIR = join(agentDir, "memory");
+	process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS = "10";
 
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	const resourceLoader = new DefaultResourceLoader({
 		cwd,
 		agentDir,
 		settingsManager,
-		additionalExtensionPaths: getBuiltinExtensionPaths(),
+		additionalExtensionPaths: [presenceExtensionPath(cwd)],
 	});
 	await resourceLoader.reload();
 
@@ -41,6 +57,19 @@ test("presence-opening: emits an opening message after session_ready", async () 
 		authStorage,
 		modelRegistry,
 		tools: Object.values(allTools),
+	});
+	t.after(async () => {
+		await session.extensionRunner?.emit({ type: "session_shutdown" });
+		if (originalMemoryDir === undefined) {
+			delete process.env.NANOMEM_MEMORY_DIR;
+		} else {
+			process.env.NANOMEM_MEMORY_DIR = originalMemoryDir;
+		}
+		if (originalDelay === undefined) {
+			delete process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS;
+		} else {
+			process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS = originalDelay;
+		}
 	});
 
 	const customMessages: Array<{ customType: string; content: unknown }> = [];
@@ -92,13 +121,11 @@ test("presence-opening: emits an opening message after session_ready", async () 
 	});
 
 	await session.extensionRunner?.emit({ type: "session_ready" });
-	await new Promise((resolve) => setTimeout(resolve, 1800));
 
-	const opening = customMessages.find((message) => message.customType === "presence");
+	const opening = await waitForPresenceMessage(customMessages);
 	assert.ok(opening);
 	assert.equal(typeof opening.content, "string");
 	assert.ok(String(opening.content).length > 0);
-	await session.extensionRunner?.emit({ type: "session_shutdown" });
 });
 
 test("presence-i18n: reads array translations for zh fallback lines", () => {
@@ -152,8 +179,8 @@ test("presence-runtime: resolves bundled packages from dist/packages", { concurr
 
 		const memEntry = __testUtils.resolveBundledPackageEntry("mem-core");
 		const soulEntry = __testUtils.resolveBundledPackageEntry("soul-core");
-		assert.equal(memEntry, join(memDir, "index.js"));
-		assert.equal(soulEntry, join(soulDir, "index.js"));
+		assert.equal(memEntry, realpathSync(join(memDir, "index.js")));
+		assert.equal(soulEntry, realpathSync(join(soulDir, "index.js")));
 
 		const memModule = await __testUtils.importRuntimeModule<{
 			NanoMemEngine: new (config: unknown) => { config: unknown };

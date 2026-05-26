@@ -83,10 +83,13 @@ async function handleBtwCommand(args: string, ctx: ExtensionCommandContext, api:
 		? `Previous conversation:\n${contextText}\n\nUser's question: ${question}`
 		: `User's question: ${question}`;
 
+	let timeout: ReturnType<typeof setTimeout> | undefined;
 	try {
 		const response = await Promise.race([
 			ctx.completeSimple(BTW_SYSTEM_PROMPT, userMessage),
-			new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), BTW_TIMEOUT_MS)),
+			new Promise<undefined>((resolve) => {
+				timeout = setTimeout(() => resolve(undefined), BTW_TIMEOUT_MS);
+			}),
 		]);
 		if (response) {
 			api.sendMessage({
@@ -100,6 +103,8 @@ async function handleBtwCommand(args: string, ctx: ExtensionCommandContext, api:
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		ctx.ui.notify(`BTW error: ${message}`, "error");
+	} finally {
+		if (timeout) clearTimeout(timeout);
 	}
 }
 

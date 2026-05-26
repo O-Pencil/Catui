@@ -124,7 +124,11 @@ import { createLogger, type AgentLogger } from "../utils/logger.js";
 
 export type { SessionSlashCommandDescriptor } from "./slash-command-catalog.js";
 
-type AgentLoopFrameworkInput = AgentLoopFramework | "standard" | "structured-adaptive";
+type AgentLoopFrameworkInput =
+  | AgentLoopFramework
+  | "high-intelligence"
+  | "low-intelligence"
+  | "structured-adaptive";
 
 // ============================================================================
 // Skill Block Parsing

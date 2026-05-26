@@ -56,6 +56,20 @@ export interface MarkdownSettings {
 }
 
 export type TransportSetting = Transport;
+export type AgentLoopFrameworkSetting = "standard" | "weak-model-compatible";
+export type AgentLoopFrameworkSettingInput =
+	| AgentLoopFrameworkSetting
+	| "high-intelligence"
+	| "low-intelligence"
+	| "structured-adaptive";
+
+export function normalizeAgentLoopFrameworkSetting(
+	value: AgentLoopFrameworkSettingInput | undefined,
+): AgentLoopFrameworkSetting | undefined {
+	if (value === "high-intelligence") return "standard";
+	if (value === "low-intelligence" || value === "structured-adaptive") return "weak-model-compatible";
+	return value;
+}
 
 /**
  * Package source for npm/git packages.
@@ -78,6 +92,7 @@ export interface Settings {
 	defaultProvider?: string;
 	defaultModel?: string;
 	defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+	agentLoopFramework?: AgentLoopFrameworkSettingInput;
 	transport?: TransportSetting; // default: "sse"
 	steeringMode?: "all" | "one-at-a-time";
 	followUpMode?: "all" | "one-at-a-time";
@@ -832,6 +847,21 @@ export class SettingsManager {
 	setDefaultThinkingLevel(level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh"): void {
 		this.globalSettings.defaultThinkingLevel = level;
 		this.markModified("defaultThinkingLevel");
+		this.save();
+	}
+
+	getAgentLoopFramework(): AgentLoopFrameworkSetting | undefined {
+		return normalizeAgentLoopFrameworkSetting(this.settings.agentLoopFramework);
+	}
+
+	setAgentLoopFramework(framework: AgentLoopFrameworkSettingInput | undefined): void {
+		const normalized = normalizeAgentLoopFrameworkSetting(framework);
+		if (normalized === undefined) {
+			delete this.globalSettings.agentLoopFramework;
+		} else {
+			this.globalSettings.agentLoopFramework = normalized;
+		}
+		this.markModified("agentLoopFramework");
 		this.save();
 	}
 

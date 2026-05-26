@@ -1186,16 +1186,19 @@ export default async function salExtension(api: ExtensionAPI) {
 		}
 	});
 
-	api.on("session_shutdown", async () => {
-		if (!runtime.evalEnabled) return;
-		await emitEval(runtime, "run_end", isEnabled(), {
-			status: "completed",
-			turn_count: runtime.turnCounter,
-			total_duration_ms: Math.max(0, Date.now() - runtime.evalStartedAtMs),
+		api.on("session_shutdown", async () => {
+			process.off("beforeExit", emergencyFlush);
+			process.off("SIGHUP", signalFlush);
+			process.off("SIGTERM", signalFlush);
+			if (!runtime.evalEnabled) return;
+			await emitEval(runtime, "run_end", isEnabled(), {
+				status: "completed",
+				turn_count: runtime.turnCounter,
+				total_duration_ms: Math.max(0, Date.now() - runtime.evalStartedAtMs),
+			});
+			await evalBestEffort(runtime, "flush", runtime.evalSink.flush());
+			await evalBestEffort(runtime, "close", runtime.evalSink.close());
 		});
-		await evalBestEffort(runtime, "flush", runtime.evalSink.flush());
-		await evalBestEffort(runtime, "close", runtime.evalSink.close());
-	});
 
 	// ------------------------------------------------------------------
 	// Strategy A: Emergency flush on abnormal exit.

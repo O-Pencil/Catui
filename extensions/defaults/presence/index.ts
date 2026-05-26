@@ -9,11 +9,17 @@ import { Box, Container, Spacer, Text } from "@pencil-agent/tui";
 import type { ExtensionAPI, ExtensionContext, SessionReadyEvent, SessionStartEvent } from "../../../core/extensions/types.js";
 import { getLocale, tValue } from "../../../core/i18n/index.js";
 import { dirname, join } from "node:path";
-import { homedir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+	collectMemoryHighlights,
+	detectLanguageFromMemory,
+	getMemoryDir,
+	getProject,
+	type PresenceMemoryEngine,
+} from "./presence-memory.js";
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -29,8 +35,10 @@ const GIT_TIMEOUT_MS = 200;
 // Fallback messages for when AI generation fails or memory is empty
 function getFallbackOpeningLines(locale?: "en" | "zh"): string[] {
 	const useLocale = locale || getLocale();
-	const lines = tValue<string[]>("msg.presence.opening");
-	if (Array.isArray(lines)) return lines;
+	if (!locale || useLocale === getLocale()) {
+		const lines = tValue<string[]>("msg.presence.opening");
+		if (Array.isArray(lines)) return lines;
+	}
 	// More human-like fallback messages
 	if (useLocale === "zh") {
 		return [
@@ -52,8 +60,10 @@ function getFallbackOpeningLines(locale?: "en" | "zh"): string[] {
 
 function getFallbackIdleLines(locale?: "en" | "zh"): string[] {
 	const useLocale = locale || getLocale();
-	const lines = tValue<string[]>("msg.presence.idle");
-	if (Array.isArray(lines)) return lines;
+	if (!locale || useLocale === getLocale()) {
+		const lines = tValue<string[]>("msg.presence.idle");
+		if (Array.isArray(lines)) return lines;
+	}
 	if (useLocale === "zh") {
 		return [
 			"还在，有需要随时说。",
@@ -80,14 +90,7 @@ type PresenceState = {
 	openingTimer?: ReturnType<typeof setTimeout>;
 	idleTimer?: ReturnType<typeof setInterval>;
 	unsubscribeInput?: () => void;
-	memEngine?: {
-		getAllEntries(): Promise<{
-			knowledge: Array<{ type?: string; tags: string[]; name?: string; summary?: string; detail?: string; content?: string }>;
-			lessons: Array<{ type?: string; tags: string[]; name?: string; summary?: string; detail?: string; content?: string; importance?: number }>;
-		}>;
-		getAllEpisodes(): Promise<Array<{ date?: string; consolidated?: boolean; endedAt?: string; startedAt?: string; summary?: string; userGoal?: string }>>;
-		searchEntries(query: string): Promise<Array<{ type?: string; tags: string[] }>>;
-	};
+	memEngine?: PresenceMemoryEngine;
 	recentPresenceLines: string[]; // Last few presence lines (max 3) for per-turn agent injection
 	lastPresenceAt?: number; // Timestamp of last sendPresence (debounce)
 	idleGenerating?: boolean; // In-flight lock for async idle generation
@@ -117,9 +120,16 @@ function getBundledPackageCandidates(packageName: "mem-core" | "soul-core"): str
 function resolveBundledPackageEntry(packageName: "mem-core" | "soul-core"): string | undefined {
 	for (const dir of getBundledPackageCandidates(packageName)) {
 		const entry = join(dir, "index.js");
-		if (existsSync(entry)) return entry;
+		if (existsSync(entry)) return realpathSync(entry);
 	}
 	return undefined;
+}
+
+function getOpeningDelayMs(): number {
+	const raw = process.env.NANOPENCIL_PRESENCE_OPENING_DELAY_MS;
+	if (!raw) return OPENING_DELAY_MS;
+	const parsed = Number(raw);
+	return Number.isFinite(parsed) && parsed >= 0 ? parsed : OPENING_DELAY_MS;
 }
 
 async function importRuntimeModule<T>(
@@ -207,185 +217,6 @@ async function initMemEngine(state: PresenceState): Promise<void> {
 		// NanoMem not available, use fallback messages
 		state.memEngine = undefined;
 	}
-}
-
-function getMemoryDir(): string {
-	// Use the same memory directory as the main app
-	// Priority: env var > nanopencil default > legacy nanomem path
-	if (process.env.NANOMEM_MEMORY_DIR) return process.env.NANOMEM_MEMORY_DIR;
-	// Check if nanopencil's memory directory exists
-	const nanopencilMemory = join(homedir(), ".nanopencil", "agent", "memory");
-	if (existsSync(nanopencilMemory)) return nanopencilMemory;
-	// Fallback to legacy path
-	return join(homedir(), ".nanomem", "memory");
-}
-
-function getProject(): string {
-	const parts = process.cwd().split("/").filter(Boolean);
-	return parts.length >= 2
-		? `${parts[parts.length - 2]}/${parts[parts.length - 1]}`
-		: parts[parts.length - 1] || "default";
-}
-
-// Detect user's language preference from memory
-async function detectLanguageFromMemory(state: PresenceState): Promise<"en" | "zh" | undefined> {
-	if (!state.memEngine) return undefined;
-
-	try {
-		// Get all entries
-		const entries = await state.memEngine.getAllEntries();
-		const preferences = [
-			...entries.knowledge.filter((e) => e.type === "preference" || e.tags.includes("preference")),
-			...entries.lessons.filter((e) => e.type === "preference" || e.tags.includes("preference")),
-		];
-
-		// Also search for language-related entries
-		try {
-			const langResults = await state.memEngine.searchEntries("language 语言 中文 Chinese");
-			for (const entry of langResults) {
-				if (entry.type === "preference" || entry.tags.some((t) => ["language", "语言", "locale"].includes(t))) {
-					preferences.push(entry);
-				}
-			}
-		} catch { /* ignore */ }
-
-		let zhScore = 0;
-		let enScore = 0;
-
-		const zhTerms = "(中文|chinese|zh-hans|mandarin|普通话)";
-		const enTerms = "(英文|english|en-us)";
-		const negPrefix = "(?:don't|do not|no|not|不用|不要|别|不想用)";
-		const useWords = "(?:\\s+use|\\s+using|\\s+说|\\s+讲|\\s+用)?";
-
-		const zhNegative = new RegExp(`${negPrefix}${useWords}\\s*${zhTerms}`);
-		const enNegative = new RegExp(`${negPrefix}${useWords}\\s*${enTerms}`);
-		const zhPositive = new RegExp(zhTerms);
-		const enPositive = new RegExp(enTerms);
-
-		// Check preference content for language indicators
-		for (const pref of preferences) {
-			const text = `${pref.name || ""} ${pref.summary || ""} ${pref.detail || ""} ${pref.content || ""}`.toLowerCase();
-			const hasZh = zhPositive.test(text);
-			const hasEn = enPositive.test(text);
-			const noZh = zhNegative.test(text);
-			const noEn = enNegative.test(text);
-
-			if (hasZh && !noZh) zhScore += 2;
-			if (hasEn && !noEn) enScore += 2;
-			// Cross-language hints: "don't use Chinese" slightly supports English, and vice versa.
-			if (noZh) enScore += 1;
-			if (noEn) zhScore += 1;
-		}
-
-		// Check recent episodes for language patterns
-		const episodes = await state.memEngine.getAllEpisodes();
-		const recentEpisodes = episodes.slice(-10);
-
-		let chineseContent = 0;
-		let englishContent = 0;
-
-		for (const ep of recentEpisodes) {
-			const text = ep.summary || ep.userGoal || "";
-			const chineseChars = (text.match(/[\u4e00-\u9fff]/g) || []).length;
-			if (chineseChars > 5) chineseContent++;
-			if (/^[a-zA-Z\s.,!?'"()-]+$/.test(text.slice(0, 50))) englishContent++;
-		}
-
-		if (chineseContent > englishContent) zhScore += 1;
-		if (englishContent > chineseContent && englishContent > 2) enScore += 1;
-
-		if (zhScore > enScore && zhScore > 0) return "zh";
-		if (enScore > zhScore && enScore > 0) return "en";
-
-		return undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-type MemoryHighlights = { preferences: string[]; lessons: string[] };
-
-async function collectMemoryHighlights(state: PresenceState): Promise<MemoryHighlights> {
-	const out: MemoryHighlights = { preferences: [], lessons: [] };
-	if (!state.memEngine) return out;
-	try {
-		const entries = await state.memEngine.getAllEntries();
-
-		// Build a larger pool and randomly sample to avoid repeating the same memories
-		const prefPool = [
-			...entries.knowledge.filter((e) => e.type === "preference" || e.tags.includes("preference")),
-			...entries.lessons.filter((e) => e.type === "preference" || e.tags.includes("preference")),
-		];
-
-		// Deprioritize recently referenced memories
-		const recentlyReferenced = new Set(state.recentlyReferencedMemories);
-		const prefPoolSorted = prefPool.sort((a, b) => {
-			const aRecent = a.name && recentlyReferenced.has(a.name) ? 1 : 0;
-			const bRecent = b.name && recentlyReferenced.has(b.name) ? 1 : 0;
-			return aRecent - bRecent;
-		});
-
-		// Take top 6, then randomly pick 1-2
-		const prefCandidates = prefPoolSorted.slice(0, 6);
-		const prefCount = Math.min(prefCandidates.length, 1 + Math.floor(Math.random() * 2)); // 1 or 2
-		const prefSelected = shufflePick(prefCandidates, prefCount);
-
-		for (const p of prefSelected) {
-			const text = (p.summary || p.detail || p.content || "").toString().slice(0, 80);
-			if (text) {
-				out.preferences.push(`${p.name || "pref"}: ${text}`);
-				if (p.name) {
-					state.recentlyReferencedMemories.push(p.name);
-				}
-			}
-		}
-
-		// Same for lessons - larger pool, random sample
-		const lessonPool = (entries.lessons || [])
-			.filter((e) => e.type !== "preference")
-			.sort((a, b) => {
-				// Sort by importance but deprioritize recently referenced
-				const aRecent = a.name && recentlyReferenced.has(a.name) ? -1 : 0;
-				const bRecent = b.name && recentlyReferenced.has(b.name) ? -1 : 0;
-				return (bRecent - aRecent) || ((b.importance ?? 0) - (a.importance ?? 0));
-			});
-
-		const lessonCandidates = lessonPool.slice(0, 4);
-		// Pick 0 or 1 lesson - don't always include one
-		const lessonCount = Math.random() < 0.5 ? 0 : Math.min(lessonCandidates.length, 1);
-		const lessonSelected = shufflePick(lessonCandidates, lessonCount);
-
-		for (const l of lessonSelected) {
-			const text = (l.summary || l.detail || l.content || "").toString().slice(0, 80);
-			if (text) {
-				out.lessons.push(`${l.name || "lesson"}: ${text}`);
-				if (l.name) {
-					state.recentlyReferencedMemories.push(l.name);
-				}
-			}
-		}
-
-		// Trim the recently-referenced tracker to last 8 entries
-		if (state.recentlyReferencedMemories.length > 8) {
-			state.recentlyReferencedMemories = state.recentlyReferencedMemories.slice(-8);
-		}
-	} catch {
-		/* fail-soft */
-	}
-	return out;
-}
-
-/** Randomly pick `count` items from array without replacement */
-function shufflePick<T>(arr: readonly T[], count: number): T[] {
-	if (count <= 0 || arr.length === 0) return [];
-	const indices = arr.map((_, i) => i);
-	const picked: T[] = [];
-	for (let i = 0; i < count && indices.length > 0; i++) {
-		const idx = Math.floor(Math.random() * indices.length);
-		picked.push(arr[indices[idx]!]!);
-		indices.splice(idx, 1);
-	}
-	return picked;
 }
 
 type ProjectSnapshot = { name: string; branch?: string; lastCommit?: string; changedFiles: string[] };
@@ -616,6 +447,9 @@ async function generatePresenceLine(
 			kind === "opening" ? getFallbackOpeningLines(locale) : getFallbackIdleLines(locale),
 			Date.now(),
 		);
+	if (!ctx.model) return fallback();
+	const apiKey = await ctx.modelRegistry.getApiKey(ctx.model);
+	if (!apiKey) return fallback();
 
 	const lastUser = kind === "idle" ? getLastUserMessage(ctx) : undefined;
 	const soulHints = collectSoulHints(ctx.getSoulManager());
@@ -813,7 +647,7 @@ function handleSessionReady(
 	const presenceEnabled = settings?.presence?.enabled ?? true;
 	if (!presenceEnabled) return;
 	state.openingStartedAt = Date.now();
-	scheduleOpening(api, ctx, state, OPENING_DELAY_MS);
+	scheduleOpening(api, ctx, state, getOpeningDelayMs());
 }
 
 export default async function presenceExtension(api: ExtensionAPI) {
@@ -914,4 +748,5 @@ export const __testUtils = {
 	resolveBundledPackageEntry,
 	importRuntimeModule,
 	detectLanguageFromMemory,
+	getOpeningDelayMs,
 };

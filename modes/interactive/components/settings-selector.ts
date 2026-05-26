@@ -30,6 +30,8 @@ const THINKING_DESCRIPTIONS: Record<ThinkingLevel, string> = {
 	xhigh: "Maximum reasoning (~32k tokens)",
 };
 
+type AgentLoopFrameworkSettingValue = "model-default" | "standard" | "weak-model-compatible";
+
 export interface SettingsConfig {
 	autoCompact: boolean;
 	showImages: boolean;
@@ -39,6 +41,7 @@ export interface SettingsConfig {
 	steeringMode: "all" | "one-at-a-time";
 	followUpMode: "all" | "one-at-a-time";
 	transport: Transport;
+	agentLoopFramework: AgentLoopFrameworkSettingValue;
 	thinkingLevel: ThinkingLevel;
 	availableThinkingLevels: ThinkingLevel[];
 	currentTheme: string;
@@ -68,6 +71,7 @@ export interface SettingsCallbacks {
 	onSteeringModeChange: (mode: "all" | "one-at-a-time") => void;
 	onFollowUpModeChange: (mode: "all" | "one-at-a-time") => void;
 	onTransportChange: (transport: Transport) => void;
+	onAgentLoopFrameworkChange: (framework: AgentLoopFrameworkSettingValue) => void;
 	onThinkingLevelChange: (level: ThinkingLevel) => void;
 	onThemeChange: (theme: string) => void;
 	onThemePreview?: (theme: string) => void;
@@ -191,6 +195,13 @@ export class SettingsSelectorComponent extends Container {
 				description: "Preferred transport for providers that support multiple transports",
 				currentValue: config.transport,
 				values: ["sse", "websocket", "auto"],
+			},
+			{
+				id: "agent-loop",
+				label: "Agent loop",
+				description: "Default loop adaptation. Model default preserves per-model configuration.",
+				currentValue: config.agentLoopFramework,
+				values: ["model-default", "standard", "weak-model-compatible"],
 			},
 			{
 				id: "hide-thinking",
@@ -447,6 +458,9 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "transport":
 						callbacks.onTransportChange(newValue as Transport);
+						break;
+					case "agent-loop":
+						callbacks.onAgentLoopFrameworkChange(newValue as AgentLoopFrameworkSettingValue);
 						break;
 					case "hide-thinking":
 						callbacks.onHideThinkingBlockChange(newValue === "true");

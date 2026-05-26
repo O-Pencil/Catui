@@ -65,11 +65,12 @@ async function handleRecapCommand(args: string, ctx: ExtensionCommandContext, ap
 
 	ctx.ui.notify("Synthesizing recap…", "info");
 
+	let timeout: ReturnType<typeof setTimeout> | undefined;
 	try {
 		const result = await Promise.race([
 			synthesizeSmartRecap(ctx, RECAP_DEFAULTS, "manual"),
 			new Promise<{ kind: "timeout" }>((resolve) =>
-				setTimeout(() => resolve({ kind: "timeout" }), RECAP_TIMEOUT_MS),
+				(timeout = setTimeout(() => resolve({ kind: "timeout" }), RECAP_TIMEOUT_MS)),
 			),
 		]);
 
@@ -110,6 +111,8 @@ async function handleRecapCommand(args: string, ctx: ExtensionCommandContext, ap
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		ctx.ui.notify(`Recap error: ${message}`, "error");
+	} finally {
+		if (timeout) clearTimeout(timeout);
 	}
 }
 

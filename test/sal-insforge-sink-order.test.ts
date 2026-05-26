@@ -35,7 +35,7 @@ test("insforge sink routes batched events sequentially (run_start before turn_an
 
 	await sink.sendEvent(event("run_start"));
 	await sink.sendEvent(event("turn_anchor"));
-	await new Promise((resolve) => setTimeout(resolve, 80));
+	await sink.flush();
 
 	assert.equal(maxActive, 1);
 	assert.equal(order[0], "run_start");

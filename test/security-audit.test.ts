@@ -34,6 +34,7 @@ function createHarness() {
 	const ctx = {
 		sessionManager: {},
 		agentDir: tempAgentDir,
+		cwd: tempAgentDir,
 	} as unknown as ExtensionContext;
 
 	const emitToolCall = async (event: ToolCallEvent): Promise<ToolCallEventResult | undefined> => {
@@ -66,8 +67,8 @@ test("security-audit blocks dangerous bash commands at tool_call boundary", asyn
 
 	const logPath = join(tempAgentDir, "security-audit.json");
 	assert.equal(existsSync(logPath), true);
-	const logs = JSON.parse(readFileSync(logPath, "utf-8")) as Array<{ status: string; target: string }>;
-	assert.ok(logs.some((entry) => entry.status === "blocked" && entry.target === "rm -rf tmp"));
+	const logs = JSON.parse(readFileSync(logPath, "utf-8")) as Array<{ status: string; target: string; cwd: string }>;
+	assert.ok(logs.some((entry) => entry.status === "blocked" && entry.target === "rm -rf tmp" && entry.cwd === tempAgentDir));
 });
 
 test("security-audit allows safe bash commands", async () => {
@@ -83,6 +84,25 @@ test("security-audit allows safe bash commands", async () => {
 
 	assert.equal(result, undefined);
 	assert.deepEqual(harness.messages, []);
+});
+
+test("security-audit logs detector warnings without blocking", async () => {
+	const harness = createHarness();
+	await securityAuditExtension(harness.api);
+
+	const result = await harness.emitToolCall({
+		type: "tool_call",
+		toolCallId: "call-warning",
+		toolName: "bash",
+		input: { command: "git reset --soft HEAD~1" },
+	});
+
+	assert.equal(result, undefined);
+	assert.deepEqual(harness.messages, []);
+
+	const logPath = join(tempAgentDir, "security-audit.json");
+	const logs = JSON.parse(readFileSync(logPath, "utf-8")) as Array<{ status: string; target: string; reason?: string }>;
+	assert.ok(logs.some((entry) => entry.status === "warning" && entry.target === "git reset --soft HEAD~1" && /Git reset/.test(entry.reason ?? "")));
 });
 
 test("security-audit blocks sensitive file writes at tool_call boundary", async () => {

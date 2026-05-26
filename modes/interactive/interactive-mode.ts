@@ -4105,10 +4105,10 @@ export class InteractiveMode {
 
   private handleAgentLoopCommand(text: string): void {
     const arg = text.slice("/agent-loop".length).trim().toLowerCase();
-    const choices = ["high-intelligence", "low-intelligence"] as const;
+    const choices = ["standard", "weak-model-compatible"] as const;
     const normalized =
-      arg === "standard" ? "high-intelligence" :
-      arg === "structured-adaptive" ? "low-intelligence" :
+      arg === "high-intelligence" ? "standard" :
+      arg === "low-intelligence" || arg === "structured-adaptive" ? "weak-model-compatible" :
       arg;
 
     if (!arg) {
@@ -4567,6 +4567,8 @@ export class InteractiveMode {
           steeringMode: this.session.steeringMode,
           followUpMode: this.session.followUpMode,
           transport: this.settingsManager.getTransport(),
+          agentLoopFramework:
+            this.settingsManager.getAgentLoopFramework() ?? "model-default",
           thinkingLevel: this.session.thinkingLevel,
           availableThinkingLevels: this.session.getAvailableThinkingLevels(),
           currentTheme: this.settingsManager.getTheme() || "dark",
@@ -4619,6 +4621,13 @@ export class InteractiveMode {
           onTransportChange: (transport) => {
             this.settingsManager.setTransport(transport);
             this.session.agent.setTransport(transport);
+          },
+          onAgentLoopFrameworkChange: (framework) => {
+            const value = framework === "model-default" ? undefined : framework;
+            this.settingsManager.setAgentLoopFramework(value);
+            this.session.setAgentLoopFramework(value as any);
+            this.footer.invalidate();
+            this.showStatus(`Agent loop: ${this.session.agentLoopFramework}`);
           },
           onThinkingLevelChange: (level) => {
             this.session.setThinkingLevel(level);

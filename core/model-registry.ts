@@ -63,13 +63,18 @@ const OpenAIResponsesCompatSchema = Type.Object({
 
 const OpenAICompatSchema = Type.Union([OpenAICompletionsCompatSchema, OpenAIResponsesCompatSchema]);
 const AgentLoopFrameworkSchema = Type.Union([
+	Type.Literal("standard"),
+	Type.Literal("weak-model-compatible"),
 	Type.Literal("high-intelligence"),
 	Type.Literal("low-intelligence"),
-	Type.Literal("standard"),
 	Type.Literal("structured-adaptive"),
 ]);
-type AgentLoopFramework = "high-intelligence" | "low-intelligence";
-type AgentLoopFrameworkInput = AgentLoopFramework | "standard" | "structured-adaptive";
+type AgentLoopFramework = "standard" | "weak-model-compatible";
+type AgentLoopFrameworkInput =
+	| AgentLoopFramework
+	| "high-intelligence"
+	| "low-intelligence"
+	| "structured-adaptive";
 type ModelWithAgentLoop = Omit<Model<Api>, "agentLoopFramework"> & { agentLoopFramework?: AgentLoopFramework };
 
 // Schema for custom model definition
@@ -120,8 +125,8 @@ type ModelOverride = Static<typeof ModelOverrideSchema>;
 function normalizeAgentLoopFramework(
 	value: AgentLoopFrameworkInput | undefined,
 ): AgentLoopFramework | undefined {
-	if (value === "standard") return "high-intelligence";
-	if (value === "structured-adaptive") return "low-intelligence";
+	if (value === "high-intelligence") return "standard";
+	if (value === "low-intelligence" || value === "structured-adaptive") return "weak-model-compatible";
 	return value;
 }
 

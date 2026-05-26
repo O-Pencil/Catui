@@ -10,7 +10,11 @@ import type { SessionStats } from "../../core/runtime/agent-session.js";
 import type { BashResult } from "../../core/bash-executor.js";
 import type { CompactionResult } from "../../core/session/compaction/index.js";
 
-type AgentLoopFrameworkInput = AgentLoopFramework | "standard" | "structured-adaptive";
+type AgentLoopFrameworkInput =
+	| AgentLoopFramework
+	| "high-intelligence"
+	| "low-intelligence"
+	| "structured-adaptive";
 
 // ============================================================================
 // RPC Commands (stdin)
