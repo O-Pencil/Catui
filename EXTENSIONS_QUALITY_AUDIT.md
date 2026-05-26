@@ -26,6 +26,7 @@ Updated on 2026-05-26 after the first repair pass and structural follow-up:
 - Split `idle-think` lifecycle/state handling into `idle-think-runtime.ts`, added diagnostics for failed background exploration, and covered daily budget reset, abort cleanup, insight persistence, and failed-exploration diagnostics.
 - Scoped `/debug` full-diagnostic system prompt injection to the pending command-generated prompt and added cleanup coverage proving old/manual `[DEBUG:]` prompts do not keep diagnostic privileges after `agent_end`.
 - Added `recap` renderer accounting coverage proving Free recaps suppress token/cost badges while Smart recaps render input/output/cost and extract only text content parts.
+- Added `export-html` branch-navigation snapshot coverage against the standalone template's tree/path functions, including active-path ordering and newest-leaf navigation from a fork point.
 - Fixed `presence` memory locale detection to include the mem-core `preferences` store rather than only `knowledge`/`lessons`, and aligned the locale fixture with the `MemoryEntry` storage contract.
 - Fixed mem-core archive cooldown logic to evaluate `revivedAt` and age against the explicit archive run timestamp instead of the wall clock, making archive maintenance deterministic.
 - Fixed related test fragility in SAL batch ordering, Grub persisted-state fixture shape, and TUI viewport cursor movement.
@@ -34,7 +35,7 @@ Post-fix verification:
 
 - `npx tsc -p tsconfig.build.json --noEmit`: pass.
 - `npm run verify:dip`: pass, `418/418` files with valid P3 headers.
-- Node test suite, excluding Vitest-style files: `240/240` pass.
+- Node test suite, excluding Vitest-style files: `242/242` pass.
 - Vitest-style tests: `48` pass, `43` skipped.
 - `packages/mem-core/test/extension-commands.test.ts`: pass.
 - `npm run build`: pass.
@@ -52,7 +53,7 @@ Current evidence:
 
 - `npm run verify:dip`: passed, `418/418` files with valid P3 headers and 30 P2 modules checked.
 - `npx tsc -p tsconfig.build.json --noEmit`: passed.
-- Node test suite excluding Vitest-style files: `240/240` passed.
+- Node test suite excluding Vitest-style files: `242/242` passed.
 - Vitest-style tests: `48` passed, `43` skipped.
 - `packages/mem-core/test/extension-commands.test.ts`: passed.
 - `npm run build`: passed.
@@ -179,7 +180,7 @@ Resolution:
 | `security-audit` | B | Active gate now uses `DangerDetector`, logs `ctx.cwd`, and has tests for dangerous/safe/warning/sensitive file paths. | Move config loading into the extension when user-facing policy configuration is introduced. |
 | `btw` | B | Small command, low blast radius; command/renderer registration, no-argument validation, no-tool prompt constraint, response emission, and timeout cleanup are covered. | Add explicit slow-timeout notification test with fake timers if the test harness gains timer control. |
 | `soul` | B | Thin compatibility shim; real implementation lives in `packages/soul-core`. | Keep it thin; audit `soul-core` separately. |
-| `export-html` | B+ | Useful command; now optional-only, ships the required HTML template asset, writes standalone HTML with decodable session data, and pre-renders custom tool call/result HTML in tests. File still has cleanup opportunities around import grouping and export adapter boundaries. | Add richer HTML snapshot coverage for branch navigation. |
+| `export-html` | A- | Useful command; now optional-only, ships the required HTML template asset, writes standalone HTML with decodable session data, pre-renders custom tool call/result HTML, and has branch-navigation snapshot coverage for active-path ordering and newest-leaf navigation. File still has cleanup opportunities around import grouping and export adapter boundaries. | Keep template navigation tests updated if sidebar filtering or deep-link semantics change. |
 | `simplify` | C+ | Write-capable LLM refactor command is now optional-only, uses argument-array process execution, and rejects paths outside the workspace. | Add rollback/no-UI integration tests before considering broader promotion. |
 | `discipline` | B+ | Passive default extension that discovers bundled engineering workflow skills and appends a bootstrap prompt only when its skills directory exists; metadata/path and direct resources_discover/before_agent_start behavior are covered. | Keep skill asset packaging covered by build/copy-assets checks. |
 
@@ -227,9 +228,8 @@ Next policy layers should enforce:
 
 The repair pass closed the high-priority defects and the known large-file hotspots. Remaining work is lower urgency and mostly architectural:
 
-1. Add deeper behavior tests beyond current coverage for branch-heavy `export-html` output.
-2. Expand metadata-based enforcement so background, external-process, and resource-discovery extensions must carry matching lifecycle/failure-mode tests.
-3. Keep `sal/index.ts` and `team-runtime.ts` from regrowing past the file-size guideline by extracting new setup, lifecycle, or persistence behavior into their existing helper boundaries.
+1. Expand metadata-based enforcement so background, external-process, and resource-discovery extensions must carry matching lifecycle/failure-mode tests.
+2. Keep `sal/index.ts` and `team-runtime.ts` from regrowing past the file-size guideline by extracting new setup, lifecycle, or persistence behavior into their existing helper boundaries.
 
 ## Verification Log
 
