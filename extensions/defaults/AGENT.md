@@ -14,6 +14,8 @@ browser/install.md: Browser Harness setup and troubleshooting instructions, expo
 browser/src/browser_harness/: Vendored Browser Harness Python package, CDP daemon, IPC bridge, admin commands, and helper functions
 browser/interaction-skills/: Reusable Browser Harness mechanics guides for browser interactions
 browser/agent-workspace/: Seed workspace copied to .nanopencil/browser-workspace for editable helpers and domain skills
+discipline/index.ts: Engineering discipline extension entry, registers skill tool, default workflow skills, and lightweight before_agent_start bootstrap prompt
+discipline/skills/: Built-in engineering workflow skills for brainstorming, debugging, TDD, verification, planning, code review, worktrees, and branch finishing
 link-world/index.ts: Internet access integration entry, registers link_world_admin/link_world_exec/web_search/web_fetch tools, /link-world status/doctor/version/install commands, and bundled internet-search resources
 link-world/link-world-agent.md: Agent-facing skill that tells models to prefer web_search/web_fetch and link_world_admin/link_world_exec over bash for internet tasks
 link-world/network-routing.md: Routing skill that tells models when to use web_search/web_fetch/link-world versus browser automation

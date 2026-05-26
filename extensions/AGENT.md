@@ -21,9 +21,22 @@ The `extensions/` module contains built-in extensions that extend nanoPencil's c
 Auto-loaded extensions available to all users.
 
 Current default extension directories:
-`browser/`, `btw/`, `debug/`, `diagnostics/`, `grub/`, `idle-think/`, `interview/`, `link-world/`, `loop/`, `mcp/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `soul/`, `subagent/`, `team/`, `token-save/`.
+`browser/`, `btw/`, `debug/`, `diagnostics/`, `discipline/`, `grub/`, `idle-think/`, `interview/`, `link-world/`, `loop/`, `mcp/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `soul/`, `subagent/`, `team/`, `token-save/`.
 
 The complete file-level member list for defaults lives in `extensions/defaults/AGENT.md`; this parent map records category boundaries and high-level responsibilities.
+
+#### discipline/ — Engineering Workflow Skills
+
+**P3 Contract:**
+`index.ts`: - [WHO]: Extension with `skill` tool, resources_discover registration for built-in workflow skills, and lightweight before_agent_start bootstrap
+    - [FROM]: core/extensions/types, node path/url/fs
+    - [HERE]: discipline extension entry
+
+`skills/`: Default skills for design clarification, root-cause debugging, TDD, verification before completion, plan writing/execution, review handling, worktree setup, and branch finishing
+
+**Design Principle:**
+- Engineering discipline is delivered as default skills plus a short prompt reminder, not hard-coded core behavior.
+- Project and user skills remain able to override default skill names through existing resource precedence.
 
 #### diagnostics/ — Extension-Owned Issue Reporting
 

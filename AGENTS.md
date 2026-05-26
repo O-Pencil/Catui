@@ -276,6 +276,7 @@ Extensions can:
 | `loop` | `/loop` session-scoped scheduled prompts |
 | `link-world` | Internet access via agent-reach |
 | `browser` | Direct browser automation via vendored Browser Harness CDP bridge |
+| `discipline` | Built-in engineering workflow skills, `skill` tool, and lightweight skill-use bootstrap |
 | `mcp` | MCP protocol support |
 | `security-audit` | Security vulnerability detection |
 | `soul` | AI personality evolution and memory |

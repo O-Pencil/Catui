@@ -15,7 +15,6 @@ const require = createRequire(import.meta.url);
 
 /** Built-in extension paths */
 const BUNDLED_NANOMEM_EXTENSION_PACKAGES = join(__dirname, "packages", "mem-core", "extension.js");
-const BUNDLED_SIMPLIFY_EXTENSION = join(__dirname, "extensions", "optional", "simplify", "index.js");
 const BUNDLED_LINK_WORLD_EXTENSION = join(__dirname, "extensions", "defaults", "link-world", "index.js");
 const BUNDLED_BROWSER_EXTENSION = join(__dirname, "extensions", "defaults", "browser", "index.js");
 const BUNDLED_SECURITY_AUDIT_EXTENSION = join(__dirname, "extensions", "defaults", "security-audit", "index.js");
@@ -24,6 +23,7 @@ const BUNDLED_PRESENCE_EXTENSION = join(__dirname, "extensions", "defaults", "pr
 const BUNDLED_INTERVIEW_EXTENSION = join(__dirname, "extensions", "defaults", "interview", "index.js");
 const BUNDLED_LOOP_EXTENSION = join(__dirname, "extensions", "defaults", "loop", "index.js");
 const BUNDLED_PLAN_EXTENSION = join(__dirname, "extensions", "defaults", "plan", "index.js");
+const BUNDLED_DISCIPLINE_EXTENSION = join(__dirname, "extensions", "defaults", "discipline", "index.js");
 const BUNDLED_DIAGNOSTICS_EXTENSION = join(__dirname, "extensions", "defaults", "diagnostics", "index.js");
 const BUNDLED_SAL_EXTENSION = join(__dirname, "extensions", "defaults", "sal", "index.js");
 const BUNDLED_TOKEN_SAVE_EXTENSION = join(__dirname, "extensions", "defaults", "token-save", "index.js");
@@ -35,7 +35,45 @@ const BUNDLED_BTW_EXTENSION = join(__dirname, "extensions", "defaults", "btw", "
 const BUNDLED_RECAP_EXTENSION = join(__dirname, "extensions", "defaults", "recap", "index.js");
 const BUNDLED_DEBUG_EXTENSION = join(__dirname, "extensions", "defaults", "debug", "index.js");
 const BUNDLED_MCP_EXTENSION = join(__dirname, "extensions", "defaults", "mcp", "index.js");
-const BUNDLED_EXPORT_HTML_EXTENSION = join(__dirname, "extensions", "optional", "export-html", "index.js");
+
+export type BuiltinExtensionRiskLevel = "passive" | "command" | "tool" | "background" | "write-capable";
+
+export interface BuiltinExtension {
+	id: string;
+	category: "default" | "optional" | "package";
+	defaultEnabled: boolean;
+	riskLevel: BuiltinExtensionRiskLevel;
+	requiresUI: boolean;
+	startsTimers: boolean;
+	writesWorkspace: boolean;
+	externalProcess: boolean;
+}
+
+export const builtInExtensions: readonly BuiltinExtension[] = [
+	{ id: "diagnostics", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: true, writesWorkspace: false, externalProcess: false },
+	{ id: "sal", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "token-save", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "nanomem", category: "package", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "link-world", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true },
+	{ id: "browser", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true },
+	{ id: "security-audit", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "soul", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "presence", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: true, startsTimers: true, writesWorkspace: false, externalProcess: false },
+	{ id: "interview", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "grub", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true },
+	{ id: "loop", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: true, writesWorkspace: false, externalProcess: false },
+	{ id: "plan", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "discipline", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "subagent", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true },
+	{ id: "team", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true },
+	{ id: "idle-think", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: true, startsTimers: true, writesWorkspace: false, externalProcess: true },
+	{ id: "btw", category: "default", defaultEnabled: true, riskLevel: "command", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "recap", category: "default", defaultEnabled: true, riskLevel: "command", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "debug", category: "default", defaultEnabled: true, riskLevel: "command", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "mcp", category: "default", defaultEnabled: true, riskLevel: "command", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true },
+	{ id: "simplify", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: true },
+	{ id: "export-html", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false },
+];
 
 /** Find package root from current module location (containing package.json with nano-pencil related name) */
 function findPackageRoot(startDir: string): string | null {
@@ -68,7 +106,7 @@ function findPackageRoot(startDir: string): string | null {
  * - SecurityAudit (security audit)
  * - MCP (MCP protocol adapter)
  *
- * Optional extensions need to be enabled via configuration:
+ * Optional extensions need to be enabled via configuration or --extension:
  * - Simplify (code simplification) - extensions/optional/simplify/
  * - export-html (HTML export) - extensions/optional/export-html/
  */
@@ -129,15 +167,6 @@ export function getBuiltinExtensionPaths(): string[] {
 				}
 			}
 		}
-	}
-
-	// === Simplify extension (optional source, compiled to dist/extensions/optional/simplify) ===
-	if (existsSync(BUNDLED_SIMPLIFY_EXTENSION)) {
-		paths.push(BUNDLED_SIMPLIFY_EXTENSION);
-	} else {
-		// Development mode: try .ts source file
-		const simplifyTs = join(__dirname, "extensions", "optional", "simplify", "index.ts");
-		if (existsSync(simplifyTs)) paths.push(simplifyTs);
 	}
 
 	// === link-world extension (built-in source, compiled to dist/extensions/defaults/link-world) ===
@@ -212,7 +241,14 @@ export function getBuiltinExtensionPaths(): string[] {
 		if (existsSync(planTs)) paths.push(planTs);
 	}
 
-	// === MCP extension (MCP tool protocol adapter) ===
+	// === Discipline extension (default engineering workflow skills and bootstrap) ===
+	if (existsSync(BUNDLED_DISCIPLINE_EXTENSION)) {
+		paths.push(BUNDLED_DISCIPLINE_EXTENSION);
+	} else {
+		const disciplineTs = join(__dirname, "extensions", "defaults", "discipline", "index.ts");
+		if (existsSync(disciplineTs)) paths.push(disciplineTs);
+	}
+
 	// Built-in SubAgent extension
 	if (existsSync(BUNDLED_SUBAGENT_EXTENSION)) {
 		paths.push(BUNDLED_SUBAGENT_EXTENSION);
@@ -267,14 +303,6 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const mcpTs = join(__dirname, "extensions", "defaults", "mcp", "index.ts");
 		if (existsSync(mcpTs)) paths.push(mcpTs);
-	}
-
-	// === export-html extension (optional, HTML export functionality) ===
-	if (existsSync(BUNDLED_EXPORT_HTML_EXTENSION)) {
-		paths.push(BUNDLED_EXPORT_HTML_EXTENSION);
-	} else {
-		const exportHtmlTs = join(__dirname, "extensions", "optional", "export-html", "index.ts");
-		if (existsSync(exportHtmlTs)) paths.push(exportHtmlTs);
 	}
 
 	return paths;

@@ -267,6 +267,7 @@ export function bindExtensionCore(runner: ExtensionRunner, host: ExtensionCoreBi
 			},
 			getSystemPrompt: () => host.systemPrompt,
 			getSoulManager: () => host.soulManager,
+			getSkills: () => host.resourceLoader.getSkills().skills,
 		} satisfies ExtensionContextActions,
 	);
 }

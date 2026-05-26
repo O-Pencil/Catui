@@ -231,6 +231,7 @@ export class ExtensionRunner {
 	private getSystemPromptFn: () => string = () => "";
 	private getSoulManagerFn: () => unknown | undefined = () => undefined;
 	private getSettingsFn: () => import("../config/settings-manager.js").Settings = () => ({});
+	private getSkillsFn: () => readonly import("../skills.js").Skill[] = () => [];
 	private newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
 	private forkHandler: ForkHandler = async () => ({ cancelled: false });
 	private navigateTreeHandler: NavigateTreeHandler = async () => ({ cancelled: false });
@@ -323,6 +324,7 @@ export class ExtensionRunner {
 		this.getSystemPromptFn = contextActions.getSystemPrompt;
 		this.getSoulManagerFn = contextActions.getSoulManager;
 		this.getSettingsFn = contextActions.getSettings;
+		this.getSkillsFn = contextActions.getSkills;
 
 		// Process provider registrations queued during extension loading
 		for (const { name, config } of this.runtime.pendingProviderRegistrations) {
@@ -607,6 +609,7 @@ export class ExtensionRunner {
 			getSystemPrompt: () => this.getSystemPromptFn(),
 			getSoulManager: () => this.getSoulManagerFn(),
 			getSettings: () => this.getSettingsFn(),
+			getSkills: () => this.getSkillsFn(),
 		};
 	}
 

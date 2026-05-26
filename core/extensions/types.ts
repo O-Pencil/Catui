@@ -52,6 +52,7 @@ import type {
 	SessionEntry,
 	SessionManager,
 } from "../session/session-manager.js";
+import type { Skill } from "../skills.js";
 import type { SlashCommandInfo } from "../slash-commands.js";
 import type { BashOperations } from "../tools/bash.js";
 import type { EditToolDetails } from "../tools/edit.js";
@@ -326,6 +327,9 @@ export interface ExtensionContext {
 
 	/** Get current merged settings (project overrides global). */
 	getSettings(): import("../config/settings-manager.js").Settings;
+
+	/** Get currently loaded skills after user/project/default resource precedence is applied. */
+	getSkills(): readonly Skill[];
 }
 
 /**
@@ -390,7 +394,7 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	interruptBehavior?: "cancel" | "block";
 	/** Optional semantic validation after schema validation and before execute. */
 	validateInput?: (params: Static<TParams>) => void | string | Promise<void | string>;
-	/** Optional maximum text result size enforced by low-intelligence-adaptation tool orchestration. */
+	/** Optional maximum text result size enforced by weak-model-compatible tool orchestration. */
 	maxResultSizeChars?: number;
 
 	/** Usage guidance for system prompt (optional) */
@@ -1156,14 +1160,14 @@ export interface ExtensionAPI {
 	 *   api: "anthropic-messages",
 	 *   models: [
 	 *     {
-	 *       id: "high-intelligence-model",
-	 *       name: "High Intelligence Model (proxy)",
+	 *       id: "example-model",
+	 *       name: "Example Model (proxy)",
 	 *       reasoning: false,
 	 *       input: ["text", "image"],
 	 *       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 	 *       contextWindow: 200000,
 	 *       maxTokens: 16384,
-	 *       agentLoopFramework: "low-intelligence"
+	 *       agentLoopFramework: "weak-model-compatible"
 	 *     }
 	 *   ]
 	 * });
@@ -1231,9 +1235,9 @@ export interface ProviderConfig {
 
 /** Configuration for a model within a provider. */
 export interface ProviderModelConfig {
-	/** Model ID (e.g., "high-intelligence-model"). */
+	/** Model ID (e.g., "example-model"). */
 	id: string;
-	/** Display name (e.g., "High Intelligence Model"). */
+	/** Display name (e.g., "Example Model"). */
 	name: string;
 	/** API type override for this model. */
 	api?: Api;
@@ -1379,6 +1383,7 @@ export interface ExtensionContextActions {
 	getSystemPrompt: () => string;
 	getSoulManager: () => unknown | undefined;
 	getSettings: () => import("../config/settings-manager.js").Settings;
+	getSkills: () => readonly Skill[];
 }
 
 /**
