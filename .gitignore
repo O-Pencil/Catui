@@ -29,6 +29,14 @@ report.html
 *.html
 config/
 
+# LLM Wiki generated machine artifacts. Keep curated Markdown pages in git;
+# regenerate these with `npm run wiki:all`.
+llm-wiki/diagnostics.json
+llm-wiki/graph.json
+llm-wiki/manifest.json
+llm-wiki/search-index.json
+llm-wiki/site/
+
 # Local SAL / memory experiment artifacts
 .memory-experiments/
 
