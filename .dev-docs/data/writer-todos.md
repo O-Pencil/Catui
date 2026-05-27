@@ -155,4 +155,4 @@ When a new wire-writer item is added:
 4. **Classify under SOP**: REVIEW (telemetry write side) or AUTO-FIX (rare; localized non-telemetry).
 5. **Assign a priority bucket** (P0–P4) based on which leg of self-diagnosis depends on it.
 
-This doc is the index. The actual REVIEW tickets, when filed, live under `docs/issues/<YYYY-MM-DD>/`.
+This doc is the index. The actual REVIEW tickets, when filed, live under `.dev-docs/diagnosis/runs/<YYYY-MM-DD>/`.

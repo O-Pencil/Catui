@@ -68,7 +68,7 @@ Observability is already partly built: SAL eval writes to `eval_runs`, `eval_tur
 **Prompt to pencil:**
 > Read the 11 rows in `pencil_issue_events`. Group by code path (grep the repo using fingerprint substrings). For each group, write one paragraph: why does this fingerprint exist, and would you have written the code that way? Save to `docs/pencil-self-study/<today>.md`.
 
-**Why useful:** Directly produces design rationale for the open 5 REVIEW tickets at `docs/issues/2026-05-13/`. Tightest feedback loop with Phase 2.
+**Why useful:** Directly produces design rationale for the open 5 REVIEW tickets at `.dev-docs/diagnosis/runs/2026-05-13/`. Tightest feedback loop with Phase 2.
 
 **Risks:** With only 11 rows the exercise is one-shot; loses value after a couple of repeats unless `pencil_issue_events` grows.
 

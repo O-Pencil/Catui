@@ -37,15 +37,16 @@ Periodically validate that InsForge tables faithfully represent what they claim 
 - Companion: `.dev-docs/data/field-purpose-matrix.md` — the field-by-field judgment of what's alive, dead, or stale
 - Triggers: schema change in any writer; > 30-day silence in an actively-used table; quarterly review
 
-### Leg 2 — Issue triage (on demand)
+### Leg 2 — Daily diagnosis (Claude-agent driven)
 
-Watch `pencil_issue_events` for fingerprints. Classify into BLOCK / REVIEW / AUTO-FIX / OBSERVE. File tickets or commit small fixes per the decision tree.
+Watch `pencil_issue_events` for fingerprints. Classify into BLOCK / REVIEW / AUTO-FIX / OBSERVE. File tickets or commit small fixes per the decision tree. The work is performed by a Claude Code agent firing on a session-scoped daily cron; the maintainer reviews each day's output via Pull Request.
 
-- SOP: `.dev-docs/diagnosis/sop.md`
-- Operational reports (gitignored): `docs/issues/<YYYY-MM-DD>.md`
-- Tickets (gitignored): `docs/issues/<YYYY-MM-DD>/<fingerprint-slug>.md`
+- SOP: `.dev-docs/diagnosis/sop.md` (v3 as of 2026-05-27)
+- Active daily output (tracked): `.dev-docs/diagnosis/runs/<YYYY-MM-DD>.md` + `<YYYY-MM-DD>/`
+- Archive (tracked): `.dev-docs/diagnosis/archive/<YYYY-MM>/`
+- Branch + PR workflow: per SOP §9.2 — daily branch `agent/diagnosis-<date>`; AUTO-FIX branches `auto/issue-<date>-<slug>` carved off `main` for independent reviewability.
 
-This leg is **not automated**. Earlier drafts assumed a daily cron; that was withdrawn when the maintainer-only constraint was made explicit. Maintainers run the SOP manually when investigating an incident or doing scheduled triage.
+Earlier drafts of this charter described Leg 2 as "manual" — that was true at v1 of the SOP. As of SOP v3 (2026-05-27), the leg is **agent-driven daily, maintainer-reviewed per-PR**. The maintainer authority is at the merge gate, not at the trigger.
 
 ### Leg 3 — Reflexive self-study (on demand)
 
