@@ -244,12 +244,12 @@ export default async function interviewExtension(api: ExtensionAPI) {
 
 	// Register /interview command for manual clarification
 	api.registerCommand("interview", {
-		description: "Clarify an ambiguous request and inject a refined intent.",
+		description: "Turn a rough request into clear next steps.",
 		handler: async (args: string, ctx: ExtensionCommandContext) => runInterviewCommand(api, args, ctx, "clarify"),
 	} satisfies Omit<RegisteredCommand, "name">);
 
 	api.registerCommand("grill-me", {
-		description: "Stress-test a plan or unclear request with one-question-at-a-time follow-ups and recommended answers.",
+		description: "Challenge a plan with focused follow-up questions.",
 		handler: async (args: string, ctx: ExtensionCommandContext) => runInterviewCommand(api, args, ctx, "grill"),
 	} satisfies Omit<RegisteredCommand, "name">);
 

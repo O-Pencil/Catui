@@ -4,10 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { RegisteredCommand } from "../core/extensions/types.js";
+import btwExtension from "../extensions/defaults/btw/index.js";
 import browserExtension from "../extensions/defaults/browser/index.js";
 import debugExtension from "../extensions/defaults/debug/index.js";
 import diagnosticsExtension from "../extensions/defaults/diagnostics/index.js";
 import grubExtension from "../extensions/defaults/grub/index.js";
+import interviewExtension from "../extensions/defaults/interview/index.js";
 import loopExtension from "../extensions/defaults/loop/index.js";
 import linkWorldExtension from "../extensions/defaults/link-world/index.js";
 import mcpExtension from "../extensions/defaults/mcp/index.js";
@@ -24,6 +26,7 @@ function createExtensionHarness() {
 	const messages: Array<{ content: unknown; display?: boolean }> = [];
 	const notifications: string[] = [];
 	const statuses: string[] = [];
+	const simplePrompts: Array<{ systemPrompt: string; userMessage: string }> = [];
 	const api = {
 		cwd: process.cwd(),
 		agentDir: process.cwd(),
@@ -43,12 +46,17 @@ function createExtensionHarness() {
 	const ctx = {
 		cwd: process.cwd(),
 		hasUI: true,
+		sessionManager: { getEntries: () => [] },
+		completeSimple: async (systemPrompt: string, userMessage: string) => {
+			simplePrompts.push({ systemPrompt, userMessage });
+			return "Short answer.";
+		},
 		ui: {
 			notify: (message: string) => notifications.push(message),
 			setStatus: (_key: string, text?: string) => statuses.push(text ?? ""),
 		},
 	};
-	return { api, commands, ctx, messages, notifications, statuses };
+	return { api, commands, ctx, messages, notifications, statuses, simplePrompts };
 }
 
 test("debug command advertises and runs quick preference diagnostics", async () => {
@@ -102,6 +110,32 @@ test("tokensave command exposes first-argument completions", () => {
 	assert.match(tokensave.description ?? "", /shell output was shortened/);
 	assert.deepEqual(tokensave.getArgumentCompletions?.("hi")?.map((item) => item.value), ["history"]);
 	assert.deepEqual(tokensave.getArgumentCompletions?.("re")?.map((item) => item.value), ["reload"]);
+});
+
+test("interview, grill, and btw commands use human-readable descriptions", async () => {
+	const interviewHarness = createExtensionHarness();
+	await interviewExtension(interviewHarness.api as never);
+
+	const interview = interviewHarness.commands.get("interview");
+	assert.ok(interview);
+	assert.match(interview.description ?? "", /Turn a rough request into clear next steps/);
+	assert.doesNotMatch(interview.description ?? "", /ambiguous|inject|refined intent/i);
+
+	const grill = interviewHarness.commands.get("grill-me");
+	assert.ok(grill);
+	assert.match(grill.description ?? "", /Challenge a plan with focused follow-up questions/);
+	assert.doesNotMatch(grill.description ?? "", /stress-test|recommended answers/i);
+
+	const btwHarness = createExtensionHarness();
+	await btwExtension(btwHarness.api as never);
+	const btw = btwHarness.commands.get("btw");
+	assert.ok(btw);
+	assert.match(btw.description ?? "", /Ask a quick side question while the main task keeps its place/);
+	assert.doesNotMatch(btw.description ?? "", /interrupting/i);
+
+	await btw.handler("what changed?", btwHarness.ctx as never);
+	assert.match(btwHarness.simplePrompts[0]?.systemPrompt ?? "", /Keep responses short \(1-3 sentences unless detail is critical\)\./);
+	assert.deepEqual(btwHarness.messages.at(-1), { customType: "btw", content: "Short answer.", display: true });
 });
 
 test("browser and link-world commands expose readable first-argument completions", () => {

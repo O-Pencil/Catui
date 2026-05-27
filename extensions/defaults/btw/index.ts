@@ -19,7 +19,7 @@ Rules:
 - Do NOT use any tools
 - Do NOT say "I cannot" or explain limitations
 - If you don't know, say so briefly
-- Keep responses short (1-3 sentences unless detail is critical`;
+- Keep responses short (1-3 sentences unless detail is critical).`;
 
 const MAX_TURN_CHARS = 500;
 
@@ -134,7 +134,7 @@ export default async function btwExtension(api: ExtensionAPI): Promise<void> {
 
 	// Register /btw command
 	api.registerCommand("btw", {
-		description: "Ask a quick question without interrupting the current task",
+		description: "Ask a quick side question while the main task keeps its place",
 		handler: (args, ctx) => handleBtwCommand(args, ctx, api),
 	});
 }
