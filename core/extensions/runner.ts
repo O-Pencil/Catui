@@ -12,7 +12,14 @@ import type { ResourceDiagnostic } from "../diagnostics.js";
 import type { KeyAction, KeybindingsConfig } from "../keybindings.js";
 import type { ModelRegistry } from "../model-registry.js";
 import type { SessionManager } from "../session/session-manager.js";
-import { classifyArgsSignature, type CommandOutcome, type ExtensionTelemetrySink } from "../telemetry/index.js";
+import {
+	classifyArgsSignature,
+	type CommandOutcome,
+	type ExtCallerContext,
+	type ExtensionTelemetrySink,
+	type LlmCallEventInput,
+	runWithExtCallerContext,
+} from "../telemetry/index.js";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
@@ -596,12 +603,46 @@ export class ExtensionRunner {
 	/**
 	 * Attach (or replace) the extension telemetry sink. The runner owns sink
 	 * lifecycle from this point — invokeCommand() will fire-and-forget one
-	 * `ext_command_events` row per invocation. Passing the noop sink (the
-	 * factory's default when no insforge credentials exist) is the safe way to
-	 * disable telemetry without scattering null-checks at the call sites.
+	 * `ext_command_events` row per invocation, and writeLlmCallEvent() (called
+	 * from extension-core-bindings) writes one `ext_llm_calls` row per
+	 * extension-initiated LLM call. Passing the noop sink (the factory's
+	 * default when no insforge credentials exist) is the safe way to disable
+	 * telemetry without scattering null-checks at the call sites.
 	 */
 	setTelemetrySink(sink: ExtensionTelemetrySink): void {
 		this.telemetrySink = sink;
+	}
+
+	/**
+	 * Passthrough used by core/runtime/extension-core-bindings.ts after each
+	 * extension-initiated LLM call. The runner owns the sink; the binding
+	 * doesn't import it directly to keep its concerns scoped to LLM plumbing.
+	 */
+	writeLlmCallEvent(input: LlmCallEventInput): void {
+		try {
+			this.telemetrySink?.writeLlmCallEvent(input);
+		} catch {
+			// Telemetry must never destabilize the LLM call path.
+		}
+	}
+
+	/**
+	 * Wrap an extension hook handler invocation in an AsyncLocalStorage frame
+	 * tagged with extension_name + hook name + isUserInitiated=false. Any
+	 * descendant LLM call placed by that handler reads this context and gets
+	 * properly attributed in ext_llm_calls. Used by all emit*() methods below.
+	 */
+	private invokeHookHandler<T>(
+		ext: Extension,
+		hookName: string,
+		fn: () => Promise<T> | T,
+	): Promise<T> {
+		const ctx: ExtCallerContext = {
+			extensionName: this.deriveExtensionName(ext),
+			callerContext: `hook:${hookName}`,
+			isUserInitiated: false,
+		};
+		return runWithExtCallerContext(ctx, fn);
 	}
 
 	/**
@@ -633,8 +674,17 @@ export class ExtensionRunner {
 		let errorCode: string | null = null;
 		let thrown: unknown;
 
+		const argsSig = classifyArgsSignature(args);
+		const callerCtx: ExtCallerContext = {
+			extensionName,
+			callerContext: argsSig === "no-args" ? `command:/${commandName}` : `command:/${commandName} ${argsSig}`,
+			isUserInitiated: true,
+			sessionId: metadata?.sessionId ?? null,
+			runId: metadata?.runId ?? null,
+			variant: metadata?.variant ?? null,
+		};
 		try {
-			await command.handler(args, ctx);
+			await runWithExtCallerContext(callerCtx, () => command.handler(args, ctx));
 		} catch (err) {
 			outcome = "error";
 			errorCode = err instanceof Error ? err.constructor.name : "unknown";
@@ -653,7 +703,7 @@ export class ExtensionRunner {
 			this.telemetrySink?.writeCommandEvent({
 				extensionName,
 				commandName,
-				argsSignature: classifyArgsSignature(args),
+				argsSignature: argsSig,
 				argsLength: args.length,
 				outcome,
 				errorCode,
@@ -752,7 +802,7 @@ export class ExtensionRunner {
 
 			for (const handler of handlers) {
 				try {
-					const handlerResult = await handler(event, ctx);
+					const handlerResult = await this.invokeHookHandler(ext, event.type, () => handler(event, ctx));
 
 					if (this.isSessionBeforeEvent(event) && handlerResult) {
 						result = handlerResult as SessionBeforeEventResult;
@@ -787,7 +837,7 @@ export class ExtensionRunner {
 
 			for (const handler of handlers) {
 				try {
-					const handlerResult = (await handler(currentEvent, ctx)) as ToolResultEventResult | undefined;
+					const handlerResult = (await this.invokeHookHandler(ext, "tool_result", () => handler(currentEvent, ctx))) as ToolResultEventResult | undefined;
 					if (!handlerResult) continue;
 
 					if (handlerResult.content !== undefined) {
@@ -835,7 +885,7 @@ export class ExtensionRunner {
 			if (!handlers || handlers.length === 0) continue;
 
 			for (const handler of handlers) {
-				const handlerResult = await handler(event, ctx);
+				const handlerResult = await this.invokeHookHandler(ext, "tool_call", () => handler(event, ctx));
 
 				if (handlerResult) {
 					result = handlerResult as ToolCallEventResult;
@@ -858,7 +908,7 @@ export class ExtensionRunner {
 
 			for (const handler of handlers) {
 				try {
-					const handlerResult = await handler(event, ctx);
+					const handlerResult = await this.invokeHookHandler(ext, "user_bash", () => handler(event, ctx));
 					if (handlerResult) {
 						return handlerResult as UserBashEventResult;
 					}
@@ -889,7 +939,7 @@ export class ExtensionRunner {
 			for (const handler of handlers) {
 				try {
 					const event: ContextEvent = { type: "context", messages: currentMessages };
-					const handlerResult = await handler(event, ctx);
+					const handlerResult = await this.invokeHookHandler(ext, "context", () => handler(event, ctx));
 
 					if (handlerResult && (handlerResult as ContextEventResult).messages) {
 						currentMessages = (handlerResult as ContextEventResult).messages!;
@@ -932,7 +982,10 @@ export class ExtensionRunner {
 						images,
 						systemPrompt: currentSystemPrompt,
 					};
-					const handlerResult = await this.withTimeout(handler(event, ctx), this.beforeAgentStartTimeoutMs);
+					const handlerResult = await this.withTimeout(
+						this.invokeHookHandler(ext, "before_agent_start", () => handler(event, ctx)),
+						this.beforeAgentStartTimeoutMs,
+					);
 					if (handlerResult === this.beforeAgentStartTimeoutSentinel) {
 						this.reportBeforeAgentStartTimeout(ext.path);
 						continue;
@@ -1004,7 +1057,7 @@ export class ExtensionRunner {
 			for (const handler of handlers) {
 				try {
 					const event: ResourcesDiscoverEvent = { type: "resources_discover", cwd, reason };
-					const handlerResult = await handler(event, ctx);
+					const handlerResult = await this.invokeHookHandler(ext, "resources_discover", () => handler(event, ctx));
 					const result = handlerResult as ResourcesDiscoverResult | undefined;
 
 					if (result?.skillPaths?.length) {
@@ -1042,7 +1095,7 @@ export class ExtensionRunner {
 			for (const handler of ext.handlers.get("input") ?? []) {
 				try {
 					const event: InputEvent = { type: "input", text: currentText, images: currentImages, source };
-					const result = (await handler(event, ctx)) as InputEventResult | undefined;
+					const result = (await this.invokeHookHandler(ext, "input", () => handler(event, ctx))) as InputEventResult | undefined;
 					if (result?.action === "handled") return result;
 					if (result?.action === "transform") {
 						currentText = result.text;

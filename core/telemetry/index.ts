@@ -19,6 +19,8 @@ export {
 	type CommandOutcome,
 	type CreateExtensionTelemetrySinkOptions,
 	type ExtensionTelemetrySink,
+	type LlmCallEventInput,
 	classifyArgsSignature,
 	createExtensionTelemetrySink,
 } from "./ext-events.js";
+export { type ExtCallerContext, getExtCallerContext, runWithExtCallerContext } from "./caller-context.js";

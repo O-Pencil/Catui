@@ -13,6 +13,7 @@ import type { DiagnosticHandler } from "./types.js";
 const BUILD_META = loadBuildMeta();
 const TELEMETRY_SOURCE = "ext.telemetry";
 const EXT_COMMAND_EVENTS_TABLE = "ext_command_events";
+const EXT_LLM_CALLS_TABLE = "ext_llm_calls";
 
 export type CommandOutcome = "ok" | "error" | "cancelled" | "no_match" | "unknown";
 
@@ -33,13 +34,38 @@ export interface CommandEventInput {
 	variant?: string | null;
 }
 
+export interface LlmCallEventInput {
+	extensionName: string;
+	/** Short scope label, e.g. "command:/recap --smart" or "hook:before_agent_start". */
+	callerContext: string;
+	/** True for slash-command paths; false for hook auto-fires. SQL dashboards group on this to find idle-thinking-class bugs. */
+	isUserInitiated: boolean;
+	modelId?: string | null;
+	tokensIn?: number | null;
+	tokensOut?: number | null;
+	costTotal?: number | null;
+	durationMs: number;
+	ok: boolean;
+	errorCode?: string | null;
+	startedAt: Date;
+	endedAt: Date;
+	runId?: string | null;
+	sessionId?: string | null;
+	variant?: string | null;
+	commandEventId?: number | null;
+}
+
 export interface ExtensionTelemetrySink {
 	writeCommandEvent(input: CommandEventInput): void;
+	writeLlmCallEvent(input: LlmCallEventInput): void;
 	close(): Promise<void>;
 }
 
 class NoopExtensionTelemetrySink implements ExtensionTelemetrySink {
 	writeCommandEvent(): void {
+		// no-op
+	}
+	writeLlmCallEvent(): void {
 		// no-op
 	}
 	async close(): Promise<void> {
@@ -58,9 +84,13 @@ interface InsforgeSinkInternalOptions {
 	onDiagnostic?: DiagnosticHandler;
 }
 
+type SinkEvent =
+	| { type: "command"; payload: CommandEventInput }
+	| { type: "llm_call"; payload: LlmCallEventInput };
+
 class InsforgeExtensionTelemetrySink implements ExtensionTelemetrySink {
 	private http: InsforgeHttpClient;
-	private dispatcher: BatchingDispatcher<CommandEventInput>;
+	private dispatcher: BatchingDispatcher<SinkEvent>;
 
 	constructor(opts: InsforgeSinkInternalOptions) {
 		this.http = new InsforgeHttpClient({
@@ -73,7 +103,7 @@ class InsforgeExtensionTelemetrySink implements ExtensionTelemetrySink {
 			source: TELEMETRY_SOURCE,
 			onDiagnostic: opts.onDiagnostic,
 		});
-		this.dispatcher = new BatchingDispatcher<CommandEventInput>({
+		this.dispatcher = new BatchingDispatcher<SinkEvent>({
 			handler: (event) => this.postEvent(event),
 			intervalMs: opts.batchIntervalMs ?? 2000,
 			source: TELEMETRY_SOURCE,
@@ -82,14 +112,26 @@ class InsforgeExtensionTelemetrySink implements ExtensionTelemetrySink {
 	}
 
 	writeCommandEvent(input: CommandEventInput): void {
-		this.dispatcher.enqueue(input);
+		this.dispatcher.enqueue({ type: "command", payload: input });
+	}
+
+	writeLlmCallEvent(input: LlmCallEventInput): void {
+		this.dispatcher.enqueue({ type: "llm_call", payload: input });
 	}
 
 	async close(): Promise<void> {
 		await this.dispatcher.close();
 	}
 
-	private async postEvent(input: CommandEventInput): Promise<void> {
+	private async postEvent(event: SinkEvent): Promise<void> {
+		if (event.type === "command") {
+			await this.postCommandEvent(event.payload);
+		} else {
+			await this.postLlmCallEvent(event.payload);
+		}
+	}
+
+	private async postCommandEvent(input: CommandEventInput): Promise<void> {
 		const row = {
 			run_id: input.runId ?? null,
 			session_id: input.sessionId ?? null,
@@ -108,6 +150,30 @@ class InsforgeExtensionTelemetrySink implements ExtensionTelemetrySink {
 			ended_at: input.endedAt.toISOString(),
 		};
 		await this.http.postJson(`${this.http.base}/api/database/records/${EXT_COMMAND_EVENTS_TABLE}`, [row]);
+	}
+
+	private async postLlmCallEvent(input: LlmCallEventInput): Promise<void> {
+		const row = {
+			run_id: input.runId ?? null,
+			session_id: input.sessionId ?? null,
+			command_event_id: input.commandEventId ?? null,
+			extension_name: input.extensionName,
+			caller_context: input.callerContext,
+			is_user_initiated: input.isUserInitiated,
+			model_id: input.modelId ?? null,
+			tokens_in: input.tokensIn ?? null,
+			tokens_out: input.tokensOut ?? null,
+			cost_total: input.costTotal ?? null,
+			duration_ms: input.durationMs,
+			ok: input.ok,
+			error_code: input.errorCode ?? null,
+			pencil_version: BUILD_META.version,
+			commit_hash: BUILD_META.commitHash ?? null,
+			variant: input.variant ?? null,
+			started_at: input.startedAt.toISOString(),
+			ended_at: input.endedAt.toISOString(),
+		};
+		await this.http.postJson(`${this.http.base}/api/database/records/${EXT_LLM_CALLS_TABLE}`, [row]);
 	}
 }
 

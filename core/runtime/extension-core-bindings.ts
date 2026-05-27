@@ -1,8 +1,8 @@
 /**
- * [WHO]: Provides bindExtensionCore()
- * [FROM]: Depends on ExtensionRunner, model/session/resource abstractions, slash command metadata
+ * [WHO]: Provides bindExtensionCore() — wires AgentSession host methods to ExtensionRunner APIs, including LLM call telemetry (every ctx.completeSimple / completeSimpleWithUsage / completeJson emits one ext_llm_calls row)
+ * [FROM]: Depends on ExtensionRunner, model/session/resource abstractions, slash command metadata, core/telemetry (getExtCallerContext for caller attribution + LlmCallEventInput shape)
  * [TO]: Consumed by AgentSession when initializing extension runtime capabilities
- * [HERE]: core/runtime/extension-core-bindings.ts - adapts AgentSession host methods to ExtensionRunner APIs
+ * [HERE]: core/runtime/extension-core-bindings.ts - the LLM-call instrumentation point; reads AsyncLocalStorage context pushed by runner.invokeCommand (user-initiated=true) or runner.invokeHookHandler (user-initiated=false) to attribute each call. is_user_initiated=false rows grouped by extension_name + caller_context are the idle-thinking bug detector.
  */
 import type {
 	ImageContent,
@@ -28,6 +28,7 @@ import type { PromptTemplate } from "../prompt/prompt-templates.js";
 import type { SessionManager } from "../session/session-manager.js";
 import type { ContextUsage } from "../extensions/types.js";
 import type { CompactionResult } from "../session/compaction/index.js";
+import { getExtCallerContext, type LlmCallEventInput } from "../telemetry/index.js";
 import { buildExtensionSlashCommands } from "./slash-command-catalog.js";
 
 function getStructuredToolChoice(model: Model<any>, toolName: string): unknown {
@@ -91,16 +92,55 @@ export interface ExtensionCoreBindingHost {
 	compact(customInstructions?: string): Promise<CompactionResult>;
 }
 
+/**
+ * Build the LlmCallEventInput row for one extension-initiated LLM call. Reads
+ * the AsyncLocalStorage caller context pushed by ExtensionRunner — that's how
+ * we know which extension and whether the path was user-initiated. Falls back
+ * to `extension_name="unknown"` + `is_user_initiated=false` when no context is
+ * set (defensive: that combination shows up in dashboards as "unattributed",
+ * a useful signal in itself).
+ */
+function buildLlmCallEvent(args: {
+	host: ExtensionCoreBindingHost;
+	model: Model<any> | undefined;
+	startedAt: Date;
+	startPerf: number;
+	ok: boolean;
+	errorCode: string | null;
+	usage: Usage | undefined;
+}): LlmCallEventInput {
+	const callerCtx = getExtCallerContext();
+	return {
+		extensionName: callerCtx?.extensionName ?? "unknown",
+		callerContext: callerCtx?.callerContext ?? "unknown",
+		isUserInitiated: callerCtx?.isUserInitiated ?? false,
+		modelId: args.model?.id ?? null,
+		tokensIn: args.usage?.input ?? null,
+		tokensOut: args.usage?.output ?? null,
+		costTotal: args.usage?.cost?.total ?? null,
+		durationMs: Math.round(performance.now() - args.startPerf),
+		ok: args.ok,
+		errorCode: args.errorCode,
+		startedAt: args.startedAt,
+		endedAt: new Date(),
+		sessionId: callerCtx?.sessionId ?? args.host.sessionManager.getSessionId(),
+		runId: callerCtx?.runId ?? null,
+		variant: callerCtx?.variant ?? null,
+	};
+}
+
 async function completeTextWithCurrentModel(
+	runner: ExtensionRunner,
 	host: ExtensionCoreBindingHost,
 	systemPrompt: string,
 	userMessage: string,
 ): Promise<string | undefined> {
-	const result = await completeTextWithUsage(host, systemPrompt, userMessage);
+	const result = await completeTextWithUsage(runner, host, systemPrompt, userMessage);
 	return result?.text;
 }
 
 async function completeTextWithUsage(
+	runner: ExtensionRunner,
 	host: ExtensionCoreBindingHost,
 	systemPrompt: string,
 	userMessage: string,
@@ -109,6 +149,13 @@ async function completeTextWithUsage(
 	if (!model) return undefined;
 	const apiKey = await host.modelRegistry.getApiKey(model);
 	if (!apiKey) return undefined;
+
+	const startedAt = new Date();
+	const startPerf = performance.now();
+	let ok = true;
+	let errorCode: string | null = null;
+	let usage: Usage | undefined;
+	let text: string | undefined;
 	try {
 		const response = await completeSimple(
 			model,
@@ -118,18 +165,23 @@ async function completeTextWithUsage(
 			},
 			{ maxTokens: 1500, temperature: 0.2, apiKey },
 		);
-		const text =
+		usage = response.usage;
+		text =
 			response.content
 				?.filter(isTextContent)
 				.map((block) => block.text ?? "")
 				.join("") ?? "";
-		return { text, usage: response.usage };
-	} catch {
-		return undefined;
+	} catch (err) {
+		ok = false;
+		errorCode = err instanceof Error ? err.constructor.name : "unknown";
 	}
+	runner.writeLlmCallEvent(buildLlmCallEvent({ host, model, startedAt, startPerf, ok, errorCode, usage }));
+	if (!ok || text === undefined || usage === undefined) return undefined;
+	return { text, usage };
 }
 
 async function completeJsonWithCurrentModel(
+	runner: ExtensionRunner,
 	host: ExtensionCoreBindingHost,
 	systemPrompt: string,
 	userMessage: string,
@@ -142,6 +194,12 @@ async function completeJsonWithCurrentModel(
 	if (!apiKey) return undefined;
 
 	const toolName = options?.toolName || "submit_json";
+	const startedAt = new Date();
+	const startPerf = performance.now();
+	let ok = true;
+	let errorCode: string | null = null;
+	let usage: Usage | undefined;
+	let payloadString: string | undefined;
 	try {
 		const toolSchema = schema as unknown as TSchema;
 		const completionOptions = {
@@ -166,13 +224,19 @@ async function completeJsonWithCurrentModel(
 			},
 			completionOptions,
 		);
+		usage = response.usage;
 		const toolCall = response.content?.find((block) => isNamedToolCall(block, toolName));
-		if (!toolCall) return undefined;
-		const payload = options?.resultKey ? toolCall.arguments?.[options.resultKey] : toolCall.arguments;
-		return JSON.stringify(payload);
-	} catch {
-		return undefined;
+		if (toolCall) {
+			const payload = options?.resultKey ? toolCall.arguments?.[options.resultKey] : toolCall.arguments;
+			payloadString = JSON.stringify(payload);
+		}
+	} catch (err) {
+		ok = false;
+		errorCode = err instanceof Error ? err.constructor.name : "unknown";
 	}
+	runner.writeLlmCallEvent(buildLlmCallEvent({ host, model, startedAt, startPerf, ok, errorCode, usage }));
+	if (!ok) return undefined;
+	return payloadString;
 }
 
 export function bindExtensionCore(runner: ExtensionRunner, host: ExtensionCoreBindingHost): void {
@@ -239,11 +303,11 @@ export function bindExtensionCore(runner: ExtensionRunner, host: ExtensionCoreBi
 		{
 			getModel: () => host.model,
 			completeSimple: (systemPrompt, userMessage) =>
-				completeTextWithCurrentModel(host, systemPrompt, userMessage),
+				completeTextWithCurrentModel(runner, host, systemPrompt, userMessage),
 			completeSimpleWithUsage: (systemPrompt, userMessage) =>
-				completeTextWithUsage(host, systemPrompt, userMessage),
+				completeTextWithUsage(runner, host, systemPrompt, userMessage),
 			completeJson: (systemPrompt, userMessage, schema, options) =>
-				completeJsonWithCurrentModel(host, systemPrompt, userMessage, schema, options),
+				completeJsonWithCurrentModel(runner, host, systemPrompt, userMessage, schema, options),
 			getSettings: () => host.settingsManager.getSettings(),
 			isIdle: () => !host.isStreaming,
 			abort: () => {
