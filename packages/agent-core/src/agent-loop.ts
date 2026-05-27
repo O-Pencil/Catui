@@ -15,6 +15,7 @@ import {
 	type Context,
 	EventStream,
 	streamSimple,
+	type TextContent,
 	type ToolResultMessage,
 	validateToolArguments,
 } from "@pencil-agent/ai";
@@ -257,6 +258,7 @@ async function runLoop(
 					signal,
 					stream,
 					config.getSteeringMessages,
+					config.canUseTool,
 				);
 				toolResults.push(...toolExecution.toolResults);
 				steeringAfterTools = toolExecution.steeringMessages ?? null;
@@ -264,6 +266,12 @@ async function runLoop(
 				for (const result of toolResults) {
 					currentContext.messages.push(result);
 					newMessages.push(result);
+				}
+				for (const contextMessage of toolExecution.contextMessages) {
+					currentContext.messages.push(contextMessage);
+					newMessages.push(contextMessage);
+					stream.push({ type: "message_start", message: contextMessage });
+					stream.push({ type: "message_end", message: contextMessage });
 				}
 			}
 
@@ -394,15 +402,18 @@ async function executeToolCalls(
 	signal: AbortSignal | undefined,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	getSteeringMessages?: AgentLoopConfig["getSteeringMessages"],
-): Promise<{ toolResults: ToolResultMessage[]; steeringMessages?: AgentMessage[] }> {
+	canUseTool?: AgentLoopConfig["canUseTool"],
+): Promise<{ toolResults: ToolResultMessage[]; contextMessages: AgentMessage[]; steeringMessages?: AgentMessage[] }> {
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
-	const toolByName = new Map((tools ?? []).map((tool) => [tool.name, tool]));
+	const toolByName = buildToolMap(tools);
 	const results: ToolResultMessage[] = [];
+	const contextMessages: AgentMessage[] = [];
 	let steeringMessages: AgentMessage[] | undefined;
 
 	for (let index = 0; index < toolCalls.length; index++) {
 		const toolCall = toolCalls[index];
 		const tool = toolByName.get(toolCall.name);
+		const startedAt = Date.now();
 
 		stream.push({
 			type: "tool_execution_start",
@@ -418,20 +429,56 @@ async function executeToolCalls(
 			if (!tool) throw new ToolNotFoundError(toolCall.name);
 
 			const validatedArgs = validateToolArguments(tool, toolCall);
-
-			result = await tool.execute(toolCall.id, validatedArgs, signal, (partialResult) => {
-				stream.push({
-					type: "tool_execution_update",
-					toolCallId: toolCall.id,
-					toolName: toolCall.name,
-					args: toolCall.arguments,
-					partialResult,
-				});
+			const validationMessage = await tool.validateInput?.(validatedArgs);
+			if (typeof validationMessage === "string" && validationMessage.trim()) {
+				throw new Error(validationMessage);
+			}
+			const permission = await canUseTool?.({
+				toolCallId: toolCall.id,
+				toolName: tool.name,
+				requestedToolName: toolCall.name,
+				input: validatedArgs,
+				rawInput: toolCall.arguments,
+				tool,
 			});
+			if (permission?.decision === "deny") {
+				const reason = permission.reason?.trim();
+				result = {
+					content: [
+						{ type: "text", text: reason ? `Permission denied: ${reason}` : `Permission denied for ${tool.name}` },
+					],
+					details: {
+						errorType: "permission_denied",
+						reason,
+						toolName: tool.name,
+						toolCallId: toolCall.id,
+					},
+				};
+				isError = true;
+			} else {
+				result = await tool.execute(toolCall.id, validatedArgs, signal, (partialResult) => {
+					stream.push({
+						type: "tool_execution_update",
+						toolCallId: toolCall.id,
+						toolName: toolCall.name,
+						args: toolCall.arguments,
+						partialResult,
+					});
+				});
+				result = enforceMaxResultSize(result, tool.maxResultSizeChars);
+			}
 		} catch (e) {
+			const message = e instanceof Error ? e.message : String(e);
 			result = {
-				content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }],
-				details: {},
+				content: [{ type: "text", text: message }],
+				details: isPermissionDeniedMessage(message)
+					? {
+							errorType: "permission_denied",
+							reason: message,
+							toolName: tool?.name ?? toolCall.name,
+							toolCallId: toolCall.id,
+						}
+					: {},
 			};
 			isError = true;
 		}
@@ -442,6 +489,7 @@ async function executeToolCalls(
 			toolName: toolCall.name,
 			result,
 			isError,
+			durationMs: Date.now() - startedAt,
 		});
 
 		const toolResultMessage: ToolResultMessage = {
@@ -455,6 +503,7 @@ async function executeToolCalls(
 		};
 
 		results.push(toolResultMessage);
+		contextMessages.push(...(result.contextMessages ?? []));
 		stream.push({ type: "message_start", message: toolResultMessage });
 		stream.push({ type: "message_end", message: toolResultMessage });
 
@@ -472,7 +521,68 @@ async function executeToolCalls(
 		}
 	}
 
-	return { toolResults: results, steeringMessages };
+	return { toolResults: results, contextMessages, steeringMessages };
+}
+
+function buildToolMap(tools: AgentTool<any>[] | undefined): Map<string, AgentTool<any>> {
+	const toolByName = new Map<string, AgentTool<any>>();
+	for (const tool of tools ?? []) {
+		toolByName.set(tool.name, tool);
+		for (const alias of tool.aliases ?? []) {
+			if (!toolByName.has(alias)) {
+				toolByName.set(alias, tool);
+			}
+		}
+	}
+	return toolByName;
+}
+
+function isPermissionDeniedMessage(message: string): boolean {
+	return /^Permission (denied|request was cancelled)/i.test(message.trim());
+}
+
+function enforceMaxResultSize<T>(
+	result: AgentToolResult<T>,
+	maxResultSizeChars: number | undefined,
+): AgentToolResult<T> {
+	if (!maxResultSizeChars || maxResultSizeChars <= 0) return result;
+
+	let remaining = Math.floor(maxResultSizeChars);
+	let truncated = false;
+	const content = result.content.map((part) => {
+		if (part.type !== "text") return part;
+		if (remaining <= 0) {
+			truncated = true;
+			return { ...part, text: "" } satisfies TextContent;
+		}
+		if (part.text.length <= remaining) {
+			remaining -= part.text.length;
+			return part;
+		}
+		truncated = true;
+		const text = part.text.slice(0, remaining);
+		remaining = 0;
+		return { ...part, text } satisfies TextContent;
+	});
+
+	if (!truncated) return result;
+
+	const note = `\n\n[Tool result truncated to ${Math.floor(maxResultSizeChars)} characters.]`;
+	let lastTextIndex = -1;
+	for (let i = content.length - 1; i >= 0; i -= 1) {
+		if (content[i]?.type === "text") {
+			lastTextIndex = i;
+			break;
+		}
+	}
+	if (lastTextIndex >= 0) {
+		const part = content[lastTextIndex] as TextContent;
+		content[lastTextIndex] = { ...part, text: `${part.text}${note}` };
+	} else {
+		content.push({ type: "text", text: note.trimStart() });
+	}
+
+	return { ...result, content };
 }
 
 function skipToolCall(

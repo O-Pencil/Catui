@@ -153,7 +153,7 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	getFollowUpMessages?: () => Promise<AgentMessage[]>;
 
 	/**
-	 * Optional tool permission gate for weak-model-compatible execution.
+	 * Optional tool permission gate for agent loop tool execution.
 	 *
 	 * Called after schema/custom validation and before the tool executes.
 	 * Return "deny" to feed a permission-denied tool_result back to the model
@@ -362,7 +362,7 @@ export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any
 	interruptBehavior?: AgentToolInterruptBehavior<TParameters>;
 	/** Optional semantic validation after schema validation and before execute. */
 	validateInput?: (params: Static<TParameters>) => void | string | Promise<void | string>;
-	/** Optional maximum text result size enforced by weak-model-compatible tool orchestration. */
+	/** Optional maximum text result size enforced by agent loop tool orchestration. */
 	maxResultSizeChars?: number;
 	execute: (
 		toolCallId: string,

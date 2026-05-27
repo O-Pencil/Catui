@@ -538,6 +538,181 @@ describe("agentLoop with AgentMessage", () => {
 		// Interrupt message should be in context when second LLM call is made
 		expect(sawInterruptInContext).toBe(true);
 	});
+
+	it("should resolve tool aliases and append context messages after standard loop tool results", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const executed: string[] = [];
+		const contextMessage = createUserMessage("tool attachment");
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "echo",
+			aliases: ["Echo"],
+			label: "Echo",
+			description: "Echo tool",
+			parameters: toolSchema,
+			async execute(_toolCallId, params) {
+				executed.push(params.value);
+				return {
+					content: [{ type: "text", text: `echoed:${params.value}` }],
+					details: { value: params.value },
+					contextMessages: [contextMessage],
+				};
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+		};
+
+		let callIndex = 0;
+		let sawContextMessageInSecondCall = false;
+		const stream = agentLoop([createUserMessage("echo")], context, config, undefined, (_model, ctx) => {
+			if (callIndex === 1) {
+				sawContextMessageInSecondCall = ctx.messages.some(
+					(message) => message.role === "user" && message.content === "tool attachment",
+				);
+			}
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.push({
+						type: "done",
+						reason: "toolUse",
+						message: createAssistantMessage(
+							[{ type: "toolCall", id: "tool-1", name: "Echo", arguments: { value: "hello" } }],
+							"toolUse",
+						),
+					});
+				} else {
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "done" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(executed).toEqual(["hello"]);
+		expect(sawContextMessageInSecondCall).toBe(true);
+		const messageEnds = events.filter(
+			(event): event is Extract<AgentEvent, { type: "message_end" }> => event.type === "message_end",
+		);
+		const toolResultIndex = messageEnds.findIndex((event) => event.message.role === "toolResult");
+		const contextMessageIndex = messageEnds.findIndex(
+			(event) => event.message.role === "user" && event.message.content === "tool attachment",
+		);
+		expect(toolResultIndex).toBeGreaterThanOrEqual(0);
+		expect(contextMessageIndex).toBeGreaterThan(toolResultIndex);
+	});
+
+	it("should run standard loop tool validateInput before execute", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		let executed = false;
+		const tool: AgentTool<typeof toolSchema> = {
+			name: "guarded",
+			label: "Guarded",
+			description: "Guarded tool",
+			parameters: toolSchema,
+			validateInput: (params) => params.value === "bad" ? "value is not allowed" : undefined,
+			async execute() {
+				executed = true;
+				return { content: [{ type: "text", text: "ok" }], details: {} };
+			},
+		};
+
+		const context: AgentContext = { systemPrompt: "", messages: [], tools: [tool] };
+		const config: AgentLoopConfig = { model: createModel(), convertToLlm: identityConverter };
+		const stream = agentLoop([createUserMessage("guard")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				mockStream.push({
+					type: "done",
+					reason: "toolUse",
+					message: createAssistantMessage(
+						[{ type: "toolCall", id: "tool-1", name: "guarded", arguments: { value: "bad" } }],
+						"toolUse",
+					),
+				});
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(executed).toBe(false);
+		const toolEnd = events.find(
+			(event): event is Extract<AgentEvent, { type: "tool_execution_end" }> => event.type === "tool_execution_end",
+		);
+		expect(toolEnd?.isError).toBe(true);
+		expect(toolEnd?.result.content[0]?.type === "text" ? toolEnd.result.content[0].text : "").toContain(
+			"value is not allowed",
+		);
+	});
+
+	it("should feed standard loop permission denials back as tool results", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		let executed = false;
+		const tool: AgentTool<typeof toolSchema> = {
+			name: "write",
+			label: "Write",
+			description: "Write tool",
+			parameters: toolSchema,
+			async execute() {
+				executed = true;
+				return { content: [{ type: "text", text: "written" }], details: {} };
+			},
+		};
+
+		const context: AgentContext = { systemPrompt: "", messages: [], tools: [tool] };
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			canUseTool: () => ({ decision: "deny", reason: "outside workspace" }),
+		};
+		const stream = agentLoop([createUserMessage("write")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				mockStream.push({
+					type: "done",
+					reason: "toolUse",
+					message: createAssistantMessage(
+						[{ type: "toolCall", id: "tool-1", name: "write", arguments: { value: "x" } }],
+						"toolUse",
+					),
+				});
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(executed).toBe(false);
+		const toolResultEnd = events.find(
+			(event): event is Extract<AgentEvent, { type: "message_end" }> =>
+				event.type === "message_end" && event.message.role === "toolResult",
+		);
+		expect(toolResultEnd?.message.isError).toBe(true);
+		expect(readToolResultText(toolResultEnd!.message)).toContain("Permission denied: outside workspace");
+	});
 });
 
 describe("structuredAdaptiveAgentLoop", () => {

@@ -160,7 +160,7 @@ describe("Agent", () => {
 		expect(toolResults).toEqual(["tool-1", "tool-2"]);
 	});
 
-	it("should keep weak-model-compatible behavior opt-in so the default standard loop is unchanged", async () => {
+	it("should keep standard loop serial while sharing tool permission gates", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		const executionOrder: string[] = [];
 		const events: string[] = [];
@@ -199,7 +199,7 @@ describe("Agent", () => {
 			},
 			canUseTool() {
 				permissionChecks++;
-				return { decision: "deny", reason: "weak-model-compatible only" };
+				return { decision: "allow" };
 			},
 			streamFn: () => {
 				const stream = new MockAssistantStream();
@@ -227,7 +227,7 @@ describe("Agent", () => {
 		await agent.prompt("read both");
 
 		expect(executionOrder).toEqual(["start:first", "end:first", "start:second", "end:second"]);
-		expect(permissionChecks).toBe(0);
+		expect(permissionChecks).toBe(2);
 		expect(events).not.toContain("stream_request_start");
 		expect(events).not.toContain("agent_result");
 		const toolResults = agent.state.messages.filter((message) => message.role === "toolResult");
