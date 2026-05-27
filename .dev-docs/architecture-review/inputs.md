@@ -50,7 +50,7 @@ To enforce the boundary in `handoff.md`, the Arch Agent reads these **to know th
 - `.dev-docs/self-awareness/archetypes.md` — reflexive task design; skim only.
 - `.dev-docs/sal/*` — SAL experiment line; skim only.
 - `.dev-docs/data/*` — table-purpose matrices and cleanup plans; skim only.
-- `docs/issues/**` — daily reports and tickets; **do not read individual tickets**, just confirm the directory exists and serves a parallel program.
+- `.dev-docs/diagnosis/runs/**` — daily reports and tickets; **do not read individual tickets**, just confirm the directory exists and serves a parallel program.
 
 If something in these files looks like an architectural problem, log it in the report's "Adjacent observations" section — don't make it a primary finding. The maintainer will route it to the self-diagnosis agent or to themselves.
 
@@ -120,7 +120,7 @@ If any of these commands need a tool not present (`tokei`, `madge`), do not inst
 - Spawn the pencil binary (see `machine-constraints.md`).
 - Run `npm run build` / `npm run dev` / `npm install` / `npm ci`.
 - Edit files outside `.dev-docs/architecture-review/` (your scratch space).
-- Read `docs/issues/<date>/` individual tickets (that's self-diagnosis territory).
+- Read `.dev-docs/diagnosis/runs/<date>/` individual tickets (that's self-diagnosis territory).
 - Read `extensions/defaults/sal/eval/insforge-sink.ts` deeply — you may grep for structure, but do not summarize SAL's experimental work; the SAL Agent owns its evolution.
 
 If you find yourself reading a file and aren't sure if it's in scope, check `handoff.md` first.

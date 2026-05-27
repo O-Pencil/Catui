@@ -1,6 +1,6 @@
 # Daily Pencil Issue Diagnosis — SOP
 
-> ⚠ **Audience: Claude Code agent (executor) + pencil maintainer (reviewer).** This SOP is invoked by a daily cron registered inside the maintainer's persistent Claude Code session. The agent reads this file end-to-end every fire, executes the procedure against the developer-owned InsForge backend via MCP, and writes its findings to `docs/issues/<date>.md`. The maintainer audits those findings asynchronously.
+> ⚠ **Audience: Claude Code agent (executor) + pencil maintainer (reviewer).** This SOP is invoked by a daily cron registered inside the maintainer's persistent Claude Code session. The agent reads this file end-to-end every fire, executes the procedure against the developer-owned InsForge backend via MCP, and writes its findings to `.dev-docs/diagnosis/runs/<date>.md`. The maintainer audits those findings asynchronously.
 >
 > The agent is **not** allowed to spawn the pencil binary (`npm run dev`, `npx tsx cli.ts --print`, `npm run build`, anything that boots a pencil session). All work is static reads + SQL queries + targeted file edits + `tsc` / `vitest` invocations. See §7.
 >
@@ -28,7 +28,7 @@ The agent calls `mcp__insforge__run-raw-sql` with a single ping. If the tool is 
 SELECT 1 AS ping;
 ```
 
-If this fails: write `docs/issues/<YYYY-MM-DD>.md` containing only:
+If this fails: write `.dev-docs/diagnosis/runs/<YYYY-MM-DD>.md` containing only:
 
 ```md
 # YYYY-MM-DD — Daily Pencil Diagnosis (SKIPPED)
@@ -159,7 +159,7 @@ A fix qualifies as AUTO-FIX **only if all** are true:
 
 ### 4.1 BLOCK / REVIEW → file an issue ticket
 
-Write `docs/issues/<YYYY-MM-DD>/<short-fp-slug>.md` using `docs/issues/_template-issue.md`. The slug is the fingerprint lower-cased, non-alnum → `-`, truncated to 60 chars.
+Write `.dev-docs/diagnosis/runs/<YYYY-MM-DD>/<short-fp-slug>.md` using `.dev-docs/diagnosis/_templates/issue.md`. The slug is the fingerprint lower-cased, non-alnum → `-`, truncated to 60 chars.
 
 The ticket must contain:
 
@@ -182,7 +182,7 @@ The agent does **not** edit any code in this branch.
 4. **Verify** (these are the only build-adjacent commands the agent may run; see §7):
    - `npx tsc --noEmit` — must pass.
    - `npx vitest run <file>` for the single test file adjacent to the change, if one exists. Do **not** run the whole vitest suite (memory cost).
-5. **Write the test report** to `docs/issues/<YYYY-MM-DD>/auto-fix-reports/<short-fp-slug>.md`. Schema in §4.2.1 below.
+5. **Write the test report** to `.dev-docs/diagnosis/runs/<YYYY-MM-DD>/auto-fix-reports/<short-fp-slug>.md`. Schema in §4.2.1 below.
 6. `git add <files> && git commit -m "fix(<scope>): <summary> [fp=<fingerprint>]"`.
    - Commit body cites: cluster fingerprint, observed count, today's report path, test-report path.
    - No `Co-Authored-By` trailer, no "Generated with Claude Code" footer (project policy).
@@ -193,7 +193,7 @@ If steps 4–6 fail: roll back the branch (`git switch - && git branch -D auto/i
 
 #### 4.2.1 Test-report schema
 
-`docs/issues/<YYYY-MM-DD>/auto-fix-reports/<short-fp-slug>.md`:
+`.dev-docs/diagnosis/runs/<YYYY-MM-DD>/auto-fix-reports/<short-fp-slug>.md`:
 
 ```markdown
 # Auto-fix Report — <fingerprint>
@@ -266,7 +266,7 @@ Listed in the day's daily report. No issue ticket, no test report, no commit.
 
 ## 5. Daily report
 
-Always write `docs/issues/<YYYY-MM-DD>.md` (even on a zero-event day), using `docs/issues/_template-daily.md`. The daily report is the canonical index for that day; individual tickets and test reports are linked from it.
+Always write `.dev-docs/diagnosis/runs/<YYYY-MM-DD>.md` (even on a zero-event day), using `.dev-docs/diagnosis/_templates/daily.md`. The daily report is the canonical index for that day; individual tickets and test reports are linked from it.
 
 Sections, in order:
 
@@ -311,7 +311,7 @@ Hard rules. Any violation aborts the run and writes a SKIPPED daily report expla
 - If working tree is dirty at pre-flight, demote everything to REVIEW for the day.
 
 **Files**:
-- **No edits outside** `docs/issues/**` and the §3.4 AUTO-FIX-eligible file set.
+- **No edits outside** `.dev-docs/diagnosis/runs/**` and the §3.4 AUTO-FIX-eligible file set.
 - **No schedule self-modification.** If the SOP itself needs to change, file a REVIEW ticket about it.
 - **No edits to `.dev-docs/architecture-review/**`** — that subtree is owned by a separate Agent (see `.dev-docs/architecture-review/handoff.md`).
 
@@ -329,8 +329,8 @@ At the end of the run, the agent prints a one-screen summary into the Claude con
 Daily Pencil diagnosis — <YYYY-MM-DD>
   clusters analyzed: N
   AUTO-FIX commits:  X (branches: ...)
-  tickets filed:     Y (paths: docs/issues/<date>/...)
-  test reports:      X (paths: docs/issues/<date>/auto-fix-reports/...)
+  tickets filed:     Y (paths: .dev-docs/diagnosis/runs/<date>/...)
+  test reports:      X (paths: .dev-docs/diagnosis/runs/<date>/auto-fix-reports/...)
   OBSERVE entries:   Z
   status:            ok | skipped | partial
 ```
@@ -358,6 +358,102 @@ CronCreate(
 
 The cron is **session-scoped** — when the maintainer's Claude Code session ends, the cron stops firing. This is intentional: the maintainer should explicitly re-register the cron when they start a new long-running session, to confirm they want a daily-running agent for that session.
 
-### 9.2 Policy version
+### 9.2 Branch and PR workflow
 
-`policy_version: 2` — 2026-05-26: rewrote audience as agent-driven, added test-report schema, codified machine constraints (no build / no dev / no pencil spawn), MCP-only credentials path.
+The agent commits its findings on **dedicated, per-day branches**. The maintainer reviews each day's work through a Pull Request before any merge into `main`.
+
+#### 9.2.1 Branch naming
+
+| Branch | Contains | Carved from |
+|--------|----------|-------------|
+| `agent/diagnosis-<YYYY-MM-DD>` | the daily report + BLOCK/REVIEW tickets + auto-fix-reports (markdown only, under `.dev-docs/diagnosis/runs/`) | `origin/main` at run start |
+| `auto/issue-<YYYYMMDD>-<short-fp-slug>` | a single AUTO-FIX source-code change + its test-report-cross-link (the test-report markdown still lands under the daily branch above) | `origin/main` directly — **not** the daily branch — so each auto-fix PR is independently mergeable |
+
+Per-AUTO-FIX-branch isolation is deliberate: if one auto-fix turns out wrong on review, the others (and the daily report) merge without it.
+
+#### 9.2.2 Per-run lifecycle
+
+```
+1. Pre-flight (§1)
+   - `git fetch origin main`
+   - check whether `agent/diagnosis-<today>` already exists locally or remotely:
+       - if remote exists and was already merged → fine, will be recreated; continue
+       - if remote exists and PR is still open → ABORT the run, write SKIPPED with
+         reason "previous day's diagnosis PR not yet merged"
+       - if local exists with uncommitted work → ABORT
+   - `git switch -c agent/diagnosis-<today> origin/main`
+
+2. Run SOP §2-§4 as usual.
+
+3. AUTO-FIX (§4.2):
+   - For each AUTO-FIX cluster, `git switch -c auto/issue-<YYYYMMDD>-<slug> origin/main`
+     (carve OFF main, not off the daily branch).
+   - Edit, verify (`tsc --noEmit` + `vitest run <one-file>`), commit, then
+     `git switch agent/diagnosis-<today>` to go back.
+   - Write the test report at `.dev-docs/diagnosis/runs/<today>/auto-fix-reports/<slug>.md`
+     on the daily branch (NOT the auto-fix branch — the report is documentation
+     output, not the fix itself).
+
+4. Write the daily report and any BLOCK/REVIEW tickets to the daily branch.
+
+5. End of run:
+   - `git push origin agent/diagnosis-<today>`
+   - For each auto-fix branch created: `git push origin auto/issue-<YYYYMMDD>-<slug>`
+   - Try `gh pr create` for each pushed branch if `gh` is available; if not,
+     print the PR creation URLs in the §8 closing summary so the maintainer
+     can open the PRs manually.
+```
+
+#### 9.2.3 PR conventions
+
+| Branch | PR title | PR body |
+|--------|----------|---------|
+| `agent/diagnosis-<date>` | `diagnosis(<date>): N tickets, M auto-fix-reports` | body = the daily-report markdown verbatim |
+| `auto/issue-<date>-<slug>` | `fix(<scope>): <one-line> [fp=<fingerprint>]` | body = the test-report markdown verbatim + link back to the daily PR |
+
+Each PR is **stand-alone reviewable**. A reviewer can merge the daily report without merging any auto-fix; or merge one auto-fix and close the others.
+
+#### 9.2.4 Branch cleanup
+
+When a PR merges, GitHub auto-deletes the branch (assuming the repo's default branch-delete-on-merge setting). If a PR is closed without merging, the branch is left dangling — the maintainer can delete it manually. The agent does not delete branches it created; this is a maintainer authority.
+
+#### 9.2.5 Concurrency
+
+The agent is **single-instance per session**. The cron at §9.3 only fires once per day per session. Two parallel agent sessions running this SOP would collide on `agent/diagnosis-<today>` branch creation — explicitly out of scope: this SOP assumes a single maintainer session.
+
+---
+
+### 9.3 Cron registration
+
+The daily fire is registered inside the maintainer's persistent Claude Code session via:
+
+```
+CronCreate(
+  cron: "0 9 * * *",          # 09:00 LA local; agent picks up at next REPL idle
+  prompt: "Daily pencil diagnosis. Read .dev-docs/diagnosis/sop.md and execute end-to-end.",
+  recurring: true,
+  durable: false               # session-scoped; dies with the maintainer's Claude session
+)
+```
+
+The cron is **session-scoped** — when the maintainer's Claude Code session ends, the cron stops firing. This is intentional: the maintainer should explicitly re-register the cron when they start a new long-running session, to confirm they want a daily-running agent for that session.
+
+---
+
+### 9.4 Archive rotation (manual)
+
+When `.dev-docs/diagnosis/runs/` accumulates entries older than ~30 days or at end-of-quarter, the maintainer manually rotates them into `.dev-docs/diagnosis/archive/<YYYY-MM>/`:
+
+```bash
+git mv .dev-docs/diagnosis/runs/2026-04-* .dev-docs/diagnosis/archive/2026-04/
+git commit -m "chore(diagnosis): rotate 2026-04 into archive"
+```
+
+The agent does NOT auto-archive. This step is deliberate human review to decide whether old findings still matter.
+
+---
+
+### 9.5 Policy version
+
+- `policy_version: 3` — 2026-05-27: artifacts moved out of gitignored `docs/issues/` into tracked `.dev-docs/diagnosis/{runs,archive,_templates}/`; added §9.2 branch+PR workflow and §9.4 archive rotation; per-AUTO-FIX branches carve off `main` (not the daily branch) for independent reviewability.
+- `policy_version: 2` — 2026-05-26: rewrote audience as agent-driven, added test-report schema, codified machine constraints (no build / no dev / no pencil spawn), MCP-only credentials path.

@@ -8,8 +8,8 @@ The Arch Agent does not work in isolation. Two adjacent agents share the nanoPen
 
 | Agent | Session | Files it owns | Files it reads | Files it must not touch |
 |-------|---------|---------------|----------------|--------------------------|
-| **Self-Diagnosis Agent** | Maintainer's persistent Claude Code session (with daily cron) | `docs/issues/**`, auto-fix commits on `auto/issue-*` branches, the SOP at `.dev-docs/diagnosis/sop.md` | InsForge tables via MCP, the whole repo for grep-based localization | `.dev-docs/architecture-review/**` (this directory) |
-| **Arch Agent (you)** | A separate, dedicated Claude Code session | `.dev-docs/architecture-review/findings/**`, `.dev-docs/architecture-review/refactor-plan.md`, the HTML report in `$TMPDIR` | The whole repo for static analysis, the handbook in `.dev-docs/architecture-review/` | `docs/issues/**` (read structure only, never individual tickets), `auto/issue-*` branches |
+| **Self-Diagnosis Agent** | Maintainer's persistent Claude Code session (with daily cron) | `.dev-docs/diagnosis/runs/**`, auto-fix commits on `auto/issue-*` branches, the SOP at `.dev-docs/diagnosis/sop.md` | InsForge tables via MCP, the whole repo for grep-based localization | `.dev-docs/architecture-review/**` (this directory) |
+| **Arch Agent (you)** | A separate, dedicated Claude Code session | `.dev-docs/architecture-review/findings/**`, `.dev-docs/architecture-review/refactor-plan.md`, the HTML report in `$TMPDIR` | The whole repo for static analysis, the handbook in `.dev-docs/architecture-review/` | `.dev-docs/diagnosis/runs/**` (read structure only, never individual tickets), `auto/issue-*` branches |
 | **SAL Agent** (hypothetical, future) | A separate session if/when SAL Phase-1+ work resumes | `extensions/defaults/sal/**` evolution; `.dev-docs/sal/**` | the whole repo for impact analysis | self-diagnosis tickets, architecture-review findings |
 
 The session separation is doctrinal, not technical. There is no enforcement mechanism — only this handbook and the maintainer's discipline.
@@ -59,7 +59,7 @@ Arch Agent may notice while walking that a particular code area has many `pencil
 
 - Write the finding normally in `findings/F<NN>-*.md`.
 - In the finding's "Adjacent observations" section, list the fingerprints / issue tickets that may be subsumed by acting on this finding.
-- Do **not** write into `docs/issues/`. Do **not** modify or close tickets. The self-diagnosis agent owns that.
+- Do **not** write into `.dev-docs/diagnosis/runs/`. Do **not** modify or close tickets. The self-diagnosis agent owns that.
 
 ### 4.3 Arch Agent → SAL Agent
 
@@ -94,12 +94,12 @@ The maintainer reads outputs from all three agents and reconciles.
 
 - Spawn pencil (`machine-constraints.md` §2).
 - Run `npm run build` / `npm install` / etc. (`machine-constraints.md` §2).
-- Edit anything in `docs/issues/`.
+- Edit anything in `.dev-docs/diagnosis/runs/`.
 - Edit anything in `scripts/self-diagnosis/`.
 - Edit anything in `extensions/defaults/sal/`.
 - Edit the self-diagnosis SOP at `.dev-docs/diagnosis/sop.md`.
 - Edit the SAL roadmap at `.dev-docs/sal/roadmap.md`.
-- Open individual issue tickets at `docs/issues/<date>/<slug>.md` for analysis — knowing they exist is the limit.
+- Open individual issue tickets at `.dev-docs/diagnosis/runs/<date>/<slug>.md` for analysis — knowing they exist is the limit.
 - Recommend changes to user-side state format (`~/.pencils/agents/<id>/`); see `project-context.md` §6.
 - Approach this work as if you were the implementation agent. **You produce recommendations. Implementation is a separate engagement.**
 
@@ -129,6 +129,6 @@ The self-diagnosis cron continues running in its own session. The Arch Agent's l
 
 ## 7. Failure of the boundary
 
-If you (Arch Agent) realize you've crossed a boundary — written something into `docs/issues/`, edited a self-diagnosis file, or read a self-diagnosis ticket in depth — **note it in your current finding's "Adjacent observations"** with the crossing flagged explicitly. Don't try to revert quietly. The maintainer needs to know.
+If you (Arch Agent) realize you've crossed a boundary — written something into `.dev-docs/diagnosis/runs/`, edited a self-diagnosis file, or read a self-diagnosis ticket in depth — **note it in your current finding's "Adjacent observations"** with the crossing flagged explicitly. Don't try to revert quietly. The maintainer needs to know.
 
 Boundaries are doctrinal. They will sometimes be wrong. The way to revise them is through the maintainer, not unilaterally.
