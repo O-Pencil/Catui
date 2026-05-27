@@ -1,8 +1,8 @@
 /**
- * [WHO]: ExtensionRunner class, lifecycle management, event emission
- * [FROM]: Depends on agent-core, ai, tui, modes/theme, session-manager, types.ts
- * [TO]: Consumed by core/extensions/index.ts, core/extensions/wrapper.ts
- * [HERE]: core/extensions/runner.ts - extension execution and lifecycle management
+ * [WHO]: ExtensionRunner class, lifecycle management, event emission, slash-command dispatch chokepoint (invokeCommand), telemetry sink wiring (setTelemetrySink)
+ * [FROM]: Depends on agent-core, ai, tui, modes/theme, session-manager, types.ts, core/telemetry (ExtensionTelemetrySink + classifyArgsSignature for the P1 ext_command_events writer)
+ * [TO]: Consumed by core/extensions/index.ts, core/extensions/wrapper.ts, core/runtime/agent-session.ts (delegates command dispatch via invokeCommand)
+ * [HERE]: core/extensions/runner.ts - extension execution and lifecycle management; owns the single try/catch around command.handler so telemetry can wrap every invocation regardless of caller mode
  */
 import type { AgentMessage } from "@pencil-agent/agent-core";
 import type { ImageContent, Model } from "@pencil-agent/ai";
@@ -12,6 +12,15 @@ import type { ResourceDiagnostic } from "../diagnostics.js";
 import type { KeyAction, KeybindingsConfig } from "../keybindings.js";
 import type { ModelRegistry } from "../model-registry.js";
 import type { SessionManager } from "../session/session-manager.js";
+import {
+	classifyArgsSignature,
+	type CommandOutcome,
+	type ExtCallerContext,
+	type ExtensionTelemetrySink,
+	HOOK_SAMPLE_RATES,
+	type LlmCallEventInput,
+	runWithExtCallerContext,
+} from "../telemetry/index.js";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
@@ -240,6 +249,7 @@ export class ExtensionRunner {
 	private shutdownHandler: ShutdownHandler = () => {};
 	private shortcutDiagnostics: ResourceDiagnostic[] = [];
 	private commandDiagnostics: ResourceDiagnostic[] = [];
+	private telemetrySink?: ExtensionTelemetrySink;
 	private _beforeAgentStartTimeoutMs: number | undefined = 1500;
 	private get beforeAgentStartTimeoutMs(): number { return this._beforeAgentStartTimeoutMs ?? 1500; }
 	private readonly beforeAgentStartTimeoutSentinel = Symbol("before_agent_start_timeout");
@@ -569,6 +579,196 @@ export class ExtensionRunner {
 	}
 
 	/**
+	 * Returns the owning Extension for a given slash command name. Used by the
+	 * telemetry middleware to stamp `extension_name` on each ext_command_events
+	 * row. Falls back to undefined when no extension claims the command.
+	 */
+	private findCommandOwner(name: string): Extension | undefined {
+		for (const ext of this.extensions) {
+			if (ext.commands.has(name)) return ext;
+		}
+		return undefined;
+	}
+
+	/**
+	 * Derive a short, stable extension name from an Extension record. For
+	 * built-ins (extensions/defaults/<name>) and most user extensions
+	 * (packages/<name>) the directory basename is the right answer.
+	 */
+	private deriveExtensionName(ext: Extension): string {
+		const path = ext.path || ext.resolvedPath || "";
+		const segments = path.replace(/\/+$/, "").split(/[\\/]/);
+		return segments[segments.length - 1] || "unknown";
+	}
+
+	/**
+	 * Attach (or replace) the extension telemetry sink. The runner owns sink
+	 * lifecycle from this point — invokeCommand() will fire-and-forget one
+	 * `ext_command_events` row per invocation, and writeLlmCallEvent() (called
+	 * from extension-core-bindings) writes one `ext_llm_calls` row per
+	 * extension-initiated LLM call. Passing the noop sink (the factory's
+	 * default when no insforge credentials exist) is the safe way to disable
+	 * telemetry without scattering null-checks at the call sites.
+	 */
+	setTelemetrySink(sink: ExtensionTelemetrySink): void {
+		this.telemetrySink = sink;
+	}
+
+	/**
+	 * Passthrough used by core/runtime/extension-core-bindings.ts after each
+	 * extension-initiated LLM call. The runner owns the sink; the binding
+	 * doesn't import it directly to keep its concerns scoped to LLM plumbing.
+	 */
+	writeLlmCallEvent(input: LlmCallEventInput): void {
+		try {
+			this.telemetrySink?.writeLlmCallEvent(input);
+		} catch {
+			// Telemetry must never destabilize the LLM call path.
+		}
+	}
+
+	/**
+	 * Wrap an extension hook handler invocation in three layers:
+	 *
+	 *   1. AsyncLocalStorage frame so any LLM call placed by the handler gets
+	 *      attributed to this extension + hook + isUserInitiated=false in
+	 *      ext_llm_calls.
+	 *   2. Wall-clock timing measurement (only when the sample roll passes).
+	 *   3. One fire-and-forget ext_hook_events row per sampled invocation,
+	 *      capturing duration_ms + ok + error_code + sample_rate.
+	 *
+	 * High-frequency hooks (tool_*) are sampled at 10% so the table doesn't
+	 * drown in tool-execution rows; the sample_rate column on each row lets
+	 * dashboards extrapolate with `count(*) * 1/sample_rate`. Sampling decision
+	 * sits inside the AsyncLocalStorage frame so even skipped-emit hooks still
+	 * attribute their LLM calls.
+	 */
+	private invokeHookHandler<T>(
+		ext: Extension,
+		hookName: string,
+		fn: () => Promise<T> | T,
+	): Promise<T> {
+		const extensionName = this.deriveExtensionName(ext);
+		const ctx: ExtCallerContext = {
+			extensionName,
+			callerContext: `hook:${hookName}`,
+			isUserInitiated: false,
+		};
+		return runWithExtCallerContext(ctx, async () => {
+			const sampleRate = HOOK_SAMPLE_RATES[hookName] ?? 1.0;
+			if (sampleRate < 1.0 && Math.random() >= sampleRate) {
+				return await fn();
+			}
+			const recordedAt = new Date();
+			const startPerf = performance.now();
+			let ok = true;
+			let errorCode: string | null = null;
+			try {
+				return await fn();
+			} catch (err) {
+				ok = false;
+				errorCode = err instanceof Error ? err.constructor.name : "unknown";
+				throw err;
+			} finally {
+				try {
+					this.telemetrySink?.writeHookEvent({
+						extensionName,
+						hookName,
+						durationMs: Math.round(performance.now() - startPerf),
+						ok,
+						errorCode,
+						sampleRate,
+						recordedAt,
+					});
+				} catch {
+					// Telemetry never destabilizes hook dispatch.
+				}
+			}
+		});
+	}
+
+	/**
+	 * Single chokepoint for slash command dispatch. All modes (interactive /
+	 * print / rpc / acp) funnel through agent-session._tryExecuteExtensionCommand,
+	 * which calls this method. The wrapper measures wall-clock duration,
+	 * captures outcome (ok / error / cancelled), and emits one telemetry row
+	 * per invocation. Errors are still routed through emitError() so existing
+	 * UI surfaces (toasts, logs) keep working unchanged.
+	 *
+	 * Returns `{ found: false }` when no extension owns the command, letting
+	 * the caller fall through to built-in command handling without emitting a
+	 * telemetry row for an unknown command.
+	 */
+	async invokeCommand(
+		commandName: string,
+		args: string,
+		ctx: ExtensionCommandContext,
+		metadata?: { sessionId?: string | null; runId?: string | null; variant?: string | null },
+	): Promise<{ found: boolean }> {
+		const command = this.getCommand(commandName);
+		if (!command) return { found: false };
+
+		const ownerExt = this.findCommandOwner(commandName);
+		const extensionName = ownerExt ? this.deriveExtensionName(ownerExt) : "unknown";
+		const startedAt = new Date();
+		const startPerf = performance.now();
+		let outcome: CommandOutcome = "ok";
+		let errorCode: string | null = null;
+		let thrown: unknown;
+
+		const argsSig = classifyArgsSignature(args);
+		const callerCtx: ExtCallerContext = {
+			extensionName,
+			callerContext: argsSig === "no-args" ? `command:/${commandName}` : `command:/${commandName} ${argsSig}`,
+			isUserInitiated: true,
+			sessionId: metadata?.sessionId ?? null,
+			runId: metadata?.runId ?? null,
+			variant: metadata?.variant ?? null,
+		};
+		try {
+			await runWithExtCallerContext(callerCtx, () => command.handler(args, ctx));
+		} catch (err) {
+			outcome = "error";
+			errorCode = err instanceof Error ? err.constructor.name : "unknown";
+			thrown = err;
+			this.emitError({
+				extensionPath: `command:${commandName}`,
+				event: "command",
+				error: err instanceof Error ? err.message : String(err),
+			});
+		}
+
+		const durationMs = Math.round(performance.now() - startPerf);
+		const endedAt = new Date();
+
+		try {
+			this.telemetrySink?.writeCommandEvent({
+				extensionName,
+				commandName,
+				argsSignature: argsSig,
+				argsLength: args.length,
+				outcome,
+				errorCode,
+				durationMs,
+				startedAt,
+				endedAt,
+				sessionId: metadata?.sessionId ?? null,
+				runId: metadata?.runId ?? null,
+				variant: metadata?.variant ?? null,
+			});
+		} catch {
+			// Sink emission must never bring down command dispatch.
+		}
+
+		// Even though we logged the error to telemetry + emitError, callers
+		// expecting the thrown error (e.g. AgentSession previously re-caught it
+		// silently) won't see it. This matches the original behaviour: the old
+		// _tryExecuteExtensionCommand swallowed the error after emitError too.
+		void thrown;
+		return { found: true };
+	}
+
+	/**
 	 * Request a graceful shutdown. Called by extension tools and event handlers.
 	 * The actual shutdown behavior is provided by the mode via bindExtensions().
 	 */
@@ -644,7 +844,7 @@ export class ExtensionRunner {
 
 			for (const handler of handlers) {
 				try {
-					const handlerResult = await handler(event, ctx);
+					const handlerResult = await this.invokeHookHandler(ext, event.type, () => handler(event, ctx));
 
 					if (this.isSessionBeforeEvent(event) && handlerResult) {
 						result = handlerResult as SessionBeforeEventResult;
@@ -679,7 +879,7 @@ export class ExtensionRunner {
 
 			for (const handler of handlers) {
 				try {
-					const handlerResult = (await handler(currentEvent, ctx)) as ToolResultEventResult | undefined;
+					const handlerResult = (await this.invokeHookHandler(ext, "tool_result", () => handler(currentEvent, ctx))) as ToolResultEventResult | undefined;
 					if (!handlerResult) continue;
 
 					if (handlerResult.content !== undefined) {
@@ -727,7 +927,7 @@ export class ExtensionRunner {
 			if (!handlers || handlers.length === 0) continue;
 
 			for (const handler of handlers) {
-				const handlerResult = await handler(event, ctx);
+				const handlerResult = await this.invokeHookHandler(ext, "tool_call", () => handler(event, ctx));
 
 				if (handlerResult) {
 					result = handlerResult as ToolCallEventResult;
@@ -750,7 +950,7 @@ export class ExtensionRunner {
 
 			for (const handler of handlers) {
 				try {
-					const handlerResult = await handler(event, ctx);
+					const handlerResult = await this.invokeHookHandler(ext, "user_bash", () => handler(event, ctx));
 					if (handlerResult) {
 						return handlerResult as UserBashEventResult;
 					}
@@ -781,7 +981,7 @@ export class ExtensionRunner {
 			for (const handler of handlers) {
 				try {
 					const event: ContextEvent = { type: "context", messages: currentMessages };
-					const handlerResult = await handler(event, ctx);
+					const handlerResult = await this.invokeHookHandler(ext, "context", () => handler(event, ctx));
 
 					if (handlerResult && (handlerResult as ContextEventResult).messages) {
 						currentMessages = (handlerResult as ContextEventResult).messages!;
@@ -824,7 +1024,10 @@ export class ExtensionRunner {
 						images,
 						systemPrompt: currentSystemPrompt,
 					};
-					const handlerResult = await this.withTimeout(handler(event, ctx), this.beforeAgentStartTimeoutMs);
+					const handlerResult = await this.withTimeout(
+						this.invokeHookHandler(ext, "before_agent_start", () => handler(event, ctx)),
+						this.beforeAgentStartTimeoutMs,
+					);
 					if (handlerResult === this.beforeAgentStartTimeoutSentinel) {
 						this.reportBeforeAgentStartTimeout(ext.path);
 						continue;
@@ -896,7 +1099,7 @@ export class ExtensionRunner {
 			for (const handler of handlers) {
 				try {
 					const event: ResourcesDiscoverEvent = { type: "resources_discover", cwd, reason };
-					const handlerResult = await handler(event, ctx);
+					const handlerResult = await this.invokeHookHandler(ext, "resources_discover", () => handler(event, ctx));
 					const result = handlerResult as ResourcesDiscoverResult | undefined;
 
 					if (result?.skillPaths?.length) {
@@ -934,7 +1137,7 @@ export class ExtensionRunner {
 			for (const handler of ext.handlers.get("input") ?? []) {
 				try {
 					const event: InputEvent = { type: "input", text: currentText, images: currentImages, source };
-					const result = (await handler(event, ctx)) as InputEventResult | undefined;
+					const result = (await this.invokeHookHandler(ext, "input", () => handler(event, ctx))) as InputEventResult | undefined;
 					if (result?.action === "handled") return result;
 					if (result?.action === "transform") {
 						currentText = result.text;

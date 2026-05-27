@@ -124,6 +124,19 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 `retry-coordinator.ts`: RetryCoordinator, RetrySessionEvent — retry coordination for transient failures
 `turn-context.ts`: TurnContext interface, TURN_CONTEXT_GLOBAL_KEY, setTurnContext/getTurnContext/resetTurnContext — per-turn hint bus for SAL decoupling
 
+### Telemetry (`core/telemetry/`)
+
+Shared base layer for insforge-backed telemetry sinks. Factored out of SAL's eval sink so future ext-telemetry pipelines (ext_command_events / ext_llm_calls / ext_hook_events) reuse the same HTTP transport, credential loader, and batching machinery without duplicating SAL's plumbing.
+
+`types.ts`: TelemetryDiagnostic event shape, DiagnosticHandler, InsforgeHttpResult, PostJsonOptions — shared types
+`credentials.ts`: loadInsforgeCredentials<T>() — parses ~/.memory-experiments/credentials.json (workspace fallback first), normalizes camelCase to snake_case, preserves sink-specific extra keys via generic
+`insforge-base.ts`: InsforgeHttpClient (POST/PATCH, TLS allowSelfSigned, 5s timeout, source-scoped diagnostic fingerprints), parsePostgrestErrorCode, safeHost
+`batching-dispatcher.ts`: BatchingDispatcher<T> — generic debounced flush + reentrancy-safe drain + close-time flush
+`build-meta.ts`: loadBuildMeta() — location-independent version/commit/branch resolver shared by SAL eval and ext-events sinks
+`ext-events.ts`: ExtensionTelemetrySink interface + classifyArgsSignature() + HOOK_SAMPLE_RATES + createExtensionTelemetrySink() — P1 ext_command_events writer (slash command invocations), P2 ext_llm_calls writer (LLM calls + caller attribution), P3 ext_hook_events writer (hook timings, tool_* sampled at 10%); single sink, tagged-union batching, noop when no credentials
+`caller-context.ts`: AsyncLocalStorage-backed ExtCallerContext bus + runWithExtCallerContext + getExtCallerContext — pushed by runner.invokeCommand (user_initiated=true) and runner.invokeHookHandler (user_initiated=false), read by extension-core-bindings LLM wrappers; the is_user_initiated flag is the explicit idle-thinking-class bug detector
+`index.ts`: Barrel — the only entry point external callers should import from
+
 ### Configuration (`core/config/`)
 
 `settings-manager.ts`: Two-tier settings (global + project-local), merge logic
