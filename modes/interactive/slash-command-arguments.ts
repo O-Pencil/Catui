@@ -1,5 +1,5 @@
 /**
- * [WHO]: getAgentLoopArgumentCompletions(), getThinkingArgumentCompletions(), getMcpArgumentCompletions(), getLanguageArgumentCompletions()
+ * [WHO]: getAgentLoopArgumentCompletions(), getThinkingArgumentCompletions(), getMcpArgumentCompletions(), getLanguageArgumentCompletions(), getPersonaArgumentCompletions()
  * [FROM]: Depends on @pencil-agent/agent-core, @pencil-agent/tui, core/i18n, core/mcp/mcp-client
  * [TO]: Consumed by modes/interactive/interactive-mode.ts
  * [HERE]: modes/interactive/slash-command-arguments.ts - pure argument completion helpers for built-in TUI slash commands
@@ -38,6 +38,10 @@ const MCP_ACTION_COMPLETIONS = [
 	{ value: "tools", label: "tools", description: "Show loaded MCP tools and runtime status" },
 	{ value: "enable", label: "enable", description: "Turn on an MCP server" },
 	{ value: "disable", label: "disable", description: "Turn off an MCP server" },
+] as const;
+const PERSONA_ACTION_COMPLETIONS = [
+	{ value: "list", label: "list", description: "Show available personas" },
+	{ value: "use", label: "use", description: "Switch to a persona" },
 ] as const;
 
 type McpCompletionServer = Pick<MCPServerConfig, "id" | "name" | "enabled">;
@@ -110,6 +114,24 @@ export function getLanguageArgumentCompletions(
 			value: locale,
 			label: locale,
 			description: LOCALE_NAMES[locale],
+		})),
+		argumentPrefix,
+	);
+}
+
+export function getPersonaArgumentCompletions(
+	argumentPrefix: string,
+	context?: Pick<ArgumentCompletionContext, "tokenIndex" | "previousTokens">,
+	personas: readonly string[] = [],
+	activePersonaId?: string,
+): AutocompleteItem[] | null {
+	if (isFirstToken(context)) return matchCompletions(PERSONA_ACTION_COMPLETIONS, argumentPrefix);
+	if (context?.tokenIndex !== 1 || context.previousTokens[0]?.toLowerCase() !== "use") return null;
+	return matchCompletions(
+		personas.map((personaId) => ({
+			value: personaId,
+			label: personaId,
+			description: personaId === activePersonaId ? "Current persona" : `Switch to ${personaId}`,
 		})),
 		argumentPrefix,
 	);

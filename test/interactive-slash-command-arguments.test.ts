@@ -11,6 +11,7 @@ import {
 	getAgentLoopArgumentCompletions,
 	getLanguageArgumentCompletions,
 	getMcpArgumentCompletions,
+	getPersonaArgumentCompletions,
 	getThinkingArgumentCompletions,
 } from "../modes/interactive/slash-command-arguments.js";
 
@@ -97,6 +98,52 @@ test("language command completions name available languages", () => {
 			argumentPrefix: "z",
 			tokenIndex: 1,
 			previousTokens: ["zh"],
+		}),
+		null,
+	);
+});
+
+test("persona command completions guide list and use flows", () => {
+	const actions = getPersonaArgumentCompletions("u", undefined, ["builder", "reviewer"], "builder");
+	assert.deepEqual(actions?.map((item) => item.value), ["use"]);
+	assert.match(actions?.[0]?.description ?? "", /Switch to a persona/);
+
+	const personas = getPersonaArgumentCompletions(
+		"r",
+		{
+			commandName: "persona",
+			argumentText: "use r",
+			argumentPrefix: "r",
+			tokenIndex: 1,
+			previousTokens: ["use"],
+		},
+		["builder", "reviewer"],
+		"builder",
+	);
+	assert.deepEqual(personas?.map((item) => item.value), ["reviewer"]);
+	assert.match(personas?.[0]?.description ?? "", /Switch to reviewer/);
+
+	const current = getPersonaArgumentCompletions(
+		"b",
+		{
+			commandName: "persona",
+			argumentText: "use b",
+			argumentPrefix: "b",
+			tokenIndex: 1,
+			previousTokens: ["use"],
+		},
+		["builder", "reviewer"],
+		"builder",
+	);
+	assert.match(current?.[0]?.description ?? "", /Current persona/);
+
+	assert.equal(
+		getPersonaArgumentCompletions("r", {
+			commandName: "persona",
+			argumentText: "list r",
+			argumentPrefix: "r",
+			tokenIndex: 1,
+			previousTokens: ["list"],
 		}),
 		null,
 	);

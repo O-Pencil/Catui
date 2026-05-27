@@ -192,6 +192,7 @@ import {
   getAgentLoopArgumentCompletions,
   getLanguageArgumentCompletions,
   getMcpArgumentCompletions,
+  getPersonaArgumentCompletions,
   getThinkingArgumentCompletions,
 } from "./slash-command-arguments.js";
 
@@ -533,6 +534,19 @@ export class InteractiveMode {
     );
     if (languageCommand) {
       languageCommand.getArgumentCompletions = getLanguageArgumentCompletions;
+    }
+
+    const personaCommand = slashCommands.find(
+      (command) => command.name === "persona",
+    );
+    if (personaCommand) {
+      personaCommand.getArgumentCompletions = (prefix, context) =>
+        getPersonaArgumentCompletions(
+          prefix,
+          context,
+          listPersonas(),
+          getActivePersonaId(),
+        );
     }
 
     // Convert prompt templates to SlashCommand format for autocomplete
