@@ -14,6 +14,7 @@ import {
 	type AssistantMessage,
 	type Context,
 	EventStream,
+	isContextOverflow,
 	streamSimple,
 	type TextContent,
 	type ToolResultMessage,
@@ -23,6 +24,7 @@ import {
 import type {
 	AgentContext,
 	AgentEvent,
+	AgentLoopTransition,
 	AgentLoopConfig,
 	AgentMessage,
 	AgentTool,
@@ -35,6 +37,7 @@ import { ToolNotFoundError, ToolExecutionError, ValidationError } from "./errors
 const DEFAULT_MAX_TURNS_PER_PROMPT = 64;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 128;
 const DEFAULT_MAX_STOP_HOOK_CONTINUATIONS = 3;
+const DEFAULT_MAX_MODEL_ERROR_RECOVERY_ATTEMPTS = 1;
 
 type StandardLoopFinishOptions = {
 	turnCount: number;
@@ -43,6 +46,7 @@ type StandardLoopFinishOptions = {
 	usage: Usage;
 	permissionDenials: AgentToolPermissionDenial[];
 	stopReason?: string;
+	lastTransition?: AgentLoopTransition;
 	errorMessage?: string;
 	errorSubtype?: string;
 };
@@ -203,6 +207,10 @@ async function runLoop(
 	const maxTurns = config.maxTurnsPerPrompt ?? DEFAULT_MAX_TURNS_PER_PROMPT;
 	const maxToolCalls = config.maxToolCallsPerPrompt ?? DEFAULT_MAX_TOOL_CALLS_PER_PROMPT;
 	const maxStopHookContinuations = config.maxStopHookContinuations ?? DEFAULT_MAX_STOP_HOOK_CONTINUATIONS;
+	const maxModelErrorRecoveryAttempts =
+		config.maxModelErrorRecoveryAttempts ?? DEFAULT_MAX_MODEL_ERROR_RECOVERY_ATTEMPTS;
+	let modelErrorRecoveryCount = 0;
+	let lastTransition: AgentLoopTransition = { reason: "start" };
 	let stopHookActive = false;
 	let stopHookContinuationCount = 0;
 	// Check for steering messages at start (user may have typed while waiting)
@@ -262,6 +270,39 @@ async function runLoop(
 			newMessages.push(message);
 
 			if (message.stopReason === "error" || message.stopReason === "aborted") {
+				const errorSubtype =
+					message.stopReason === "aborted"
+						? "aborted"
+						: isContextOverflow(message, config.model.contextWindow)
+							? "context_overflow"
+							: "model_error";
+
+				if (
+					message.stopReason === "error" &&
+					config.recoverModelError &&
+					modelErrorRecoveryCount < maxModelErrorRecoveryAttempts
+				) {
+					const attempt = modelErrorRecoveryCount + 1;
+					const recovery = await config.recoverModelError({
+						message,
+						messages: currentContext.messages,
+						errorSubtype,
+						attempt,
+					});
+					if (recovery.action === "retry") {
+						stream.push({ type: "turn_end", message, toolResults: [] });
+						modelErrorRecoveryCount = attempt;
+						currentContext.messages = recovery.messages;
+						lastTransition =
+							recovery.transition ?? {
+								reason: "model_error_recovery",
+								subtype: errorSubtype,
+								attempt,
+							};
+						continue;
+					}
+				}
+
 				stream.push({ type: "turn_end", message, toolResults: [] });
 				finishStandardLoop(stream, newMessages, {
 					turnCount,
@@ -270,8 +311,9 @@ async function runLoop(
 					usage,
 					permissionDenials,
 					stopReason: message.stopReason,
+					lastTransition,
 					errorMessage: message.errorMessage,
-					errorSubtype: message.stopReason === "aborted" ? "aborted" : "model_error",
+					errorSubtype,
 				});
 				return;
 			}
@@ -395,6 +437,7 @@ async function runLoop(
 		usage,
 		permissionDenials,
 		stopReason: inferStopReason(newMessages),
+		lastTransition,
 	});
 }
 
@@ -512,6 +555,7 @@ function finishStandardLoop(
 		usage: options.usage,
 		permissionDenialCount: options.permissionDenials.length,
 		permissionDenials: options.permissionDenials,
+		lastTransition: options.lastTransition,
 		errorMessage: options.errorMessage,
 		errorSubtype: options.errorSubtype,
 	});

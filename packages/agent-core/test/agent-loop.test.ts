@@ -203,6 +203,75 @@ describe("agentLoop with AgentMessage", () => {
 		expect(result.permissionDenials).toEqual([]);
 	});
 
+	it("should let a standard loop recovery hook replace context and retry model errors", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [createUserMessage("old context")],
+			tools: [],
+		};
+		let recoveryCalls = 0;
+		let sawRecoveredContext = false;
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			recoverModelError: ({ errorSubtype, attempt }) => {
+				recoveryCalls += 1;
+				expect(errorSubtype).toBe("context_overflow");
+				expect(attempt).toBe(1);
+				return {
+					action: "retry",
+					messages: [createUserMessage("compacted context")],
+					transition: { reason: "model_error_recovery", subtype: errorSubtype, attempt },
+				};
+			},
+		};
+
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("too much context")], context, config, undefined, (_model, ctx) => {
+			if (callIndex === 1) {
+				sawRecoveredContext = ctx.messages.some(
+					(message) =>
+						message.role === "user" &&
+						typeof message.content === "string" &&
+						message.content === "compacted context",
+				);
+			}
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					const message = createAssistantMessage([], "error");
+					message.errorMessage = "maximum context length is 8192 tokens";
+					mockStream.push({ type: "done", reason: "error", message });
+				} else {
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "recovered" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(recoveryCalls).toBe(1);
+		expect(sawRecoveredContext).toBe(true);
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.stopReason).toBe("stop");
+		expect(result?.lastTransition).toEqual({
+			reason: "model_error_recovery",
+			subtype: "context_overflow",
+			attempt: 1,
+		});
+	});
+
 	it("should handle custom message types via convertToLlm", async () => {
 		// Create a custom message type
 		interface CustomNotification {
