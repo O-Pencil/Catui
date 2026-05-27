@@ -1,5 +1,5 @@
 /**
- * [WHO]: getAgentLoopArgumentCompletions(), getThinkingArgumentCompletions(), getMcpArgumentCompletions(), getLanguageArgumentCompletions(), getPersonaArgumentCompletions()
+ * [WHO]: getAgentLoopArgumentCompletions(), getThinkingArgumentCompletions(), getMcpArgumentCompletions(), getLanguageArgumentCompletions(), getPersonaArgumentCompletions(), getLoginArgumentCompletions()
  * [FROM]: Depends on @pencil-agent/agent-core, @pencil-agent/tui, core/i18n, core/mcp/mcp-client
  * [TO]: Consumed by modes/interactive/interactive-mode.ts
  * [HERE]: modes/interactive/slash-command-arguments.ts - pure argument completion helpers for built-in TUI slash commands
@@ -45,6 +45,11 @@ const PERSONA_ACTION_COMPLETIONS = [
 ] as const;
 
 type McpCompletionServer = Pick<MCPServerConfig, "id" | "name" | "enabled">;
+type LoginCompletionProvider = {
+	id: string;
+	name: string;
+	authType: "oauth" | "api_key";
+};
 
 function matchCompletions(items: readonly AutocompleteItem[], prefix: string): AutocompleteItem[] | null {
 	const lowerPrefix = prefix.trim().toLowerCase();
@@ -132,6 +137,24 @@ export function getPersonaArgumentCompletions(
 			value: personaId,
 			label: personaId,
 			description: personaId === activePersonaId ? "Current persona" : `Switch to ${personaId}`,
+		})),
+		argumentPrefix,
+	);
+}
+
+export function getLoginArgumentCompletions(
+	argumentPrefix: string,
+	context?: Pick<ArgumentCompletionContext, "tokenIndex">,
+	providers: readonly LoginCompletionProvider[] = [],
+): AutocompleteItem[] | null {
+	if (!isFirstToken(context)) return null;
+	return matchCompletions(
+		providers.map((provider) => ({
+			value: provider.id,
+			label: provider.id,
+			description: provider.authType === "oauth"
+				? `Sign in with browser for ${provider.name}`
+				: `Set API key for ${provider.name}`,
 		})),
 		argumentPrefix,
 	);

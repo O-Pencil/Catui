@@ -4,7 +4,7 @@
 
 Member List
 interactive-mode.ts: TUI orchestration hub, coordinates AgentSession with terminal UI, handles input/output loop
-slash-command-arguments.ts: Built-in TUI slash command argument completion helpers for agent-loop, thinking, MCP, language, and persona commands
+slash-command-arguments.ts: Built-in TUI slash command argument completion helpers for agent-loop, thinking, MCP, language, persona, and login commands
 theme/theme.ts: Theme loader and definitions, ThemeJson schema validation, chalk-based color system
 components/index.ts: Component barrel exports, re-exports all UI components for extensions
 components/extension-selector.ts: Extension selector UI, keyboard navigation with timeout support

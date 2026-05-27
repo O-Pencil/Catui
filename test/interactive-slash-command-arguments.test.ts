@@ -10,6 +10,7 @@ import test from "node:test";
 import {
 	getAgentLoopArgumentCompletions,
 	getLanguageArgumentCompletions,
+	getLoginArgumentCompletions,
 	getMcpArgumentCompletions,
 	getPersonaArgumentCompletions,
 	getThinkingArgumentCompletions,
@@ -144,6 +145,33 @@ test("persona command completions guide list and use flows", () => {
 			argumentPrefix: "r",
 			tokenIndex: 1,
 			previousTokens: ["list"],
+		}),
+		null,
+	);
+});
+
+test("login command completions explain provider authentication type", () => {
+	const oauth = getLoginArgumentCompletions("anth", undefined, [
+		{ id: "anthropic", name: "Anthropic", authType: "oauth" },
+		{ id: "openrouter", name: "OpenRouter", authType: "api_key" },
+	]);
+	assert.deepEqual(oauth?.map((item) => item.value), ["anthropic"]);
+	assert.match(oauth?.[0]?.description ?? "", /Sign in with browser/);
+
+	const apiKey = getLoginArgumentCompletions("open", undefined, [
+		{ id: "anthropic", name: "Anthropic", authType: "oauth" },
+		{ id: "openrouter", name: "OpenRouter", authType: "api_key" },
+	]);
+	assert.deepEqual(apiKey?.map((item) => item.value), ["openrouter"]);
+	assert.match(apiKey?.[0]?.description ?? "", /Set API key/);
+
+	assert.equal(
+		getLoginArgumentCompletions("open", {
+			commandName: "login",
+			argumentText: "openrouter open",
+			argumentPrefix: "open",
+			tokenIndex: 1,
+			previousTokens: ["openrouter"],
 		}),
 		null,
 	);

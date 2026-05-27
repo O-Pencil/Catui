@@ -191,6 +191,7 @@ import {
 import {
   getAgentLoopArgumentCompletions,
   getLanguageArgumentCompletions,
+  getLoginArgumentCompletions,
   getMcpArgumentCompletions,
   getPersonaArgumentCompletions,
   getThinkingArgumentCompletions,
@@ -547,6 +548,12 @@ export class InteractiveMode {
           listPersonas(),
           getActivePersonaId(),
         );
+    }
+
+    const loginCommand = slashCommands.find((command) => command.name === "login");
+    if (loginCommand) {
+      loginCommand.getArgumentCompletions = (prefix, context) =>
+        getLoginArgumentCompletions(prefix, context, this.getLoginSelectorProviders("login"));
     }
 
     // Convert prompt templates to SlashCommand format for autocomplete
