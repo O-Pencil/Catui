@@ -977,6 +977,8 @@ export class TUI extends Container {
 		if (this.overlayStack.length > 0) {
 			newLines = this.compositeOverlays(newLines, width, height);
 		}
+		const nextWorkingHeight = Math.max(this.maxLinesRendered, newLines.length);
+		viewportTop = Math.max(0, nextWorkingHeight - height);
 
 		// Extract cursor position before applying line resets (marker must be found first)
 		const cursorPos = this.extractCursorPosition(newLines, height);
@@ -1244,8 +1246,15 @@ export class TUI extends Container {
 		// Clamp cursor position to valid range
 		const targetRow = Math.max(0, Math.min(cursorPos.row, totalLines - 1));
 		const targetCol = Math.max(0, cursorPos.col);
-		const currentScreenRow = this.hardwareCursorRow - prevViewportTop;
-		const targetScreenRow = targetRow - viewportTop;
+		const terminalHeight = this.terminal.rows;
+		const currentScreenRow = Math.max(
+			0,
+			Math.min(this.hardwareCursorRow - prevViewportTop, terminalHeight - 1),
+		);
+		const targetScreenRow = Math.max(
+			0,
+			Math.min(targetRow - viewportTop, terminalHeight - 1),
+		);
 
 		// Move cursor from current position to target
 		const rowDelta = targetScreenRow - currentScreenRow;

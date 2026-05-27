@@ -47,3 +47,20 @@ test("tui cursor positioning uses screen rows when viewport shifts", () => {
 	assert.equal(terminal.writes.at(-1), "\x1b[1G");
 	assert.equal(tui.hardwareCursorRow, 3);
 });
+
+test("tui cursor positioning clamps offscreen logical rows to visible screen rows", () => {
+	const terminal = new FakeTerminal();
+	const tui = new TUI(terminal, false) as any;
+
+	tui.hardwareCursorRow = 100;
+	tui.positionHardwareCursor(
+		{ row: 8, col: 0 },
+		11,
+		0,
+		6,
+		3,
+	);
+
+	assert.equal(terminal.writes.at(-1), "\x1b[1G");
+	assert.equal(tui.hardwareCursorRow, 8);
+});
