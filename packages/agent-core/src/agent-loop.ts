@@ -3,10 +3,10 @@
  * Transforms to Message[] only at the LLM call boundary.
  */
 /**
- * [WHO]: agentLoop, agentLoopContinue
- * [FROM]: No external dependencies
- * [TO]: Consumed by packages/agent-core/src/index.ts
- * [HERE]: packages/agent-core/src/agent-loop.ts -
+ * [WHO]: Provides agentLoop(), agentLoopContinue(), standard loop event emission, and serial tool execution.
+ * [FROM]: Depends on @pencil-agent/ai streams/messages, ./types contracts, and ./errors for loop validation.
+ * [TO]: Consumed by agent.ts and package exports as the default agent execution loop.
+ * [HERE]: packages/agent-core/src/agent-loop.ts within agent-core; standard counterpart to structured-adaptive-agent-loop.ts.
  */
 
 
@@ -17,6 +17,7 @@ import {
 	streamSimple,
 	type TextContent,
 	type ToolResultMessage,
+	type Usage,
 	validateToolArguments,
 } from "@pencil-agent/ai";
 import type {
@@ -25,6 +26,7 @@ import type {
 	AgentLoopConfig,
 	AgentMessage,
 	AgentTool,
+	AgentToolPermissionDenial,
 	AgentToolResult,
 	StreamFn,
 } from "./types.js";
@@ -33,6 +35,17 @@ import { ToolNotFoundError, ToolExecutionError, ValidationError } from "./errors
 const DEFAULT_MAX_TURNS_PER_PROMPT = 64;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 128;
 const DEFAULT_MAX_STOP_HOOK_CONTINUATIONS = 3;
+
+type StandardLoopFinishOptions = {
+	turnCount: number;
+	toolCallCount: number;
+	startedAt: number;
+	usage: Usage;
+	permissionDenials: AgentToolPermissionDenial[];
+	stopReason?: string;
+	errorMessage?: string;
+	errorSubtype?: string;
+};
 
 /**
  * Start an agent loop with a new prompt message.
@@ -158,8 +171,16 @@ function endWithLoopError(
 	stream.push({ type: "message_start", message: { ...errorMessage } });
 	stream.push({ type: "message_end", message: errorMessage });
 	stream.push({ type: "turn_end", message: errorMessage, toolResults: [] });
-	stream.push({ type: "agent_end", messages: newMessages });
-	stream.end(newMessages);
+	finishStandardLoop(stream, newMessages, {
+		turnCount: 0,
+		toolCallCount: 0,
+		startedAt: Date.now(),
+		usage: emptyUsage(),
+		permissionDenials: [],
+		stopReason: errorMessage.stopReason,
+		errorMessage: errorMessage.errorMessage,
+		errorSubtype: signal?.aborted ? "aborted" : "loop_error",
+	});
 }
 
 /**
@@ -176,6 +197,9 @@ async function runLoop(
 	let firstTurn = true;
 	let turnCount = 0;
 	let toolCallCount = 0;
+	const startedAt = Date.now();
+	const usage = emptyUsage();
+	const permissionDenials: AgentToolPermissionDenial[] = [];
 	const maxTurns = config.maxTurnsPerPrompt ?? DEFAULT_MAX_TURNS_PER_PROMPT;
 	const maxToolCalls = config.maxToolCallsPerPrompt ?? DEFAULT_MAX_TOOL_CALLS_PER_PROMPT;
 	const maxStopHookContinuations = config.maxStopHookContinuations ?? DEFAULT_MAX_STOP_HOOK_CONTINUATIONS;
@@ -219,19 +243,36 @@ async function runLoop(
 				stream.push({ type: "message_start", message: { ...limitMessage } });
 				stream.push({ type: "message_end", message: limitMessage });
 				stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
-				stream.push({ type: "agent_end", messages: newMessages });
-				stream.end(newMessages);
+				finishStandardLoop(stream, newMessages, {
+					turnCount,
+					toolCallCount,
+					startedAt,
+					usage,
+					permissionDenials,
+					stopReason: limitMessage.stopReason,
+					errorMessage: limitMessage.errorMessage,
+					errorSubtype: "max_turns_reached",
+				});
 				return;
 			}
 
 			// Stream assistant response
 			const message = await streamAssistantResponse(currentContext, config, signal, stream, streamFn);
+			addUsage(usage, message.usage);
 			newMessages.push(message);
 
 			if (message.stopReason === "error" || message.stopReason === "aborted") {
 				stream.push({ type: "turn_end", message, toolResults: [] });
-				stream.push({ type: "agent_end", messages: newMessages });
-				stream.end(newMessages);
+				finishStandardLoop(stream, newMessages, {
+					turnCount,
+					toolCallCount,
+					startedAt,
+					usage,
+					permissionDenials,
+					stopReason: message.stopReason,
+					errorMessage: message.errorMessage,
+					errorSubtype: message.stopReason === "aborted" ? "aborted" : "model_error",
+				});
 				return;
 			}
 
@@ -251,8 +292,16 @@ async function runLoop(
 					stream.push({ type: "message_start", message: { ...limitMessage } });
 					stream.push({ type: "message_end", message: limitMessage });
 					stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
-					stream.push({ type: "agent_end", messages: newMessages });
-					stream.end(newMessages);
+					finishStandardLoop(stream, newMessages, {
+						turnCount,
+						toolCallCount,
+						startedAt,
+						usage,
+						permissionDenials,
+						stopReason: limitMessage.stopReason,
+						errorMessage: limitMessage.errorMessage,
+						errorSubtype: "tool_call_limit_reached",
+					});
 					return;
 				}
 				toolCallCount += toolCalls.length;
@@ -265,6 +314,7 @@ async function runLoop(
 					config.canUseTool,
 				);
 				toolResults.push(...toolExecution.toolResults);
+				permissionDenials.push(...collectPermissionDenials(toolExecution.toolResults));
 				steeringAfterTools = toolExecution.steeringMessages ?? null;
 
 				for (const result of toolResults) {
@@ -299,8 +349,16 @@ async function runLoop(
 						stream.push({ type: "message_start", message: { ...limitMessage } });
 						stream.push({ type: "message_end", message: limitMessage });
 						stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
-						stream.push({ type: "agent_end", messages: newMessages });
-						stream.end(newMessages);
+						finishStandardLoop(stream, newMessages, {
+							turnCount,
+							toolCallCount,
+							startedAt,
+							usage,
+							permissionDenials,
+							stopReason: limitMessage.stopReason,
+							errorMessage: limitMessage.errorMessage,
+							errorSubtype: "stop_hook_limit_reached",
+						});
 						return;
 					}
 					stopHookContinuationCount += 1;
@@ -330,8 +388,14 @@ async function runLoop(
 		break;
 	}
 
-	stream.push({ type: "agent_end", messages: newMessages });
-	stream.end(newMessages);
+	finishStandardLoop(stream, newMessages, {
+		turnCount,
+		toolCallCount,
+		startedAt,
+		usage,
+		permissionDenials,
+		stopReason: inferStopReason(newMessages),
+	});
 }
 
 /**
@@ -366,6 +430,15 @@ async function streamAssistantResponse(
 	// Resolve API key (important for expiring tokens)
 	const resolvedApiKey =
 		(config.getApiKey ? await config.getApiKey(config.model.provider) : undefined) || config.apiKey;
+
+	stream.push({
+		type: "stream_request_start",
+		model: config.model.id,
+		provider: config.model.provider,
+		api: config.model.api,
+		messageCount: llmMessages.length,
+		maxTokens: config.maxTokens,
+	});
 
 	const response = await streamFunction(config.model, llmContext, {
 		...config,
@@ -423,6 +496,77 @@ async function streamAssistantResponse(
 	}
 
 	return await response.result();
+}
+
+function finishStandardLoop(
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+	newMessages: AgentMessage[],
+	options: StandardLoopFinishOptions,
+): void {
+	stream.push({
+		type: "agent_result",
+		stopReason: options.stopReason ?? inferStopReason(newMessages),
+		turnCount: options.turnCount,
+		toolCallCount: options.toolCallCount,
+		durationMs: Date.now() - options.startedAt,
+		usage: options.usage,
+		permissionDenialCount: options.permissionDenials.length,
+		permissionDenials: options.permissionDenials,
+		errorMessage: options.errorMessage,
+		errorSubtype: options.errorSubtype,
+	});
+	stream.push({ type: "agent_end", messages: newMessages });
+	stream.end(newMessages);
+}
+
+function emptyUsage(): Usage {
+	return {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 0,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
+}
+
+function addUsage(target: Usage, usage: Usage): void {
+	target.input += usage.input;
+	target.output += usage.output;
+	target.cacheRead += usage.cacheRead;
+	target.cacheWrite += usage.cacheWrite;
+	target.totalTokens += usage.totalTokens;
+	target.cost.input += usage.cost.input;
+	target.cost.output += usage.cost.output;
+	target.cost.cacheRead += usage.cost.cacheRead;
+	target.cost.cacheWrite += usage.cost.cacheWrite;
+	target.cost.total += usage.cost.total;
+}
+
+function inferStopReason(messages: AgentMessage[]): string {
+	for (let i = messages.length - 1; i >= 0; i -= 1) {
+		const message = messages[i];
+		if (message?.role === "assistant") {
+			return message.stopReason ?? "stop";
+		}
+	}
+	return "stop";
+}
+
+function collectPermissionDenials(toolResults: ToolResultMessage[]): AgentToolPermissionDenial[] {
+	const denials: AgentToolPermissionDenial[] = [];
+	for (const result of toolResults) {
+		const details = result.details;
+		if (!details || typeof details !== "object") continue;
+		if ((details as { errorType?: unknown }).errorType !== "permission_denied") continue;
+		const reason = (details as { reason?: unknown }).reason;
+		denials.push({
+			toolCallId: result.toolCallId,
+			toolName: result.toolName,
+			reason: typeof reason === "string" && reason.length > 0 ? reason : undefined,
+		});
+	}
+	return denials;
 }
 
 /**

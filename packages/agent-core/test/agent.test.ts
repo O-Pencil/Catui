@@ -228,8 +228,8 @@ describe("Agent", () => {
 
 		expect(executionOrder).toEqual(["start:first", "end:first", "start:second", "end:second"]);
 		expect(permissionChecks).toBe(2);
-		expect(events).not.toContain("stream_request_start");
-		expect(events).not.toContain("agent_result");
+		expect(events).toContain("stream_request_start");
+		expect(events).toContain("agent_result");
 		const toolResults = agent.state.messages.filter((message) => message.role === "toolResult");
 		expect(toolResults).toHaveLength(2);
 		expect(toolResults.every((message) => message.isError === false)).toBe(true);

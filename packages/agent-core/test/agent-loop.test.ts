@@ -141,6 +141,68 @@ describe("agentLoop with AgentMessage", () => {
 		expect(eventTypes).toContain("agent_end");
 	});
 
+	it("should emit standard loop request and result summary events", async () => {
+		const context: AgentContext = {
+			systemPrompt: "You are helpful.",
+			messages: [],
+			tools: [],
+		};
+		const userPrompt: AgentMessage = createUserMessage("Hello");
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			maxTokens: 123,
+		};
+		const streamFn = () => {
+			const stream = new MockAssistantStream();
+			queueMicrotask(() => {
+				const message = createAssistantMessage([{ type: "text", text: "hi" }]);
+				message.usage = {
+					input: 2,
+					output: 3,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 5,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.03 },
+				};
+				stream.push({ type: "done", reason: "stop", message });
+			});
+			return stream;
+		};
+
+		const events: AgentEvent[] = [];
+		const stream = agentLoop([userPrompt], context, config, undefined, streamFn);
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		const request = events.find(
+			(event): event is Extract<AgentEvent, { type: "stream_request_start" }> =>
+				event.type === "stream_request_start",
+		);
+		expect(request).toMatchObject({
+			type: "stream_request_start",
+			model: "mock",
+			provider: "openai",
+			api: "openai-responses",
+			messageCount: 1,
+			maxTokens: 123,
+		});
+
+		const resultIndex = events.findIndex((event) => event.type === "agent_result");
+		const endIndex = events.findIndex((event) => event.type === "agent_end");
+		expect(resultIndex).toBeGreaterThanOrEqual(0);
+		expect(endIndex).toBeGreaterThan(resultIndex);
+		const result = events[resultIndex] as Extract<AgentEvent, { type: "agent_result" }>;
+		expect(result.stopReason).toBe("stop");
+		expect(result.turnCount).toBe(1);
+		expect(result.toolCallCount).toBe(0);
+		expect(result.durationMs).toEqual(expect.any(Number));
+		expect(result.usage).toMatchObject({ input: 2, output: 3, totalTokens: 5, cost: { total: 0.03 } });
+		expect(result.permissionDenialCount).toBe(0);
+		expect(result.permissionDenials).toEqual([]);
+	});
+
 	it("should handle custom message types via convertToLlm", async () => {
 		// Create a custom message type
 		interface CustomNotification {
