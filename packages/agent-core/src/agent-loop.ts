@@ -4,7 +4,7 @@
  */
 /**
  * [WHO]: Provides agentLoop(), agentLoopContinue(), standard loop event emission, continuation recovery, and serial tool execution.
- * [FROM]: Depends on @pencil-agent/ai streams/messages, ./types contracts, ./errors, and continuation helpers.
+ * [FROM]: Depends on @pencil-agent/ai streams/messages, ./types contracts, ./errors, and shared loop helpers.
  * [TO]: Consumed by agent.ts and package exports as the default agent execution loop.
  * [HERE]: packages/agent-core/src/agent-loop.ts within agent-core; standard counterpart to structured-adaptive-agent-loop.ts.
  */
@@ -39,6 +39,11 @@ import {
 	createTokenBudgetContinuation,
 } from "./agent-loop-continuations.js";
 import { enforceToolResultBatchSize } from "./agent-loop-tool-results.js";
+import {
+	flushReadyToolUseSummaries,
+	type PendingToolUseSummary,
+	startToolUseSummary,
+} from "./agent-loop-tool-summaries.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 64;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 128;
@@ -223,6 +228,7 @@ async function runLoop(
 	let tokenBudgetContinuationCount = 0;
 	let maxOutputTokensOverride: number | undefined;
 	let lastTransition: AgentLoopTransition = { reason: "start" };
+	let pendingToolUseSummaries: PendingToolUseSummary[] = [];
 	let stopHookActive = false;
 	let stopHookContinuationCount = 0;
 	// Check for steering messages at start (user may have typed while waiting)
@@ -240,6 +246,13 @@ async function runLoop(
 			} else {
 				firstTurn = false;
 			}
+
+			pendingToolUseSummaries = flushReadyToolUseSummaries(
+				pendingToolUseSummaries,
+				currentContext.messages,
+				newMessages,
+				stream,
+			);
 
 			// Process pending messages (inject before next assistant response)
 			if (pendingMessages.length > 0) {
@@ -392,6 +405,15 @@ async function runLoop(
 					newMessages.push(contextMessage);
 					stream.push({ type: "message_start", message: contextMessage });
 					stream.push({ type: "message_end", message: contextMessage });
+				}
+				const pendingSummary = startToolUseSummary(config, {
+					assistantMessage: message,
+					toolResults,
+					contextMessages: toolExecution.contextMessages,
+					messages: currentContext.messages,
+				});
+				if (pendingSummary) {
+					pendingToolUseSummaries.push(pendingSummary);
 				}
 			}
 

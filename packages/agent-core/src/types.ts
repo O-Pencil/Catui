@@ -185,10 +185,10 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	/**
 	 * Optional non-blocking summary for completed tool batches.
 	 *
-	 * The weak-model-compatible loop starts this after a tool batch finishes.
-	 * If the summary is already settled at the start of a later turn, it is
-	 * emitted as a normal AgentMessage and included in that model request. If it
-	 * is still pending, the model request proceeds without waiting.
+	 * The loop starts this after a tool batch finishes. If the summary is
+	 * already settled at the start of a later turn, it is emitted as a normal
+	 * AgentMessage and included in that model request. If it is still pending,
+	 * the model request proceeds without waiting.
 	 */
 	createToolUseSummary?: (event: {
 		assistantMessage: AgentMessage;

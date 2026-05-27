@@ -1057,6 +1057,153 @@ describe("agentLoop with AgentMessage", () => {
 		expect(totalToolResultTextLength(eventToolResults)).toBeLessThanOrEqual(90);
 	});
 
+	it("should start standard loop tool-use summaries without blocking the next model request", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "summary_read",
+			label: "Summary read",
+			description: "Read tool used to test non-blocking summaries",
+			parameters: toolSchema,
+			async execute(_toolCallId, params) {
+				return {
+					content: [{ type: "text", text: params.value }],
+					details: { value: params.value },
+				};
+			},
+		};
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+
+		let summaryStartedAt = 0;
+		let summaryResolvedAt = 0;
+		let secondRequestStartedAt = 0;
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			createToolUseSummary() {
+				summaryStartedAt = Date.now();
+				return new Promise<AgentMessage>((resolve) => {
+					setTimeout(() => {
+						summaryResolvedAt = Date.now();
+						resolve(createUserMessage("Tool summary: summary_read returned value."));
+					}, 40);
+				});
+			},
+		};
+
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("read")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			if (callIndex === 1) {
+				secondRequestStartedAt = Date.now();
+			}
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.push({
+						type: "done",
+						reason: "toolUse",
+						message: createAssistantMessage(
+							[{ type: "toolCall", id: "tool-1", name: "summary_read", arguments: { value: "file" } }],
+							"toolUse",
+						),
+					});
+				} else {
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "done" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		for await (const _event of stream) {
+			// consume
+		}
+		await new Promise((resolve) => setTimeout(resolve, 60));
+
+		expect(summaryStartedAt).toBeGreaterThan(0);
+		expect(secondRequestStartedAt).toBeGreaterThan(0);
+		expect(summaryResolvedAt).toBeGreaterThan(0);
+		expect(secondRequestStartedAt).toBeLessThan(summaryResolvedAt);
+	});
+
+	it("should add ready standard loop tool-use summaries to the next model request context", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "ready_summary_read",
+			label: "Ready summary read",
+			description: "Read tool used to test settled summaries",
+			parameters: toolSchema,
+			async execute(_toolCallId, params) {
+				return {
+					content: [{ type: "text", text: params.value }],
+					details: { value: params.value },
+				};
+			},
+		};
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+		const summaryMessage = createUserMessage("Tool summary: ready_summary_read returned file.");
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			createToolUseSummary() {
+				return summaryMessage;
+			},
+		};
+
+		let secondRequestSawSummary = false;
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("read")], context, config, undefined, (_model, ctx) => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.push({
+						type: "done",
+						reason: "toolUse",
+						message: createAssistantMessage(
+							[{ type: "toolCall", id: "tool-1", name: "ready_summary_read", arguments: { value: "file" } }],
+							"toolUse",
+						),
+					});
+				} else {
+					secondRequestSawSummary = ctx.messages.includes(summaryMessage);
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "done" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(secondRequestSawSummary).toBe(true);
+		expect(
+			events.some(
+				(event) =>
+					event.type === "message_end" &&
+					event.message.role === "user" &&
+					event.message.content === "Tool summary: ready_summary_read returned file.",
+			),
+		).toBe(true);
+	});
+
 	it("should allow standard loop stop hooks to inject a continuation turn", async () => {
 		const context: AgentContext = {
 			systemPrompt: "",

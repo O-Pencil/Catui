@@ -5,7 +5,7 @@
  */
 /**
  * [WHO]: structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue
- * [FROM]: Depends on @pencil-agent/ai, ./types, ./errors, ./structured-adaptive-tool-orchestration, ./structured-adaptive-streaming-tool-executor
+ * [FROM]: Depends on @pencil-agent/ai, ./types, ./errors, structured-adaptive tool executors, and shared loop helpers.
  * [TO]: Consumed by packages/agent-core/src/agent.ts and index.ts
  * [HERE]: packages/agent-core/src/structured-adaptive-agent-loop.ts - selectable structured-adaptive query loop framework
  */
@@ -40,6 +40,11 @@ import {
 	createTokenBudgetContinuation,
 } from "./agent-loop-continuations.js";
 import { enforceToolResultBatchSize } from "./agent-loop-tool-results.js";
+import {
+	flushReadyToolUseSummaries,
+	type PendingToolUseSummary,
+	startToolUseSummary,
+} from "./agent-loop-tool-summaries.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 64;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 128;
@@ -67,10 +72,6 @@ interface QueryLoopState {
 	finalErrorMessage?: string;
 	finalErrorSubtype?: string;
 }
-
-type PendingToolUseSummary = {
-	read(): { settled: boolean; value?: AgentMessage };
-};
 
 export function structuredAdaptiveAgentLoop(
 	prompts: AgentMessage[],
@@ -184,7 +185,12 @@ async function runStructuredAdaptiveQueryLoop(
 			firstTurn = false;
 		}
 
-		flushReadyToolUseSummaries(state, currentContext, newMessages, stream);
+		state.pendingToolUseSummaries = flushReadyToolUseSummaries(
+			state.pendingToolUseSummaries,
+			currentContext.messages,
+			newMessages,
+			stream,
+		);
 
 		if (state.pendingMessages.length > 0) {
 			for (const message of state.pendingMessages) {
@@ -451,88 +457,6 @@ async function runStructuredAdaptiveQueryLoop(
 
 	state.finalStopReason = state.finalStopReason ?? inferStopReason(newMessages);
 	finish(stream, newMessages, state);
-}
-
-function flushReadyToolUseSummaries(
-	state: QueryLoopState,
-	currentContext: AgentContext,
-	newMessages: AgentMessage[],
-	stream: EventStream<AgentEvent, AgentMessage[]>,
-): void {
-	if (state.pendingToolUseSummaries.length === 0) {
-		return;
-	}
-
-	const pending: PendingToolUseSummary[] = [];
-	for (const summary of state.pendingToolUseSummaries) {
-		const result = summary.read();
-		if (!result.settled) {
-			pending.push(summary);
-			continue;
-		}
-		if (!result.value) {
-			continue;
-		}
-		currentContext.messages.push(result.value);
-		newMessages.push(result.value);
-		stream.push({ type: "message_start", message: result.value });
-		stream.push({ type: "message_end", message: result.value });
-	}
-	state.pendingToolUseSummaries = pending;
-}
-
-function startToolUseSummary(
-	config: AgentLoopConfig,
-	event: {
-		assistantMessage: AgentMessage;
-		toolResults: ToolResultMessage[];
-		contextMessages: AgentMessage[];
-		messages: AgentMessage[];
-	},
-): PendingToolUseSummary | undefined {
-	if (!config.createToolUseSummary) {
-		return undefined;
-	}
-
-	try {
-		const value = config.createToolUseSummary({
-			...event,
-			messages: [...event.messages],
-		});
-		return trackToolUseSummary(value);
-	} catch {
-		return undefined;
-	}
-}
-
-function trackToolUseSummary(
-	value: AgentMessage | undefined | Promise<AgentMessage | undefined>,
-): PendingToolUseSummary | undefined {
-	if (!value) {
-		return undefined;
-	}
-
-	if (typeof (value as Promise<AgentMessage | undefined>).then !== "function") {
-		return {
-			read: () => ({ settled: true, value: value as AgentMessage }),
-		};
-	}
-
-	let settled = false;
-	let settledValue: AgentMessage | undefined;
-	(value as Promise<AgentMessage | undefined>).then(
-		(summary) => {
-			settled = true;
-			settledValue = summary;
-		},
-		() => {
-			settled = true;
-			settledValue = undefined;
-		},
-	);
-	return {
-		read: () => ({ settled, value: settledValue }),
-	};
 }
 
 async function streamAssistantResponse(
