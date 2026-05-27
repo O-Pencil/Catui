@@ -973,6 +973,90 @@ describe("agentLoop with AgentMessage", () => {
 		expect(readToolResultText(toolResultEnd!.message)).toContain("Permission denied: outside workspace");
 	});
 
+	it("should enforce standard loop aggregate tool result batch budget before the next model request", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "budget_read",
+			label: "Budget read",
+			description: "Read tool with configurable output size",
+			parameters: toolSchema,
+			async execute(_toolCallId, params) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: params.value === "large" ? "L".repeat(220) : "small-output",
+						},
+					],
+					details: { value: params.value },
+				};
+			},
+		};
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			maxToolResultBatchSizeChars: 90,
+		};
+
+		let secondRequestToolResults: Extract<AgentMessage, { role: "toolResult" }>[] = [];
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("read small and large")], context, config, undefined, (_model, ctx) => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.push({
+						type: "done",
+						reason: "toolUse",
+						message: createAssistantMessage(
+							[
+								{ type: "toolCall", id: "tool-small", name: "budget_read", arguments: { value: "small" } },
+								{ type: "toolCall", id: "tool-large", name: "budget_read", arguments: { value: "large" } },
+							],
+							"toolUse",
+						),
+					});
+				} else {
+					secondRequestToolResults = ctx.messages.filter(
+						(message): message is Extract<AgentMessage, { role: "toolResult" }> => message.role === "toolResult",
+					);
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "done" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(secondRequestToolResults.map((result) => result.toolCallId)).toEqual(["tool-small", "tool-large"]);
+		expect(readToolResultText(secondRequestToolResults[0]!)).toBe("small-output");
+		expect(totalToolResultTextLength(secondRequestToolResults)).toBeLessThanOrEqual(90);
+		expect(readToolResultText(secondRequestToolResults[1]!)).toContain("Tool result truncated by batch budget");
+		expect((secondRequestToolResults[1]!.details as { truncationReason?: string }).truncationReason).toBe(
+			"tool_result_batch_budget",
+		);
+
+		const eventToolResults = events
+			.filter(
+				(event): event is Extract<AgentEvent, { type: "message_end" }> =>
+					event.type === "message_end" && event.message.role === "toolResult",
+			)
+			.map((event) => event.message);
+		expect(totalToolResultTextLength(eventToolResults)).toBeLessThanOrEqual(90);
+	});
+
 	it("should allow standard loop stop hooks to inject a continuation turn", async () => {
 		const context: AgentContext = {
 			systemPrompt: "",

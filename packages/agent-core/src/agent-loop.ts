@@ -38,6 +38,7 @@ import {
 	createOutputTokenRecoveryMessage,
 	createTokenBudgetContinuation,
 } from "./agent-loop-continuations.js";
+import { enforceToolResultBatchSize } from "./agent-loop-tool-results.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 64;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 128;
@@ -374,13 +375,17 @@ async function runLoop(
 					config.getSteeringMessages,
 					config.canUseTool,
 				);
-				toolResults.push(...toolExecution.toolResults);
+				toolResults.push(
+					...enforceToolResultBatchSize(toolExecution.toolResults, config.maxToolResultBatchSizeChars),
+				);
 				permissionDenials.push(...collectPermissionDenials(toolExecution.toolResults));
 				steeringAfterTools = toolExecution.steeringMessages ?? null;
 
 				for (const result of toolResults) {
 					currentContext.messages.push(result);
 					newMessages.push(result);
+					stream.push({ type: "message_start", message: result });
+					stream.push({ type: "message_end", message: result });
 				}
 				for (const contextMessage of toolExecution.contextMessages) {
 					currentContext.messages.push(contextMessage);
@@ -783,8 +788,6 @@ async function executeToolCalls(
 
 		results.push(toolResultMessage);
 		contextMessages.push(...(result.contextMessages ?? []));
-		stream.push({ type: "message_start", message: toolResultMessage });
-		stream.push({ type: "message_end", message: toolResultMessage });
 
 		// Check for steering messages - skip remaining tools if user interrupted
 		if (getSteeringMessages) {
@@ -896,9 +899,6 @@ function skipToolCall(
 		isError: true,
 		timestamp: Date.now(),
 	};
-
-	stream.push({ type: "message_start", message: toolResultMessage });
-	stream.push({ type: "message_end", message: toolResultMessage });
 
 	return toolResultMessage;
 }

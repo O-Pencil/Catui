@@ -231,8 +231,8 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 *
 	 * This aggregate guard complements per-tool maxResultSizeChars: it prevents
 	 * several individually valid read/search results from flooding the next
-	 * context turn. The structured-adaptive loop preserves tool_result order and
-	 * trims the largest successful results first.
+	 * context turn. Loops preserve tool_result order and trim the largest
+	 * successful results first.
 	 */
 	maxToolResultBatchSizeChars?: number;
 
