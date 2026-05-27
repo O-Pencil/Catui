@@ -132,6 +132,8 @@ Shared base layer for insforge-backed telemetry sinks. Factored out of SAL's eva
 `credentials.ts`: loadInsforgeCredentials<T>() — parses ~/.memory-experiments/credentials.json (workspace fallback first), normalizes camelCase to snake_case, preserves sink-specific extra keys via generic
 `insforge-base.ts`: InsforgeHttpClient (POST/PATCH, TLS allowSelfSigned, 5s timeout, source-scoped diagnostic fingerprints), parsePostgrestErrorCode, safeHost
 `batching-dispatcher.ts`: BatchingDispatcher<T> — generic debounced flush + reentrancy-safe drain + close-time flush
+`build-meta.ts`: loadBuildMeta() — location-independent version/commit/branch resolver shared by SAL eval and ext-events sinks
+`ext-events.ts`: ExtensionTelemetrySink interface + classifyArgsSignature() + createExtensionTelemetrySink() — P1 ext_command_events writer; one batched row per slash command invocation, noop sink when no credentials
 `index.ts`: Barrel — the only entry point external callers should import from
 
 ### Configuration (`core/config/`)
