@@ -7,7 +7,7 @@
 
 import type { AgentMessage } from "@pencil-agent/agent-core";
 import { Box, Container, Spacer, Text } from "@pencil-agent/tui";
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../core/extensions/types.js";
+import type { ArgumentCompletionContext, ExtensionAPI, ExtensionCommandContext } from "../../../core/extensions/types.js";
 import type { EventBus } from "../../../core/runtime/event-bus.js";
 import { createCronCreateTool, createCronDeleteTool, createCronListTool } from "./cron-tools/index.js";
 import {
@@ -27,24 +27,43 @@ import { buildSchedulerHelp, parseSchedulerCommand } from "./scheduler-parser.js
 
 const LOOP_CUSTOM_TYPE = "loop";
 const SCHEDULER_TICK_MS = 1000;
-const LOOP_COMPLETION_VALUES = [
-	"list",
-	"status",
-	"pause",
-	"resume",
-	"run",
-	"cancel",
-	"clear",
-	"every",
-	"hourly",
-	"daily",
-	"--name",
-	"--max",
-	"--quiet",
-	"--durable",
-	"-q",
-	"-d",
+const LOOP_ACTION_COMPLETIONS = [
+	{ value: "list", label: "list", description: "Show scheduled tasks" },
+	{ value: "status", label: "status", description: "Show scheduled tasks" },
+	{ value: "pause", label: "pause", description: "Pause a scheduled task" },
+	{ value: "resume", label: "resume", description: "Resume a paused task" },
+	{ value: "run", label: "run", description: "Run a scheduled task now" },
+	{ value: "cancel", label: "cancel", description: "Cancel a scheduled task" },
+	{ value: "clear", label: "clear", description: "Remove session-only tasks" },
+	{ value: "every", label: "every", description: "Schedule a repeated prompt or command" },
+	{ value: "hourly", label: "hourly", description: "Run once per hour" },
+	{ value: "daily", label: "daily", description: "Run once per day" },
 ] as const;
+const LOOP_FLAG_COMPLETIONS = [
+	{ value: "--name", label: "--name", description: "Give the schedule a name" },
+	{ value: "--max", label: "--max", description: "Stop after a number of runs" },
+	{ value: "--quiet", label: "--quiet", description: "Hide per-run messages" },
+	{ value: "--durable", label: "--durable", description: "Keep the schedule across sessions" },
+	{ value: "-q", label: "-q", description: "Hide per-run messages" },
+	{ value: "-d", label: "-d", description: "Keep the schedule across sessions" },
+] as const;
+type LoopCompletion = { value: string; label: string; description: string };
+
+function matchLoopCompletions(completions: readonly LoopCompletion[], prefix: string): LoopCompletion[] | null {
+	const matches = completions.filter((completion) => completion.value.startsWith(prefix));
+	return matches.length > 0 ? matches.map((completion) => ({ ...completion })) : null;
+}
+
+function getLoopArgumentCompletions(argumentPrefix: string, context?: ArgumentCompletionContext): LoopCompletion[] | null {
+	const prefix = argumentPrefix.trim().toLowerCase();
+	const isFirstToken = !context || context.tokenIndex === 0;
+	if (!isFirstToken && !prefix.startsWith("-")) return null;
+
+	const completions = prefix.startsWith("-")
+		? LOOP_FLAG_COMPLETIONS
+		: [...LOOP_ACTION_COMPLETIONS, ...LOOP_FLAG_COMPLETIONS];
+	return matchLoopCompletions(completions, prefix);
+}
 
 // Single unified scheduler per session
 const cronSchedulerByBus = new WeakMap<EventBus, CronScheduler>();
@@ -504,11 +523,7 @@ export default async function loopExtension(api: ExtensionAPI) {
 
 	api.registerCommand("loop", {
 		description: "Schedule a recurring prompt or slash command for this session.",
-		getArgumentCompletions: (argumentPrefix) => {
-			const prefix = argumentPrefix.trim().toLowerCase();
-			const values = LOOP_COMPLETION_VALUES.filter((value) => value.startsWith(prefix));
-			return values.length > 0 ? values.map((value) => ({ value, label: value })) : null;
-		},
+		getArgumentCompletions: getLoopArgumentCompletions,
 		handler: handleLoopCommand,
 	});
 }

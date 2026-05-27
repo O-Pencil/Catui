@@ -208,8 +208,32 @@ test("loop command exposes scheduler subcommands and flags", async () => {
 	const loop = harness.commands.get("loop");
 	assert.ok(loop);
 	assert.deepEqual(loop.getArgumentCompletions?.("sta")?.map((item) => item.value), ["status"]);
+	assert.match(loop.getArgumentCompletions?.("sta")?.[0]?.description ?? "", /Show scheduled tasks/);
 	assert.deepEqual(loop.getArgumentCompletions?.("--q")?.map((item) => item.value), ["--quiet"]);
+	assert.match(loop.getArgumentCompletions?.("--q")?.[0]?.description ?? "", /Hide per-run messages/);
 	assert.ok(loop.getArgumentCompletions?.("")?.some((item) => item.value === "every"));
+	assert.equal(
+		loop.getArgumentCompletions?.("sta", {
+			commandName: "loop",
+			argumentText: "status sta",
+			argumentPrefix: "sta",
+			tokenIndex: 1,
+			previousTokens: ["status"],
+		}),
+		null,
+	);
+	assert.deepEqual(
+		loop
+			.getArgumentCompletions?.("--q", {
+				commandName: "loop",
+				argumentText: "Review build every 10m --q",
+				argumentPrefix: "--q",
+				tokenIndex: 4,
+				previousTokens: ["Review", "build", "every", "10m"],
+			})
+			?.map((item) => item.value),
+		["--quiet"],
+	);
 });
 
 test("grub command exposes readable subcommand and flag completions", async () => {
