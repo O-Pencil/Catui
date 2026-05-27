@@ -62,6 +62,7 @@ test("session slash command catalog includes builtins and filters shadowed exten
 				command.description === "translated:slash.model",
 		),
 	);
+	assert.ok(commands.some((command) => command.name === "resources" && command.source === "builtin" && command.category === "core"));
 	assert.deepEqual(
 		commands.filter((command) => command.name === "model"),
 		[

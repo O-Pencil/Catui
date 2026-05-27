@@ -45,6 +45,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "usage", descriptionKey: "slash.usage", category: "core" },
 	{ name: "changelog", descriptionKey: "slash.changelog", category: "core" },
 	{ name: "hotkeys", descriptionKey: "slash.hotkeys", category: "core" },
+	{ name: "resources", descriptionKey: "slash.resources", category: "core" },
 	{ name: "fork", descriptionKey: "slash.fork", category: "session" },
 	{ name: "tree", descriptionKey: "slash.tree", category: "session" },
 	{ name: "login", descriptionKey: "slash.login", category: "model" },

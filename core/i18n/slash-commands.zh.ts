@@ -35,6 +35,7 @@ export const slashCommands = {
 	usage: "显示 token 使用量和费用统计",
 	changelog: "显示更新日志条目",
 	hotkeys: "显示所有键盘快捷键",
+	resources: "显示已加载的扩展、提示、技能和主题",
 	fork: "从上一条消息创建新分支",
 	tree: "导航会话树（切换分支）",
 	login: "通过 OAuth 提供商登录",

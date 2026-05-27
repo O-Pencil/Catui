@@ -35,6 +35,7 @@ export const slashCommands = {
 	usage: "Show token usage and cost stats",
 	changelog: "Show changelog entries",
 	hotkeys: "Show all keyboard shortcuts",
+	resources: "Show loaded extensions, prompts, skills, and themes",
 	fork: "Create a new fork from a previous message",
 	tree: "Navigate session tree (switch branches)",
 	login: "Login with OAuth provider",

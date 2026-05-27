@@ -2400,7 +2400,7 @@ export class InteractiveMode {
     );
 
     // Global debug handler on TUI (works regardless of focus)
-    this.ui.onDebug = () => this.handleDebugCommand();
+    this.ui.onDebug = () => this.handleRenderDebugCommand();
     this.defaultEditor.onAction("selectModel", () =>
       this.showProviderThenModelSelector(),
     );
@@ -2744,11 +2744,6 @@ export class InteractiveMode {
       }
       if (text === "/memory") {
         this.handleMemoryCommand();
-        this.editor.setText("");
-        return;
-      }
-      if (text === "/debug") {
-        this.handleDebugCommand();
         this.editor.setText("");
         return;
       }
@@ -3121,11 +3116,6 @@ export class InteractiveMode {
     }
     if (text === "/memory") {
       this.handleMemoryCommand();
-      clear();
-      return true;
-    }
-    if (text === "/debug") {
-      this.handleDebugCommand();
       clear();
       return true;
     }
@@ -6574,7 +6564,7 @@ export class InteractiveMode {
     this.ui.requestRender();
   }
 
-  private handleDebugCommand(): void {
+  private handleRenderDebugCommand(): void {
     const width = this.ui.terminal.columns;
     const height = this.ui.terminal.rows;
     const allLines = this.ui.render(width);
