@@ -1,125 +1,59 @@
 /**
- * [WHO]: Provides InsForgeEvalSink (PostgREST-backed adapter)
- * [FROM]: Depends on node:https, node:http, node:url; ./types.js for EvalSink/EvalEventEnvelope/CreateEvalSinkOptions
+ * [WHO]: Provides InsForgeEvalSink (PostgREST-backed adapter for SAL)
+ * [FROM]: Depends on core/telemetry/* for InsforgeHttpClient + BatchingDispatcher + types; ./types.js for SAL event shape (EvalSink/EvalEventEnvelope/CreateEvalSinkOptions)
  * [TO]: Constructed by eval/index.ts factory when adapter resolves to "insforge"
- * [HERE]: extensions/defaults/sal/eval/insforge-sink.ts - InsForge-specific routing: run_start→eval_runs INSERT (merge-duplicates, includes pencil_version with legacy fallback), turn_anchor→eval_turns + eval_sal_anchors×2 with on_conflict-based upsert (suppresses benign 23505 retries) only after parent run confirmation, tool_trace→eval_tool_traces with legacy-schema fallback, memory_recalls→eval_memory_recalls, run_end→eval_runs PATCH
+ * [HERE]: extensions/defaults/sal/eval/insforge-sink.ts - SAL-specific event routing only: run_start→eval_runs, turn_anchor→eval_turns+eval_sal_anchors×2, tool_trace→eval_tool_traces (legacy fallback), memory_recalls→eval_memory_recalls, run_end→eval_runs PATCH. HTTP transport + batching come from core/telemetry/.
  *
- * Pluggable: nothing in this file may be imported from outside the eval/ directory.
+ * Pluggable: nothing in this file may be imported from outside the eval/ directory other than core/telemetry (the shared base layer).
  * To add a new backend, write a sibling file with the same EvalSink interface.
  */
 
-import { request as httpRequest } from "node:http";
-import { request } from "node:https";
-import { URL } from "node:url";
-import { isDevRuntime } from "../../../../utils/diagnostics.js";
+import { BatchingDispatcher, InsforgeHttpClient, safeHost } from "../../../../core/telemetry/index.js";
 import type { CreateEvalSinkOptions, EvalEventEnvelope, EvalSink } from "./types.js";
-
-interface HttpJsonResult {
-	ok: boolean;
-	statusCode?: number;
-	body?: string;
-	errorCode?: string;
-}
-
-interface PostJsonOptions {
-	prefer?: string;
-	quietErrorCodes?: string[];
-}
 
 export class InsForgeEvalSink implements EvalSink {
 	readonly enabled = true;
 
-	private base: string;
-	private headers: Record<string, string>;
-	private allowSelfSigned: boolean;
-	private batchIntervalMs: number;
+	private http: InsforgeHttpClient;
+	private dispatcher: BatchingDispatcher<EvalEventEnvelope>;
 	private onDiagnostic: CreateEvalSinkOptions["onDiagnostic"];
-	private pending: EvalEventEnvelope[] = [];
-	private flushTimer: ReturnType<typeof setTimeout> | undefined;
-	private flushInFlight: Promise<void> | undefined;
-	private closed = false;
 	private confirmedRuns = new Set<string>();
 	private failedRuns = new Set<string>();
 
 	constructor(options: CreateEvalSinkOptions) {
-		this.base = options.endpoint!.replace(/\/+$/, "");
-		this.batchIntervalMs = options.batchIntervalMs ?? 2000;
 		this.onDiagnostic = options.onDiagnostic;
-		this.allowSelfSigned = options.allowSelfSigned ?? false;
-		if (this.allowSelfSigned && isDevRuntime()) {
-			console.warn("[sal][eval] TLS certificate verification disabled (allowSelfSigned=true)");
-		}
-
-		const h: Record<string, string> = {
-			"Content-Type": "application/json",
-			...(options.headers ?? {}),
-		};
-		if (options.anonKey) {
-			h["apikey"] = options.anonKey;
-			h["Authorization"] = `Bearer ${options.anonKey}`;
-		}
-		if (options.apiKey) {
-			h[options.apiKeyHeader ?? "x-api-key"] = options.apiKey;
-			if (!options.anonKey) {
-				h["Authorization"] = `Bearer ${options.apiKey}`;
-			}
-		}
-		this.headers = h;
-	}
-
-	async sendEvent(event: EvalEventEnvelope): Promise<void> {
-		if (this.closed) return;
-		this.pending.push(event);
-		this.scheduleFlush();
-	}
-
-	async flush(): Promise<void> {
-		if (this.flushInFlight) {
-			await this.flushInFlight.catch(() => {});
-			return;
-		}
-
-		this.flushInFlight = this.doFlush();
-		try {
-			await this.flushInFlight;
-		} catch (err) {
-			this.reportDiagnostic("persistence", "SAL eval flush failed.", err, "flush");
-		} finally {
-			this.flushInFlight = undefined;
-		}
-	}
-
-	private async doFlush(): Promise<void> {
-		if (this.flushTimer) {
-			clearTimeout(this.flushTimer);
-			this.flushTimer = undefined;
-		}
-		while (true) {
-			const toFlush = this.pending.splice(0);
-			if (toFlush.length === 0) break;
-			for (const event of toFlush) {
-				await this.routeEvent(event);
-			}
-		}
-	}
-
-	async close(): Promise<void> {
-		this.closed = true;
-		await this.flush().catch((err) => {
-			this.reportDiagnostic("persistence", "SAL eval close flush failed.", err, "close-flush");
+		this.http = new InsforgeHttpClient({
+			endpoint: options.endpoint!,
+			apiKey: options.apiKey,
+			anonKey: options.anonKey,
+			apiKeyHeader: options.apiKeyHeader,
+			extraHeaders: options.headers,
+			allowSelfSigned: options.allowSelfSigned,
+			source: "sal.eval",
+			onDiagnostic: this.onDiagnostic,
+		});
+		this.dispatcher = new BatchingDispatcher<EvalEventEnvelope>({
+			handler: (event) => this.routeEvent(event),
+			intervalMs: options.batchIntervalMs ?? 2000,
+			source: "sal.eval",
+			onDiagnostic: this.onDiagnostic,
 		});
 	}
 
-	private scheduleFlush(): void {
-		if (this.flushTimer) return;
-		this.flushTimer = setTimeout(() => {
-			this.flushTimer = undefined;
-			void this.flush().catch(() => {});
-		}, this.batchIntervalMs);
+	async sendEvent(event: EvalEventEnvelope): Promise<void> {
+		this.dispatcher.enqueue(event);
+	}
+
+	async flush(): Promise<void> {
+		await this.dispatcher.flush();
+	}
+
+	async close(): Promise<void> {
+		await this.dispatcher.close();
 	}
 
 	// ------------------------------------------------------------------
-	// Routing
+	// SAL-specific routing
 	// ------------------------------------------------------------------
 
 	private async routeEvent(event: EvalEventEnvelope): Promise<void> {
@@ -163,8 +97,8 @@ export class InsForgeEvalSink implements EvalSink {
 			workspace_root: strOrNull(p.workspace_root),
 			started_at:    ev.ts,
 		};
-		const url = `${this.base}/api/database/records/eval_runs`;
-		const result = await this.postJson(url, [row], {
+		const url = `${this.http.base}/api/database/records/eval_runs`;
+		const result = await this.http.postJson(url, [row], {
 			prefer: "resolution=merge-duplicates",
 			quietErrorCodes: ["PGRST204"],
 		});
@@ -174,7 +108,7 @@ export class InsForgeEvalSink implements EvalSink {
 			return;
 		}
 
-		const fallback = await this.postJson(url, [toLegacyRunStartRow(row)], {
+		const fallback = await this.http.postJson(url, [toLegacyRunStartRow(row)], {
 			prefer: "resolution=merge-duplicates",
 		});
 		if (fallback.ok) {
@@ -226,7 +160,7 @@ export class InsForgeEvalSink implements EvalSink {
 		// UNIQUE(run_id, turn_id) collision via ON CONFLICT DO UPDATE
 		// instead of returning 409/23505. ignore-duplicates only checks the
 		// primary key, which is auto-uuid here, so it never sees the conflict.
-		await this.postJson(`${this.base}/api/database/records/eval_turns?on_conflict=run_id,turn_id`, [{
+		await this.http.postJson(`${this.http.base}/api/database/records/eval_turns?on_conflict=run_id,turn_id`, [{
 			run_id:                   ev.run_id,
 			turn_id:                  turnId,
 			event_id:                 ev.event_id,
@@ -238,7 +172,7 @@ export class InsForgeEvalSink implements EvalSink {
 
 		const taskAnchor = p.task_anchor as Record<string, unknown> | null;
 		if (taskAnchor) {
-			await this.postJson(`${this.base}/api/database/records/eval_sal_anchors?on_conflict=run_id,turn_id,anchor_type`, [{
+			await this.http.postJson(`${this.http.base}/api/database/records/eval_sal_anchors?on_conflict=run_id,turn_id,anchor_type`, [{
 				run_id:             ev.run_id,
 				turn_id:            turnId,
 				event_id:           `${ev.event_id}-task`,
@@ -252,7 +186,7 @@ export class InsForgeEvalSink implements EvalSink {
 		}
 
 		const actionAnchor = p.action_anchor as Record<string, unknown> | null;
-		await this.postJson(`${this.base}/api/database/records/eval_sal_anchors?on_conflict=run_id,turn_id,anchor_type`, [{
+		await this.http.postJson(`${this.http.base}/api/database/records/eval_sal_anchors?on_conflict=run_id,turn_id,anchor_type`, [{
 			run_id:             ev.run_id,
 			turn_id:            turnId,
 			event_id:           `${ev.event_id}-action`,
@@ -273,8 +207,8 @@ export class InsForgeEvalSink implements EvalSink {
 			rawStatus === "success" ? "completed"
 			: rawStatus === "error" ? "failed"
 			: rawStatus ?? "completed";
-		await this.patchJson(
-			`${this.base}/api/database/records/eval_runs?run_id=eq.${ev.run_id}`,
+		await this.http.patchJson(
+			`${this.http.base}/api/database/records/eval_runs?run_id=eq.${ev.run_id}`,
 			{
 				status:           normalizedStatus,
 				turn_count:       numOrNull(p.turn_count),
@@ -306,8 +240,8 @@ export class InsForgeEvalSink implements EvalSink {
 			inject_rank:       numOrNull(r.injectRank),
 			recorded_at:       ev.ts,
 		}));
-		await this.postJson(
-			`${this.base}/api/database/records/eval_memory_recalls`,
+		await this.http.postJson(
+			`${this.http.base}/api/database/records/eval_memory_recalls`,
 			rows,
 			{ prefer: "resolution=ignore-duplicates" },
 		);
@@ -337,111 +271,14 @@ export class InsForgeEvalSink implements EvalSink {
 			duration_ms:        String(p.duration_ms ?? 0),
 			recorded_at:        ev.ts,
 		};
-		const url = `${this.base}/api/database/records/eval_tool_traces`;
-		const result = await this.postJson(url, [row], {
+		const url = `${this.http.base}/api/database/records/eval_tool_traces`;
+		const result = await this.http.postJson(url, [row], {
 			prefer: "resolution=ignore-duplicates",
 			quietErrorCodes: ["PGRST204"],
 		});
 		if (!result.ok && result.errorCode === "PGRST204") {
-			await this.postJson(url, [toLegacyToolTraceRow(row)], { prefer: "resolution=ignore-duplicates" });
+			await this.http.postJson(url, [toLegacyToolTraceRow(row)], { prefer: "resolution=ignore-duplicates" });
 		}
-	}
-
-	// ------------------------------------------------------------------
-	// HTTP helpers
-	// ------------------------------------------------------------------
-
-	private postJson(url: string, body: unknown, extra?: PostJsonOptions): Promise<HttpJsonResult> {
-		const extraHeaders: Record<string, string> = {};
-		if (extra?.prefer) extraHeaders["Prefer"] = extra.prefer;
-		return this.httpJson("POST", url, body, extraHeaders, extra?.quietErrorCodes);
-	}
-
-	private patchJson(url: string, body: unknown): Promise<HttpJsonResult> {
-		return this.httpJson("PATCH", url, body, {});
-	}
-
-	private httpJson(
-		method: string,
-		url: string,
-		body: unknown,
-		extraHeaders: Record<string, string>,
-		quietErrorCodes: string[] = [],
-	): Promise<HttpJsonResult> {
-		return new Promise((resolve) => {
-			const payload = JSON.stringify(body);
-			let parsed: URL;
-			try {
-				parsed = new URL(url);
-			} catch {
-				this.reportDiagnostic("config", "SAL eval endpoint URL is invalid.", { url }, "invalid-url");
-				resolve({ ok: false });
-				return;
-			}
-			const isHttps = parsed.protocol === "https:";
-			const requestFn = isHttps ? request : httpRequest;
-			const port = parsed.port ? Number(parsed.port) : (isHttps ? 443 : 80);
-			const req = requestFn(
-				{
-					hostname: parsed.hostname,
-					port,
-					path: parsed.pathname + parsed.search,
-					method,
-					headers: {
-						...this.headers,
-						...extraHeaders,
-						"Content-Length": Buffer.byteLength(payload),
-					},
-					timeout: 5000,
-					...(isHttps && this.allowSelfSigned ? { rejectUnauthorized: false } : {}),
-				},
-				(res) => {
-					let rawBody = "";
-					res.setEncoding("utf-8");
-					res.on("data", (chunk) => { rawBody += chunk; });
-					res.on("end", () => {
-						const ok = res.statusCode !== undefined && res.statusCode < 300;
-						const errorCode = parsePostgrestErrorCode(rawBody);
-						if (!ok && !quietErrorCodes.includes(errorCode ?? "")) {
-							this.reportDiagnostic(
-								errorCode === "PGRST204" ? "schema" : "network",
-								`SAL eval upload failed with HTTP ${res.statusCode}.`,
-								{ method, path: parsed.pathname, statusCode: res.statusCode, body: rawBody.slice(0, 300), errorCode },
-								`http-${res.statusCode ?? "unknown"}-${errorCode ?? "none"}`,
-							);
-						}
-						resolve({ ok, statusCode: res.statusCode, body: rawBody, errorCode });
-					});
-				},
-			);
-			req.on("error", (err) => {
-				this.reportDiagnostic(
-					"network",
-					"SAL eval upload is failing due to a network connection error.",
-					{ host: parsed.hostname, error: err.message },
-					"network-error",
-				);
-				if (isDevRuntime()) {
-					console.error(`[sal][eval] network error → ${parsed.hostname}: ${err.message}`);
-				}
-				resolve({ ok: false });
-			});
-			req.on("timeout", () => {
-				this.reportDiagnostic(
-					"network",
-					"SAL eval upload timed out.",
-					{ method, path: parsed.pathname, host: parsed.hostname },
-					"timeout",
-				);
-				if (isDevRuntime()) {
-					console.error(`[sal][eval] timeout ${method} ${parsed.pathname}`);
-				}
-				req.destroy();
-				resolve({ ok: false });
-			});
-			req.write(payload);
-			req.end();
-		});
 	}
 
 	private reportDiagnostic(
@@ -459,14 +296,14 @@ export class InsForgeEvalSink implements EvalSink {
 			fingerprint: `sal.eval:${category}:${fingerprintSuffix}`,
 			context: {
 				adapter: "insforge",
-				endpoint_host: safeHost(this.base),
+				endpoint_host: safeHost(this.http.base),
 			},
 		});
 	}
 }
 
 // ----------------------------------------------------------------------------
-// Local helpers
+// SAL-specific row helpers
 // ----------------------------------------------------------------------------
 
 function strOrNull(v: unknown, skipValue?: string): string | null {
@@ -478,23 +315,6 @@ function numOrNull(v: unknown): number | null {
 	if (v == null) return null;
 	const n = Number(v);
 	return isNaN(n) ? null : n;
-}
-
-function parsePostgrestErrorCode(rawBody: string): string | undefined {
-	try {
-		const parsed = JSON.parse(rawBody);
-		return typeof parsed?.code === "string" ? parsed.code : undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-function safeHost(value: string): string | undefined {
-	try {
-		return new URL(value).hostname;
-	} catch {
-		return undefined;
-	}
 }
 
 function toLegacyRunStartRow(row: Record<string, unknown>): Record<string, unknown> {

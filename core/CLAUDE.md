@@ -124,6 +124,16 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 `retry-coordinator.ts`: RetryCoordinator, RetrySessionEvent — retry coordination for transient failures
 `turn-context.ts`: TurnContext interface, TURN_CONTEXT_GLOBAL_KEY, setTurnContext/getTurnContext/resetTurnContext — per-turn hint bus for SAL decoupling
 
+### Telemetry (`core/telemetry/`)
+
+Shared base layer for insforge-backed telemetry sinks. Factored out of SAL's eval sink so future ext-telemetry pipelines (ext_command_events / ext_llm_calls / ext_hook_events) reuse the same HTTP transport, credential loader, and batching machinery without duplicating SAL's plumbing.
+
+`types.ts`: TelemetryDiagnostic event shape, DiagnosticHandler, InsforgeHttpResult, PostJsonOptions — shared types
+`credentials.ts`: loadInsforgeCredentials<T>() — parses ~/.memory-experiments/credentials.json (workspace fallback first), normalizes camelCase to snake_case, preserves sink-specific extra keys via generic
+`insforge-base.ts`: InsforgeHttpClient (POST/PATCH, TLS allowSelfSigned, 5s timeout, source-scoped diagnostic fingerprints), parsePostgrestErrorCode, safeHost
+`batching-dispatcher.ts`: BatchingDispatcher<T> — generic debounced flush + reentrancy-safe drain + close-time flush
+`index.ts`: Barrel — the only entry point external callers should import from
+
 ### Configuration (`core/config/`)
 
 `settings-manager.ts`: Two-tier settings (global + project-local), merge logic
