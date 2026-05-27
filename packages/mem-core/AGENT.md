@@ -254,6 +254,7 @@ nanomem insights [--output <path>]  # Generate HTML report
 - `engine-episode-sync.ts` - Episode-to-V2 sync and mapping
 - `engine-reinforce.ts` - Memory reinforcement and reconsolidation after recall
 - `engine-recall-select.ts` - Recall entry selection and budget allocation for progressive recall
+- `full-insights-sections.ts` - Claude-style parallel insight section generation for comprehensive reports
 - `config.ts` - Configuration management
 - `types.ts` - All type definitions
 - `store.ts` - JSON persistence layer

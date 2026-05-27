@@ -145,6 +145,7 @@ The `packages/` directory contains bundled npm packages that are compiled and in
 `extension.ts`: nanoPencil extension adapter
 `extraction.ts`: Memory extraction (LLM + heuristic)
 `full-insights.ts`: Comprehensive insights
+`full-insights-sections.ts`: Claude-style parallel insight section generation for comprehensive reports
 `full-insights-html.ts`: HTML insights report
 `human-insights.ts`: Human-readable insights
 `i18n.ts`: Internationalization

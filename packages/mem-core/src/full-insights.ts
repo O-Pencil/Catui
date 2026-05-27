@@ -1,13 +1,12 @@
 /**
  * [WHO]: FullInsightsReport, generateFullInsights
- * [FROM]: Depends on ./i18n.js, ./llm-json.js, ./types.js
+ * [FROM]: Depends on ./i18n.js, ./full-insights-sections.js, ./types.js
  * [TO]: Consumed by packages/mem-core/src/index.ts
  * [HERE]: packages/mem-core/src/full-insights.ts - aggregation + optional LLM for comprehensive insights report
  */
 
 
 import { PROMPTS } from "./i18n.js";
-import { parseLlmJson } from "./llm-json.js";
 import type {
 	Episode,
 	FullInsightsAtAGlance,
@@ -24,6 +23,7 @@ import type {
 	StruggleInsight,
 	WorkEntry,
 } from "./types.js";
+import { generateParallelFullInsightSections } from "./full-insights-sections.js";
 
 const EXT_TO_LANG: Record<string, string> = {
 	ts: "TypeScript",
@@ -255,25 +255,6 @@ function fallbackFeaturesAndPatterns(
 	return { featuresToTry, usagePatterns };
 }
 
-interface LlmFullInsightsPayload {
-	atAGlance?: FullInsightsAtAGlance;
-	projectAreaDescriptions?: string[];
-	wins?: FullInsightsWin[];
-	frictions?: FullInsightsFriction[];
-	recommendations?: string[];
-	featuresToTry?: FullInsightsFeatureToTry[];
-	usagePatterns?: FullInsightsUsagePattern[];
-}
-
-function parseLlmPayload(raw: string): LlmFullInsightsPayload | null {
-	try {
-		const parsed = parseLlmJson<LlmFullInsightsPayload>(raw);
-		return parsed;
-	} catch {
-		return null;
-	}
-}
-
 export async function buildFullInsightsReport(
 	all: ExportAllResult,
 	llmFn: LlmFn | undefined,
@@ -326,29 +307,30 @@ export async function buildFullInsightsReport(
 	);
 
 	if (llmFn) {
-		const context = {
-			patterns: patterns.slice(0, 5).map((x) => ({ trigger: x.trigger, behavior: x.behavior })),
-			struggles: struggles.slice(0, 8).map((s) => ({ problem: s.problem, resolved: s.resolved, attempts: s.attempts, solution: s.solution })),
-			lessons: topLessons.slice(0, 5).map((l) => l.summary || l.detail || l.content || ""),
-			projectAreas: projectAreas.map((a) => ({ name: a.name, sessionCount: a.sessionCount, firstSummary: a.description })),
-			topTools: toolsChart.rows.slice(0, 5),
-			errorsSummary: errChart.rows.slice(0, 5).map((r) => r.label),
-			locale,
-		};
 		try {
-			const raw = await llmFn(p.fullInsightsSystemPrompt, JSON.stringify(context));
-			const payload = parseLlmPayload(raw);
-			if (payload) {
-				if (payload.atAGlance && typeof payload.atAGlance === "object") atAGlance = payload.atAGlance;
-				if (Array.isArray(payload.projectAreaDescriptions) && payload.projectAreaDescriptions.length >= projectAreas.length) {
-					projectAreaDescriptions = payload.projectAreaDescriptions.slice(0, projectAreas.length);
-				}
-				if (Array.isArray(payload.wins) && payload.wins.length > 0) wins = payload.wins.slice(0, 8);
-				if (Array.isArray(payload.frictions) && payload.frictions.length > 0) frictions = payload.frictions.slice(0, 8);
-				if (Array.isArray(payload.recommendations) && payload.recommendations.length > 0) recommendations = payload.recommendations.slice(0, 5);
-				if (Array.isArray(payload.featuresToTry) && payload.featuresToTry.length > 0) featuresToTry = payload.featuresToTry.slice(0, 6);
-				if (Array.isArray(payload.usagePatterns) && payload.usagePatterns.length > 0) usagePatterns = payload.usagePatterns.slice(0, 6);
+			const payload = await generateParallelFullInsightSections(
+				{
+					locale,
+					stats,
+					patterns,
+					struggles,
+					lessons: topLessons,
+					projectAreas,
+					topTools: toolsChart.rows,
+					topLanguages: langChart.rows,
+					topErrors: errChart.rows,
+				},
+				llmFn,
+			);
+			if (payload.atAGlance) atAGlance = payload.atAGlance;
+			if (Array.isArray(payload.projectAreaDescriptions) && payload.projectAreaDescriptions.length >= projectAreas.length) {
+				projectAreaDescriptions = payload.projectAreaDescriptions.slice(0, projectAreas.length);
 			}
+			if (Array.isArray(payload.wins) && payload.wins.length > 0) wins = payload.wins.slice(0, 8);
+			if (Array.isArray(payload.frictions) && payload.frictions.length > 0) frictions = payload.frictions.slice(0, 8);
+			if (Array.isArray(payload.recommendations) && payload.recommendations.length > 0) recommendations = payload.recommendations.slice(0, 5);
+			if (Array.isArray(payload.featuresToTry) && payload.featuresToTry.length > 0) featuresToTry = payload.featuresToTry.slice(0, 6);
+			if (Array.isArray(payload.usagePatterns) && payload.usagePatterns.length > 0) usagePatterns = payload.usagePatterns.slice(0, 6);
 		} catch {
 			// keep fallbacks
 		}
