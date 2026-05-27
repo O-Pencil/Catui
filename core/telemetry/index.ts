@@ -13,3 +13,12 @@ export {
 	safeHost,
 } from "./insforge-base.js";
 export { type BatchingDispatcherOptions, BatchingDispatcher } from "./batching-dispatcher.js";
+export { type BuildMeta, loadBuildMeta } from "./build-meta.js";
+export {
+	type CommandEventInput,
+	type CommandOutcome,
+	type CreateExtensionTelemetrySinkOptions,
+	type ExtensionTelemetrySink,
+	classifyArgsSignature,
+	createExtensionTelemetrySink,
+} from "./ext-events.js";

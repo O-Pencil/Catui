@@ -5,10 +5,8 @@
  * [HERE]: extensions/defaults/sal/sal-config.ts - configuration and path boundary for Structural Anchor Localization
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { loadInsforgeCredentials } from "../../../core/telemetry/index.js";
+import { join } from "node:path";
+import { loadBuildMeta as loadBuildMetaShared, loadInsforgeCredentials } from "../../../core/telemetry/index.js";
 import type { EvalAdapterId } from "./eval/index.js";
 import type { BuildMeta, SalDiagnosticReporter } from "./sal-runtime.js";
 
@@ -38,37 +36,13 @@ export interface EvalCredentials {
 	adapter?: EvalAdapterId;
 }
 
+/**
+ * Delegate to the shared core/telemetry/build-meta loader so SAL eval, the
+ * ext-events sink, and any future telemetry consumer all stamp identical
+ * pencil_version / commit_hash on emitted rows.
+ */
 export function loadBuildMeta(): BuildMeta {
-	const fallback: BuildMeta = { version: "dev" };
-	try {
-		const thisFile = fileURLToPath(import.meta.url);
-		const thisDir = dirname(thisFile);
-		const distMeta = join(thisDir, "..", "..", "..", "build-meta.json");
-		if (existsSync(distMeta)) {
-			const parsed = JSON.parse(readFileSync(distMeta, "utf-8"));
-			return {
-				version: parsed.version ?? fallback.version,
-				commitHash: parsed.commitHash,
-				branch: parsed.branch,
-			};
-		}
-
-		const pkgCandidates = [
-			join(thisDir, "..", "..", "..", "package.json"),
-			join(thisDir, "..", "..", "..", "..", "package.json"),
-		];
-		for (const p of pkgCandidates) {
-			if (existsSync(p)) {
-				const pkg = JSON.parse(readFileSync(p, "utf-8"));
-				if (pkg.name === "@pencil-agent/nano-pencil") {
-					return { version: pkg.version ?? fallback.version };
-				}
-			}
-		}
-	} catch {
-		// Non-fatal: dev and tests can run without build metadata.
-	}
-	return fallback;
+	return loadBuildMetaShared();
 }
 
 export const BUILD_META = loadBuildMeta();

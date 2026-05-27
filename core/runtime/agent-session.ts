@@ -64,6 +64,7 @@ import { CompactionCoordinator } from "../session/compaction/compaction-coordina
 import { ToolOrchestrator } from "../tools/orchestrator.js";
 import { ModelSwitcher } from "../model/index.js";
 import { DEFAULT_THINKING_LEVEL } from "../defaults.js";
+import { createExtensionTelemetrySink } from "../telemetry/index.js";
 import {
   exportSessionToHtml,
   type ToolHtmlRenderer,
@@ -1213,34 +1214,24 @@ export class AgentSession {
 
   /**
    * Try to execute an extension command. Returns true if command was found and executed.
+   *
+   * Delegates to ExtensionRunner.invokeCommand() so command dispatch, error
+   * routing (emitError), and telemetry (ext_command_events) all happen in one
+   * place rather than being scattered across modes.
    */
   private async _tryExecuteExtensionCommand(text: string): Promise<boolean> {
     if (!this._extensionRunner) return false;
 
-    // Parse command name and args
     const spaceIndex = text.indexOf(" ");
     const commandName =
       spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
     const args = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1);
 
-    const command = this._extensionRunner.getCommand(commandName);
-    if (!command) return false;
-
-    // Get command context from extension runner (includes session control methods)
     const ctx = this._extensionRunner.createCommandContext();
-
-    try {
-      await command.handler(args, ctx);
-      return true;
-    } catch (err) {
-      // Emit error via extension runner
-      this._extensionRunner.emitError({
-        extensionPath: `command:${commandName}`,
-        event: "command",
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return true;
-    }
+    const result = await this._extensionRunner.invokeCommand(commandName, args, ctx, {
+      sessionId: this.sessionManager.getSessionId(),
+    });
+    return result.found;
   }
 
   /**
@@ -2508,6 +2499,12 @@ export class AgentSession {
     if (this._extensionRunner) {
       this._bindExtensionCore(this._extensionRunner);
       this._applyExtensionBindings(this._extensionRunner);
+      // P1 extension telemetry: every /command invocation writes one row to
+      // ext_command_events. Returns a noop sink when no insforge credentials
+      // are configured, so this is zero-cost for users not opted in.
+      this._extensionRunner.setTelemetrySink(
+        createExtensionTelemetrySink({ workspaceRoot: this._cwd }),
+      );
     }
 
     const registeredTools =

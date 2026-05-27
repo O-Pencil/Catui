@@ -1,8 +1,8 @@
 /**
- * [WHO]: ExtensionRunner class, lifecycle management, event emission
- * [FROM]: Depends on agent-core, ai, tui, modes/theme, session-manager, types.ts
- * [TO]: Consumed by core/extensions/index.ts, core/extensions/wrapper.ts
- * [HERE]: core/extensions/runner.ts - extension execution and lifecycle management
+ * [WHO]: ExtensionRunner class, lifecycle management, event emission, slash-command dispatch chokepoint (invokeCommand), telemetry sink wiring (setTelemetrySink)
+ * [FROM]: Depends on agent-core, ai, tui, modes/theme, session-manager, types.ts, core/telemetry (ExtensionTelemetrySink + classifyArgsSignature for the P1 ext_command_events writer)
+ * [TO]: Consumed by core/extensions/index.ts, core/extensions/wrapper.ts, core/runtime/agent-session.ts (delegates command dispatch via invokeCommand)
+ * [HERE]: core/extensions/runner.ts - extension execution and lifecycle management; owns the single try/catch around command.handler so telemetry can wrap every invocation regardless of caller mode
  */
 import type { AgentMessage } from "@pencil-agent/agent-core";
 import type { ImageContent, Model } from "@pencil-agent/ai";
@@ -12,6 +12,7 @@ import type { ResourceDiagnostic } from "../diagnostics.js";
 import type { KeyAction, KeybindingsConfig } from "../keybindings.js";
 import type { ModelRegistry } from "../model-registry.js";
 import type { SessionManager } from "../session/session-manager.js";
+import { classifyArgsSignature, type CommandOutcome, type ExtensionTelemetrySink } from "../telemetry/index.js";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
@@ -240,6 +241,7 @@ export class ExtensionRunner {
 	private shutdownHandler: ShutdownHandler = () => {};
 	private shortcutDiagnostics: ResourceDiagnostic[] = [];
 	private commandDiagnostics: ResourceDiagnostic[] = [];
+	private telemetrySink?: ExtensionTelemetrySink;
 	private _beforeAgentStartTimeoutMs: number | undefined = 1500;
 	private get beforeAgentStartTimeoutMs(): number { return this._beforeAgentStartTimeoutMs ?? 1500; }
 	private readonly beforeAgentStartTimeoutSentinel = Symbol("before_agent_start_timeout");
@@ -566,6 +568,112 @@ export class ExtensionRunner {
 			}
 		}
 		return undefined;
+	}
+
+	/**
+	 * Returns the owning Extension for a given slash command name. Used by the
+	 * telemetry middleware to stamp `extension_name` on each ext_command_events
+	 * row. Falls back to undefined when no extension claims the command.
+	 */
+	private findCommandOwner(name: string): Extension | undefined {
+		for (const ext of this.extensions) {
+			if (ext.commands.has(name)) return ext;
+		}
+		return undefined;
+	}
+
+	/**
+	 * Derive a short, stable extension name from an Extension record. For
+	 * built-ins (extensions/defaults/<name>) and most user extensions
+	 * (packages/<name>) the directory basename is the right answer.
+	 */
+	private deriveExtensionName(ext: Extension): string {
+		const path = ext.path || ext.resolvedPath || "";
+		const segments = path.replace(/\/+$/, "").split(/[\\/]/);
+		return segments[segments.length - 1] || "unknown";
+	}
+
+	/**
+	 * Attach (or replace) the extension telemetry sink. The runner owns sink
+	 * lifecycle from this point — invokeCommand() will fire-and-forget one
+	 * `ext_command_events` row per invocation. Passing the noop sink (the
+	 * factory's default when no insforge credentials exist) is the safe way to
+	 * disable telemetry without scattering null-checks at the call sites.
+	 */
+	setTelemetrySink(sink: ExtensionTelemetrySink): void {
+		this.telemetrySink = sink;
+	}
+
+	/**
+	 * Single chokepoint for slash command dispatch. All modes (interactive /
+	 * print / rpc / acp) funnel through agent-session._tryExecuteExtensionCommand,
+	 * which calls this method. The wrapper measures wall-clock duration,
+	 * captures outcome (ok / error / cancelled), and emits one telemetry row
+	 * per invocation. Errors are still routed through emitError() so existing
+	 * UI surfaces (toasts, logs) keep working unchanged.
+	 *
+	 * Returns `{ found: false }` when no extension owns the command, letting
+	 * the caller fall through to built-in command handling without emitting a
+	 * telemetry row for an unknown command.
+	 */
+	async invokeCommand(
+		commandName: string,
+		args: string,
+		ctx: ExtensionCommandContext,
+		metadata?: { sessionId?: string | null; runId?: string | null; variant?: string | null },
+	): Promise<{ found: boolean }> {
+		const command = this.getCommand(commandName);
+		if (!command) return { found: false };
+
+		const ownerExt = this.findCommandOwner(commandName);
+		const extensionName = ownerExt ? this.deriveExtensionName(ownerExt) : "unknown";
+		const startedAt = new Date();
+		const startPerf = performance.now();
+		let outcome: CommandOutcome = "ok";
+		let errorCode: string | null = null;
+		let thrown: unknown;
+
+		try {
+			await command.handler(args, ctx);
+		} catch (err) {
+			outcome = "error";
+			errorCode = err instanceof Error ? err.constructor.name : "unknown";
+			thrown = err;
+			this.emitError({
+				extensionPath: `command:${commandName}`,
+				event: "command",
+				error: err instanceof Error ? err.message : String(err),
+			});
+		}
+
+		const durationMs = Math.round(performance.now() - startPerf);
+		const endedAt = new Date();
+
+		try {
+			this.telemetrySink?.writeCommandEvent({
+				extensionName,
+				commandName,
+				argsSignature: classifyArgsSignature(args),
+				argsLength: args.length,
+				outcome,
+				errorCode,
+				durationMs,
+				startedAt,
+				endedAt,
+				sessionId: metadata?.sessionId ?? null,
+				runId: metadata?.runId ?? null,
+				variant: metadata?.variant ?? null,
+			});
+		} catch {
+			// Sink emission must never bring down command dispatch.
+		}
+
+		// Even though we logged the error to telemetry + emitError, callers
+		// expecting the thrown error (e.g. AgentSession previously re-caught it
+		// silently) won't see it. This matches the original behaviour: the old
+		// _tryExecuteExtensionCommand swallowed the error after emitError too.
+		void thrown;
+		return { found: true };
 	}
 
 	/**
