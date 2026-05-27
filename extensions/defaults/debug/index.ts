@@ -77,6 +77,18 @@ interface ParsedDebugArgs {
 	issueDescription?: string;
 }
 
+const DEBUG_COMMAND_COMPLETIONS = [
+	{ value: "env", label: "env", description: "Show terminal and system details" },
+	{ value: "session", label: "session", description: "Show current conversation state" },
+	{ value: "model", label: "model", description: "Show active model and provider details" },
+	{ value: "preferences", label: "preferences", description: "Show saved preferences" },
+];
+
+const LOCALE_COMMAND_COMPLETIONS = [
+	{ value: "zh", label: "zh", description: "Use Chinese for future replies" },
+	{ value: "en", label: "en", description: "Use English for future replies" },
+];
+
 function parseDebugArgs(args: string): ParsedDebugArgs {
 	const trimmed = args.trim().toLowerCase();
 	if (trimmed === "env") return { subcommand: "env" };
@@ -248,11 +260,10 @@ export default async function debugExtension(api: ExtensionAPI): Promise<void> {
 
 	api.registerCommand("debug", {
 		description: "Check NanoPencil health or investigate an issue. Usage: /debug [env|session|model|preferences|<issue>]",
-		getArgumentCompletions: (argumentPrefix) => {
+		getArgumentCompletions: (argumentPrefix, context) => {
+			if (context && context.tokenIndex > 0) return null;
 			const prefix = argumentPrefix.trim().toLowerCase();
-			const values = ["env", "session", "model", "preferences"]
-				.filter((value) => value.startsWith(prefix))
-				.map((value) => ({ value, label: value }));
+			const values = DEBUG_COMMAND_COMPLETIONS.filter((value) => value.value.startsWith(prefix));
 			return values.length > 0 ? values : null;
 		},
 		handler: (args, ctx) => handleDebugCommand(args, ctx, api),
@@ -261,11 +272,10 @@ export default async function debugExtension(api: ExtensionAPI): Promise<void> {
 	// Register /set-locale command
 	api.registerCommand("set-locale", {
 		description: "Set language preference (/set-locale zh|en)",
-		getArgumentCompletions: (argumentPrefix) => {
+		getArgumentCompletions: (argumentPrefix, context) => {
+			if (context && context.tokenIndex > 0) return null;
 			const prefix = argumentPrefix.trim().toLowerCase();
-			const values = ["zh", "en"]
-				.filter((value) => value.startsWith(prefix))
-				.map((value) => ({ value, label: value }));
+			const values = LOCALE_COMMAND_COMPLETIONS.filter((value) => value.value.startsWith(prefix));
 			return values.length > 0 ? values : null;
 		},
 		handler: async (args, ctx) => {

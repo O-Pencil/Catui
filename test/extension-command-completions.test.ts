@@ -76,6 +76,17 @@ test("debug command advertises and runs quick preference diagnostics", async () 
 		assert.ok(debug);
 		assert.match(debug.description ?? "", /Check NanoPencil health/);
 		assert.deepEqual(debug.getArgumentCompletions?.("pre")?.map((item) => item.value), ["preferences"]);
+		assert.match(debug.getArgumentCompletions?.("pre")?.[0]?.description ?? "", /saved preferences/);
+		assert.equal(
+			debug.getArgumentCompletions?.("pre", {
+				commandName: "debug",
+				argumentText: "model pre",
+				argumentPrefix: "pre",
+				tokenIndex: 1,
+				previousTokens: ["model"],
+			}),
+			null,
+		);
 
 		await debug.handler("preferences", harness.ctx as never);
 		assert.match(String(harness.messages.at(-1)?.content ?? ""), /Preferences/);
@@ -83,6 +94,7 @@ test("debug command advertises and runs quick preference diagnostics", async () 
 		const setLocale = harness.commands.get("set-locale");
 		assert.ok(setLocale);
 		assert.deepEqual(setLocale.getArgumentCompletions?.("z")?.map((item) => item.value), ["zh"]);
+		assert.match(setLocale.getArgumentCompletions?.("z")?.[0]?.description ?? "", /Chinese/);
 	} finally {
 		if (previousMemoryDir === undefined) {
 			delete process.env.NANOMEM_MEMORY_DIR;
@@ -110,9 +122,20 @@ test("tokensave command exposes first-argument completions", () => {
 
 	const tokensave = harness.commands.get("tokensave");
 	assert.ok(tokensave);
-	assert.match(tokensave.description ?? "", /shell output was shortened/);
+	assert.match(tokensave.description ?? "", /Review shell output shortening/);
 	assert.deepEqual(tokensave.getArgumentCompletions?.("hi")?.map((item) => item.value), ["history"]);
 	assert.deepEqual(tokensave.getArgumentCompletions?.("re")?.map((item) => item.value), ["reload"]);
+	assert.match(tokensave.getArgumentCompletions?.("pl")?.[0]?.description ?? "", /Preview how a command will be shortened/);
+	assert.equal(
+		tokensave.getArgumentCompletions?.("hi", {
+			commandName: "tokensave",
+			argumentText: "plan hi",
+			argumentPrefix: "hi",
+			tokenIndex: 1,
+			previousTokens: ["plan"],
+		}),
+		null,
+	);
 });
 
 test("interview, grill, and btw commands use human-readable descriptions", async () => {

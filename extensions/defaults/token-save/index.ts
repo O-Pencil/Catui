@@ -12,6 +12,13 @@ import { planCommand } from "./rewrite.js";
 import { applyTomlStyleFilter } from "./toml-dsl.js";
 import { TokenSaveTracker } from "./tracking.js";
 
+const TOKENSAVE_COMMAND_COMPLETIONS = [
+	{ value: "summary", label: "summary", description: "Show total shell output savings" },
+	{ value: "history", label: "history", description: "Show recent shortened commands" },
+	{ value: "reload", label: "reload", description: "Reload project output-shortening rules" },
+	{ value: "plan", label: "plan", description: "Preview how a command will be shortened" },
+];
+
 function getTextContent(event: ToolResultEvent): string | undefined {
 	const parts = event.content.filter((part): part is { type: "text"; text: string } => part.type === "text");
 	if (parts.length === 0) return undefined;
@@ -40,12 +47,11 @@ export default function tokenSaveExtension(api: ExtensionAPI): void {
 	});
 
 	api.registerCommand("tokensave", {
-		description: "Show how much shell output was shortened. Usage: /tokensave [summary|history|reload|plan <cmd>]",
-		getArgumentCompletions: (argumentPrefix) => {
+		description: "Review shell output shortening. Usage: /tokensave [summary|history|reload|plan <cmd>]",
+		getArgumentCompletions: (argumentPrefix, context) => {
+			if (context && context.tokenIndex > 0) return null;
 			const prefix = argumentPrefix.trim().toLowerCase();
-			const values = ["summary", "history", "reload", "plan"]
-				.filter((value) => value.startsWith(prefix))
-				.map((value) => ({ value, label: value }));
+			const values = TOKENSAVE_COMMAND_COMPLETIONS.filter((value) => value.value.startsWith(prefix));
 			return values.length > 0 ? values : null;
 		},
 		async handler(args, ctx) {
