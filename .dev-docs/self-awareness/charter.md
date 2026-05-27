@@ -37,16 +37,26 @@ Periodically validate that InsForge tables faithfully represent what they claim 
 - Companion: `.dev-docs/data/field-purpose-matrix.md` — the field-by-field judgment of what's alive, dead, or stale
 - Triggers: schema change in any writer; > 30-day silence in an actively-used table; quarterly review
 
-### Leg 2 — Daily diagnosis (Claude-agent driven)
+### Leg 2 — Daily diagnosis (two-agent, single rolling branch)
 
-Watch `pencil_issue_events` for fingerprints. Classify into BLOCK / REVIEW / AUTO-FIX / OBSERVE. File tickets or commit small fixes per the decision tree. The work is performed by a Claude Code agent firing on a session-scoped daily cron; the maintainer reviews each day's output via Pull Request.
+Watch `pencil_issue_events` for fingerprints. Classify into BLOCK / REVIEW / AUTO-FIX / OBSERVE. File tickets or commit small fixes per the decision tree.
 
-- SOP: `.dev-docs/diagnosis/sop.md` (v3 as of 2026-05-27)
-- Active daily output (tracked): `.dev-docs/diagnosis/runs/<YYYY-MM-DD>.md` + `<YYYY-MM-DD>/`
-- Archive (tracked): `.dev-docs/diagnosis/archive/<YYYY-MM>/`
-- Branch + PR workflow: per SOP §9.2 — daily branch `agent/diagnosis-<date>`; AUTO-FIX branches `auto/issue-<date>-<slug>` carved off `main` for independent reviewability.
+As of SOP v4 (2026-05-27), this leg is operated by **two cooperating Claude Code agents** in separate sessions:
 
-Earlier drafts of this charter described Leg 2 as "manual" — that was true at v1 of the SOP. As of SOP v3 (2026-05-27), the leg is **agent-driven daily, maintainer-reviewed per-PR**. The maintainer authority is at the merge gate, not at the trigger.
+| Agent | Procedure | What it does |
+|-------|-----------|--------------|
+| **Diagnosis Agent** | `.dev-docs/diagnosis/sop.md` | Fires daily at 09:00 LA. Pulls `pencil_issue_events`, classifies clusters, writes daily reports / tickets / test reports to one persistent branch `agent/diagnosis`, carves per-fix `auto/issue-*` branches for AUTO-FIX. Pushes; opens or updates one rolling PR + N per-fix PRs. |
+| **Review Agent** | `.dev-docs/diagnosis/review-sop.md` | Fires daily at 09:30 LA. Reads each open Diagnosis PR. For docs PRs: checks structural integrity. For AUTO-FIX PRs: re-runs `tsc --noEmit` + adjacent vitest, validates scope per SOP §3.2/§3.3. Approves or requests changes. Posts a review report to its own rolling branch `agent/diagnosis-reviews`. **Never merges.** |
+
+The maintainer is the **single merge authority** for all PRs (diagnosis, auto-fix, review reports). Their job is reduced from "review every PR end-to-end" to "spot-check the Review Agent's verdicts and click merge".
+
+- SOP: `.dev-docs/diagnosis/sop.md` (Diagnosis Agent, v4) + `.dev-docs/diagnosis/review-sop.md` (Review Agent, v1)
+- Active daily output: `.dev-docs/diagnosis/runs/<YYYY-MM-DD>.md` + `<YYYY-MM-DD>/`
+- Review output: `.dev-docs/diagnosis/reviews/<YYYY-MM-DD>.md`
+- Archive: `.dev-docs/diagnosis/archive/<YYYY-MM>/`
+- Branches: `agent/diagnosis` (persistent, rolling PR), `agent/diagnosis-reviews` (persistent, rolling PR), `auto/issue-<date>-<slug>` (per-fix, ephemeral)
+
+Earlier drafts described Leg 2 as "manual" (v1) then "agent-driven, per-day branches" (v3). v4 collapsed per-day branches into one persistent branch and added the Review Agent so a single maintainer can keep up with output volume.
 
 ### Leg 3 — Reflexive self-study (on demand)
 

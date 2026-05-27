@@ -1,18 +1,21 @@
 # Handoff — boundaries with other agents
 
-The Arch Agent does not work in isolation. Two adjacent agents share the nanoPencil data and code surface but operate independently. This file defines who owns what and how findings cross boundaries (when they cross at all).
+The Arch Agent does not work in isolation. Three adjacent agents share the nanoPencil data and code surface but operate independently — the Diagnosis Agent and its dedicated Review Agent (the two-agent diagnosis pair documented at `.dev-docs/diagnosis/sop.md` and `.dev-docs/diagnosis/review-sop.md`), plus a hypothetical SAL Agent. This file defines who owns what and how findings cross boundaries (when they cross at all).
 
 ---
 
-## 1. The three agents
+## 1. The four agents
 
 | Agent | Session | Files it owns | Files it reads | Files it must not touch |
 |-------|---------|---------------|----------------|--------------------------|
-| **Self-Diagnosis Agent** | Maintainer's persistent Claude Code session (with daily cron) | `.dev-docs/diagnosis/runs/**`, auto-fix commits on `auto/issue-*` branches, the SOP at `.dev-docs/diagnosis/sop.md` | InsForge tables via MCP, the whole repo for grep-based localization | `.dev-docs/architecture-review/**` (this directory) |
-| **Arch Agent (you)** | A separate, dedicated Claude Code session | `.dev-docs/architecture-review/findings/**`, `.dev-docs/architecture-review/refactor-plan.md`, the HTML report in `$TMPDIR` | The whole repo for static analysis, the handbook in `.dev-docs/architecture-review/` | `.dev-docs/diagnosis/runs/**` (read structure only, never individual tickets), `auto/issue-*` branches |
-| **SAL Agent** (hypothetical, future) | A separate session if/when SAL Phase-1+ work resumes | `extensions/defaults/sal/**` evolution; `.dev-docs/sal/**` | the whole repo for impact analysis | self-diagnosis tickets, architecture-review findings |
+| **Diagnosis Agent** | Maintainer's persistent Claude Code session (daily cron 09:00 LA) | `.dev-docs/diagnosis/runs/**`, daily commits on `agent/diagnosis` branch, per-fix commits on `auto/issue-*` branches, the SOP at `.dev-docs/diagnosis/sop.md` | InsForge tables via MCP, the whole repo for grep-based localization | `.dev-docs/architecture-review/**` (this directory); `.dev-docs/diagnosis/reviews/**` (Review Agent owns those) |
+| **Review Agent** | A separate Claude Code session (daily cron 09:30 LA) | `.dev-docs/diagnosis/reviews/**`, daily commits on `agent/diagnosis-reviews` branch, PR review comments on `agent/diagnosis` and `auto/issue-*` PRs, the SOP at `.dev-docs/diagnosis/review-sop.md` | The Diagnosis Agent's PR diffs, the SOP it must validate against, `npx tsc --noEmit` + adjacent `vitest run` to verify AUTO-FIX claims | `.dev-docs/diagnosis/runs/**` (only via PR review, never direct edit); source code (read for verification only, never edit); `.dev-docs/architecture-review/**` |
+| **Arch Agent (you)** | A separate Claude Code session | `.dev-docs/architecture-review/findings/**`, `.dev-docs/architecture-review/refactor-plan.md`, the HTML report in `$TMPDIR` | The whole repo for static analysis, the handbook in `.dev-docs/architecture-review/` | `.dev-docs/diagnosis/**` in any subdirectory (structure-only confirmation OK; never read individual reports/tickets/reviews); `auto/issue-*` branches; `agent/diagnosis*` branches |
+| **SAL Agent** (hypothetical, future) | A separate session if/when SAL Phase-1+ work resumes | `extensions/defaults/sal/**` evolution; `.dev-docs/sal/**` | the whole repo for impact analysis | diagnosis runs / reviews, architecture-review findings |
 
 The session separation is doctrinal, not technical. There is no enforcement mechanism — only this handbook and the maintainer's discipline.
+
+The Diagnosis Agent and Review Agent are tightly coordinated (output of one is input of the other) but **deliberately do not share a session**. The Diagnosis Agent commits work; the Review Agent verifies that work. If both ran in one session, the verifier would inherit the implementer's blind spots — the whole point of a second agent is independent eyes.
 
 ---
 
@@ -43,7 +46,7 @@ So: separate sessions. Separate Claude Code conversations. Manual handoff of art
 
 ## 4. Cross-agent communication
 
-The three agents communicate only through files in the repo. No shared memory. No shared session. The maintainer is the broker.
+The four agents communicate only through files in the repo. No shared memory. No shared session. The maintainer is the broker.
 
 ### 4.1 Self-diagnosis → Arch Agent
 
@@ -73,7 +76,7 @@ The maintainer is the only entity that:
 - Acts on the actual code changes (Phase 3 selections, AUTO-FIX merges, SAL roadmap moves)
 - Updates the handbooks when methodology evolves
 
-The maintainer reads outputs from all three agents and reconciles.
+The maintainer reads outputs from all four agents and reconciles.
 
 ---
 

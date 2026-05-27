@@ -343,87 +343,89 @@ If `status: skipped`, the message says **why** (MCP disconnected, dirty tree, lo
 
 Add or sharpen rules here; do not embed policy in the cron prompt. Bump the `policy_version` field in the daily report header when §3 changes materially, so historical reports can be re-interpreted.
 
-### 9.1 Cron registration
+### 9.1 Branch and PR workflow (single persistent branch)
 
-The daily fire is registered inside the maintainer's persistent Claude Code session via:
+The agent commits its daily output to **one persistent branch**, `agent/diagnosis`. There is **one rolling PR** open against `main` for that branch. Every day's findings accrue as new commits on the same branch; the PR is updated, not duplicated. The Review Agent (`.dev-docs/diagnosis/review-sop.md`) reviews each new commit on the rolling PR; the maintainer decides when to merge.
 
-```
-CronCreate(
-  cron: "0 9 * * *",          # 09:00 LA local; agent picks up at next REPL idle
-  prompt: "Daily pencil diagnosis. Read .dev-docs/diagnosis/sop.md and execute end-to-end.",
-  recurring: true,
-  durable: false               # session-scoped; dies with the maintainer's Claude session
-)
-```
+The earlier per-day-branch design (SOP v3) was rejected: too many PRs for a single maintainer to track. Single branch + rolling PR + automated review is the v4 contract.
 
-The cron is **session-scoped** — when the maintainer's Claude Code session ends, the cron stops firing. This is intentional: the maintainer should explicitly re-register the cron when they start a new long-running session, to confirm they want a daily-running agent for that session.
+#### 9.1.1 Branch summary
 
-### 9.2 Branch and PR workflow
+| Branch | Persistence | Carved from | Contents |
+|--------|-------------|-------------|----------|
+| `agent/diagnosis` | **persistent** — never deleted; rebased onto `main` after each merge | `main` initially; rebased on `origin/main` after each merge cycle | All daily reports + BLOCK/REVIEW tickets + auto-fix-reports — markdown only, all under `.dev-docs/diagnosis/runs/` |
+| `auto/issue-<YYYYMMDD>-<short-fp-slug>` | one per AUTO-FIX — ephemeral, deleted on merge | `origin/main` directly | The source-code change (one fix per branch); the matching test-report markdown lands on `agent/diagnosis`, not on the auto-fix branch |
 
-The agent commits its findings on **dedicated, per-day branches**. The maintainer reviews each day's work through a Pull Request before any merge into `main`.
+AUTO-FIX branches stay per-fix (not folded into `agent/diagnosis`) so each fix is independently mergeable: rejecting one fix never blocks the others or the daily docs.
 
-#### 9.2.1 Branch naming
-
-| Branch | Contains | Carved from |
-|--------|----------|-------------|
-| `agent/diagnosis-<YYYY-MM-DD>` | the daily report + BLOCK/REVIEW tickets + auto-fix-reports (markdown only, under `.dev-docs/diagnosis/runs/`) | `origin/main` at run start |
-| `auto/issue-<YYYYMMDD>-<short-fp-slug>` | a single AUTO-FIX source-code change + its test-report-cross-link (the test-report markdown still lands under the daily branch above) | `origin/main` directly — **not** the daily branch — so each auto-fix PR is independently mergeable |
-
-Per-AUTO-FIX-branch isolation is deliberate: if one auto-fix turns out wrong on review, the others (and the daily report) merge without it.
-
-#### 9.2.2 Per-run lifecycle
+#### 9.1.2 Per-run lifecycle
 
 ```
 1. Pre-flight (§1)
    - `git fetch origin main`
-   - check whether `agent/diagnosis-<today>` already exists locally or remotely:
-       - if remote exists and was already merged → fine, will be recreated; continue
-       - if remote exists and PR is still open → ABORT the run, write SKIPPED with
-         reason "previous day's diagnosis PR not yet merged"
-       - if local exists with uncommitted work → ABORT
-   - `git switch -c agent/diagnosis-<today> origin/main`
+   - `git fetch origin agent/diagnosis || true`   # branch may not yet exist
+   - if `agent/diagnosis` exists on origin:
+       - if the open PR (`agent/diagnosis -> main`) was just merged
+         (commits the agent doesn't recognize landed on `origin/main`):
+           - rebase: `git switch agent/diagnosis &&
+             git fetch origin main && git rebase origin/main`
+           - if rebase has conflicts → ABORT, write SKIPPED with reason
+             "agent/diagnosis rebase conflict — needs maintainer"
+       - else: just check out the branch as-is, ready to add today's commit
+   - if `agent/diagnosis` does NOT exist:
+       - `git switch -c agent/diagnosis origin/main`
 
-2. Run SOP §2-§4 as usual.
+2. Run SOP §2-§4 as usual, on `agent/diagnosis`.
 
 3. AUTO-FIX (§4.2):
-   - For each AUTO-FIX cluster, `git switch -c auto/issue-<YYYYMMDD>-<slug> origin/main`
-     (carve OFF main, not off the daily branch).
-   - Edit, verify (`tsc --noEmit` + `vitest run <one-file>`), commit, then
-     `git switch agent/diagnosis-<today>` to go back.
-   - Write the test report at `.dev-docs/diagnosis/runs/<today>/auto-fix-reports/<slug>.md`
-     on the daily branch (NOT the auto-fix branch — the report is documentation
-     output, not the fix itself).
+   - For each AUTO-FIX cluster:
+       - `git switch -c auto/issue-<YYYYMMDD>-<slug> origin/main`
+       - Edit + verify (`tsc --noEmit` + `vitest run <one-file>`) + commit.
+       - `git switch agent/diagnosis` to return.
+   - Write the test-report markdown at
+     `.dev-docs/diagnosis/runs/<today>/auto-fix-reports/<slug>.md`
+     on `agent/diagnosis` (NOT on the auto-fix branch).
 
-4. Write the daily report and any BLOCK/REVIEW tickets to the daily branch.
+4. Write the daily report at `.dev-docs/diagnosis/runs/<today>.md` and any
+   BLOCK/REVIEW tickets at `.dev-docs/diagnosis/runs/<today>/<slug>.md`
+   on `agent/diagnosis`.
 
-5. End of run:
-   - `git push origin agent/diagnosis-<today>`
-   - For each auto-fix branch created: `git push origin auto/issue-<YYYYMMDD>-<slug>`
-   - Try `gh pr create` for each pushed branch if `gh` is available; if not,
-     print the PR creation URLs in the §8 closing summary so the maintainer
-     can open the PRs manually.
+5. Commit on `agent/diagnosis`:
+   `git commit -m "diagnosis(<today>): N clusters, X auto-fix, Y review tickets"`
+
+6. End of run:
+   - `git push origin agent/diagnosis`   # rolling PR auto-updates
+   - For each auto-fix branch created: `git push origin auto/issue-<...>`
+   - If the rolling PR doesn't yet exist (first ever run), the agent opens it
+     via `gh pr create` if `gh` is available; otherwise prints the PR URL in
+     the §8 closing summary so the maintainer opens it manually. From then on,
+     `agent/diagnosis` already has an open PR and pushes are enough to update.
+   - Each new auto-fix branch gets its own PR (created the same way).
 ```
 
-#### 9.2.3 PR conventions
+#### 9.1.3 PR conventions
 
 | Branch | PR title | PR body |
 |--------|----------|---------|
-| `agent/diagnosis-<date>` | `diagnosis(<date>): N tickets, M auto-fix-reports` | body = the daily-report markdown verbatim |
-| `auto/issue-<date>-<slug>` | `fix(<scope>): <one-line> [fp=<fingerprint>]` | body = the test-report markdown verbatim + link back to the daily PR |
+| `agent/diagnosis` (one rolling PR) | `diagnosis: rolling daily output (latest <YYYY-MM-DD>)` | The PR body is rewritten on each agent run to list the latest day's summary plus a link table of all included daily reports. The body is short; details live in the linked files. |
+| `auto/issue-<date>-<slug>` (one PR per fix) | `fix(<scope>): <one-line> [fp=<fingerprint>]` | Test-report markdown verbatim + a link to the matching ticket/report on `agent/diagnosis`. |
 
-Each PR is **stand-alone reviewable**. A reviewer can merge the daily report without merging any auto-fix; or merge one auto-fix and close the others.
+The Review Agent (§9.4 + `review-sop.md`) reviews these PRs; the maintainer decides when to merge.
 
-#### 9.2.4 Branch cleanup
+#### 9.1.4 Branch cleanup
 
-When a PR merges, GitHub auto-deletes the branch (assuming the repo's default branch-delete-on-merge setting). If a PR is closed without merging, the branch is left dangling — the maintainer can delete it manually. The agent does not delete branches it created; this is a maintainer authority.
+| Branch | Cleanup |
+|--------|---------|
+| `agent/diagnosis` | **never deleted**. After each maintainer-triggered merge, the agent rebases this branch onto the new `origin/main`. The rolling PR closes on merge (GitHub closes the PR when the branch FF-merges). The agent re-opens a new rolling PR on the next run (still targeting `main` from `agent/diagnosis`). |
+| `auto/issue-*` | GitHub's branch-delete-on-merge deletes these automatically on merge. Closed-without-merge leaves them dangling — maintainer cleans up periodically. |
 
-#### 9.2.5 Concurrency
+#### 9.1.5 Concurrency
 
-The agent is **single-instance per session**. The cron at §9.3 only fires once per day per session. Two parallel agent sessions running this SOP would collide on `agent/diagnosis-<today>` branch creation — explicitly out of scope: this SOP assumes a single maintainer session.
+Single-instance per session. The cron at §9.2 fires once per day per session. Two parallel agent sessions on the same `agent/diagnosis` would collide; out of scope.
 
 ---
 
-### 9.3 Cron registration
+### 9.2 Cron registration
 
 The daily fire is registered inside the maintainer's persistent Claude Code session via:
 
@@ -440,7 +442,7 @@ The cron is **session-scoped** — when the maintainer's Claude Code session end
 
 ---
 
-### 9.4 Archive rotation (manual)
+### 9.3 Archive rotation (manual)
 
 When `.dev-docs/diagnosis/runs/` accumulates entries older than ~30 days or at end-of-quarter, the maintainer manually rotates them into `.dev-docs/diagnosis/archive/<YYYY-MM>/`:
 
@@ -453,7 +455,26 @@ The agent does NOT auto-archive. This step is deliberate human review to decide 
 
 ---
 
+### 9.4 Review Agent handoff
+
+This SOP describes the Diagnosis Agent only. A separate **Review Agent** runs in a different session and is responsible for reviewing the PRs that this agent opens (`agent/diagnosis` rolling + each `auto/issue-*` per fix). The Review Agent's procedure lives at `.dev-docs/diagnosis/review-sop.md`.
+
+What the Diagnosis Agent **must** do to make Review Agent's job possible:
+
+- Commit messages are conventional (`diagnosis(<date>): ...` or `fix(<scope>): ... [fp=<fingerprint>]`).
+- Each AUTO-FIX commit's test report on `agent/diagnosis` includes a stable cross-link to the auto-fix branch name + commit hash.
+- Daily report (§5) lists each `auto/issue-*` PR by branch name, so the Review Agent can scan them as a unit.
+
+What the Diagnosis Agent **must NOT** do:
+
+- Approve or merge its own PRs.
+- Comment on PRs other than the body it writes at PR creation.
+- Run the Review Agent's SOP — the two agents are deliberately separate sessions (see `.dev-docs/architecture-review/handoff.md` for the cross-agent boundary principles).
+
+---
+
 ### 9.5 Policy version
 
-- `policy_version: 3` — 2026-05-27: artifacts moved out of gitignored `docs/issues/` into tracked `.dev-docs/diagnosis/{runs,archive,_templates}/`; added §9.2 branch+PR workflow and §9.4 archive rotation; per-AUTO-FIX branches carve off `main` (not the daily branch) for independent reviewability.
+- `policy_version: 4` — 2026-05-27: switched from per-day diagnosis branches to one persistent `agent/diagnosis` branch with a rolling PR; added §9.4 Review Agent handoff (a separate agent now reviews PRs per `.dev-docs/diagnosis/review-sop.md`).
+- `policy_version: 3` — 2026-05-27: artifacts moved out of gitignored `docs/issues/` into tracked `.dev-docs/diagnosis/{runs,archive,_templates}/`; added §9.1 branch+PR workflow and §9.3 archive rotation; per-AUTO-FIX branches carve off `main` (not the daily branch) for independent reviewability.
 - `policy_version: 2` — 2026-05-26: rewrote audience as agent-driven, added test-report schema, codified machine constraints (no build / no dev / no pencil spawn), MCP-only credentials path.
