@@ -7,6 +7,7 @@ import type { RegisteredCommand } from "../core/extensions/types.js";
 import debugExtension from "../extensions/defaults/debug/index.js";
 import grubExtension from "../extensions/defaults/grub/index.js";
 import loopExtension from "../extensions/defaults/loop/index.js";
+import securityAuditExtension from "../extensions/defaults/security-audit/index.js";
 import subagentExtension from "../extensions/defaults/subagent/index.js";
 import tokenSaveExtension from "../extensions/defaults/token-save/index.js";
 
@@ -127,6 +128,21 @@ test("grub command exposes readable subcommand and flag completions", async () =
 			?.map((item) => item.value),
 		["--max-iter", "--max-fail"],
 	);
+});
+
+test("security commands expose dashboard actions and log limit completions", () => {
+	const harness = createExtensionHarness();
+	securityAuditExtension(harness.api as never);
+
+	const security = harness.commands.get("security");
+	assert.ok(security);
+	assert.match(security.description ?? "", /Review security activity/);
+	assert.deepEqual(security.getArgumentCompletions?.("lo")?.map((item) => item.value), ["logs"]);
+	assert.deepEqual(security.getArgumentCompletions?.("sta")?.map((item) => item.value), ["stats"]);
+
+	const logs = harness.commands.get("security-logs");
+	assert.ok(logs);
+	assert.deepEqual(logs.getArgumentCompletions?.("1")?.map((item) => item.value), ["10", "100"]);
 });
 
 test("subagent commands expose root actions and write flag completions", async () => {
