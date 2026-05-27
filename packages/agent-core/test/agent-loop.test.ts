@@ -82,6 +82,17 @@ function identityConverter(messages: AgentMessage[]): Message[] {
 	return messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult") as Message[];
 }
 
+function readToolResultText(message: Extract<AgentMessage, { role: "toolResult" }>): string {
+	return message.content
+		.filter((part): part is Extract<(typeof message.content)[number], { type: "text" }> => part.type === "text")
+		.map((part) => part.text)
+		.join("");
+}
+
+function totalToolResultTextLength(messages: Extract<AgentMessage, { role: "toolResult" }>[]): number {
+	return messages.reduce((total, message) => total + readToolResultText(message).length, 0);
+}
+
 describe("agentLoop with AgentMessage", () => {
 	it("should emit events with AgentMessage types", async () => {
 		const context: AgentContext = {
@@ -1439,6 +1450,87 @@ describe("structuredAdaptiveAgentLoop", () => {
 		expect(toolResult?.content[0]?.type === "text" ? toolResult.content[0].text : "").toContain(
 			"value is not allowed",
 		);
+	});
+
+	it("should enforce an aggregate tool result batch budget before the next model request", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "budget_read",
+			label: "Budget read",
+			description: "Returns text large enough to trigger aggregate budget enforcement",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute(_toolCallId, params) {
+				const text = params.value === "small" ? "small-output" : "L".repeat(200);
+				return {
+					content: [{ type: "text", text }],
+					details: { value: params.value },
+				};
+			},
+		};
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			maxToolResultBatchSizeChars: 90,
+		};
+
+		let secondRequestToolResults: Extract<AgentMessage, { role: "toolResult" }>[] = [];
+		let callIndex = 0;
+		const stream = structuredAdaptiveAgentLoop([createUserMessage("read small and large")], context, config, undefined, (_model, ctx) => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.push({
+						type: "done",
+						reason: "toolUse",
+						message: createAssistantMessage(
+							[
+								{ type: "toolCall", id: "tool-small", name: "budget_read", arguments: { value: "small" } },
+								{ type: "toolCall", id: "tool-large", name: "budget_read", arguments: { value: "large" } },
+							],
+							"toolUse",
+						),
+					});
+				} else {
+					secondRequestToolResults = ctx.messages.filter(
+						(message): message is Extract<AgentMessage, { role: "toolResult" }> => message.role === "toolResult",
+					);
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "done" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(secondRequestToolResults.map((result) => result.toolCallId)).toEqual(["tool-small", "tool-large"]);
+		expect(readToolResultText(secondRequestToolResults[0]!)).toBe("small-output");
+		expect(totalToolResultTextLength(secondRequestToolResults)).toBeLessThanOrEqual(90);
+		expect(readToolResultText(secondRequestToolResults[1]!)).toContain("Tool result truncated by batch budget");
+		expect((secondRequestToolResults[1]!.details as { truncationReason?: string }).truncationReason).toBe(
+			"tool_result_batch_budget",
+		);
+
+		const eventToolResults = events
+			.filter(
+				(event): event is Extract<AgentEvent, { type: "message_end" }> =>
+					event.type === "message_end" && event.message.role === "toolResult",
+			)
+			.map((event) => event.message);
+		expect(totalToolResultTextLength(eventToolResults)).toBeLessThanOrEqual(90);
 	});
 
 	it("should return permission denials as tool results without executing the tool", async () => {

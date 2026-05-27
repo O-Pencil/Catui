@@ -282,6 +282,58 @@ describe("Agent", () => {
 		expect(finalAssistant?.stopReason).toBe("stop");
 	});
 
+	it("should pass aggregate tool result batch budget into the weak-model-compatible loop", async () => {
+		const model = {
+			...getModel("openai", "gpt-4o-mini"),
+			agentLoopFramework: "weak-model-compatible",
+		} as Model<any> & { agentLoopFramework: "weak-model-compatible" };
+		const toolSchema = Type.Object({ value: Type.String() });
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "large_read",
+			label: "Large read",
+			description: "Returns large content",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute(_toolCallId, params) {
+				return {
+					content: [{ type: "text", text: params.value.repeat(200) }],
+					details: { value: params.value },
+				};
+			},
+		};
+		let callIndex = 0;
+		const agent = new Agent({
+			initialState: { model, tools: [tool] },
+			maxToolResultBatchSizeChars: 80,
+			streamFn: () => {
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => {
+					if (callIndex === 0) {
+						stream.push({
+							type: "done",
+							reason: "toolUse",
+							message: createToolUseMessage([
+								{ type: "toolCall", id: "tool-1", name: "large_read", arguments: { value: "x" } },
+							]),
+						});
+					} else {
+						stream.push({ type: "done", reason: "stop", message: createAssistantMessage("done") });
+					}
+					callIndex++;
+				});
+				return stream;
+			},
+		});
+
+		await agent.prompt("read");
+
+		const toolResult = agent.state.messages.find((message) => message.role === "toolResult");
+		expect(toolResult?.role).toBe("toolResult");
+		const text = toolResult?.content[0]?.type === "text" ? toolResult.content[0].text : "";
+		expect(text.length).toBeLessThanOrEqual(80);
+		expect(text).toContain("Tool result truncated by batch budget");
+	});
+
 	it("should subscribe to events", () => {
 		const agent = new Agent();
 

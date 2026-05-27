@@ -3,7 +3,7 @@
  * No transport abstraction - calls streamSimple via the loop.
  */
 /**
- * [WHO]: AgentOptions, Agent, in-loop model error recovery option plumbing
+ * [WHO]: AgentOptions, Agent, in-loop model error recovery and loop budget option plumbing
  * [FROM]: Depends on ./agent-loop.js and ./structured-adaptive-agent-loop.js
  * [TO]: Consumed by packages/agent-core/src/index.ts
  * [HERE]: packages/agent-core/src/agent.ts -
@@ -117,6 +117,11 @@ export interface AgentOptions {
 	canUseTool?: AgentLoopConfig["canUseTool"];
 
 	/**
+	 * Optional aggregate tool-result batch budget used by weak-model-compatible loop execution.
+	 */
+	maxToolResultBatchSizeChars?: AgentLoopConfig["maxToolResultBatchSizeChars"];
+
+	/**
 	 * Optional in-loop model error recovery hook used by weak-model-compatible loop execution.
 	 */
 	recoverModelError?: AgentLoopConfig["recoverModelError"];
@@ -156,6 +161,7 @@ export class Agent {
 	private _maxRetryDelayMs?: number;
 	private _agentLoopFramework?: AgentLoopFramework;
 	private canUseTool?: AgentLoopConfig["canUseTool"];
+	private maxToolResultBatchSizeChars?: AgentLoopConfig["maxToolResultBatchSizeChars"];
 	private recoverModelError?: AgentLoopConfig["recoverModelError"];
 	private maxModelErrorRecoveryAttempts?: number;
 
@@ -173,6 +179,7 @@ export class Agent {
 		this._maxRetryDelayMs = opts.maxRetryDelayMs;
 		this._agentLoopFramework = normalizeAgentLoopFramework(opts.agentLoopFramework);
 		this.canUseTool = opts.canUseTool;
+		this.maxToolResultBatchSizeChars = opts.maxToolResultBatchSizeChars;
 		this.recoverModelError = opts.recoverModelError;
 		this.maxModelErrorRecoveryAttempts = opts.maxModelErrorRecoveryAttempts;
 	}
@@ -491,6 +498,7 @@ export class Agent {
 			transformContext: this.transformContext,
 			getApiKey: this.getApiKey,
 			canUseTool: this.canUseTool,
+			maxToolResultBatchSizeChars: this.maxToolResultBatchSizeChars,
 			recoverModelError: this.recoverModelError,
 			maxModelErrorRecoveryAttempts: this.maxModelErrorRecoveryAttempts,
 			getSteeringMessages: async () => {

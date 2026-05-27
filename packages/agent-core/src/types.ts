@@ -226,6 +226,17 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	maxToolConcurrency?: number;
 
 	/**
+	 * Maximum combined text characters from one assistant tool-use batch that
+	 * may be fed into the next model request.
+	 *
+	 * This aggregate guard complements per-tool maxResultSizeChars: it prevents
+	 * several individually valid read/search results from flooding the next
+	 * context turn. The structured-adaptive loop preserves tool_result order and
+	 * trims the largest successful results first.
+	 */
+	maxToolResultBatchSizeChars?: number;
+
+	/**
 	 * Maximum automatic continuations after a model stops because it hit its
 	 * output-token limit in the weak-model-compatible loop. Defaults to 1.
 	 */
