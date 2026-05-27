@@ -3,8 +3,8 @@
  * Transforms to Message[] only at the LLM call boundary.
  */
 /**
- * [WHO]: Provides agentLoop(), agentLoopContinue(), standard loop event emission, and serial tool execution.
- * [FROM]: Depends on @pencil-agent/ai streams/messages, ./types contracts, and ./errors for loop validation.
+ * [WHO]: Provides agentLoop(), agentLoopContinue(), standard loop event emission, continuation recovery, and serial tool execution.
+ * [FROM]: Depends on @pencil-agent/ai streams/messages, ./types contracts, ./errors, and continuation helpers.
  * [TO]: Consumed by agent.ts and package exports as the default agent execution loop.
  * [HERE]: packages/agent-core/src/agent-loop.ts within agent-core; standard counterpart to structured-adaptive-agent-loop.ts.
  */
@@ -33,11 +33,17 @@ import type {
 	StreamFn,
 } from "./types.js";
 import { ToolNotFoundError, ToolExecutionError, ValidationError } from "./errors.js";
+import {
+	computeRecoveryMaxTokens,
+	createOutputTokenRecoveryMessage,
+	createTokenBudgetContinuation,
+} from "./agent-loop-continuations.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 64;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 128;
 const DEFAULT_MAX_STOP_HOOK_CONTINUATIONS = 3;
 const DEFAULT_MAX_MODEL_ERROR_RECOVERY_ATTEMPTS = 1;
+const DEFAULT_MAX_OUTPUT_TOKEN_RECOVERY_ATTEMPTS = 1;
 
 type StandardLoopFinishOptions = {
 	turnCount: number;
@@ -209,7 +215,12 @@ async function runLoop(
 	const maxStopHookContinuations = config.maxStopHookContinuations ?? DEFAULT_MAX_STOP_HOOK_CONTINUATIONS;
 	const maxModelErrorRecoveryAttempts =
 		config.maxModelErrorRecoveryAttempts ?? DEFAULT_MAX_MODEL_ERROR_RECOVERY_ATTEMPTS;
+	const maxOutputTokenRecoveryAttempts =
+		config.maxOutputTokenRecoveryAttempts ?? DEFAULT_MAX_OUTPUT_TOKEN_RECOVERY_ATTEMPTS;
 	let modelErrorRecoveryCount = 0;
+	let maxOutputTokensRecoveryCount = 0;
+	let tokenBudgetContinuationCount = 0;
+	let maxOutputTokensOverride: number | undefined;
 	let lastTransition: AgentLoopTransition = { reason: "start" };
 	let stopHookActive = false;
 	let stopHookContinuationCount = 0;
@@ -265,8 +276,16 @@ async function runLoop(
 			}
 
 			// Stream assistant response
-			const message = await streamAssistantResponse(currentContext, config, signal, stream, streamFn);
+			const message = await streamAssistantResponse(
+				currentContext,
+				config,
+				signal,
+				stream,
+				streamFn,
+				maxOutputTokensOverride,
+			);
 			addUsage(usage, message.usage);
+			maxOutputTokensOverride = undefined;
 			newMessages.push(message);
 
 			if (message.stopReason === "error" || message.stopReason === "aborted") {
@@ -373,6 +392,21 @@ async function runLoop(
 
 			stream.push({ type: "turn_end", message, toolResults });
 
+			if (
+				!hasMoreToolCalls &&
+				message.stopReason === "length" &&
+				maxOutputTokensRecoveryCount < maxOutputTokenRecoveryAttempts
+			) {
+				maxOutputTokensRecoveryCount += 1;
+				maxOutputTokensOverride = computeRecoveryMaxTokens(config, message);
+				pendingMessages = [createOutputTokenRecoveryMessage(maxOutputTokensRecoveryCount)];
+				lastTransition = {
+					reason: "max_output_tokens_recovery",
+					attempt: maxOutputTokensRecoveryCount,
+				};
+				continue;
+			}
+
 			if (!hasMoreToolCalls && config.runStopHooks && !stopHookActive) {
 				stopHookActive = true;
 				const stopHookResult = await config.runStopHooks({
@@ -405,6 +439,29 @@ async function runLoop(
 					}
 					stopHookContinuationCount += 1;
 					pendingMessages = stopHookResult.messages;
+					lastTransition = {
+						reason: "stop_hook_blocking",
+						continuationCount: stopHookContinuationCount,
+					};
+					continue;
+				}
+			}
+
+			if (!hasMoreToolCalls) {
+				const tokenBudgetContinuation = createTokenBudgetContinuation(
+					config,
+					usage.output,
+					tokenBudgetContinuationCount,
+				);
+				if (tokenBudgetContinuation) {
+					tokenBudgetContinuationCount += 1;
+					pendingMessages = [tokenBudgetContinuation.message];
+					lastTransition = {
+						reason: "token_budget_continuation",
+						continuationCount: tokenBudgetContinuationCount,
+						outputTokens: tokenBudgetContinuation.outputTokens,
+						targetTokens: tokenBudgetContinuation.targetTokens,
+					};
 					continue;
 				}
 			}
@@ -451,6 +508,7 @@ async function streamAssistantResponse(
 	signal: AbortSignal | undefined,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	streamFn?: StreamFn,
+	maxTokensOverride?: number,
 ): Promise<AssistantMessage> {
 	// Apply context transform if configured (AgentMessage[] → AgentMessage[])
 	let messages = context.messages;
@@ -480,11 +538,12 @@ async function streamAssistantResponse(
 		provider: config.model.provider,
 		api: config.model.api,
 		messageCount: llmMessages.length,
-		maxTokens: config.maxTokens,
+		maxTokens: maxTokensOverride ?? config.maxTokens,
 	});
 
 	const response = await streamFunction(config.model, llmContext, {
 		...config,
+		maxTokens: maxTokensOverride ?? config.maxTokens,
 		apiKey: resolvedApiKey,
 		signal,
 	});

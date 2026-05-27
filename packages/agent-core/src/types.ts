@@ -238,7 +238,7 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 
 	/**
 	 * Maximum automatic continuations after a model stops because it hit its
-	 * output-token limit in the weak-model-compatible loop. Defaults to 1.
+	 * output-token limit. Defaults to 1.
 	 */
 	maxOutputTokenRecoveryAttempts?: number;
 
@@ -246,9 +246,9 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * Optional output-token budget target for long-form agent turns.
 	 *
 	 * If the assistant stops naturally before cumulative output reaches
-	 * thresholdPct * targetTokens, the weak-model-compatible loop injects a meta
-	 * continuation prompt. This is distinct from max-output-token recovery:
-	 * it handles under-complete answers, not hard length stops.
+	 * thresholdPct * targetTokens, the loop injects a meta continuation prompt.
+	 * This is distinct from max-output-token recovery: it handles
+	 * under-complete answers, not hard length stops.
 	 */
 	outputTokenBudget?: {
 		targetTokens: number;
@@ -257,8 +257,8 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	};
 
 	/**
-	 * Optional weak-model-compatible stop hook. Called when the assistant would stop
-	 * without tool calls. Return action "continue" with messages to force a
+	 * Optional stop hook. Called when the assistant would stop without tool
+	 * calls. Return action "continue" with messages to force a
 	 * correction/validation turn; return "stop" to allow completion.
 	 */
 	runStopHooks?: (event: {

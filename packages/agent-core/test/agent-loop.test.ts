@@ -272,6 +272,134 @@ describe("agentLoop with AgentMessage", () => {
 		});
 	});
 
+	it("should recover standard loop once when output stops due to max output tokens", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			maxTokens: 100,
+		};
+
+		let callIndex = 0;
+		let sawRecoveryPrompt = false;
+		const requestedMaxTokens: Array<number | undefined> = [];
+		const stream = agentLoop([createUserMessage("write long")], context, config, undefined, (_model, ctx, options) => {
+			requestedMaxTokens.push(options?.maxTokens);
+			if (callIndex === 1) {
+				sawRecoveryPrompt = ctx.messages.some((message) => {
+					if (message.role !== "user") return false;
+					if (typeof message.content === "string") return message.content.includes("output-token recovery");
+					return message.content.some(
+						(part) => part.type === "text" && part.text.includes("output-token recovery"),
+					);
+				});
+			}
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					const message = createAssistantMessage([{ type: "text", text: "partial" }], "length");
+					message.usage.output = 100;
+					message.usage.totalTokens = 100;
+					mockStream.push({ type: "done", reason: "length", message });
+				} else {
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "continued" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(sawRecoveryPrompt).toBe(true);
+		expect(requestedMaxTokens).toEqual([100, 150]);
+		const assistantEnds = events.filter(
+			(event): event is Extract<AgentEvent, { type: "message_end" }> =>
+				event.type === "message_end" && event.message.role === "assistant",
+		);
+		expect(assistantEnds.map((event) => event.message.stopReason)).toEqual(["length", "stop"]);
+		const requestStarts = events.filter(
+			(event): event is Extract<AgentEvent, { type: "stream_request_start" }> =>
+				event.type === "stream_request_start",
+		);
+		expect(requestStarts.map((event) => event.maxTokens)).toEqual([100, 150]);
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.lastTransition).toEqual({ reason: "max_output_tokens_recovery", attempt: 1 });
+	});
+
+	it("should continue standard loop when a configured output token budget is underused", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			outputTokenBudget: {
+				targetTokens: 100,
+				thresholdPct: 0.9,
+				maxContinuations: 2,
+			},
+		};
+
+		let callIndex = 0;
+		let sawBudgetContinuation = false;
+		const stream = agentLoop([createUserMessage("write deeply")], context, config, undefined, (_model, ctx) => {
+			if (callIndex === 1) {
+				sawBudgetContinuation = ctx.messages.some((message) => {
+					if (message.role !== "user") return false;
+					if (typeof message.content === "string") return message.content.includes("output token budget");
+					return message.content.some(
+						(part) => part.type === "text" && part.text.includes("output token budget"),
+					);
+				});
+			}
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				const message = createAssistantMessage([
+					{ type: "text", text: callIndex === 0 ? "partial" : "expanded" },
+				]);
+				message.usage.output = callIndex === 0 ? 30 : 70;
+				message.usage.totalTokens = message.usage.output;
+				mockStream.push({ type: "done", reason: "stop", message });
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(callIndex).toBe(2);
+		expect(sawBudgetContinuation).toBe(true);
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.usage?.output).toBe(100);
+		expect(result?.lastTransition).toEqual({
+			reason: "token_budget_continuation",
+			continuationCount: 1,
+			outputTokens: 30,
+			targetTokens: 100,
+		});
+	});
+
 	it("should handle custom message types via convertToLlm", async () => {
 		// Create a custom message type
 		interface CustomNotification {

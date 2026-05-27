@@ -18,7 +18,6 @@ import {
 	streamSimple,
 	type TextContent,
 	type ToolResultMessage,
-	type UserMessage,
 	type Usage,
 } from "@pencil-agent/ai";
 import type {
@@ -36,14 +35,17 @@ import {
 } from "./structured-adaptive-tool-orchestration.js";
 import { StructuredAdaptiveStreamingToolExecutor } from "./structured-adaptive-streaming-tool-executor.js";
 import { ValidationError } from "./errors.js";
+import {
+	computeRecoveryMaxTokens,
+	createOutputTokenRecoveryMessage,
+	createTokenBudgetContinuation,
+} from "./agent-loop-continuations.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 64;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 128;
 const DEFAULT_MAX_OUTPUT_TOKEN_RECOVERY_ATTEMPTS = 1;
 const DEFAULT_MAX_STOP_HOOK_CONTINUATIONS = 3;
 const DEFAULT_MAX_MODEL_ERROR_RECOVERY_ATTEMPTS = 1;
-const DEFAULT_OUTPUT_TOKEN_BUDGET_THRESHOLD_PCT = 0.9;
-const DEFAULT_OUTPUT_TOKEN_BUDGET_CONTINUATIONS = 3;
 
 interface QueryLoopState {
 	turnCount: number;
@@ -350,7 +352,11 @@ async function runStructuredAdaptiveQueryLoop(
 				}
 			}
 
-			const tokenBudgetContinuation = maybeCreateTokenBudgetContinuation(config, state);
+			const tokenBudgetContinuation = createTokenBudgetContinuation(
+				config,
+				state.usage.output,
+				state.tokenBudgetContinuationCount,
+			);
 			if (tokenBudgetContinuation) {
 				state.tokenBudgetContinuationCount += 1;
 				state.pendingMessages = [tokenBudgetContinuation.message];
@@ -734,71 +740,6 @@ async function streamAssistantResponse(
 	}
 
 	return await response.result();
-}
-
-function computeRecoveryMaxTokens(config: AgentLoopConfig, message: AssistantMessage): number | undefined {
-	const modelMaxTokens = Math.max(1, Math.floor(config.model.maxTokens || 1));
-	const configured = config.maxTokens !== undefined ? Math.max(1, Math.floor(config.maxTokens)) : undefined;
-	const observedOutput = Math.max(1, Math.floor(message.usage.output || 1));
-	const baseline = configured ?? observedOutput;
-	const expanded = Math.max(baseline + 1, Math.ceil(Math.max(baseline, observedOutput) * 1.5));
-	return Math.min(modelMaxTokens, expanded);
-}
-
-function createOutputTokenRecoveryMessage(attempt: number): UserMessage {
-	return {
-		role: "user",
-		content: [
-			{
-				type: "text",
-				text: `Continue the previous response from exactly where it stopped. This is automatic output-token recovery attempt ${attempt}.`,
-			},
-		],
-		timestamp: Date.now(),
-	};
-}
-
-function maybeCreateTokenBudgetContinuation(
-	config: AgentLoopConfig,
-	state: QueryLoopState,
-): { message: UserMessage; outputTokens: number; targetTokens: number } | undefined {
-	const budget = config.outputTokenBudget;
-	if (!budget) return undefined;
-	const targetTokens = Math.max(1, Math.floor(budget.targetTokens));
-	const thresholdPct = clamp(
-		budget.thresholdPct ?? DEFAULT_OUTPUT_TOKEN_BUDGET_THRESHOLD_PCT,
-		0,
-		1,
-	);
-	const maxContinuations = Math.max(
-		0,
-		Math.floor(budget.maxContinuations ?? DEFAULT_OUTPUT_TOKEN_BUDGET_CONTINUATIONS),
-	);
-	if (maxContinuations <= state.tokenBudgetContinuationCount) return undefined;
-
-	const outputTokens = Math.max(0, Math.floor(state.usage.output));
-	const requiredTokens = Math.ceil(targetTokens * thresholdPct);
-	if (outputTokens >= requiredTokens) return undefined;
-
-	const message: UserMessage = {
-		role: "user",
-		content: [
-			{
-				type: "text",
-				text:
-					`Continue because the output token budget is underused ` +
-					`(${outputTokens}/${targetTokens} tokens). Add the missing useful detail directly; ` +
-					`do not recap or apologize.`,
-			},
-		],
-		timestamp: Date.now(),
-	};
-	return { message, outputTokens, targetTokens };
-}
-
-function clamp(value: number, min: number, max: number): number {
-	if (!Number.isFinite(value)) return min;
-	return Math.min(max, Math.max(min, value));
 }
 
 function createLoopLimitMessage(config: AgentLoopConfig, errorMessage: string): AssistantMessage {
