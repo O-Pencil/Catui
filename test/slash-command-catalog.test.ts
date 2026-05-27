@@ -8,6 +8,7 @@ import {
 	buildExtensionSlashCommands,
 	buildSessionSlashCommands,
 } from "../core/runtime/slash-command-catalog.js";
+import { getExtensionBackedBuiltinCommandNames } from "../core/slash-commands.js";
 
 const promptTemplates = [
 	{
@@ -78,6 +79,14 @@ test("session slash command catalog includes builtins and filters shadowed exten
 	assert.ok(commands.some((command) => command.name === "deploy" && command.source === "extension" && command.category === "tools"));
 	assert.ok(commands.some((command) => command.name === "draft" && command.source === "prompt" && command.category === "workflow"));
 	assert.ok(commands.some((command) => command.name === "skill:review" && command.source === "skill" && command.category === "tools"));
+});
+
+test("extension-backed builtins are explicit command metadata", () => {
+	const names = getExtensionBackedBuiltinCommandNames();
+
+	assert.equal(names.has("dream"), true);
+	assert.equal(names.has("link-world"), true);
+	assert.equal(names.has("model"), false);
 });
 
 test("extension slash command catalog preserves paths and normalized locations", () => {

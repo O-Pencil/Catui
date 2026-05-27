@@ -93,6 +93,7 @@ import {
 } from "../../core/session/session-manager.js";
 import {
   BUILTIN_SLASH_COMMANDS,
+  getExtensionBackedBuiltinCommandNames,
   formatSlashCommandDescription,
   getLocalizedCommands,
   inferSlashCommandCategory,
@@ -521,13 +522,34 @@ export class InteractiveMode {
       }),
     );
 
-    // Convert extension commands to SlashCommand format
+    // Convert extension commands to SlashCommand format. Some discoverable
+    // built-ins are implemented by default extensions; merge their argument
+    // completions into the built-in entry instead of showing duplicates.
     const builtinCommandNames = new Set(slashCommands.map((c) => c.name));
-    const extensionCommands: SlashCommand[] = (
+    const extensionBackedBuiltinNames = getExtensionBackedBuiltinCommandNames();
+    const reservedCommandNames = new Set(
+      [...builtinCommandNames].filter(
+        (name) => !extensionBackedBuiltinNames.has(name),
+      ),
+    );
+    const registeredExtensionCommands =
       this.session.extensionRunner?.getRegisteredCommands(
-        builtinCommandNames,
-      ) ?? []
-    ).map((cmd) => ({
+        reservedCommandNames,
+      ) ?? [];
+    const extensionCommandByName = new Map(
+      registeredExtensionCommands.map((command) => [command.name, command]),
+    );
+    for (const command of slashCommands) {
+      if (!extensionBackedBuiltinNames.has(command.name)) continue;
+      const extensionCommand = extensionCommandByName.get(command.name);
+      if (extensionCommand?.getArgumentCompletions) {
+        command.getArgumentCompletions =
+          extensionCommand.getArgumentCompletions;
+      }
+    }
+    const extensionCommands: SlashCommand[] = registeredExtensionCommands
+      .filter((cmd) => !builtinCommandNames.has(cmd.name))
+      .map((cmd) => ({
       name: cmd.name,
       description: formatSlashCommandDescription(
         cmd.description ?? "(extension command)",

@@ -10,6 +10,8 @@ export type SlashCommandLocation = "user" | "project" | "path";
 
 export type SlashCommandCategory = "core" | "model" | "memory" | "session" | "workflow" | "agents" | "tools" | "admin";
 
+export type SlashCommandImplementation = "core" | "extension";
+
 export interface SlashCommandInfo {
 	name: string;
 	description?: string;
@@ -23,6 +25,7 @@ export interface BuiltinSlashCommand {
 	name: string;
 	descriptionKey: string; // i18n key instead of hardcoded string
 	category: SlashCommandCategory;
+	implementation?: SlashCommandImplementation;
 }
 
 export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
@@ -36,7 +39,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "soul", descriptionKey: "slash.soul", category: "memory" },
 	{ name: "persona", descriptionKey: "slash.persona", category: "core" },
 	{ name: "memory", descriptionKey: "slash.memory", category: "memory" },
-	{ name: "dream", descriptionKey: "slash.dream", category: "memory" },
+	{ name: "dream", descriptionKey: "slash.dream", category: "memory", implementation: "extension" },
 	{ name: "export", descriptionKey: "slash.export", category: "tools" },
 	{ name: "share", descriptionKey: "slash.share", category: "tools" },
 	{ name: "copy", descriptionKey: "slash.copy", category: "core" },
@@ -57,10 +60,18 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "compact", descriptionKey: "slash.compact", category: "session" },
 	{ name: "resume", descriptionKey: "slash.resume", category: "session" },
 	{ name: "reload", descriptionKey: "slash.reload", category: "admin" },
-	{ name: "link-world", descriptionKey: "slash.link-world", category: "tools" },
+	{ name: "link-world", descriptionKey: "slash.link-world", category: "tools", implementation: "extension" },
 	{ name: "language", descriptionKey: "slash.language", category: "core" },
 	{ name: "quit", descriptionKey: "slash.quit", category: "core" },
 ];
+
+export function getExtensionBackedBuiltinCommandNames(): Set<string> {
+	return new Set(
+		BUILTIN_SLASH_COMMANDS.filter((command) => command.implementation === "extension").map(
+			(command) => command.name,
+		),
+	);
+}
 
 export function inferSlashCommandCategory(name: string, source?: SlashCommandSource): SlashCommandCategory {
 	if (source === "prompt") return "workflow";
