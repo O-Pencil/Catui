@@ -148,14 +148,18 @@ export function getLoginArgumentCompletions(
 	providers: readonly LoginCompletionProvider[] = [],
 ): AutocompleteItem[] | null {
 	if (!isFirstToken(context)) return null;
-	return matchCompletions(
-		providers.map((provider) => ({
+	const lowerPrefix = argumentPrefix.trim().toLowerCase();
+	const matches = providers
+		.map((provider) => ({
 			value: provider.id,
-			label: provider.id,
+			label: provider.name,
 			description: provider.authType === "oauth"
 				? `Sign in with browser for ${provider.name}`
 				: `Set API key for ${provider.name}`,
-		})),
-		argumentPrefix,
-	);
+		}))
+		.filter((item) => {
+			if (item.value.toLowerCase().startsWith(lowerPrefix)) return true;
+			return item.label.toLowerCase().split(/[\s-]+/).some((part) => part.startsWith(lowerPrefix));
+		});
+	return matches.length > 0 ? matches : null;
 }

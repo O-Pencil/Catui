@@ -176,3 +176,13 @@ test("login command completions explain provider authentication type", () => {
 		null,
 	);
 });
+
+test("login command completions match provider display names", () => {
+	const completions = getLoginArgumentCompletions("cop", undefined, [
+		{ id: "github-copilot", name: "GitHub Copilot", authType: "oauth" },
+		{ id: "openrouter", name: "OpenRouter", authType: "api_key" },
+	]);
+
+	assert.deepEqual(completions?.map((item) => item.value), ["github-copilot"]);
+	assert.equal(completions?.[0]?.label, "GitHub Copilot");
+});
