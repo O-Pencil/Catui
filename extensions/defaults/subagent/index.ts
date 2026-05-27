@@ -12,8 +12,17 @@ import { buildSubAgentHelp, parseSubAgentCommand } from "./subagent-parser.js";
 import type { SubAgentRunReport } from "./subagent-types.js";
 
 const SUBAGENT_MESSAGE_TYPE = "subagent";
-const SUBAGENT_ROOT_COMPLETIONS = ["run", "stop", "status", "report", "apply", "help"] as const;
-const SUBAGENT_RUN_COMPLETIONS = ["--write"] as const;
+const SUBAGENT_ROOT_COMPLETIONS = [
+	{ value: "run", label: "run", description: "Start a background helper task" },
+	{ value: "stop", label: "stop", description: "Stop the current helper task" },
+	{ value: "status", label: "status", description: "Show current helper task status" },
+	{ value: "report", label: "report", description: "Show the latest helper report" },
+	{ value: "apply", label: "apply", description: "Copy isolated changes into this workspace" },
+	{ value: "help", label: "help", description: "Show helper commands" },
+] as const;
+const SUBAGENT_RUN_COMPLETIONS = [
+	{ value: "--write", label: "--write", description: "Allow changes in an isolated workspace" },
+] as const;
 
 // Global runner instance
 let runner: SubAgentRunner | null = null;
@@ -49,7 +58,7 @@ export default async function subagentExtension(api: ExtensionAPI): Promise<void
 	for (const commandName of commandNames) {
 		api.registerCommand(commandName, {
 			description: getCommandDescription(commandName),
-			getArgumentCompletions: (argumentPrefix) => getArgumentCompletions(commandName, argumentPrefix),
+			getArgumentCompletions: (argumentPrefix, context) => getArgumentCompletions(commandName, argumentPrefix, context),
 			handler: async (args: string, ctx) => {
 				const parsed = parseSubAgentCommand(commandName, args);
 
@@ -199,7 +208,12 @@ export default async function subagentExtension(api: ExtensionAPI): Promise<void
 	}
 }
 
-function getArgumentCompletions(commandName: string, argumentPrefix: string): Array<{ value: string; label: string }> | null {
+function getArgumentCompletions(
+	commandName: string,
+	argumentPrefix: string,
+	context?: { tokenIndex: number },
+): Array<{ value: string; label: string; description?: string }> | null {
+	if (commandName === "subagent:run" && context && context.tokenIndex > 0) return null;
 	const prefix = argumentPrefix.trim().toLowerCase();
 	const values =
 		commandName === "subagent"
@@ -207,23 +221,23 @@ function getArgumentCompletions(commandName: string, argumentPrefix: string): Ar
 			: commandName === "subagent:run"
 				? SUBAGENT_RUN_COMPLETIONS
 				: [];
-	const matches = values.filter((value) => value.startsWith(prefix));
-	return matches.length > 0 ? matches.map((value) => ({ value, label: value })) : null;
+	const matches = values.filter((value) => value.value.startsWith(prefix));
+	return matches.length > 0 ? matches.map((value) => ({ ...value })) : null;
 }
 
 function getCommandDescription(commandName: string): string {
 	switch (commandName) {
 		case "subagent:run":
-			return "Run a SubAgent task (/subagent:run <task> [--write])";
+			return "Start a background helper task (/subagent:run <task> [--write])";
 		case "subagent:stop":
-			return "Stop the active SubAgent run";
+			return "Stop the active background helper task";
 		case "subagent:status":
-			return "Show current SubAgent run status";
+			return "Show current background helper status";
 		case "subagent:report":
-			return "Show the latest SubAgent report";
+			return "Show the latest background helper report";
 		case "subagent:apply":
 			return "Apply the latest isolated write run to the main workspace";
 		default:
-			return "SubAgent orchestration help";
+			return "Run or inspect a background helper task";
 	}
 }

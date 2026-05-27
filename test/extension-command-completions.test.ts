@@ -341,11 +341,27 @@ test("subagent commands expose root actions and write flag completions", async (
 
 	const subagent = harness.commands.get("subagent");
 	assert.ok(subagent);
+	assert.match(subagent.description ?? "", /Run or inspect a background helper task/);
+	assert.doesNotMatch(subagent.description ?? "", /SubAgent/);
 	assert.deepEqual(subagent.getArgumentCompletions?.("sta")?.map((item) => item.value), ["status"]);
+	assert.match(subagent.getArgumentCompletions?.("sta")?.[0]?.description ?? "", /current helper task/);
 
 	const run = harness.commands.get("subagent:run");
 	assert.ok(run);
+	assert.match(run.description ?? "", /Start a background helper task/);
+	assert.doesNotMatch(run.description ?? "", /SubAgent/);
 	assert.deepEqual(run.getArgumentCompletions?.("--w")?.map((item) => item.value), ["--write"]);
+	assert.match(run.getArgumentCompletions?.("--w")?.[0]?.description ?? "", /isolated workspace/);
+	assert.equal(
+		run.getArgumentCompletions?.("--w", {
+			commandName: "subagent:run",
+			argumentText: "inspect architecture --w",
+			argumentPrefix: "--w",
+			tokenIndex: 2,
+			previousTokens: ["inspect", "architecture"],
+		}),
+		null,
+	);
 	assert.equal(harness.commands.get("subagent:status")?.getArgumentCompletions?.("sta"), null);
 });
 
