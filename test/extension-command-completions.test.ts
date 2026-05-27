@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import type { RegisteredCommand } from "../core/extensions/types.js";
 import debugExtension from "../extensions/defaults/debug/index.js";
+import loopExtension from "../extensions/defaults/loop/index.js";
 import tokenSaveExtension from "../extensions/defaults/token-save/index.js";
 
 type CapturedCommand = Omit<RegisteredCommand, "name">;
@@ -21,6 +22,9 @@ function createExtensionHarness() {
 		registerMessageRenderer: () => {},
 		registerTool: () => {},
 		on: () => {},
+		appendEntry: () => {},
+		executeCommand: async () => false,
+		isIdle: () => true,
 		sendMessage: (message: { content: unknown; display?: boolean }) => messages.push(message),
 		sendUserMessage: () => {},
 		events: { on: () => {}, emit: () => {} },
@@ -76,4 +80,15 @@ test("tokensave command exposes first-argument completions", () => {
 	assert.match(tokensave.description ?? "", /shell output was shortened/);
 	assert.deepEqual(tokensave.getArgumentCompletions?.("hi")?.map((item) => item.value), ["history"]);
 	assert.deepEqual(tokensave.getArgumentCompletions?.("re")?.map((item) => item.value), ["reload"]);
+});
+
+test("loop command exposes scheduler subcommands and flags", async () => {
+	const harness = createExtensionHarness();
+	await loopExtension(harness.api as never);
+
+	const loop = harness.commands.get("loop");
+	assert.ok(loop);
+	assert.deepEqual(loop.getArgumentCompletions?.("sta")?.map((item) => item.value), ["status"]);
+	assert.deepEqual(loop.getArgumentCompletions?.("--q")?.map((item) => item.value), ["--quiet"]);
+	assert.ok(loop.getArgumentCompletions?.("")?.some((item) => item.value === "every"));
 });

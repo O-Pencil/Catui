@@ -27,6 +27,24 @@ import { buildSchedulerHelp, parseSchedulerCommand } from "./scheduler-parser.js
 
 const LOOP_CUSTOM_TYPE = "loop";
 const SCHEDULER_TICK_MS = 1000;
+const LOOP_COMPLETION_VALUES = [
+	"list",
+	"status",
+	"pause",
+	"resume",
+	"run",
+	"cancel",
+	"clear",
+	"every",
+	"hourly",
+	"daily",
+	"--name",
+	"--max",
+	"--quiet",
+	"--durable",
+	"-q",
+	"-d",
+] as const;
 
 // Single unified scheduler per session
 const cronSchedulerByBus = new WeakMap<EventBus, CronScheduler>();
@@ -486,6 +504,11 @@ export default async function loopExtension(api: ExtensionAPI) {
 
 	api.registerCommand("loop", {
 		description: "Schedule a recurring prompt or slash command for this session.",
+		getArgumentCompletions: (argumentPrefix) => {
+			const prefix = argumentPrefix.trim().toLowerCase();
+			const values = LOOP_COMPLETION_VALUES.filter((value) => value.startsWith(prefix));
+			return values.length > 0 ? values.map((value) => ({ value, label: value })) : null;
+		},
 		handler: handleLoopCommand,
 	});
 }
