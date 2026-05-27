@@ -49,14 +49,17 @@ const requireFdPath = (): string => {
 describe("CombinedAutocompleteProvider", () => {
 	describe("slash command arguments", () => {
 		it("completes only the current argument token", () => {
+			let receivedContext: unknown;
 			const provider = new CombinedAutocompleteProvider([
 				{
 					name: "mem-edit",
 					description: "Edit one memory",
-					getArgumentCompletions: (prefix) =>
-						["summary", "detail", "salience"]
+					getArgumentCompletions: (prefix, context) => {
+						receivedContext = context;
+						return ["summary", "detail", "salience"]
 							.filter((value) => value.startsWith(prefix))
-							.map((value) => ({ value, label: value })),
+							.map((value) => ({ value, label: value }));
+					},
 				},
 			]);
 
@@ -67,6 +70,13 @@ describe("CombinedAutocompleteProvider", () => {
 			assert.notEqual(result, null);
 			assert.strictEqual(result?.prefix, "su");
 			assert.deepStrictEqual(result?.items.map((item) => item.value), ["summary"]);
+			assert.deepStrictEqual(receivedContext, {
+				commandName: "mem-edit",
+				argumentText: "memory-123 su",
+				argumentPrefix: "su",
+				tokenIndex: 1,
+				previousTokens: ["memory-123"],
+			});
 
 			const applied = provider.applyCompletion(lines, 0, cursorCol, result!.items[0]!, result!.prefix);
 			assert.deepStrictEqual(applied.lines, ["/mem-edit memory-123 summary"]);
@@ -74,14 +84,17 @@ describe("CombinedAutocompleteProvider", () => {
 		});
 
 		it("completes an empty next argument without replacing previous arguments", () => {
+			let receivedContext: unknown;
 			const provider = new CombinedAutocompleteProvider([
 				{
 					name: "mem-resolve",
 					description: "Resolve memory conflict",
-					getArgumentCompletions: (prefix) =>
-						["merge", "demote", "forget", "mark-situational"]
+					getArgumentCompletions: (prefix, context) => {
+						receivedContext = context;
+						return ["merge", "demote", "forget", "mark-situational"]
 							.filter((value) => value.startsWith(prefix))
-							.map((value) => ({ value, label: value })),
+							.map((value) => ({ value, label: value }));
+					},
 				},
 			]);
 
@@ -92,6 +105,13 @@ describe("CombinedAutocompleteProvider", () => {
 			assert.notEqual(result, null);
 			assert.strictEqual(result?.prefix, "");
 			assert.ok(result?.items.some((item) => item.value === "merge"));
+			assert.deepStrictEqual(receivedContext, {
+				commandName: "mem-resolve",
+				argumentText: "a b ",
+				argumentPrefix: "",
+				tokenIndex: 2,
+				previousTokens: ["a", "b"],
+			});
 
 			const merge = result!.items.find((item) => item.value === "merge")!;
 			const applied = provider.applyCompletion(lines, 0, cursorCol, merge, result!.prefix);

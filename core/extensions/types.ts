@@ -963,10 +963,21 @@ export type MessageRenderer<T = unknown> = (
 // Command Registration
 // ============================================================================
 
+export interface ArgumentCompletionContext {
+	commandName: string;
+	argumentText: string;
+	argumentPrefix: string;
+	tokenIndex: number;
+	previousTokens: string[];
+}
+
 export interface RegisteredCommand {
 	name: string;
 	description?: string;
-	getArgumentCompletions?: (argumentPrefix: string) => AutocompleteItem[] | null;
+	getArgumentCompletions?: (
+		argumentPrefix: string,
+		context?: ArgumentCompletionContext,
+	) => AutocompleteItem[] | null;
 	handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 }
 

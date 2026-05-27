@@ -112,18 +112,42 @@ export const VALID_PRESETS: PresetName[] = ["solo", "duo", "squad"];
 export const VALID_TASK_ACTIONS = ["add", "claim", "done", "block", "cancel", "list"] as const;
 const TEAM_SPAWN_FLAGS = ["--name", "--harness"] as const;
 
-export function getTeamArgumentCompletions(commandName: string, argumentPrefix: string): Array<{ value: string; label: string }> | null {
+type TeamArgumentCompletionContext = {
+	commandName: string;
+	argumentText: string;
+	argumentPrefix: string;
+	tokenIndex: number;
+	previousTokens: string[];
+};
+
+function getTeamCompletionValues(
+	commandName: string,
+	context?: TeamArgumentCompletionContext,
+): readonly string[] {
+	switch (commandName) {
+		case "team":
+			return !context || context.tokenIndex === 0 ? TEAM_ROOT_COMPLETIONS : [];
+		case "team:spawn":
+			if (!context) return [...VALID_ROLES, ...TEAM_SPAWN_FLAGS];
+			return context.tokenIndex === 0 ? VALID_ROLES : TEAM_SPAWN_FLAGS;
+		case "team:preset":
+			return !context || context.tokenIndex === 0 ? VALID_PRESETS : [];
+		case "team:task":
+			return !context || context.tokenIndex === 0 ? VALID_TASK_ACTIONS : [];
+		case "team:mode":
+			return context?.tokenIndex === 1 ? VALID_MODES : [];
+		default:
+			return [];
+	}
+}
+
+export function getTeamArgumentCompletions(
+	commandName: string,
+	argumentPrefix: string,
+	context?: TeamArgumentCompletionContext,
+): Array<{ value: string; label: string }> | null {
 	const prefix = argumentPrefix.trim().toLowerCase();
-	const values =
-		commandName === "team"
-			? TEAM_ROOT_COMPLETIONS
-			: commandName === "team:spawn"
-				? [...VALID_ROLES, ...TEAM_SPAWN_FLAGS]
-				: commandName === "team:preset"
-					? VALID_PRESETS
-					: commandName === "team:task"
-						? VALID_TASK_ACTIONS
-						: [];
+	const values = getTeamCompletionValues(commandName, context);
 	const matches = values.filter((value) => value.startsWith(prefix));
 	return matches.length > 0 ? matches.map((value) => ({ value, label: value })) : null;
 }

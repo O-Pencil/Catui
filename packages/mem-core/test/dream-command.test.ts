@@ -9,9 +9,19 @@ import { NanoMemEngine } from "../src/engine.js";
 import type { Episode } from "../src/types.js";
 
 type CommandHandler = (args: string, ctx: Record<string, unknown>) => Promise<void> | void;
+type ArgumentCompletionContext = {
+	commandName: string;
+	argumentText: string;
+	argumentPrefix: string;
+	tokenIndex: number;
+	previousTokens: string[];
+};
 type CommandRegistration = {
 	description?: string;
-	getArgumentCompletions?: (argumentPrefix: string) => Array<{ value: string; label: string; description?: string }> | null;
+	getArgumentCompletions?: (
+		argumentPrefix: string,
+		context?: ArgumentCompletionContext,
+	) => Array<{ value: string; label: string; description?: string }> | null;
 	handler: CommandHandler;
 };
 
@@ -131,10 +141,62 @@ test("memory edit and resolve commands expose safe argument completions", () => 
 
 	const edit = harness.commands.get("mem-edit");
 	assert.ok(edit);
-	assert.deepEqual(edit.getArgumentCompletions?.("sal")?.map((item) => item.value), ["salience"]);
+	assert.deepEqual(
+		edit
+			.getArgumentCompletions?.("sal", {
+				commandName: "mem-edit",
+				argumentText: "memory-123 sal",
+				argumentPrefix: "sal",
+				tokenIndex: 1,
+				previousTokens: ["memory-123"],
+			})
+			?.map((item) => item.value),
+		["salience"],
+	);
+	assert.equal(
+		edit.getArgumentCompletions?.("s", {
+			commandName: "mem-edit",
+			argumentText: "s",
+			argumentPrefix: "s",
+			tokenIndex: 0,
+			previousTokens: [],
+		}),
+		null,
+	);
 
 	const resolve = harness.commands.get("mem-resolve");
 	assert.ok(resolve);
-	assert.deepEqual(resolve.getArgumentCompletions?.("mark")?.map((item) => item.value), ["mark-situational"]);
-	assert.ok(resolve.getArgumentCompletions?.("")?.some((item) => item.value === "merge"));
+	assert.deepEqual(
+		resolve
+			.getArgumentCompletions?.("mark", {
+				commandName: "mem-resolve",
+				argumentText: "a b mark",
+				argumentPrefix: "mark",
+				tokenIndex: 2,
+				previousTokens: ["a", "b"],
+			})
+			?.map((item) => item.value),
+		["mark-situational"],
+	);
+	assert.equal(
+		resolve.getArgumentCompletions?.("m", {
+			commandName: "mem-resolve",
+			argumentText: "m",
+			argumentPrefix: "m",
+			tokenIndex: 0,
+			previousTokens: [],
+		}),
+		null,
+	);
+	assert.ok(
+		resolve
+			.getArgumentCompletions?.("", {
+				commandName: "mem-resolve",
+				argumentText: "a b ",
+				argumentPrefix: "",
+				tokenIndex: 2,
+				previousTokens: ["a", "b"],
+			})
+			?.some((item) => item.value === "merge"),
+	);
 });

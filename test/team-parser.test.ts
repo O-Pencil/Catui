@@ -101,10 +101,48 @@ test("team-parser: help text advertises list and approve flow", () => {
 
 test("team-parser: exposes safe enum completions for team command family", () => {
 	assert.deepEqual(getTeamArgumentCompletions("team", "sp")?.map((item) => item.value), ["spawn"]);
-	assert.deepEqual(getTeamArgumentCompletions("team:spawn", "dev")?.map((item) => item.value), ["developer"]);
-	assert.deepEqual(getTeamArgumentCompletions("team:spawn", "--h")?.map((item) => item.value), ["--harness"]);
+	assert.deepEqual(
+		getTeamArgumentCompletions("team:spawn", "dev", {
+			commandName: "team:spawn",
+			argumentText: "dev",
+			argumentPrefix: "dev",
+			tokenIndex: 0,
+			previousTokens: [],
+		})?.map((item) => item.value),
+		["developer"],
+	);
+	assert.deepEqual(
+		getTeamArgumentCompletions("team:spawn", "--h", {
+			commandName: "team:spawn",
+			argumentText: "developer --h",
+			argumentPrefix: "--h",
+			tokenIndex: 1,
+			previousTokens: ["developer"],
+		})?.map((item) => item.value),
+		["--harness"],
+	);
 	assert.deepEqual(getTeamArgumentCompletions("team:preset", "sq")?.map((item) => item.value), ["squad"]);
 	assert.deepEqual(getTeamArgumentCompletions("team:task", "cl")?.map((item) => item.value), ["claim"]);
+	assert.deepEqual(
+		getTeamArgumentCompletions("team:mode", "ex", {
+			commandName: "team:mode",
+			argumentText: "builder ex",
+			argumentPrefix: "ex",
+			tokenIndex: 1,
+			previousTokens: ["builder"],
+		})?.map((item) => item.value),
+		["execute"],
+	);
+	assert.equal(
+		getTeamArgumentCompletions("team:mode", "bu", {
+			commandName: "team:mode",
+			argumentText: "bu",
+			argumentPrefix: "bu",
+			tokenIndex: 0,
+			previousTokens: [],
+		}),
+		null,
+	);
 	assert.equal(getTeamArgumentCompletions("team:status", "sta"), null);
 });
 

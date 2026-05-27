@@ -908,7 +908,8 @@ export default function nanomemExtension(api: ExtensionAPI) {
 
 	api.registerCommand("mem-edit", {
 		description: "Edit one memory by ID. Usage: /mem-edit <id> <field> <value>",
-		getArgumentCompletions: (argumentPrefix) => {
+		getArgumentCompletions: (argumentPrefix, context) => {
+			if (context && context.tokenIndex !== 1) return null;
 			const prefix = argumentPrefix.trim().toLowerCase();
 			const values = memoryEditFields
 				.filter((value) => value.startsWith(prefix))
@@ -934,7 +935,8 @@ export default function nanomemExtension(api: ExtensionAPI) {
 
 	api.registerCommand("mem-resolve", {
 		description: "Resolve a memory conflict. Usage: /mem-resolve <aId> <bId> [merge|demote|forget|mark-situational]",
-		getArgumentCompletions: (argumentPrefix) => {
+		getArgumentCompletions: (argumentPrefix, context) => {
+			if (context && context.tokenIndex !== 2) return null;
 			const prefix = argumentPrefix.trim().toLowerCase();
 			const values = memoryResolveActions
 				.filter((value) => value.startsWith(prefix))

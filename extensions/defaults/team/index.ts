@@ -104,7 +104,7 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 	for (const commandName of commandNames) {
 		api.registerCommand(commandName, {
 			description: getCommandDescription(commandName),
-			getArgumentCompletions: (argumentPrefix) => getTeamArgumentCompletions(commandName, argumentPrefix),
+			getArgumentCompletions: (argumentPrefix, context) => getTeamArgumentCompletions(commandName, argumentPrefix, context),
 			handler: async (args: string, ctx) => {
 				const parsed = parseTeamCommand(commandName, args);
 

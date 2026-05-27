@@ -8,6 +8,7 @@
 
 // Autocomplete support
 export {
+	type ArgumentCompletionContext,
 	type AutocompleteItem,
 	type AutocompleteProvider,
 	CombinedAutocompleteProvider,

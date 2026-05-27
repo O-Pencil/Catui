@@ -80,6 +80,22 @@ function getCurrentArgumentPrefix(argumentText: string): string {
 	return match?.[1] ?? argumentText;
 }
 
+function getArgumentCompletionContext(
+	commandName: string,
+	argumentText: string,
+	argumentPrefix: string,
+): ArgumentCompletionContext {
+	const beforePrefix = argumentText.slice(0, argumentText.length - argumentPrefix.length);
+	const previousTokens = beforePrefix.trim() ? beforePrefix.trim().split(/\s+/) : [];
+	return {
+		commandName,
+		argumentText,
+		argumentPrefix,
+		tokenIndex: previousTokens.length,
+		previousTokens,
+	};
+}
+
 function buildCompletionValue(
 	path: string,
 	options: { isDirectory: boolean; isAtPrefix: boolean; isQuotedPrefix: boolean },
@@ -163,12 +179,23 @@ export interface AutocompleteItem {
 	description?: string;
 }
 
+export interface ArgumentCompletionContext {
+	commandName: string;
+	argumentText: string;
+	argumentPrefix: string;
+	tokenIndex: number;
+	previousTokens: string[];
+}
+
 export interface SlashCommand {
 	name: string;
 	description?: string;
 	// Function to get argument completions for this command
 	// Returns null if no argument completion is available
-	getArgumentCompletions?(argumentPrefix: string): AutocompleteItem[] | null;
+	getArgumentCompletions?(
+		argumentPrefix: string,
+		context?: ArgumentCompletionContext,
+	): AutocompleteItem[] | null;
 }
 
 export interface AutocompleteProvider {
@@ -288,7 +315,10 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 					return null; // No argument completion for this command
 				}
 
-				const argumentSuggestions = command.getArgumentCompletions(argumentPrefix);
+				const argumentSuggestions = command.getArgumentCompletions(
+					argumentPrefix,
+					getArgumentCompletionContext(commandName, argumentText, argumentPrefix),
+				);
 				if (!argumentSuggestions || argumentSuggestions.length === 0) {
 					return null;
 				}
