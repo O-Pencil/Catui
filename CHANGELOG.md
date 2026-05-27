@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.14.3] - 2026-05-27
+
+### Added
+- feat(commands): complete current argument token
+- feat(commands): improve command discoverability
+
+### Fixed
+- fix(tui): prevent render overflow regressions
+- fix(commands): align extension command UX
+- fix(debug): scope diagnostic prompt injection
+- fix(ai): resolve TS2536 generic index error for TypeScript 5.9
+
+### Changed
+- refactor(extensions): split large runtime boundaries
+
+### Maintenance
+- chore(ai): refresh generated model catalog
+- chore: normalize npm package metadata
+- chore(ai): refresh generated model catalog
+
+
 ## [1.14.2] - 2026-05-26
 
 ### Added
