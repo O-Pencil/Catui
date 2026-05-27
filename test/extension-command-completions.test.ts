@@ -6,6 +6,7 @@ import test from "node:test";
 import type { RegisteredCommand } from "../core/extensions/types.js";
 import debugExtension from "../extensions/defaults/debug/index.js";
 import loopExtension from "../extensions/defaults/loop/index.js";
+import subagentExtension from "../extensions/defaults/subagent/index.js";
 import tokenSaveExtension from "../extensions/defaults/token-save/index.js";
 
 type CapturedCommand = Omit<RegisteredCommand, "name">;
@@ -91,4 +92,18 @@ test("loop command exposes scheduler subcommands and flags", async () => {
 	assert.deepEqual(loop.getArgumentCompletions?.("sta")?.map((item) => item.value), ["status"]);
 	assert.deepEqual(loop.getArgumentCompletions?.("--q")?.map((item) => item.value), ["--quiet"]);
 	assert.ok(loop.getArgumentCompletions?.("")?.some((item) => item.value === "every"));
+});
+
+test("subagent commands expose root actions and write flag completions", async () => {
+	const harness = createExtensionHarness();
+	await subagentExtension(harness.api as never);
+
+	const subagent = harness.commands.get("subagent");
+	assert.ok(subagent);
+	assert.deepEqual(subagent.getArgumentCompletions?.("sta")?.map((item) => item.value), ["status"]);
+
+	const run = harness.commands.get("subagent:run");
+	assert.ok(run);
+	assert.deepEqual(run.getArgumentCompletions?.("--w")?.map((item) => item.value), ["--write"]);
+	assert.equal(harness.commands.get("subagent:status")?.getArgumentCompletions?.("sta"), null);
 });

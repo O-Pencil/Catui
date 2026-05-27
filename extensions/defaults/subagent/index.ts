@@ -12,6 +12,8 @@ import { buildSubAgentHelp, parseSubAgentCommand } from "./subagent-parser.js";
 import type { SubAgentRunReport } from "./subagent-types.js";
 
 const SUBAGENT_MESSAGE_TYPE = "subagent";
+const SUBAGENT_ROOT_COMPLETIONS = ["run", "stop", "status", "report", "apply", "help"] as const;
+const SUBAGENT_RUN_COMPLETIONS = ["--write"] as const;
 
 // Global runner instance
 let runner: SubAgentRunner | null = null;
@@ -47,6 +49,7 @@ export default async function subagentExtension(api: ExtensionAPI): Promise<void
 	for (const commandName of commandNames) {
 		api.registerCommand(commandName, {
 			description: getCommandDescription(commandName),
+			getArgumentCompletions: (argumentPrefix) => getArgumentCompletions(commandName, argumentPrefix),
 			handler: async (args: string, ctx) => {
 				const parsed = parseSubAgentCommand(commandName, args);
 
@@ -194,6 +197,18 @@ export default async function subagentExtension(api: ExtensionAPI): Promise<void
 			},
 		});
 	}
+}
+
+function getArgumentCompletions(commandName: string, argumentPrefix: string): Array<{ value: string; label: string }> | null {
+	const prefix = argumentPrefix.trim().toLowerCase();
+	const values =
+		commandName === "subagent"
+			? SUBAGENT_ROOT_COMPLETIONS
+			: commandName === "subagent:run"
+				? SUBAGENT_RUN_COMPLETIONS
+				: [];
+	const matches = values.filter((value) => value.startsWith(prefix));
+	return matches.length > 0 ? matches.map((value) => ({ value, label: value })) : null;
 }
 
 function getCommandDescription(commandName: string): string {
