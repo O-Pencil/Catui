@@ -34,9 +34,29 @@ const MCP_SKILL_PATH = join(__dirname, "mcp-management.md");
 const FIGMA_SKILL_PATH = join(__dirname, "figma-design.md");
 const FIGMA_DESKTOP_URL = "http://127.0.0.1:3845/mcp";
 const FIGMA_REMOTE_URL = "https://mcp.figma.com/mcp";
+const FIGMA_COMMAND_COMPLETIONS = [
+	{ value: "help", label: "help", description: "Show setup steps" },
+	{ value: "auth", label: "auth", description: "Sign in to Figma" },
+	{ value: "remote", label: "remote", description: "Enable the remote MCP path" },
+	{ value: "setup", label: "setup", description: "Probe and enable the best Figma path" },
+	{ value: "status", label: "status", description: "Inspect the current connection" },
+	{ value: "logout", label: "logout", description: "Remove saved Figma credentials" },
+	{ value: "enable", label: "enable", description: "Enable the desktop MCP preset" },
+	{ value: "disable", label: "disable", description: "Disable the desktop MCP preset" },
+] as const;
 
 function getFigmaAuthStorage(): AuthStorage {
 	return AuthStorage.create(getAuthPath());
+}
+
+function getFigmaArgumentCompletions(
+	argumentPrefix: string,
+	context?: { tokenIndex: number },
+): Array<{ value: string; label: string; description?: string }> | null {
+	if (context && context.tokenIndex > 0) return null;
+	const prefix = argumentPrefix.trim().toLowerCase();
+	const values = FIGMA_COMMAND_COMPLETIONS.filter((item) => item.value.startsWith(prefix));
+	return values.length > 0 ? values.map((item) => ({ ...item })) : null;
 }
 
 async function getFigmaAccessToken(): Promise<string | undefined> {
@@ -148,6 +168,7 @@ async function probeFigmaRemoteEndpoint(
 export default async function mcpExtension(api: ExtensionAPI) {
 	api.registerCommand("figma", {
 		description: "Connect NanoPencil to Figma for generative design",
+		getArgumentCompletions: getFigmaArgumentCompletions,
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const [rawAction, ...rest] = args.trim().split(/\s+/).filter(Boolean);
 			const action = (rawAction || "help").toLowerCase();

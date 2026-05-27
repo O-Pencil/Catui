@@ -7,6 +7,7 @@ import type { RegisteredCommand } from "../core/extensions/types.js";
 import debugExtension from "../extensions/defaults/debug/index.js";
 import grubExtension from "../extensions/defaults/grub/index.js";
 import loopExtension from "../extensions/defaults/loop/index.js";
+import mcpExtension from "../extensions/defaults/mcp/index.js";
 import securityAuditExtension from "../extensions/defaults/security-audit/index.js";
 import subagentExtension from "../extensions/defaults/subagent/index.js";
 import tokenSaveExtension from "../extensions/defaults/token-save/index.js";
@@ -143,6 +144,18 @@ test("security commands expose dashboard actions and log limit completions", () 
 	const logs = harness.commands.get("security-logs");
 	assert.ok(logs);
 	assert.deepEqual(logs.getArgumentCompletions?.("1")?.map((item) => item.value), ["10", "100"]);
+});
+
+test("figma command exposes setup and authentication completions", async () => {
+	const harness = createExtensionHarness();
+	await mcpExtension(harness.api as never);
+
+	const figma = harness.commands.get("figma");
+	assert.ok(figma);
+	assert.match(figma.description ?? "", /Connect NanoPencil to Figma/);
+	assert.deepEqual(figma.getArgumentCompletions?.("sta")?.map((item) => item.value), ["status"]);
+	assert.deepEqual(figma.getArgumentCompletions?.("auth")?.map((item) => item.value), ["auth"]);
+	assert.deepEqual(figma.getArgumentCompletions?.("rem")?.map((item) => item.value), ["remote"]);
 });
 
 test("subagent commands expose root actions and write flag completions", async () => {
