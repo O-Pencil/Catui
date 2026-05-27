@@ -6,16 +6,26 @@
  */
 
 export const slashCommands = {
+	categories: {
+		core: "Core",
+		model: "Models",
+		memory: "Memory",
+		session: "Sessions",
+		workflow: "Workflows",
+		agents: "Agents",
+		tools: "Tools",
+		admin: "Admin",
+	},
 	settings: "Open settings menu",
 	model: "Select model (opens selector UI)",
-	"agent-loop": "Set standard or weak-model-compatible agent loop for this session",
-	"scoped-models": "Enable/disable models for Ctrl+P cycling",
+	"agent-loop": "Choose how the agent keeps working through a task",
+	"scoped-models": "Choose which models appear in quick switching",
 	apikey: "Update API key for current provider",
 	mcp: "Manage MCP servers (list, enable, disable)",
 	soul: "Show AI personality and stats (Soul)",
 	persona: "Switch AI persona/personality pack",
 	memory: "Show project memory and knowledge (NanoMem)",
-	dream: "Consolidate project memory (NanoMem)",
+	dream: "Refresh long-term project memory (NanoMem)",
 	export: "Export session to HTML file",
 	share: "Share session as a secret GitHub gist",
 	copy: "Copy last agent message to clipboard",
@@ -35,7 +45,7 @@ export const slashCommands = {
 	compact: "Manually compact the session context",
 	resume: "Resume a different session",
 	reload: "Reload extensions, skills, prompts, and themes",
-	"link-world": "Install link-world for internet access (Twitter, YouTube, etc.)",
+	"link-world": "Set up internet access tools",
 	quit: "Quit NanoPencil",
 	language: "Switch language (English/Chinese)",
 };

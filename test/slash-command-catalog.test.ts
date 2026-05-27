@@ -58,6 +58,7 @@ test("session slash command catalog includes builtins and filters shadowed exten
 			(command) =>
 				command.name === "model" &&
 				command.source === "builtin" &&
+				command.category === "model" &&
 				command.description === "translated:slash.model",
 		),
 	);
@@ -68,12 +69,13 @@ test("session slash command catalog includes builtins and filters shadowed exten
 				name: "model",
 				description: "translated:slash.model",
 				source: "builtin",
+				category: "model",
 			},
 		],
 	);
-	assert.ok(commands.some((command) => command.name === "deploy" && command.source === "extension"));
-	assert.ok(commands.some((command) => command.name === "draft" && command.source === "prompt"));
-	assert.ok(commands.some((command) => command.name === "skill:review" && command.source === "skill"));
+	assert.ok(commands.some((command) => command.name === "deploy" && command.source === "extension" && command.category === "tools"));
+	assert.ok(commands.some((command) => command.name === "draft" && command.source === "prompt" && command.category === "workflow"));
+	assert.ok(commands.some((command) => command.name === "skill:review" && command.source === "skill" && command.category === "tools"));
 });
 
 test("extension slash command catalog preserves paths and normalized locations", () => {
@@ -88,12 +90,14 @@ test("extension slash command catalog preserves paths and normalized locations",
 			name: "deploy",
 			description: "Deploy project",
 			source: "extension",
+			category: "tools",
 			path: "/workspace/extensions/deploy",
 		},
 		{
 			name: "draft",
 			description: "Draft from prompt",
 			source: "prompt",
+			category: "workflow",
 			location: "project",
 			path: "/workspace/.pencil/prompts/draft.md",
 		},
@@ -101,6 +105,7 @@ test("extension slash command catalog preserves paths and normalized locations",
 			name: "skill:review",
 			description: "Review skill",
 			source: "skill",
+			category: "tools",
 			location: "user",
 			path: "/home/user/.nanopencil/skills/review/SKILL.md",
 		},

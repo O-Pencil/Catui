@@ -6,16 +6,26 @@
  */
 
 export const slashCommands = {
+	categories: {
+		core: "核心",
+		model: "模型",
+		memory: "记忆",
+		session: "会话",
+		workflow: "工作流",
+		agents: "Agent",
+		tools: "工具",
+		admin: "管理",
+	},
 	settings: "打开设置菜单",
 	model: "选择模型（打开选择器界面）",
-	"agent-loop": "设置本会话的 standard/弱模型兼容 agent loop",
-	"scoped-models": "启用/禁用 Ctrl+P 循环的模型",
+	"agent-loop": "选择 agent 推进任务的方式",
+	"scoped-models": "选择快速切换里出现的模型",
 	apikey: "更新当前提供商的 API 密钥",
 	mcp: "管理 MCP 服务器（列出、启用、禁用）",
 	soul: "显示 AI 人格和统计（灵魂）",
 	persona: "切换 AI 人格/个性包",
 	memory: "显示项目记忆和知识（纳米记忆）",
-	dream: "整合项目记忆（纳米记忆）",
+	dream: "刷新长期项目记忆（纳米记忆）",
 	export: "将会话导出为 HTML 文件",
 	share: "将会话分享为保密的 GitHub gist",
 	copy: "复制上一条 AI 消息到剪贴板",
@@ -35,7 +45,7 @@ export const slashCommands = {
 	compact: "手动压缩会话上下文",
 	resume: "恢复其他会话",
 	reload: "重新加载扩展、技能、提示和主题",
-	"link-world": "安装 link-world 以获得互联网访问（Twitter、YouTube 等）",
+	"link-world": "设置联网访问工具",
 	quit: "退出 NanoPencil",
 	language: "切换语言（English/中文）",
 };

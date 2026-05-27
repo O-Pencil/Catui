@@ -10,7 +10,9 @@ import type { PromptTemplate } from "../prompt/prompt-templates.js";
 import {
 	BUILTIN_SLASH_COMMANDS,
 	getLocalizedCommands,
+	inferSlashCommandCategory,
 	type SlashCommandInfo,
+	type SlashCommandCategory,
 	type SlashCommandLocation,
 } from "../slash-commands.js";
 
@@ -18,6 +20,7 @@ export interface SessionSlashCommandDescriptor {
 	name: string;
 	description?: string;
 	source: "builtin" | SlashCommandInfo["source"];
+	category?: SlashCommandCategory;
 }
 
 type Translate = Parameters<typeof getLocalizedCommands>[0];
@@ -42,7 +45,7 @@ function getReservedBuiltinNames(): Set<string> {
 function getExtensionCommands(
 	runner: ExtensionRunner | undefined,
 	reservedBuiltins: Set<string>,
-): Array<{ name: string; description?: string; path?: string }> {
+): Array<{ name: string; description?: string; path?: string; category: SlashCommandCategory }> {
 	return (
 		runner
 			?.getRegisteredCommandsWithPaths()
@@ -51,6 +54,7 @@ function getExtensionCommands(
 				name: command.name,
 				description: command.description,
 				path: extensionPath,
+				category: inferSlashCommandCategory(command.name, "extension"),
 			})) ?? []
 	);
 }
@@ -65,6 +69,7 @@ export function buildSessionSlashCommands(
 		name: command.name,
 		description: command.description,
 		source: "builtin",
+		category: command.category,
 	}));
 
 	const reservedBuiltins = getReservedBuiltinNames();
@@ -74,6 +79,7 @@ export function buildSessionSlashCommands(
 				name: command.name,
 				description: command.description,
 				source: "extension",
+				category: command.category,
 			}),
 		);
 
@@ -82,6 +88,7 @@ export function buildSessionSlashCommands(
 			name: template.name,
 			description: template.description,
 			source: "prompt",
+			category: inferSlashCommandCategory(template.name, "prompt"),
 		}));
 
 	const skillCommands: SessionSlashCommandDescriptor[] =
@@ -89,6 +96,7 @@ export function buildSessionSlashCommands(
 			name: `skill:${skill.name}`,
 			description: skill.description,
 			source: "skill",
+			category: inferSlashCommandCategory(skill.name, "skill"),
 		}));
 
 	return [
@@ -110,6 +118,7 @@ export function buildExtensionSlashCommands(
 		name: command.name,
 		description: command.description,
 		source: "extension",
+		category: command.category,
 		path: command.path,
 	}));
 
@@ -118,6 +127,7 @@ export function buildExtensionSlashCommands(
 			name: template.name,
 			description: template.description,
 			source: "prompt",
+			category: inferSlashCommandCategory(template.name, "prompt"),
 			location: normalizeLocation(template.source),
 			path: template.filePath,
 		}),
@@ -129,6 +139,7 @@ export function buildExtensionSlashCommands(
 			name: `skill:${skill.name}`,
 			description: skill.description,
 			source: "skill",
+			category: inferSlashCommandCategory(skill.name, "skill"),
 			location: normalizeLocation(skill.source),
 			path: skill.filePath,
 		}));

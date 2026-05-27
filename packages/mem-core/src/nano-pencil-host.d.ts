@@ -65,6 +65,7 @@ declare module "@pencil-agent/nano-pencil" {
 			name: string,
 			command: {
 				description: string;
+				getArgumentCompletions?: (argumentPrefix: string) => Array<{ value: string; label: string; description?: string }> | null;
 				handler: (args: string, context: ExtensionContext) => unknown;
 			},
 		): void;

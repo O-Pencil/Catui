@@ -91,7 +91,12 @@ import {
   type SessionContext,
   SessionManager,
 } from "../../core/session/session-manager.js";
-import { BUILTIN_SLASH_COMMANDS, getLocalizedCommands } from "../../core/slash-commands.js";
+import {
+  BUILTIN_SLASH_COMMANDS,
+  formatSlashCommandDescription,
+  getLocalizedCommands,
+  inferSlashCommandCategory,
+} from "../../core/slash-commands.js";
 import { t } from "../../core/i18n/index.js";
 import {
   getActivePersonaId,
@@ -442,7 +447,11 @@ export class InteractiveMode {
     const slashCommands: SlashCommand[] = localizedCommands.map(
       (command) => ({
         name: command.name,
-        description: command.description,
+        description: formatSlashCommandDescription(
+          command.description,
+          command.category,
+          t,
+        ),
       }),
     );
 
@@ -489,7 +498,11 @@ export class InteractiveMode {
     const templateCommands: SlashCommand[] = this.session.promptTemplates.map(
       (cmd) => ({
         name: cmd.name,
-        description: cmd.description,
+        description: formatSlashCommandDescription(
+          cmd.description,
+          inferSlashCommandCategory(cmd.name, "prompt"),
+          t,
+        ),
       }),
     );
 
@@ -501,7 +514,11 @@ export class InteractiveMode {
       ) ?? []
     ).map((cmd) => ({
       name: cmd.name,
-      description: cmd.description ?? "(extension command)",
+      description: formatSlashCommandDescription(
+        cmd.description ?? "(extension command)",
+        inferSlashCommandCategory(cmd.name, "extension"),
+        t,
+      ),
       getArgumentCompletions: cmd.getArgumentCompletions,
     }));
 
@@ -514,7 +531,11 @@ export class InteractiveMode {
         this.skillCommands.set(commandName, skill.filePath);
         skillCommandList.push({
           name: commandName,
-          description: skill.description,
+          description: formatSlashCommandDescription(
+            skill.description,
+            inferSlashCommandCategory(skill.name, "skill"),
+            t,
+          ),
         });
       }
     }
