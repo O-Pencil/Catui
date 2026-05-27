@@ -188,6 +188,11 @@ import {
   type ThemeColor,
   theme,
 } from "./theme/theme.js";
+import {
+  getLanguageArgumentCompletions,
+  getMcpArgumentCompletions,
+  getThinkingArgumentCompletions,
+} from "./slash-command-arguments.js";
 
 /** Interface for components that can be expanded/collapsed */
 interface Expandable {
@@ -501,13 +506,25 @@ export class InteractiveMode {
     if (thinkingCommand) {
       thinkingCommand.getArgumentCompletions = (
         prefix: string,
-      ): AutocompleteItem[] | null => {
-        const lowerPrefix = prefix.trim().toLowerCase();
-        const levels = this.session.getAvailableThinkingLevels();
-        const matches = levels.filter((level) => level.startsWith(lowerPrefix));
-        if (matches.length === 0) return null;
-        return matches.map((level) => ({ value: level, label: level }));
-      };
+        context,
+      ): AutocompleteItem[] | null => getThinkingArgumentCompletions(
+        prefix,
+        context,
+        this.session.getAvailableThinkingLevels(),
+      );
+    }
+
+    const mcpCommand = slashCommands.find((command) => command.name === "mcp");
+    if (mcpCommand) {
+      mcpCommand.getArgumentCompletions = (prefix, context) =>
+        getMcpArgumentCompletions(prefix, context, listMCPServers());
+    }
+
+    const languageCommand = slashCommands.find(
+      (command) => command.name === "language",
+    );
+    if (languageCommand) {
+      languageCommand.getArgumentCompletions = getLanguageArgumentCompletions;
     }
 
     // Convert prompt templates to SlashCommand format for autocomplete
