@@ -3034,6 +3034,93 @@ describe("structuredAdaptiveAgentLoop", () => {
 		});
 	});
 
+	it("should not carry permission denials from recovered streaming tool attempts", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		let toolExecuted = false;
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "guarded_stream_read",
+			label: "Guarded stream read",
+			description: "Safe streamed tool guarded by permission",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute() {
+				toolExecuted = true;
+				return {
+					content: [{ type: "text", text: "should not execute" }],
+					details: {},
+				};
+			},
+		};
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+		let recoveryCalls = 0;
+		let permissionChecks = 0;
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			canUseTool: () => {
+				permissionChecks += 1;
+				return { decision: "deny", reason: "outside workspace" };
+			},
+			recoverModelError: ({ errorSubtype, attempt }) => {
+				recoveryCalls += 1;
+				return {
+					action: "retry",
+					messages: [createUserMessage("recovered context")],
+					transition: { reason: "model_error_recovery", subtype: errorSubtype, attempt },
+				};
+			},
+		};
+
+		let callIndex = 0;
+		const stream = structuredAdaptiveAgentLoop([createUserMessage("stream guarded read")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					const toolCall = {
+						type: "toolCall" as const,
+						id: "tool-1",
+						name: "guarded_stream_read",
+						arguments: { value: "early" },
+					};
+					const partial = createAssistantMessage([toolCall], "toolUse");
+					mockStream.push({ type: "start", partial });
+					mockStream.push({ type: "toolcall_start", contentIndex: 0, partial });
+					mockStream.push({ type: "toolcall_end", contentIndex: 0, toolCall, partial });
+					const errorMessage = createAssistantMessage([toolCall], "error");
+					errorMessage.errorMessage = "upstream 503 service unavailable";
+					mockStream.push({ type: "error", reason: "error", error: errorMessage });
+				} else {
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "recovered" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		expect(recoveryCalls).toBe(1);
+		expect(permissionChecks).toBe(1);
+		expect(toolExecuted).toBe(false);
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.stopReason).toBe("stop");
+		expect(result?.permissionDenialCount).toBe(0);
+		expect(result?.permissionDenials).toEqual([]);
+	});
+
 	it("should allow stop hooks to inject a continuation turn", async () => {
 		const context: AgentContext = {
 			systemPrompt: "",

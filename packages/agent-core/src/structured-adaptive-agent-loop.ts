@@ -7,7 +7,7 @@
  * [WHO]: structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue
  * [FROM]: Depends on @pencil-agent/ai, ./types, ./errors, structured-adaptive tool executors, and shared loop helpers.
  * [TO]: Consumed by packages/agent-core/src/agent.ts and index.ts
- * [HERE]: packages/agent-core/src/structured-adaptive-agent-loop.ts - selectable structured-adaptive query loop framework
+ * [HERE]: packages/agent-core/src/structured-adaptive-agent-loop.ts - selectable structured-adaptive query loop framework with recovered-error tombstoning
  */
 
 import {
@@ -273,7 +273,6 @@ async function runStructuredAdaptiveQueryLoop(
 				new Set(toolResults.map((result) => result.toolCallId)),
 			);
 			const allToolResults = [...toolResults, ...interruptedToolResults];
-			state.permissionDenials.push(...failedToolExecution.permissionDenials);
 			for (const result of allToolResults) {
 				currentContext.messages.push(result);
 				newMessages.push(result);
@@ -315,6 +314,7 @@ async function runStructuredAdaptiveQueryLoop(
 				}
 			}
 
+			state.permissionDenials.push(...failedToolExecution.permissionDenials);
 			stream.push({ type: "turn_end", message, toolResults: allToolResults });
 			state.finalStopReason = message.stopReason;
 			state.finalErrorMessage = message.errorMessage;

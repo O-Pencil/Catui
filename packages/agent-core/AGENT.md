@@ -9,7 +9,7 @@ agent-loop-continuations.ts: computeRecoveryMaxTokens, createOutputTokenRecovery
 agent-loop-tool-results.ts: enforceToolResultBatchSize and createInterruptedToolResults, shared aggregate tool-result budget and interrupted tool-call completion policy for agent loops
 agent-loop-tool-summaries.ts: PendingToolUseSummary, flushReadyToolUseSummaries, startToolUseSummary, shared non-blocking tool summary policy for agent loops
 agent-run-result.ts: resolveAgentRunLoopFramework(), buildAgentRunPolicy(), shared agent_result framework/policy telemetry helpers
-structured-adaptive-agent-loop.ts: structuredAdaptiveAgentLoop and structuredAdaptiveAgentLoopContinue, weak-model-compatible loop with ordered tool results, transition history telemetry, concurrency-safe tool batching, and aggregate tool-result budget enforcement
+structured-adaptive-agent-loop.ts: structuredAdaptiveAgentLoop and structuredAdaptiveAgentLoopContinue, weak-model-compatible loop with ordered tool results, transition history telemetry, concurrency-safe tool batching, recovered-error tombstoning, and aggregate tool-result budget enforcement
 structured-adaptive-tool-orchestration.ts: runStructuredAdaptiveTools and partitionStructuredAdaptiveToolCalls, weak-model-compatible tool batching/execution layer with ordered tool_result pairing
 structured-adaptive-streaming-tool-executor.ts: StructuredAdaptiveStreamingToolExecutor, starts complete streamed tool calls before assistant done while preserving ordered tool_result emission
 index.ts: agent-core barrel exports, entry point for package, exports Agent, agentLoop, proxy utilities, types
