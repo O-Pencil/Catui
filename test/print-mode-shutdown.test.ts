@@ -40,6 +40,28 @@ test("parse args recognizes print loop result reporting", () => {
 	assert.deepEqual(args.messages, ["Run checks"]);
 });
 
+test("parse args recognizes non-persistent agent loop controls", () => {
+	const args = parseArgs([
+		"--agent-loop",
+		"weak-model-compatible",
+		"--max-turns-per-prompt",
+		"3",
+		"--max-tool-calls-per-prompt",
+		"8",
+		"--max-tool-concurrency",
+		"2",
+		"Run bounded checks",
+	]);
+
+	assert.equal(args.agentLoopFramework, "weak-model-compatible");
+	assert.deepEqual(args.loopPolicy, {
+		maxTurnsPerPrompt: 3,
+		maxToolCallsPerPrompt: 8,
+		maxToolConcurrency: 2,
+	});
+	assert.deepEqual(args.messages, ["Run bounded checks"]);
+});
+
 test("text print mode can emit final agent loop result as stderr JSON", async () => {
 	const stdout: string[] = [];
 	const stderr: string[] = [];

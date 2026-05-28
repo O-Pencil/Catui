@@ -4,7 +4,12 @@
  * [TO]: Consumed by main.ts, core/model-resolver.ts
  * [HERE]: cli/args.ts - CLI argument parsing and help display
  */
-import type { ThinkingLevel } from "@pencil-agent/agent-core";
+import {
+	normalizeAgentLoopFramework,
+	type AgentLoopFrameworkInput,
+	type AgentLoopPolicyOptions,
+	type ThinkingLevel,
+} from "@pencil-agent/agent-core";
 import chalk from "chalk";
 import { APP_NAME, CONFIG_DIR_NAME, ENV_AGENT_DIR } from "../config.js";
 import { allTools, type ToolName } from "../core/tools/index.js";
@@ -35,6 +40,13 @@ export interface Args {
 	print?: boolean;
 	/** In text print mode, emit the final agent loop result as stderr JSON. */
 	printLoopResult?: boolean;
+	/** Non-persistent agent loop framework override for this process/session. */
+	agentLoopFramework?: AgentLoopFrameworkInput;
+	/** Non-persistent loop policy overrides for this process/session. */
+	loopPolicy?: Pick<
+		AgentLoopPolicyOptions,
+		"maxTurnsPerPrompt" | "maxToolCallsPerPrompt" | "maxToolConcurrency"
+	>;
 	export?: string;
 	noSkills?: boolean;
 	skills?: string[];
@@ -63,6 +75,30 @@ const VALID_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh
 
 export function isValidThinkingLevel(level: string): level is ThinkingLevel {
 	return VALID_THINKING_LEVELS.includes(level as ThinkingLevel);
+}
+
+function parseAgentLoopFramework(value: string): AgentLoopFrameworkInput | undefined {
+	const normalized = normalizeAgentLoopFramework(value as AgentLoopFrameworkInput);
+	if (normalized === "standard" || normalized === "weak-model-compatible") {
+		return normalized;
+	}
+	return undefined;
+}
+
+function parsePositiveIntegerOption(flag: string, value: string): number | undefined {
+	const parsed = Number(value);
+	if (Number.isInteger(parsed) && parsed > 0) return parsed;
+	console.error(chalk.yellow(`Warning: Invalid ${flag} value "${value}". Expected a positive integer.`));
+	return undefined;
+}
+
+function setLoopPolicyOption<K extends keyof NonNullable<Args["loopPolicy"]>>(
+	result: Args,
+	key: K,
+	value: NonNullable<Args["loopPolicy"]>[K],
+): void {
+	result.loopPolicy = result.loopPolicy ?? {};
+	result.loopPolicy[key] = value;
 }
 
 export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "boolean" | "string" }>): Args {
@@ -138,6 +174,27 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			result.print = true;
 		} else if (arg === "--print-loop-result") {
 			result.printLoopResult = true;
+		} else if (arg === "--agent-loop" && i + 1 < args.length) {
+			const framework = args[++i];
+			const normalized = parseAgentLoopFramework(framework);
+			if (normalized) {
+				result.agentLoopFramework = normalized;
+			} else {
+				console.error(
+					chalk.yellow(
+						`Warning: Invalid agent loop framework "${framework}". Valid values: standard, weak-model-compatible.`,
+					),
+				);
+			}
+		} else if (arg === "--max-turns-per-prompt" && i + 1 < args.length) {
+			const value = parsePositiveIntegerOption(arg, args[++i]);
+			if (value !== undefined) setLoopPolicyOption(result, "maxTurnsPerPrompt", value);
+		} else if (arg === "--max-tool-calls-per-prompt" && i + 1 < args.length) {
+			const value = parsePositiveIntegerOption(arg, args[++i]);
+			if (value !== undefined) setLoopPolicyOption(result, "maxToolCallsPerPrompt", value);
+		} else if (arg === "--max-tool-concurrency" && i + 1 < args.length) {
+			const value = parsePositiveIntegerOption(arg, args[++i]);
+			if (value !== undefined) setLoopPolicyOption(result, "maxToolConcurrency", value);
 		} else if (arg === "--export" && i + 1 < args.length) {
 			result.export = args[++i];
 		} else if ((arg === "--extension" || arg === "-e") && i + 1 < args.length) {
@@ -226,6 +283,10 @@ ${chalk.bold("Options:")}
   --mode <mode>                  Output mode: text (default), json, or rpc
   --print, -p                    Non-interactive mode: process prompt and exit
   --print-loop-result            In text print mode, write final loop result JSON to stderr
+  --agent-loop <framework>       Override loop framework: standard or weak-model-compatible
+  --max-turns-per-prompt <n>     Stop a prompt after n assistant turns
+  --max-tool-calls-per-prompt <n> Stop a prompt after n tool calls
+  --max-tool-concurrency <n>     Max concurrent safe tool calls in compatible loop
   --continue, -c                 Continue previous session
   --resume, -r                   Select a session to resume
   --session <path>               Use specific session file

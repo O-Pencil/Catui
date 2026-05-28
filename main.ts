@@ -621,6 +621,13 @@ function buildSessionOptions(
 		options.thinkingLevel = parsed.thinking;
 	}
 
+	if (parsed.agentLoopFramework) {
+		options.agentLoopFramework = parsed.agentLoopFramework;
+	}
+	if (parsed.loopPolicy) {
+		options.loopPolicy = parsed.loopPolicy;
+	}
+
 	// Scoped models for Ctrl+P cycling - fill in default thinking level for models without explicit level
 	if (scopedModels.length > 0) {
 		const defaultThinkingLevel = settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL;

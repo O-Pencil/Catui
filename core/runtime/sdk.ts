@@ -1,5 +1,5 @@
 /**
- * [WHO]: createAgentSession(options) → AgentSession + load results, runtime loop setting wiring
+ * [WHO]: createAgentSession(options) → AgentSession + load results, loop framework/policy override wiring
  * [FROM]: Depends on agent-core, ai, core/config/*, core/tools/*, core/session/*, core/mcp-*, i18n/*
  * [TO]: Consumed by index.ts, main.ts, test/presence-opening.test.ts, extensions/defaults/team/index.ts
  * [HERE]: SDK factory; creates all services with DI, wires up extensions
@@ -7,6 +7,8 @@
 import { join } from "node:path";
 import {
   Agent,
+  type AgentLoopFrameworkInput,
+  type AgentLoopPolicyOptions,
   type AgentMessage,
   type ThinkingLevel,
 } from "@pencil-agent/agent-core";
@@ -111,6 +113,21 @@ export interface CreateAgentSessionOptions {
   model?: Model<any>;
   /** Thinking level. Default: from settings, else 'medium' (clamped to model capabilities) */
   thinkingLevel?: ThinkingLevel;
+  /** Session-level agent loop framework override. Default: from settings/model. */
+  agentLoopFramework?: AgentLoopFrameworkInput;
+  /** Optional runtime loop policy overrides applied at session creation. */
+  loopPolicy?: Pick<
+    AgentLoopPolicyOptions,
+    "maxTurnsPerPrompt" | "maxToolCallsPerPrompt" | "maxToolConcurrency" | "maxToolResultBatchSizeChars"
+  >;
+  /** Maximum assistant turns allowed for one prompt. */
+  maxTurnsPerPrompt?: number;
+  /** Maximum tool calls allowed for one prompt. */
+  maxToolCallsPerPrompt?: number;
+  /** Maximum concurrent safe tool calls in compatible loops. */
+  maxToolConcurrency?: number;
+  /** Aggregate tool-result batch budget in characters. */
+  maxToolResultBatchSizeChars?: number;
   /** Models available for cycling (Ctrl+P in interactive mode) */
   scopedModels?: Array<{ model: Model<any>; thinkingLevel: ThinkingLevel }>;
 
@@ -448,10 +465,16 @@ export async function createAgentSession(
     steeringMode: settingsManager.getSteeringMode(),
     followUpMode: settingsManager.getFollowUpMode(),
     transport: settingsManager.getTransport(),
-    agentLoopFramework: settingsManager.getAgentLoopFramework() as any,
+    agentLoopFramework: options.agentLoopFramework ?? (settingsManager.getAgentLoopFramework() as any),
     thinkingBudgets: settingsManager.getThinkingBudgets(),
     maxRetryDelayMs: settingsManager.getRetrySettings().maxDelayMs,
-    maxToolResultBatchSizeChars: settingsManager.getAgentLoopSettings().maxToolResultBatchSizeChars,
+    maxToolResultBatchSizeChars:
+      options.maxToolResultBatchSizeChars ??
+      options.loopPolicy?.maxToolResultBatchSizeChars ??
+      settingsManager.getAgentLoopSettings().maxToolResultBatchSizeChars,
+    maxToolConcurrency: options.maxToolConcurrency ?? options.loopPolicy?.maxToolConcurrency,
+    maxTurnsPerPrompt: options.maxTurnsPerPrompt ?? options.loopPolicy?.maxTurnsPerPrompt,
+    maxToolCallsPerPrompt: options.maxToolCallsPerPrompt ?? options.loopPolicy?.maxToolCallsPerPrompt,
     getApiKey: async (provider) => {
       // Use the provider argument from the in-flight request;
       // agent.state.model may already be switched mid-turn.

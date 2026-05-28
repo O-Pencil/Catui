@@ -77,6 +77,19 @@ The slash command sets a session-level override. It does not rewrite `models.jso
 
 RPC clients can call `set_agent_loop_framework` with `"standard"`, `"weak-model-compatible"`, or `null` to return to the model default.
 
+CLI and SDK callers can set non-persistent overrides for the current process/session:
+
+```bash
+nanopencil -p --agent-loop weak-model-compatible \
+  --max-turns-per-prompt 3 \
+  --max-tool-calls-per-prompt 8 \
+  --max-tool-concurrency 2 \
+  --print-loop-result \
+  "Run bounded checks"
+```
+
+These flags do not rewrite `models.json` or settings. `--print-loop-result` writes a final `agent_result` JSON line to stderr in text print mode, so stdout can stay reserved for the assistant answer.
+
 For local compatibility, older experimental values `"high-intelligence"`, `"low-intelligence"`, and `"structured-adaptive"` are normalized to the current names when read.
 
 ## Tool Concurrency
