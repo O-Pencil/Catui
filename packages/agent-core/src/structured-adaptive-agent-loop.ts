@@ -58,6 +58,7 @@ interface QueryLoopState {
 	turnCount: number;
 	toolCallCount: number;
 	transition: AgentLoopTransition;
+	transitions: AgentLoopTransition[];
 	pendingMessages: AgentMessage[];
 	pendingToolUseSummaries: PendingToolUseSummary[];
 	stopHookActive: boolean;
@@ -167,6 +168,7 @@ async function runStructuredAdaptiveQueryLoop(
 		turnCount: 0,
 		toolCallCount: 0,
 		transition: { reason: "start" },
+		transitions: [],
 		pendingMessages: (await config.getSteeringMessages?.()) || [],
 		pendingToolUseSummaries: [],
 		stopHookActive: false,
@@ -216,11 +218,11 @@ async function runStructuredAdaptiveQueryLoop(
 			stream.push({ type: "message_start", message: { ...limitMessage } });
 			stream.push({ type: "message_end", message: limitMessage });
 			stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
-			state.transition = {
+			recordTransition(state, {
 				reason: "max_turns_reached",
 				maxTurns,
 				turnCount: state.turnCount,
-			};
+			});
 			state.finalStopReason = "error";
 			state.finalErrorMessage = limitMessage.errorMessage;
 			state.finalErrorSubtype = "max_turns_reached";
@@ -296,12 +298,14 @@ async function runStructuredAdaptiveQueryLoop(
 					stream.push({ type: "turn_end", message, toolResults });
 					state.modelErrorRecoveryCount = attempt;
 					currentContext.messages = recovery.messages;
-					state.transition =
+					recordTransition(
+						state,
 						recovery.transition ?? {
 							reason: "model_error_recovery",
 							subtype: errorSubtype,
 							attempt,
-						};
+						},
+					);
 					continue;
 				}
 			}
@@ -325,10 +329,10 @@ async function runStructuredAdaptiveQueryLoop(
 				state.maxOutputTokensRecoveryCount += 1;
 				state.maxOutputTokensOverride = computeRecoveryMaxTokens(config, message);
 				state.pendingMessages = [createOutputTokenRecoveryMessage(state.maxOutputTokensRecoveryCount)];
-				state.transition = {
+				recordTransition(state, {
 					reason: "max_output_tokens_recovery",
 					attempt: state.maxOutputTokensRecoveryCount,
-				};
+				});
 				continue;
 			}
 
@@ -350,11 +354,11 @@ async function runStructuredAdaptiveQueryLoop(
 						stream.push({ type: "message_start", message: { ...limitMessage } });
 						stream.push({ type: "message_end", message: limitMessage });
 						stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
-						state.transition = {
+						recordTransition(state, {
 							reason: "stop_hook_limit_reached",
 							maxContinuations: maxStopHookContinuations,
 							continuationCount: state.stopHookContinuationCount,
-						};
+						});
 						state.finalStopReason = "error";
 						state.finalErrorMessage = limitMessage.errorMessage;
 						state.finalErrorSubtype = "stop_hook_limit_reached";
@@ -363,10 +367,10 @@ async function runStructuredAdaptiveQueryLoop(
 					}
 					state.stopHookContinuationCount += 1;
 					state.pendingMessages = stopHookResult.messages;
-					state.transition = {
+					recordTransition(state, {
 						reason: "stop_hook_blocking",
 						continuationCount: state.stopHookContinuationCount,
-					};
+					});
 					continue;
 				}
 			}
@@ -379,12 +383,12 @@ async function runStructuredAdaptiveQueryLoop(
 			if (tokenBudgetContinuation) {
 				state.tokenBudgetContinuationCount += 1;
 				state.pendingMessages = [tokenBudgetContinuation.message];
-				state.transition = {
+				recordTransition(state, {
 					reason: "token_budget_continuation",
 					continuationCount: state.tokenBudgetContinuationCount,
 					outputTokens: tokenBudgetContinuation.outputTokens,
 					targetTokens: tokenBudgetContinuation.targetTokens,
-				};
+				});
 				continue;
 			}
 
@@ -393,7 +397,7 @@ async function runStructuredAdaptiveQueryLoop(
 				break;
 			}
 			state.pendingMessages = followUpMessages;
-			state.transition = { reason: "follow_up" };
+			recordTransition(state, { reason: "follow_up" });
 			continue;
 		}
 
@@ -409,12 +413,12 @@ async function runStructuredAdaptiveQueryLoop(
 			stream.push({ type: "message_start", message: { ...limitMessage } });
 			stream.push({ type: "message_end", message: limitMessage });
 			stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
-			state.transition = {
+			recordTransition(state, {
 				reason: "tool_call_limit_reached",
 				maxToolCalls,
 				requestedToolCalls: toolCalls.length,
 				toolCallCount: state.toolCallCount,
-			};
+			});
 			state.finalStopReason = "error";
 			state.finalErrorMessage = limitMessage.errorMessage;
 			state.finalErrorSubtype = "tool_call_limit_reached";
@@ -471,7 +475,7 @@ async function runStructuredAdaptiveQueryLoop(
 		} else {
 			state.pendingMessages = (await config.getSteeringMessages?.()) || [];
 		}
-		state.transition = { reason: "tool_result", toolCallCount: toolCalls.length };
+		recordTransition(state, { reason: "tool_result", toolCallCount: toolCalls.length });
 	}
 
 	state.finalStopReason = state.finalStopReason ?? inferStopReason(newMessages);
@@ -624,6 +628,7 @@ function endWithLoopError(
 		turnCount: 0,
 		toolCallCount: 0,
 		transition: { reason: "start" },
+		transitions: [],
 		pendingMessages: [],
 		pendingToolUseSummaries: [],
 		stopHookActive: false,
@@ -658,12 +663,18 @@ function finish(
 		usage: state.usage,
 		permissionDenialCount: state.permissionDenials.length,
 		permissionDenials: state.permissionDenials,
+		transitions: state.transitions.length > 0 ? state.transitions : undefined,
 		lastTransition: state.transition,
 		errorMessage: state.finalErrorMessage,
 		errorSubtype: state.finalErrorSubtype,
 	});
 	stream.push({ type: "agent_end", messages: newMessages });
 	stream.end(newMessages);
+}
+
+function recordTransition(state: QueryLoopState, transition: AgentLoopTransition): void {
+	state.transition = transition;
+	state.transitions.push(transition);
 }
 
 function emptyUsage(): Usage {

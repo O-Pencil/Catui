@@ -338,6 +338,7 @@ describe("agentLoop with AgentMessage", () => {
 			event.type === "agent_result",
 		);
 		expect(result?.lastTransition).toEqual({ reason: "max_output_tokens_recovery", attempt: 1 });
+		expect(result?.transitions).toEqual([{ reason: "max_output_tokens_recovery", attempt: 1 }]);
 	});
 
 	it("should continue standard loop when a configured output token budget is underused", async () => {
@@ -2654,6 +2655,7 @@ describe("structuredAdaptiveAgentLoop", () => {
 			event.type === "agent_result",
 		);
 		expect(result?.lastTransition).toEqual({ reason: "max_output_tokens_recovery", attempt: 1 });
+		expect(result?.transitions).toEqual([{ reason: "max_output_tokens_recovery", attempt: 1 }]);
 	});
 
 	it("should continue when a configured output token budget is underused", async () => {

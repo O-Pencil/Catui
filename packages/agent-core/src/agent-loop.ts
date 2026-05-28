@@ -60,6 +60,7 @@ type StandardLoopFinishOptions = {
 	usage: Usage;
 	permissionDenials: AgentToolPermissionDenial[];
 	stopReason?: string;
+	transitions?: AgentLoopTransition[];
 	lastTransition?: AgentLoopTransition;
 	errorMessage?: string;
 	errorSubtype?: string;
@@ -231,6 +232,12 @@ async function runLoop(
 	let tokenBudgetContinuationCount = 0;
 	let maxOutputTokensOverride: number | undefined;
 	let lastTransition: AgentLoopTransition = { reason: "start" };
+	const transitions: AgentLoopTransition[] = [];
+	const recordTransition = (transition: AgentLoopTransition): AgentLoopTransition => {
+		lastTransition = transition;
+		transitions.push(transition);
+		return transition;
+	};
 	let pendingToolUseSummaries: PendingToolUseSummary[] = [];
 	let stopHookActive = false;
 	let stopHookContinuationCount = 0;
@@ -287,11 +294,12 @@ async function runLoop(
 					usage,
 					permissionDenials,
 					stopReason: limitMessage.stopReason,
-					lastTransition: {
+					transitions,
+					lastTransition: recordTransition({
 						reason: "max_turns_reached",
 						maxTurns,
 						turnCount,
-					},
+					}),
 					errorMessage: limitMessage.errorMessage,
 					errorSubtype: "max_turns_reached",
 				});
@@ -335,12 +343,13 @@ async function runLoop(
 						stream.push({ type: "turn_end", message, toolResults: [] });
 						modelErrorRecoveryCount = attempt;
 						currentContext.messages = recovery.messages;
-						lastTransition =
+						recordTransition(
 							recovery.transition ?? {
 								reason: "model_error_recovery",
 								subtype: errorSubtype,
 								attempt,
-							};
+							},
+						);
 						continue;
 					}
 				}
@@ -354,6 +363,7 @@ async function runLoop(
 					usage,
 					permissionDenials,
 					stopReason: message.stopReason,
+					transitions,
 					lastTransition,
 					errorMessage: message.errorMessage,
 					errorSubtype,
@@ -385,12 +395,13 @@ async function runLoop(
 						usage,
 						permissionDenials,
 						stopReason: limitMessage.stopReason,
-						lastTransition: {
+						transitions,
+						lastTransition: recordTransition({
 							reason: "tool_call_limit_reached",
 							maxToolCalls,
 							requestedToolCalls: toolCalls.length,
 							toolCallCount,
-						},
+						}),
 						errorMessage: limitMessage.errorMessage,
 						errorSubtype: "tool_call_limit_reached",
 					});
@@ -444,10 +455,10 @@ async function runLoop(
 				maxOutputTokensRecoveryCount += 1;
 				maxOutputTokensOverride = computeRecoveryMaxTokens(config, message);
 				pendingMessages = [createOutputTokenRecoveryMessage(maxOutputTokensRecoveryCount)];
-				lastTransition = {
+				recordTransition({
 					reason: "max_output_tokens_recovery",
 					attempt: maxOutputTokensRecoveryCount,
-				};
+				});
 				continue;
 			}
 
@@ -477,11 +488,12 @@ async function runLoop(
 							usage,
 							permissionDenials,
 							stopReason: limitMessage.stopReason,
-							lastTransition: {
+							transitions,
+							lastTransition: recordTransition({
 								reason: "stop_hook_limit_reached",
 								maxContinuations: maxStopHookContinuations,
 								continuationCount: stopHookContinuationCount,
-							},
+							}),
 							errorMessage: limitMessage.errorMessage,
 							errorSubtype: "stop_hook_limit_reached",
 						});
@@ -489,10 +501,10 @@ async function runLoop(
 					}
 					stopHookContinuationCount += 1;
 					pendingMessages = stopHookResult.messages;
-					lastTransition = {
+					recordTransition({
 						reason: "stop_hook_blocking",
 						continuationCount: stopHookContinuationCount,
-					};
+					});
 					continue;
 				}
 			}
@@ -506,12 +518,12 @@ async function runLoop(
 				if (tokenBudgetContinuation) {
 					tokenBudgetContinuationCount += 1;
 					pendingMessages = [tokenBudgetContinuation.message];
-					lastTransition = {
+					recordTransition({
 						reason: "token_budget_continuation",
 						continuationCount: tokenBudgetContinuationCount,
 						outputTokens: tokenBudgetContinuation.outputTokens,
 						targetTokens: tokenBudgetContinuation.targetTokens,
-					};
+					});
 					continue;
 				}
 			}
@@ -545,6 +557,7 @@ async function runLoop(
 		usage,
 		permissionDenials,
 		stopReason: inferStopReason(newMessages),
+		transitions,
 		lastTransition,
 	});
 }
@@ -667,6 +680,7 @@ function finishStandardLoop(
 		usage: options.usage,
 		permissionDenialCount: options.permissionDenials.length,
 		permissionDenials: options.permissionDenials,
+		transitions: options.transitions && options.transitions.length > 0 ? options.transitions : undefined,
 		lastTransition: options.lastTransition,
 		errorMessage: options.errorMessage,
 		errorSubtype: options.errorSubtype,

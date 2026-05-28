@@ -1,5 +1,5 @@
 /**
- * [WHO]: AgentLoopFramework, AgentLoopTransition, AgentRunResult, AgentModelErrorRecoveryResult, AgentLoopConfig, CustomAgentMessages, AgentState, AgentToolResult, AgentTool, AgentToolConcurrencySafety, AgentToolInterruptBehavior
+ * [WHO]: AgentLoopFramework, AgentLoopTransition, AgentRunResult with transition history, AgentModelErrorRecoveryResult, AgentLoopConfig, CustomAgentMessages, AgentState, AgentToolResult, AgentTool, AgentToolConcurrencySafety, AgentToolInterruptBehavior
  * [FROM]: No external dependencies
  * [TO]: Consumed by packages/agent-core/src/index.ts
  * [HERE]: packages/agent-core/src/types.ts -
@@ -67,6 +67,7 @@ export interface AgentRunResult {
 	usage?: Usage;
 	permissionDenialCount?: number;
 	permissionDenials?: AgentToolPermissionDenial[];
+	transitions?: AgentLoopTransition[];
 	lastTransition?: AgentLoopTransition;
 	errorMessage?: string;
 	errorSubtype?: string;
