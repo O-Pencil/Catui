@@ -1077,6 +1077,7 @@ export async function main(args: string[]) {
 			messages: parsed.messages,
 			initialMessage,
 			initialImages,
+			printLoopResult: parsed.printLoopResult,
 		});
 		stopThemeWatcher();
 		if (process.stdout.writableLength > 0) {

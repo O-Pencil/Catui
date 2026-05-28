@@ -1,9 +1,10 @@
 /**
- * [WHO]: PrintModeOptions, runPrintMode()
- * [FROM]: Depends on ai, core/runtime/agent-session
- * [TO]: Consumed by modes/index.ts
+ * [WHO]: PrintModeOptions, formatPrintLoopResult(), runPrintMode()
+ * [FROM]: Depends on ai, agent-core, core/runtime/agent-session
+ * [TO]: Consumed by modes/index.ts, main.ts, print mode tests
  * [HERE]: modes/print-mode.ts - non-interactive batch processing mode
  */
+import type { AgentRunResult } from "@pencil-agent/agent-core";
 import type { AssistantMessage, ImageContent } from "@pencil-agent/ai";
 import type { AgentSession } from "../core/runtime/agent-session.js";
 
@@ -19,6 +20,13 @@ export interface PrintModeOptions {
 	initialMessage?: string;
 	/** Images to attach to the initial message */
 	initialImages?: ImageContent[];
+	/** In text mode, emit the final agent loop result as one JSON line on stderr */
+	printLoopResult?: boolean;
+}
+
+export function formatPrintLoopResult(result: AgentRunResult | undefined): string | undefined {
+	if (!result) return undefined;
+	return JSON.stringify({ type: "agent_result", ...result });
 }
 
 /**
@@ -114,6 +122,11 @@ export async function runPrintMode(session: AgentSession, options: PrintModeOpti
 				if (content.type === "text") {
 					console.log(content.text);
 				}
+			}
+
+			if (options.printLoopResult) {
+				const loopResult = formatPrintLoopResult(state.lastResult);
+				if (loopResult) console.error(loopResult);
 			}
 		}
 	}
