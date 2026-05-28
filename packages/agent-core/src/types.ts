@@ -59,6 +59,8 @@ export type AgentLoopTransition =
 
 export interface AgentRunResult {
 	stopReason: string;
+	loopFramework?: AgentLoopFramework;
+	loopPolicy?: AgentRunPolicy;
 	turnCount: number;
 	toolCallCount: number;
 	durationMs: number;
@@ -68,6 +70,21 @@ export interface AgentRunResult {
 	lastTransition?: AgentLoopTransition;
 	errorMessage?: string;
 	errorSubtype?: string;
+}
+
+export interface AgentRunPolicy {
+	maxModelErrorRecoveryAttempts?: number;
+	maxOutputTokenRecoveryAttempts?: number;
+	outputTokenBudget?: {
+		targetTokens: number;
+		thresholdPct?: number;
+		maxContinuations?: number;
+	};
+	maxStopHookContinuations?: number;
+	maxToolConcurrency?: number;
+	maxToolResultBatchSizeChars?: number;
+	maxTurnsPerPrompt?: number;
+	maxToolCallsPerPrompt?: number;
 }
 
 export function normalizeAgentLoopFramework(

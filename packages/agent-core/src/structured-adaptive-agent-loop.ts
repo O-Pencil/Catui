@@ -45,6 +45,7 @@ import {
 	type PendingToolUseSummary,
 	startToolUseSummary,
 } from "./agent-loop-tool-summaries.js";
+import { buildAgentRunPolicy, resolveAgentRunLoopFramework } from "./agent-run-result.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 64;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 128;
@@ -53,6 +54,7 @@ const DEFAULT_MAX_STOP_HOOK_CONTINUATIONS = 3;
 const DEFAULT_MAX_MODEL_ERROR_RECOVERY_ATTEMPTS = 1;
 
 interface QueryLoopState {
+	config: AgentLoopConfig;
 	turnCount: number;
 	toolCallCount: number;
 	transition: AgentLoopTransition;
@@ -161,6 +163,7 @@ async function runStructuredAdaptiveQueryLoop(
 	const maxModelErrorRecoveryAttempts =
 		config.maxModelErrorRecoveryAttempts ?? DEFAULT_MAX_MODEL_ERROR_RECOVERY_ATTEMPTS;
 	const state: QueryLoopState = {
+		config,
 		turnCount: 0,
 		toolCallCount: 0,
 		transition: { reason: "start" },
@@ -617,6 +620,7 @@ function endWithLoopError(
 	stream.push({ type: "message_end", message: errorMessage });
 	stream.push({ type: "turn_end", message: errorMessage, toolResults: [] });
 	const state: QueryLoopState = {
+		config,
 		turnCount: 0,
 		toolCallCount: 0,
 		transition: { reason: "start" },
@@ -646,6 +650,8 @@ function finish(
 	stream.push({
 		type: "agent_result",
 		stopReason: state.finalStopReason ?? inferStopReason(newMessages),
+		loopFramework: resolveAgentRunLoopFramework(state.config),
+		loopPolicy: buildAgentRunPolicy(state.config),
 		turnCount: state.turnCount,
 		toolCallCount: state.toolCallCount,
 		durationMs: Date.now() - state.startedAt,

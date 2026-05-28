@@ -44,6 +44,7 @@ import {
 	type PendingToolUseSummary,
 	startToolUseSummary,
 } from "./agent-loop-tool-summaries.js";
+import { buildAgentRunPolicy, resolveAgentRunLoopFramework } from "./agent-run-result.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 64;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 128;
@@ -52,6 +53,7 @@ const DEFAULT_MAX_MODEL_ERROR_RECOVERY_ATTEMPTS = 1;
 const DEFAULT_MAX_OUTPUT_TOKEN_RECOVERY_ATTEMPTS = 1;
 
 type StandardLoopFinishOptions = {
+	config: AgentLoopConfig;
 	turnCount: number;
 	toolCallCount: number;
 	startedAt: number;
@@ -188,6 +190,7 @@ function endWithLoopError(
 	stream.push({ type: "message_end", message: errorMessage });
 	stream.push({ type: "turn_end", message: errorMessage, toolResults: [] });
 	finishStandardLoop(stream, newMessages, {
+		config,
 		turnCount: 0,
 		toolCallCount: 0,
 		startedAt: Date.now(),
@@ -277,6 +280,7 @@ async function runLoop(
 				stream.push({ type: "message_end", message: limitMessage });
 				stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
 				finishStandardLoop(stream, newMessages, {
+					config,
 					turnCount,
 					toolCallCount,
 					startedAt,
@@ -343,6 +347,7 @@ async function runLoop(
 
 				stream.push({ type: "turn_end", message, toolResults: [] });
 				finishStandardLoop(stream, newMessages, {
+					config,
 					turnCount,
 					toolCallCount,
 					startedAt,
@@ -373,6 +378,7 @@ async function runLoop(
 					stream.push({ type: "message_end", message: limitMessage });
 					stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
 					finishStandardLoop(stream, newMessages, {
+						config,
 						turnCount,
 						toolCallCount,
 						startedAt,
@@ -464,6 +470,7 @@ async function runLoop(
 						stream.push({ type: "message_end", message: limitMessage });
 						stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
 						finishStandardLoop(stream, newMessages, {
+							config,
 							turnCount,
 							toolCallCount,
 							startedAt,
@@ -531,6 +538,7 @@ async function runLoop(
 	}
 
 	finishStandardLoop(stream, newMessages, {
+		config,
 		turnCount,
 		toolCallCount,
 		startedAt,
@@ -651,6 +659,8 @@ function finishStandardLoop(
 	stream.push({
 		type: "agent_result",
 		stopReason: options.stopReason ?? inferStopReason(newMessages),
+		loopFramework: resolveAgentRunLoopFramework(options.config),
+		loopPolicy: buildAgentRunPolicy(options.config),
 		turnCount: options.turnCount,
 		toolCallCount: options.toolCallCount,
 		durationMs: Date.now() - options.startedAt,

@@ -652,6 +652,8 @@ export class Agent {
 					case "agent_result":
 						this._state.lastResult = {
 							stopReason: event.stopReason,
+							loopFramework: event.loopFramework,
+							loopPolicy: event.loopPolicy,
 							turnCount: event.turnCount,
 							toolCallCount: event.toolCallCount,
 							durationMs: event.durationMs,

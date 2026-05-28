@@ -263,6 +263,55 @@ describe("Agent", () => {
 		expect(agent.state.lastResult?.durationMs).toEqual(expect.any(Number));
 	});
 
+	it("should retain loop framework and policy summary in the last result", async () => {
+		const model = {
+			...getModel("openai", "gpt-4o-mini"),
+			agentLoopFramework: "weak-model-compatible",
+		} as Model<any> & { agentLoopFramework: "weak-model-compatible" };
+		const agent = new Agent({
+			initialState: { model },
+			maxTurnsPerPrompt: 3,
+			maxToolCallsPerPrompt: 8,
+			maxToolConcurrency: 2,
+			maxToolResultBatchSizeChars: 64_000,
+			maxModelErrorRecoveryAttempts: 4,
+			maxOutputTokenRecoveryAttempts: 3,
+			outputTokenBudget: {
+				targetTokens: 1200,
+				thresholdPct: 0.75,
+				maxContinuations: 2,
+			},
+			maxStopHookContinuations: 2,
+			streamFn: () => {
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => {
+					stream.push({ type: "done", reason: "stop", message: createAssistantMessage("done") });
+				});
+				return stream;
+			},
+		});
+
+		await agent.prompt("answer");
+
+		expect(agent.state.lastResult).toMatchObject({
+			loopFramework: "weak-model-compatible",
+			loopPolicy: {
+				maxTurnsPerPrompt: 3,
+				maxToolCallsPerPrompt: 8,
+				maxToolConcurrency: 2,
+				maxToolResultBatchSizeChars: 64_000,
+				maxModelErrorRecoveryAttempts: 4,
+				maxOutputTokenRecoveryAttempts: 3,
+				outputTokenBudget: {
+					targetTokens: 1200,
+					thresholdPct: 0.75,
+					maxContinuations: 2,
+				},
+				maxStopHookContinuations: 2,
+			},
+		});
+	});
+
 	it("should pass recoverModelError into the weak-model-compatible loop", async () => {
 		const model = {
 			...getModel("openai", "gpt-4o-mini"),
