@@ -690,6 +690,12 @@ describe("agentLoop with AgentMessage", () => {
 		expect((assistantEnds.at(-1)?.message as AssistantMessage | undefined)?.errorMessage).toContain(
 			"tool-call limit",
 		);
+		const toolResultEnds = events.filter(
+			(e): e is Extract<AgentEvent, { type: "message_end" }> =>
+				e.type === "message_end" && e.message.role === "toolResult",
+		);
+		expect(toolResultEnds.map((event) => event.message.toolCallId)).toEqual(["tool-1", "tool-2"]);
+		expect(toolResultEnds.every((event) => event.message.isError)).toBe(true);
 		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
 			event.type === "agent_result",
 		);
@@ -2266,6 +2272,12 @@ describe("structuredAdaptiveAgentLoop", () => {
 			toolCallCount: 0,
 		});
 		expect(result?.errorSubtype).toBe("tool_call_limit_reached");
+		const toolResultEnds = events.filter(
+			(event): event is Extract<AgentEvent, { type: "message_end" }> =>
+				event.type === "message_end" && event.message.role === "toolResult",
+		);
+		expect(toolResultEnds.map((event) => event.message.toolCallId)).toEqual(["tool-1", "tool-2"]);
+		expect(toolResultEnds.every((event) => event.message.isError)).toBe(true);
 	});
 
 	it("should return custom input validation failures as tool results", async () => {

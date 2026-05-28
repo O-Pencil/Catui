@@ -1,5 +1,5 @@
 /**
- * [WHO]: Provides enforceToolResultBatchSize() and createInterruptedToolResults() for bounded and complete tool-result batches.
+ * [WHO]: Provides enforceToolResultBatchSize(), createInterruptedToolResults(), and createSkippedToolCallLimitResults() for bounded and complete tool-result batches.
  * [FROM]: Depends on @pencil-agent/ai AssistantMessage/ToolResultMessage/TextContent shapes.
  * [TO]: Consumed by standard and structured-adaptive agent loops before appending tool results.
  * [HERE]: packages/agent-core/src/agent-loop-tool-results.ts within agent-core; shared tool-result budget policy.
@@ -76,6 +76,26 @@ export function createInterruptedToolResults(
 			isError: true,
 			timestamp: Date.now(),
 		}));
+}
+
+export function createSkippedToolCallLimitResults(
+	assistantMessage: AssistantMessage,
+	reasonText: string,
+): ToolResultMessage[] {
+	const toolCalls = assistantMessage.content.filter((part) => part.type === "toolCall");
+	return toolCalls.map((toolCall) => ({
+		role: "toolResult" as const,
+		toolCallId: toolCall.id,
+		toolName: toolCall.name,
+		content: [{ type: "text" as const, text: reasonText }],
+		details: {
+			errorType: "tool_call_limit_reached",
+			toolName: toolCall.name,
+			toolCallId: toolCall.id,
+		},
+		isError: true,
+		timestamp: Date.now(),
+	}));
 }
 
 function truncateToolResultToTextChars(

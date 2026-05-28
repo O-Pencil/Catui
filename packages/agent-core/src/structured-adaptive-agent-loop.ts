@@ -39,7 +39,11 @@ import {
 	createOutputTokenRecoveryMessage,
 	createTokenBudgetContinuation,
 } from "./agent-loop-continuations.js";
-import { createInterruptedToolResults, enforceToolResultBatchSize } from "./agent-loop-tool-results.js";
+import {
+	createInterruptedToolResults,
+	createSkippedToolCallLimitResults,
+	enforceToolResultBatchSize,
+} from "./agent-loop-tool-results.js";
 import {
 	flushReadyToolUseSummaries,
 	type PendingToolUseSummary,
@@ -409,6 +413,16 @@ async function runStructuredAdaptiveQueryLoop(
 		}
 
 		if (state.toolCallCount + toolCalls.length > maxToolCalls) {
+			const skippedToolResults = createSkippedToolCallLimitResults(
+				message,
+				`Tool call skipped because this prompt reached the ${maxToolCalls} tool-call limit.`,
+			);
+			for (const result of skippedToolResults) {
+				currentContext.messages.push(result);
+				newMessages.push(result);
+				stream.push({ type: "message_start", message: result });
+				stream.push({ type: "message_end", message: result });
+			}
 			const limitMessage = createLoopLimitMessage(
 				config,
 				`tool_call_limit_reached: stopped before executing ${toolCalls.length} tool call${
@@ -419,7 +433,7 @@ async function runStructuredAdaptiveQueryLoop(
 			newMessages.push(limitMessage);
 			stream.push({ type: "message_start", message: { ...limitMessage } });
 			stream.push({ type: "message_end", message: limitMessage });
-			stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
+			stream.push({ type: "turn_end", message: limitMessage, toolResults: skippedToolResults });
 			recordTransition(state, {
 				reason: "tool_call_limit_reached",
 				maxToolCalls,
