@@ -118,6 +118,20 @@ function extractRetryAfterMs(errorMessage: string): number | undefined {
 	return undefined;
 }
 
+function getRetryDelayMs(
+	message: AssistantMessage,
+	attempt: number,
+	retryOptions: Required<RetryOptions>,
+): number | undefined {
+	if (attempt >= retryOptions.maxRetries || !isRetriableStreamError(message)) {
+		return undefined;
+	}
+	if (/^429\b/.test(message.errorMessage ?? "")) {
+		return extractRetryAfterMs(message.errorMessage ?? "") ?? calculateDelay(attempt, retryOptions);
+	}
+	return calculateDelay(attempt, retryOptions);
+}
+
 // =============================================================================
 // Provider Resolution
 // =============================================================================
@@ -238,15 +252,8 @@ function wrapWithRetry<TApi extends Api>(
 					lastMessage = event.error;
 
 					// Check if retriable
-					if (attempt < retryOptions.maxRetries && isRetriableStreamError(lastMessage)) {
-						// Calculate delay: prefer Retry-After for 429, else exponential backoff
-						let delayMs: number;
-						if (/^429\b/.test(lastMessage.errorMessage ?? "")) {
-							delayMs = extractRetryAfterMs(lastMessage.errorMessage ?? "") ?? calculateDelay(attempt, retryOptions);
-						} else {
-							delayMs = calculateDelay(attempt, retryOptions);
-						}
-
+					const delayMs = getRetryDelayMs(lastMessage, attempt, retryOptions);
+					if (delayMs !== undefined) {
 						attempt++;
 						await new Promise((resolve) => setTimeout(resolve, delayMs));
 						break; // Break inner loop, retry outer loop
@@ -262,6 +269,22 @@ function wrapWithRetry<TApi extends Api>(
 						outerStream.push(event);
 					}
 				}
+			}
+
+			if (!lastMessage) {
+				lastMessage = await innerStream.result();
+				const delayMs = getRetryDelayMs(lastMessage, attempt, retryOptions);
+				if (delayMs !== undefined) {
+					attempt++;
+					await new Promise((resolve) => setTimeout(resolve, delayMs));
+					continue;
+				}
+				if (lastMessage.stopReason === "error" || lastMessage.stopReason === "aborted") {
+					outerStream.push({ type: "error", reason: lastMessage.stopReason, error: lastMessage });
+					return;
+				}
+				outerStream.push({ type: "done", reason: lastMessage.stopReason, message: lastMessage });
+				return;
 			}
 
 			// If we got a done event, we're finished
