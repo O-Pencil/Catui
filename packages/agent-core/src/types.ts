@@ -35,6 +35,18 @@ export type AgentLoopTransition =
 	| { reason: "start" }
 	| { reason: "tool_result"; toolCallCount: number }
 	| { reason: "follow_up" }
+	| { reason: "max_turns_reached"; maxTurns: number; turnCount: number }
+	| {
+			reason: "tool_call_limit_reached";
+			maxToolCalls: number;
+			requestedToolCalls: number;
+			toolCallCount: number;
+	  }
+	| {
+			reason: "stop_hook_limit_reached";
+			maxContinuations: number;
+			continuationCount: number;
+	  }
 	| { reason: "max_output_tokens_recovery"; attempt: number }
 	| { reason: "stop_hook_blocking"; continuationCount: number }
 	| { reason: "model_error_recovery"; subtype: string; attempt: number }

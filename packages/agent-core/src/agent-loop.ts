@@ -283,6 +283,11 @@ async function runLoop(
 					usage,
 					permissionDenials,
 					stopReason: limitMessage.stopReason,
+					lastTransition: {
+						reason: "max_turns_reached",
+						maxTurns,
+						turnCount,
+					},
 					errorMessage: limitMessage.errorMessage,
 					errorSubtype: "max_turns_reached",
 				});
@@ -374,6 +379,12 @@ async function runLoop(
 						usage,
 						permissionDenials,
 						stopReason: limitMessage.stopReason,
+						lastTransition: {
+							reason: "tool_call_limit_reached",
+							maxToolCalls,
+							requestedToolCalls: toolCalls.length,
+							toolCallCount,
+						},
 						errorMessage: limitMessage.errorMessage,
 						errorSubtype: "tool_call_limit_reached",
 					});
@@ -459,6 +470,11 @@ async function runLoop(
 							usage,
 							permissionDenials,
 							stopReason: limitMessage.stopReason,
+							lastTransition: {
+								reason: "stop_hook_limit_reached",
+								maxContinuations: maxStopHookContinuations,
+								continuationCount: stopHookContinuationCount,
+							},
 							errorMessage: limitMessage.errorMessage,
 							errorSubtype: "stop_hook_limit_reached",
 						});

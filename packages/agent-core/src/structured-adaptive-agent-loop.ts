@@ -213,6 +213,11 @@ async function runStructuredAdaptiveQueryLoop(
 			stream.push({ type: "message_start", message: { ...limitMessage } });
 			stream.push({ type: "message_end", message: limitMessage });
 			stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
+			state.transition = {
+				reason: "max_turns_reached",
+				maxTurns,
+				turnCount: state.turnCount,
+			};
 			state.finalStopReason = "error";
 			state.finalErrorMessage = limitMessage.errorMessage;
 			state.finalErrorSubtype = "max_turns_reached";
@@ -342,6 +347,11 @@ async function runStructuredAdaptiveQueryLoop(
 						stream.push({ type: "message_start", message: { ...limitMessage } });
 						stream.push({ type: "message_end", message: limitMessage });
 						stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
+						state.transition = {
+							reason: "stop_hook_limit_reached",
+							maxContinuations: maxStopHookContinuations,
+							continuationCount: state.stopHookContinuationCount,
+						};
 						state.finalStopReason = "error";
 						state.finalErrorMessage = limitMessage.errorMessage;
 						state.finalErrorSubtype = "stop_hook_limit_reached";
@@ -396,6 +406,12 @@ async function runStructuredAdaptiveQueryLoop(
 			stream.push({ type: "message_start", message: { ...limitMessage } });
 			stream.push({ type: "message_end", message: limitMessage });
 			stream.push({ type: "turn_end", message: limitMessage, toolResults: [] });
+			state.transition = {
+				reason: "tool_call_limit_reached",
+				maxToolCalls,
+				requestedToolCalls: toolCalls.length,
+				toolCallCount: state.toolCallCount,
+			};
 			state.finalStopReason = "error";
 			state.finalErrorMessage = limitMessage.errorMessage;
 			state.finalErrorSubtype = "tool_call_limit_reached";

@@ -637,6 +637,15 @@ describe("agentLoop with AgentMessage", () => {
 		expect((assistantEnds.at(-1)?.message as AssistantMessage | undefined)?.errorMessage).toContain(
 			"tool-call limit",
 		);
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.lastTransition).toEqual({
+			reason: "tool_call_limit_reached",
+			maxToolCalls: 1,
+			requestedToolCalls: 2,
+			toolCallCount: 0,
+		});
 	});
 
 	it("should stop when the per-prompt assistant turn limit is reached", async () => {
@@ -690,6 +699,14 @@ describe("agentLoop with AgentMessage", () => {
 		expect((assistantEnds.at(-1)?.message as AssistantMessage | undefined)?.errorMessage).toContain(
 			"assistant turns",
 		);
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.lastTransition).toEqual({
+			reason: "max_turns_reached",
+			maxTurns: 1,
+			turnCount: 2,
+		});
 	});
 
 	it("should inject queued messages and skip remaining tool calls", async () => {
@@ -2139,6 +2156,63 @@ describe("structuredAdaptiveAgentLoop", () => {
 				process.env.NANOPENCIL_MAX_TOOL_USE_CONCURRENCY = previous;
 			}
 		}
+	});
+
+	it("should report structured-adaptive tool-call limit transitions", async () => {
+		const toolSchema = Type.Object({});
+		const tool: AgentTool<typeof toolSchema, Record<string, never>> = {
+			name: "limited",
+			label: "Limited",
+			description: "Should not run when the batch exceeds the limit",
+			parameters: toolSchema,
+			async execute() {
+				return { content: [{ type: "text", text: "ran" }], details: {} };
+			},
+		};
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			maxToolCallsPerPrompt: 1,
+		};
+
+		const stream = structuredAdaptiveAgentLoop([createUserMessage("run twice")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				mockStream.push({
+					type: "done",
+					reason: "toolUse",
+					message: createAssistantMessage(
+						[
+							{ type: "toolCall", id: "tool-1", name: "limited", arguments: {} },
+							{ type: "toolCall", id: "tool-2", name: "limited", arguments: {} },
+						],
+						"toolUse",
+					),
+				});
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.lastTransition).toEqual({
+			reason: "tool_call_limit_reached",
+			maxToolCalls: 1,
+			requestedToolCalls: 2,
+			toolCallCount: 0,
+		});
+		expect(result?.errorSubtype).toBe("tool_call_limit_reached");
 	});
 
 	it("should return custom input validation failures as tool results", async () => {
