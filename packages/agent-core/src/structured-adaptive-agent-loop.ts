@@ -39,7 +39,7 @@ import {
 	createOutputTokenRecoveryMessage,
 	createTokenBudgetContinuation,
 } from "./agent-loop-continuations.js";
-import { enforceToolResultBatchSize } from "./agent-loop-tool-results.js";
+import { createInterruptedToolResults, enforceToolResultBatchSize } from "./agent-loop-tool-results.js";
 import {
 	flushReadyToolUseSummaries,
 	type PendingToolUseSummary,
@@ -268,8 +268,13 @@ async function runStructuredAdaptiveQueryLoop(
 				failedToolExecution.toolResults,
 				config.maxToolResultBatchSizeChars,
 			);
+			const interruptedToolResults = createInterruptedToolResults(
+				message,
+				new Set(toolResults.map((result) => result.toolCallId)),
+			);
+			const allToolResults = [...toolResults, ...interruptedToolResults];
 			state.permissionDenials.push(...failedToolExecution.permissionDenials);
-			for (const result of toolResults) {
+			for (const result of allToolResults) {
 				currentContext.messages.push(result);
 				newMessages.push(result);
 				stream.push({ type: "message_start", message: result });
@@ -295,7 +300,7 @@ async function runStructuredAdaptiveQueryLoop(
 					attempt,
 				});
 				if (recovery.action === "retry") {
-					stream.push({ type: "turn_end", message, toolResults });
+					stream.push({ type: "turn_end", message, toolResults: allToolResults });
 					state.modelErrorRecoveryCount = attempt;
 					currentContext.messages = recovery.messages;
 					recordTransition(
@@ -310,7 +315,7 @@ async function runStructuredAdaptiveQueryLoop(
 				}
 			}
 
-			stream.push({ type: "turn_end", message, toolResults });
+			stream.push({ type: "turn_end", message, toolResults: allToolResults });
 			state.finalStopReason = message.stopReason;
 			state.finalErrorMessage = message.errorMessage;
 			state.finalErrorSubtype = errorSubtype;

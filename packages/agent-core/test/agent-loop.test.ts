@@ -341,6 +341,54 @@ describe("agentLoop with AgentMessage", () => {
 		expect(result?.transitions).toEqual([{ reason: "max_output_tokens_recovery", attempt: 1 }]);
 	});
 
+	it("should close interrupted standard loop tool calls with synthetic tool results", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+		};
+
+		const stream = agentLoop([createUserMessage("start tool")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				const message = createAssistantMessage(
+					[{ type: "toolCall", id: "tool-1", name: "slow_tool", arguments: { value: "draft" } }],
+					"aborted",
+				);
+				message.errorMessage = "User aborted";
+				mockStream.push({ type: "error", reason: "aborted", error: message });
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		const toolResults = events
+			.filter((event): event is Extract<AgentEvent, { type: "message_end" }> => event.type === "message_end")
+			.map((event) => event.message)
+			.filter((message): message is Extract<AgentMessage, { role: "toolResult" }> => message.role === "toolResult");
+		expect(toolResults).toHaveLength(1);
+		expect(toolResults[0]).toMatchObject({
+			toolCallId: "tool-1",
+			toolName: "slow_tool",
+			isError: true,
+			details: {
+				errorType: "interrupted_tool_call",
+				stopReason: "aborted",
+			},
+		});
+		expect(readToolResultText(toolResults[0])).toContain("interrupted");
+		const turnEnd = events.find((event): event is Extract<AgentEvent, { type: "turn_end" }> => event.type === "turn_end");
+		expect(turnEnd?.toolResults.map((result) => result.toolCallId)).toEqual(["tool-1"]);
+	});
+
 	it("should continue standard loop when a configured output token budget is underused", async () => {
 		const context: AgentContext = {
 			systemPrompt: "",
@@ -2656,6 +2704,54 @@ describe("structuredAdaptiveAgentLoop", () => {
 		);
 		expect(result?.lastTransition).toEqual({ reason: "max_output_tokens_recovery", attempt: 1 });
 		expect(result?.transitions).toEqual([{ reason: "max_output_tokens_recovery", attempt: 1 }]);
+	});
+
+	it("should close interrupted structured-adaptive tool calls with synthetic tool results", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+		};
+
+		const stream = structuredAdaptiveAgentLoop([createUserMessage("start tool")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				const message = createAssistantMessage(
+					[{ type: "toolCall", id: "tool-1", name: "slow_tool", arguments: { value: "draft" } }],
+					"aborted",
+				);
+				message.errorMessage = "User aborted";
+				mockStream.push({ type: "error", reason: "aborted", error: message });
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		const toolResults = events
+			.filter((event): event is Extract<AgentEvent, { type: "message_end" }> => event.type === "message_end")
+			.map((event) => event.message)
+			.filter((message): message is Extract<AgentMessage, { role: "toolResult" }> => message.role === "toolResult");
+		expect(toolResults).toHaveLength(1);
+		expect(toolResults[0]).toMatchObject({
+			toolCallId: "tool-1",
+			toolName: "slow_tool",
+			isError: true,
+			details: {
+				errorType: "interrupted_tool_call",
+				stopReason: "aborted",
+			},
+		});
+		expect(readToolResultText(toolResults[0])).toContain("interrupted");
+		const turnEnd = events.find((event): event is Extract<AgentEvent, { type: "turn_end" }> => event.type === "turn_end");
+		expect(turnEnd?.toolResults.map((result) => result.toolCallId)).toEqual(["tool-1"]);
 	});
 
 	it("should continue when a configured output token budget is underused", async () => {

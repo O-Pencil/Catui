@@ -1,11 +1,11 @@
 /**
- * [WHO]: Provides enforceToolResultBatchSize() for bounded tool-result batches.
- * [FROM]: Depends on @pencil-agent/ai ToolResultMessage/TextContent shapes.
+ * [WHO]: Provides enforceToolResultBatchSize() and createInterruptedToolResults() for bounded and complete tool-result batches.
+ * [FROM]: Depends on @pencil-agent/ai AssistantMessage/ToolResultMessage/TextContent shapes.
  * [TO]: Consumed by standard and structured-adaptive agent loops before appending tool results.
  * [HERE]: packages/agent-core/src/agent-loop-tool-results.ts within agent-core; shared tool-result budget policy.
  */
 
-import type { TextContent, ToolResultMessage } from "@pencil-agent/ai";
+import type { AssistantMessage, TextContent, ToolResultMessage } from "@pencil-agent/ai";
 
 export function enforceToolResultBatchSize(
 	toolResults: ToolResultMessage[],
@@ -44,6 +44,38 @@ export function enforceToolResultBatchSize(
 	}
 
 	return next;
+}
+
+export function createInterruptedToolResults(
+	assistantMessage: AssistantMessage,
+	existingToolResultIds: ReadonlySet<string> = new Set(),
+): ToolResultMessage[] {
+	const toolCalls = assistantMessage.content.filter((part) => part.type === "toolCall");
+	if (toolCalls.length === 0) {
+		return [];
+	}
+
+	const stopReason = assistantMessage.stopReason;
+	const reasonText =
+		stopReason === "aborted"
+			? "Tool call interrupted because the assistant response was aborted."
+			: "Tool call interrupted because the assistant response ended with an error.";
+
+	return toolCalls
+		.filter((toolCall) => !existingToolResultIds.has(toolCall.id))
+		.map((toolCall) => ({
+			role: "toolResult" as const,
+			toolCallId: toolCall.id,
+			toolName: toolCall.name,
+			content: [{ type: "text" as const, text: reasonText }],
+			details: {
+				errorType: "interrupted_tool_call",
+				stopReason,
+				errorMessage: assistantMessage.errorMessage,
+			},
+			isError: true,
+			timestamp: Date.now(),
+		}));
 }
 
 function truncateToolResultToTextChars(

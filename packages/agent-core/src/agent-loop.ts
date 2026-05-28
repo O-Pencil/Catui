@@ -38,7 +38,7 @@ import {
 	createOutputTokenRecoveryMessage,
 	createTokenBudgetContinuation,
 } from "./agent-loop-continuations.js";
-import { enforceToolResultBatchSize } from "./agent-loop-tool-results.js";
+import { createInterruptedToolResults, enforceToolResultBatchSize } from "./agent-loop-tool-results.js";
 import {
 	flushReadyToolUseSummaries,
 	type PendingToolUseSummary,
@@ -326,6 +326,13 @@ async function runLoop(
 						: isContextOverflow(message, config.model.contextWindow)
 							? "context_overflow"
 							: "model_error";
+				const interruptedToolResults = createInterruptedToolResults(message);
+				for (const result of interruptedToolResults) {
+					currentContext.messages.push(result);
+					newMessages.push(result);
+					stream.push({ type: "message_start", message: result });
+					stream.push({ type: "message_end", message: result });
+				}
 
 				if (
 					message.stopReason === "error" &&
@@ -340,7 +347,7 @@ async function runLoop(
 						attempt,
 					});
 					if (recovery.action === "retry") {
-						stream.push({ type: "turn_end", message, toolResults: [] });
+						stream.push({ type: "turn_end", message, toolResults: interruptedToolResults });
 						modelErrorRecoveryCount = attempt;
 						currentContext.messages = recovery.messages;
 						recordTransition(
@@ -354,7 +361,7 @@ async function runLoop(
 					}
 				}
 
-				stream.push({ type: "turn_end", message, toolResults: [] });
+				stream.push({ type: "turn_end", message, toolResults: interruptedToolResults });
 				finishStandardLoop(stream, newMessages, {
 					config,
 					turnCount,
