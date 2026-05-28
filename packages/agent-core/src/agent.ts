@@ -660,6 +660,7 @@ export class Agent {
 							usage: event.usage,
 							permissionDenialCount: event.permissionDenialCount,
 							permissionDenials: event.permissionDenials,
+							transitions: event.transitions,
 							lastTransition: event.lastTransition,
 							errorMessage: event.errorMessage,
 							errorSubtype: event.errorSubtype,

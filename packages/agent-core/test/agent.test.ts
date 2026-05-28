@@ -357,6 +357,18 @@ describe("Agent", () => {
 		const finalAssistant = agent.state.messages.filter((message) => message.role === "assistant").at(-1);
 		expect(finalAssistant?.role).toBe("assistant");
 		expect(finalAssistant?.stopReason).toBe("stop");
+		expect(agent.state.lastResult?.lastTransition).toEqual({
+			reason: "model_error_recovery",
+			subtype: "context_overflow",
+			attempt: 1,
+		});
+		expect(agent.state.lastResult?.transitions).toEqual([
+			{
+				reason: "model_error_recovery",
+				subtype: "context_overflow",
+				attempt: 1,
+			},
+		]);
 	});
 
 	it("should pass aggregate tool result batch budget into the weak-model-compatible loop", async () => {

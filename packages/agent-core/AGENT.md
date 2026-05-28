@@ -3,7 +3,7 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
-agent.ts: Agent class, AgentOptions, AgentLoopPolicyOptions, main agent with message loop, coordinates with agent-loop for execution, stores last run result, runtime-settable loop policy plumbing
+agent.ts: Agent class, AgentOptions, AgentLoopPolicyOptions, main agent with message loop, coordinates with agent-loop for execution, stores last run result including transition history, runtime-settable loop policy plumbing
 agent-loop.ts: agentLoop and agentLoopContinue, agent execution loop and state machine, transforms to Message[] at LLM boundary, emits request/result telemetry with transition history, recovers model/output errors, enforces standard tool lifecycle and tool-result budget gates
 agent-loop-continuations.ts: computeRecoveryMaxTokens, createOutputTokenRecoveryMessage, createTokenBudgetContinuation, shared output continuation policy for agent loops
 agent-loop-tool-results.ts: enforceToolResultBatchSize, shared aggregate tool-result budget policy for agent loops
