@@ -278,6 +278,36 @@ Sections, in order:
 6. **Burst detector**: clusters where today ≥ 3× baseline rate.
 7. **Notes** (optional): anomalies, schema surprises, anything the maintainer should glance at.
 
+### 5.1 LEDGER update
+
+At the end of every run, in addition to writing the daily report, the agent updates `.dev-docs/diagnosis/runs/LEDGER.md`. The ledger is a single cross-day index that answers "what's still open across history?" without grep'ing N daily reports.
+
+The ledger has two sections — see the file header for the full schema.
+
+**Procedure**:
+
+1. **Read** the existing ledger event log (append-only table at the bottom).
+2. **Derive prior-state events from git** (close the gap since the previous run):
+   - `git log origin/main --since='<previous run timestamp>' --format='%h %s' -- '.dev-docs/diagnosis/runs/'` — any docs PRs that merged map their tickets to `ticket-closed` events.
+   - `git log origin/main --since='<previous run timestamp>' --format='%h %s' --grep '\[fp='` — any auto-fix commits that landed in main map to `auto-fix-merged` events.
+   - For auto-fix branches the agent created earlier and the PR is now closed-without-merge, log `auto-fix-rejected`.
+   - For fingerprints in the previous-run Outstanding section whose `first_seen` is now older than 7 days AND have no escalation event in between, log `observed-aged-out`.
+
+3. **Append today's new events** for each cluster classified in §3:
+   - BLOCK / REVIEW → `ticket-opened`
+   - AUTO-FIX successful → `auto-fix-pushed`
+   - AUTO-FIX attempted then demoted → `attempt-failed-demoted` followed by `ticket-opened` (two rows, same date)
+   - OBSERVE → `observed`
+   - Whole-day skipped → `skipped` with `fingerprint = *`
+
+4. **Regenerate the Outstanding section** by walking the event log bottom-up and listing one entry per fingerprint whose latest event is **not** in the terminal set: `ticket-closed`, `auto-fix-merged`, `auto-fix-rejected`, `observed-aged-out`, `skipped`.
+
+5. **Write the file** atomically. The Outstanding section is rewritten in place; the event log table only gets new rows appended at the bottom; the Maintenance notes and Event vocabulary sections are preserved verbatim.
+
+The ledger lives at `.dev-docs/diagnosis/runs/LEDGER.md` and **does not rotate to `archive/`** under SOP §9.3 — it stays in `runs/` permanently as the canonical cross-day index. If event-log volume becomes unmanageable, the maintainer manually splits by year; the agent does not auto-split.
+
+The Review Agent **reads** the Outstanding section to give context to its PR review comments (e.g. "this fingerprint has been outstanding for 6 days") but **never edits** the ledger. Write is exclusive to the Diagnosis Agent.
+
 ---
 
 ## 6. Redaction
@@ -475,6 +505,7 @@ What the Diagnosis Agent **must NOT** do:
 
 ### 9.5 Policy version
 
+- `policy_version: 5` — 2026-05-28: added §5.1 LEDGER update procedure; introduced `.dev-docs/diagnosis/runs/LEDGER.md` as the cross-day index of every cluster ever seen, with Outstanding (auto-regenerated) + Event log (append-only) sections; ledger does NOT rotate to archive.
 - `policy_version: 4` — 2026-05-27: switched from per-day diagnosis branches to one persistent `agent/diagnosis` branch with a rolling PR; added §9.4 Review Agent handoff (a separate agent now reviews PRs per `.dev-docs/diagnosis/review-sop.md`).
 - `policy_version: 3` — 2026-05-27: artifacts moved out of gitignored `docs/issues/` into tracked `.dev-docs/diagnosis/{runs,archive,_templates}/`; added §9.1 branch+PR workflow and §9.3 archive rotation; per-AUTO-FIX branches carve off `main` (not the daily branch) for independent reviewability.
 - `policy_version: 2` — 2026-05-26: rewrote audience as agent-driven, added test-report schema, codified machine constraints (no build / no dev / no pencil spawn), MCP-only credentials path.
