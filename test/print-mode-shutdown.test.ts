@@ -235,6 +235,72 @@ test("text print mode can emit final agent loop result as stderr JSON", async ()
 	});
 });
 
+test("text print mode joins automatic continuation assistant text", async () => {
+	const stdout: string[] = [];
+	const originalLog = console.log;
+	console.log = (...args: unknown[]) => {
+		stdout.push(args.map(String).join(" "));
+	};
+
+	try {
+		const session = {
+			sessionManager: {
+				getHeader: () => undefined,
+			},
+			state: {
+				lastResult: {
+					stopReason: "stop",
+					turnCount: 2,
+					toolCallCount: 0,
+					durationMs: 300,
+					transitions: [{ reason: "max_output_tokens_recovery", attempt: 1 }],
+					lastTransition: { reason: "max_output_tokens_recovery", attempt: 1 },
+				},
+				messages: [
+					{
+						role: "user",
+						content: "Write a long answer",
+					},
+					{
+						role: "assistant",
+						stopReason: "length",
+						content: [{ type: "text", text: "Part one." }],
+					},
+					{
+						role: "user",
+						content: [
+							{
+								type: "text",
+								text: "Continue the previous response from exactly where it stopped. This is automatic output-token recovery attempt 1.",
+							},
+						],
+					},
+					{
+						role: "assistant",
+						stopReason: "stop",
+						content: [{ type: "text", text: " Part two." }],
+					},
+				],
+			},
+			extensionRunner: undefined,
+			agent: {
+				waitForIdle: async () => {},
+			},
+			bindExtensions: async () => {},
+			subscribe: () => () => {},
+			prompt: async () => {},
+		};
+
+		await runPrintMode(session as any, {
+			mode: "text",
+		});
+	} finally {
+		console.log = originalLog;
+	}
+
+	assert.deepEqual(stdout, ["Part one.", " Part two."]);
+});
+
 test("text print mode can fail on tool denial after emitting answer and loop result", async () => {
 	const stdout: string[] = [];
 	const stderr: string[] = [];

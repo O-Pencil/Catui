@@ -1,11 +1,11 @@
 /**
- * [WHO]: PrintModeOptions, PrintModeResult, formatPrintLoopResult(), runPrintMode()
+ * [WHO]: PrintModeOptions, PrintModeResult, formatPrintLoopResult(), collectPrintAssistantText(), runPrintMode()
  * [FROM]: Depends on ai, agent-core, core/runtime/agent-session
  * [TO]: Consumed by modes/index.ts, main.ts, print mode tests
  * [HERE]: modes/print-mode.ts - non-interactive batch processing mode
  */
 import type { AgentRunResult } from "@pencil-agent/agent-core";
-import type { AssistantMessage, ImageContent } from "@pencil-agent/ai";
+import type { AssistantMessage, ImageContent, Message, UserMessage } from "@pencil-agent/ai";
 import type { AgentSession } from "../core/runtime/agent-session.js";
 
 /**
@@ -35,6 +35,44 @@ export interface PrintModeResult {
 export function formatPrintLoopResult(result: AgentRunResult | undefined): string | undefined {
 	if (!result) return undefined;
 	return JSON.stringify({ type: "agent_result", ...result });
+}
+
+function isAutomaticContinuationMessage(message: Message | undefined): message is UserMessage {
+	if (!message || message.role !== "user") return false;
+	const content = message.content;
+	const text =
+		typeof content === "string"
+			? content
+			: content
+					.filter((part) => part.type === "text")
+					.map((part) => part.text)
+					.join("\n");
+	return (
+		text.includes("automatic output-token recovery attempt") ||
+		text.includes("output token budget is underused")
+	);
+}
+
+function assistantTextBlocks(message: AssistantMessage): string[] {
+	return message.content
+		.filter((content): content is Extract<(typeof message.content)[number], { type: "text" }> => content.type === "text")
+		.map((content) => content.text);
+}
+
+export function collectPrintAssistantText(messages: Message[]): string[] {
+	const lastMessage = messages[messages.length - 1];
+	if (!lastMessage || lastMessage.role !== "assistant") return [];
+	const assistantMessages: AssistantMessage[] = [lastMessage as AssistantMessage];
+
+	let index = messages.length - 2;
+	while (index >= 1 && isAutomaticContinuationMessage(messages[index])) {
+		const previous = messages[index - 1];
+		if (!previous || previous.role !== "assistant") break;
+		assistantMessages.unshift(previous as AssistantMessage);
+		index -= 2;
+	}
+
+	return assistantMessages.flatMap(assistantTextBlocks);
 }
 
 function emitPrintLoopResult(result: AgentRunResult | undefined): void {
@@ -145,10 +183,8 @@ export async function runPrintMode(session: AgentSession, options: PrintModeOpti
 				exitCode = 1;
 			} else {
 				// Output text content
-				for (const content of assistantMsg.content) {
-					if (content.type === "text") {
-						console.log(content.text);
-					}
+				for (const text of collectPrintAssistantText(state.messages as Message[])) {
+					console.log(text);
 				}
 
 				if (options.printLoopResult) {
