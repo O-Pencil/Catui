@@ -431,6 +431,42 @@ describe("Agent", () => {
 		).toBe(true);
 	});
 
+	it("should update loop policy at runtime", async () => {
+		let callIndex = 0;
+		const agent = new Agent({
+			streamFn: () => {
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => {
+					const message = createAssistantMessage(callIndex % 2 === 0 ? "short answer" : "expanded answer");
+					message.usage.output = 10;
+					message.usage.totalTokens = 10;
+					stream.push({ type: "done", reason: "stop", message });
+					callIndex++;
+				});
+				return stream;
+			},
+		});
+
+		agent.setLoopPolicy({
+			outputTokenBudget: {
+				targetTokens: 100,
+				maxContinuations: 1,
+			},
+		});
+
+		await agent.prompt("answer with enough detail");
+
+		expect(callIndex).toBe(2);
+
+		agent.clearMessages();
+		callIndex = 0;
+		agent.setLoopPolicy({ outputTokenBudget: undefined });
+
+		await agent.prompt("answer briefly");
+
+		expect(callIndex).toBe(1);
+	});
+
 	it("should subscribe to events", () => {
 		const agent = new Agent();
 

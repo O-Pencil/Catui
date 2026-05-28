@@ -154,6 +154,22 @@ export interface AgentOptions {
 	maxToolCallsPerPrompt?: number;
 }
 
+export type AgentLoopPolicyOptions = Pick<
+	AgentOptions,
+	| "canUseTool"
+	| "maxToolResultBatchSizeChars"
+	| "recoverModelError"
+	| "maxModelErrorRecoveryAttempts"
+	| "maxOutputTokenRecoveryAttempts"
+	| "outputTokenBudget"
+	| "runStopHooks"
+	| "maxStopHookContinuations"
+	| "createToolUseSummary"
+	| "maxToolConcurrency"
+	| "maxTurnsPerPrompt"
+	| "maxToolCallsPerPrompt"
+>;
+
 export class Agent {
 	private _state: AgentState = {
 		systemPrompt: "",
@@ -335,8 +351,27 @@ export class Agent {
 		this._state.tools = t;
 	}
 
+	setLoopPolicy(options: Partial<AgentLoopPolicyOptions>) {
+		if ("canUseTool" in options) this.canUseTool = options.canUseTool;
+		if ("maxToolResultBatchSizeChars" in options) this.maxToolResultBatchSizeChars = options.maxToolResultBatchSizeChars;
+		if ("recoverModelError" in options) this.recoverModelError = options.recoverModelError;
+		if ("maxModelErrorRecoveryAttempts" in options) {
+			this.maxModelErrorRecoveryAttempts = options.maxModelErrorRecoveryAttempts;
+		}
+		if ("maxOutputTokenRecoveryAttempts" in options) {
+			this.maxOutputTokenRecoveryAttempts = options.maxOutputTokenRecoveryAttempts;
+		}
+		if ("outputTokenBudget" in options) this.outputTokenBudget = options.outputTokenBudget;
+		if ("runStopHooks" in options) this.runStopHooks = options.runStopHooks;
+		if ("maxStopHookContinuations" in options) this.maxStopHookContinuations = options.maxStopHookContinuations;
+		if ("createToolUseSummary" in options) this.createToolUseSummary = options.createToolUseSummary;
+		if ("maxToolConcurrency" in options) this.maxToolConcurrency = options.maxToolConcurrency;
+		if ("maxTurnsPerPrompt" in options) this.maxTurnsPerPrompt = options.maxTurnsPerPrompt;
+		if ("maxToolCallsPerPrompt" in options) this.maxToolCallsPerPrompt = options.maxToolCallsPerPrompt;
+	}
+
 	setModelErrorRecovery(recoverModelError: AgentLoopConfig["recoverModelError"] | undefined) {
-		this.recoverModelError = recoverModelError;
+		this.setLoopPolicy({ recoverModelError });
 	}
 
 	replaceMessages(ms: AgentMessage[]) {
