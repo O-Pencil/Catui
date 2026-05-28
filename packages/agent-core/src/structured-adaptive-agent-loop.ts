@@ -51,6 +51,7 @@ import {
 } from "./agent-loop-tool-summaries.js";
 import { buildAgentRunPolicy, resolveAgentRunLoopFramework } from "./agent-run-result.js";
 import {
+	waitForAbortableOperation,
 	waitForAssistantStream,
 	waitForAssistantStreamEvent,
 	type AssistantStreamNext,
@@ -519,10 +520,18 @@ async function streamAssistantResponse(
 ): Promise<AssistantMessage> {
 	let messages = context.messages;
 	if (config.transformContext) {
-		messages = await config.transformContext(messages, signal);
+		const transformedMessages = await waitForAbortableOperation(config.transformContext(messages, signal), signal);
+		if (transformedMessages.type === "aborted") {
+			return pushAbortedAssistantMessage(context, stream, config);
+		}
+		messages = transformedMessages.value;
 	}
 
-	const llmMessages = await config.convertToLlm(messages);
+	const convertedMessages = await waitForAbortableOperation(config.convertToLlm(messages), signal);
+	if (convertedMessages.type === "aborted") {
+		return pushAbortedAssistantMessage(context, stream, config);
+	}
+	const llmMessages = convertedMessages.value;
 	const llmContext: Context = {
 		systemPrompt: context.systemPrompt,
 		messages: llmMessages,
@@ -530,8 +539,14 @@ async function streamAssistantResponse(
 	};
 
 	const streamFunction = streamFn || streamSimple;
-	const resolvedApiKey =
-		(config.getApiKey ? await config.getApiKey(config.model.provider) : undefined) || config.apiKey;
+	const apiKeyResult = await waitForAbortableOperation(
+		config.getApiKey ? config.getApiKey(config.model.provider) : undefined,
+		signal,
+	);
+	if (apiKeyResult.type === "aborted") {
+		return pushAbortedAssistantMessage(context, stream, config);
+	}
+	const resolvedApiKey = apiKeyResult.value || config.apiKey;
 
 	stream.push({
 		type: "stream_request_start",
@@ -662,6 +677,19 @@ async function streamAssistantResponse(
 		context.messages.push(finalMessage);
 		stream.push({ type: "message_start", message: { ...finalMessage } });
 	}
+	stream.push({ type: "message_end", message: finalMessage });
+	return finalMessage;
+}
+
+function pushAbortedAssistantMessage(
+	context: AgentContext,
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+	config: AgentLoopConfig,
+): AssistantMessage {
+	const finalMessage = createLoopLimitMessage(config, "Request was aborted");
+	finalMessage.stopReason = "aborted";
+	context.messages.push(finalMessage);
+	stream.push({ type: "message_start", message: { ...finalMessage } });
 	stream.push({ type: "message_end", message: finalMessage });
 	return finalMessage;
 }

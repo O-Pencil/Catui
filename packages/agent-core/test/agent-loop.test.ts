@@ -744,6 +744,125 @@ describe("agentLoop with AgentMessage", () => {
 		expect(result?.errorSubtype).toBe("aborted");
 	});
 
+	it("should abort standard loop while context transform is still running", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			transformContext: () => new Promise<AgentMessage[]>(() => {}),
+			convertToLlm: identityConverter,
+		};
+		const controller = new AbortController();
+		const stream = agentLoop([createUserMessage("wait")], context, config, controller.signal, () => {
+			throw new Error("streamFn should not be called after an aborted context transform");
+		});
+		queueMicrotask(() => controller.abort());
+
+		const events: AgentEvent[] = [];
+		await withTimeout(
+			(async () => {
+				for await (const event of stream) {
+					events.push(event);
+				}
+			})(),
+			100,
+		);
+
+		const messages = await withTimeout(stream.result(), 100);
+		const finalAssistant = messages.find(
+			(message): message is AssistantMessage => message.role === "assistant",
+		);
+		expect(finalAssistant?.stopReason).toBe("aborted");
+		expect(finalAssistant?.errorMessage).toBe("Request was aborted");
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.stopReason).toBe("aborted");
+		expect(result?.errorSubtype).toBe("aborted");
+	});
+
+	it("should abort standard loop while LLM message conversion is still running", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: () => new Promise<Message[]>(() => {}),
+		};
+		const controller = new AbortController();
+		const stream = agentLoop([createUserMessage("wait")], context, config, controller.signal, () => {
+			throw new Error("streamFn should not be called after an aborted LLM conversion");
+		});
+		queueMicrotask(() => controller.abort());
+
+		const events: AgentEvent[] = [];
+		await withTimeout(
+			(async () => {
+				for await (const event of stream) {
+					events.push(event);
+				}
+			})(),
+			100,
+		);
+
+		const messages = await withTimeout(stream.result(), 100);
+		const finalAssistant = messages.find(
+			(message): message is AssistantMessage => message.role === "assistant",
+		);
+		expect(finalAssistant?.stopReason).toBe("aborted");
+		expect(finalAssistant?.errorMessage).toBe("Request was aborted");
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.stopReason).toBe("aborted");
+		expect(result?.errorSubtype).toBe("aborted");
+	});
+
+	it("should abort standard loop while API key resolution is still running", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			getApiKey: () => new Promise<string | undefined>(() => {}),
+		};
+		const controller = new AbortController();
+		const stream = agentLoop([createUserMessage("wait")], context, config, controller.signal, () => {
+			throw new Error("streamFn should not be called after an aborted API key resolution");
+		});
+		queueMicrotask(() => controller.abort());
+
+		const events: AgentEvent[] = [];
+		await withTimeout(
+			(async () => {
+				for await (const event of stream) {
+					events.push(event);
+				}
+			})(),
+			100,
+		);
+
+		const messages = await withTimeout(stream.result(), 100);
+		const finalAssistant = messages.find(
+			(message): message is AssistantMessage => message.role === "assistant",
+		);
+		expect(finalAssistant?.stopReason).toBe("aborted");
+		expect(finalAssistant?.errorMessage).toBe("Request was aborted");
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.stopReason).toBe("aborted");
+		expect(result?.errorSubtype).toBe("aborted");
+	});
+
 	it("should continue standard loop when a configured output token budget is underused", async () => {
 		const context: AgentContext = {
 			systemPrompt: "",
@@ -3240,6 +3359,125 @@ describe("structuredAdaptiveAgentLoop", () => {
 			controller.signal,
 			() => new Promise<MockAssistantStream>(() => {}),
 		);
+		queueMicrotask(() => controller.abort());
+
+		const events: AgentEvent[] = [];
+		await withTimeout(
+			(async () => {
+				for await (const event of stream) {
+					events.push(event);
+				}
+			})(),
+			100,
+		);
+
+		const messages = await withTimeout(stream.result(), 100);
+		const finalAssistant = messages.find(
+			(message): message is AssistantMessage => message.role === "assistant",
+		);
+		expect(finalAssistant?.stopReason).toBe("aborted");
+		expect(finalAssistant?.errorMessage).toBe("Request was aborted");
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.stopReason).toBe("aborted");
+		expect(result?.errorSubtype).toBe("aborted");
+	});
+
+	it("should abort structured-adaptive loop while context transform is still running", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			transformContext: () => new Promise<AgentMessage[]>(() => {}),
+			convertToLlm: identityConverter,
+		};
+		const controller = new AbortController();
+		const stream = structuredAdaptiveAgentLoop([createUserMessage("wait")], context, config, controller.signal, () => {
+			throw new Error("streamFn should not be called after an aborted context transform");
+		});
+		queueMicrotask(() => controller.abort());
+
+		const events: AgentEvent[] = [];
+		await withTimeout(
+			(async () => {
+				for await (const event of stream) {
+					events.push(event);
+				}
+			})(),
+			100,
+		);
+
+		const messages = await withTimeout(stream.result(), 100);
+		const finalAssistant = messages.find(
+			(message): message is AssistantMessage => message.role === "assistant",
+		);
+		expect(finalAssistant?.stopReason).toBe("aborted");
+		expect(finalAssistant?.errorMessage).toBe("Request was aborted");
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.stopReason).toBe("aborted");
+		expect(result?.errorSubtype).toBe("aborted");
+	});
+
+	it("should abort structured-adaptive loop while LLM message conversion is still running", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: () => new Promise<Message[]>(() => {}),
+		};
+		const controller = new AbortController();
+		const stream = structuredAdaptiveAgentLoop([createUserMessage("wait")], context, config, controller.signal, () => {
+			throw new Error("streamFn should not be called after an aborted LLM conversion");
+		});
+		queueMicrotask(() => controller.abort());
+
+		const events: AgentEvent[] = [];
+		await withTimeout(
+			(async () => {
+				for await (const event of stream) {
+					events.push(event);
+				}
+			})(),
+			100,
+		);
+
+		const messages = await withTimeout(stream.result(), 100);
+		const finalAssistant = messages.find(
+			(message): message is AssistantMessage => message.role === "assistant",
+		);
+		expect(finalAssistant?.stopReason).toBe("aborted");
+		expect(finalAssistant?.errorMessage).toBe("Request was aborted");
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.stopReason).toBe("aborted");
+		expect(result?.errorSubtype).toBe("aborted");
+	});
+
+	it("should abort structured-adaptive loop while API key resolution is still running", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			getApiKey: () => new Promise<string | undefined>(() => {}),
+		};
+		const controller = new AbortController();
+		const stream = structuredAdaptiveAgentLoop([createUserMessage("wait")], context, config, controller.signal, () => {
+			throw new Error("streamFn should not be called after an aborted API key resolution");
+		});
 		queueMicrotask(() => controller.abort());
 
 		const events: AgentEvent[] = [];
