@@ -193,6 +193,33 @@ function waitForRetryDelay(delayMs: number, signal?: AbortSignal): Promise<"elap
 	});
 }
 
+function waitForStreamEvent<T>(
+	iterator: AsyncIterator<T>,
+	signal?: AbortSignal,
+): Promise<IteratorResult<T> | "aborted"> {
+	if (signal?.aborted) return Promise.resolve("aborted");
+	return new Promise((resolve, reject) => {
+		const cleanup = () => {
+			signal?.removeEventListener("abort", onAbort);
+		};
+		const onAbort = () => {
+			cleanup();
+			resolve("aborted");
+		};
+		signal?.addEventListener("abort", onAbort, { once: true });
+		iterator.next().then(
+			(result) => {
+				cleanup();
+				resolve(result);
+			},
+			(error) => {
+				cleanup();
+				reject(error);
+			},
+		);
+	});
+}
+
 // =============================================================================
 // Provider Resolution
 // =============================================================================
@@ -308,8 +335,19 @@ function wrapWithRetry<TApi extends Api>(
 
 			// Forward all events from inner to outer, but intercept the final result
 			let lastMessage: AssistantMessage | null = null;
+			const innerIterator = innerStream[Symbol.asyncIterator]();
 
-			for await (const event of innerStream) {
+			while (true) {
+				const nextEvent = await waitForStreamEvent(innerIterator, signal);
+				if (nextEvent === "aborted") {
+					void innerIterator.return?.();
+					emitAbortError(outerStream, model);
+					return;
+				}
+				if (nextEvent.done) {
+					break;
+				}
+				const event = nextEvent.value;
 				if (event.type === "done") {
 					lastMessage = event.message;
 					outerStream.push(event);

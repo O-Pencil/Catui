@@ -450,4 +450,52 @@ describe("stream retry abort handling", () => {
 		expect(result.stopReason).toBe("error");
 		expect(result.errorMessage).toBe("Request was aborted");
 	});
+
+	it("emits an abort error when a provider stream never yields", async () => {
+		let providerCalls = 0;
+		const controller = new AbortController();
+		registerApiProvider(
+			{
+				api: "openai-responses",
+				stream() {
+					providerCalls += 1;
+					return new AssistantMessageEventStream();
+				},
+				streamSimple() {
+					providerCalls += 1;
+					return new AssistantMessageEventStream();
+				},
+			},
+			"stream-retry-abort-hung-stream-test",
+		);
+
+		const context: Context = {
+			messages: [{ role: "user", content: "hello", timestamp: 1 }],
+		};
+		const stream = streamSimple(createModel(), context, { signal: controller.signal });
+		queueMicrotask(() => controller.abort());
+		const events = [];
+		await withTimeout(
+			(async () => {
+				for await (const event of stream) {
+					events.push(event);
+				}
+			})(),
+			100,
+		);
+		const result = await withTimeout(stream.result(), 100);
+
+		expect(providerCalls).toBe(1);
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({
+			type: "error",
+			reason: "error",
+			error: {
+				stopReason: "error",
+				errorMessage: "Request was aborted",
+			},
+		});
+		expect(result.stopReason).toBe("error");
+		expect(result.errorMessage).toBe("Request was aborted");
+	});
 });
