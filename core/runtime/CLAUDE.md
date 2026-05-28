@@ -5,7 +5,7 @@
 Member List
 event-bus.ts: EventBus interface, EventBusController, createEventBus(), typed event emission system for extension hooks, key methods: emit(), on() returns unsubscribe function
 sdk.ts: createAgentSession(options) factory, creates all services with dependency injection, wires up extensions, consumed by all run modes (interactive/print/rpc)
-agent-session.ts: AgentSession class, central session lifecycle manager, wraps Agent from agent-core, coordinates compaction, forwards agent_result telemetry to extensions, emits events, handles model switching, all modes delegate to this class
+agent-session.ts: AgentSession class, central session lifecycle manager, wraps Agent from agent-core, coordinates compaction, forwards agent_result telemetry to extensions, exposes runtime loop policy updates, emits events, handles model switching, all modes delegate to this class
 turn-context.ts: Generic per-turn hint bus on globalThis, TURN_CONTEXT_GLOBAL_KEY, TurnContext interface (currently structuralAnchor), setTurnContext/getTurnContext/resetTurnContext; producer-side API for SAL→mem-core decoupling (mem-core has read-only mirror at packages/mem-core/src/turn-context.ts using same global key)
 pencil-agent.ts: PencilAgent helper class wrapping Agent core
 retry-coordinator.ts: Retry coordination for transient failures

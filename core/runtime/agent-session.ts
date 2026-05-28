@@ -10,6 +10,7 @@ import type {
   Agent,
   AgentEvent,
   AgentLoopFramework,
+  AgentLoopPolicyOptions,
   AgentModelErrorRecoveryResult,
   AgentMessage,
   AgentState,
@@ -1824,6 +1825,11 @@ export class AgentSession {
   /** Set the session-level agent loop framework override. */
   setAgentLoopFramework(framework: AgentLoopFrameworkInput | undefined): void {
     this.agent.setAgentLoopFramework(framework);
+  }
+
+  /** Update runtime loop policy options for subsequent turns. */
+  setLoopPolicy(options: Partial<AgentLoopPolicyOptions>): void {
+    this.agent.setLoopPolicy(options);
   }
 
   /**

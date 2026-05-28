@@ -38,3 +38,23 @@ test("createAgentSession passes aggregate tool result budget into Agent", async 
 	};
 	assert.equal(agentWithPrivateOptions.maxToolResultBatchSizeChars, 123_456);
 });
+
+test("AgentSession forwards runtime loop policy updates into Agent", async () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "nanopencil-sdk-loop-policy-"));
+	const agentCtx = { id: "sdk-loop-policy-test", path: agentDir };
+	const { session } = await createAgentSession({
+		cwd: process.cwd(),
+		agentCtx,
+		agentDir,
+		settingsManager: SettingsManager.inMemory(),
+		model: getModel("openai", "gpt-4o-mini"),
+		enableSoul: false,
+	});
+
+	session.setLoopPolicy({ maxToolCallsPerPrompt: 2 });
+
+	const agentWithPrivateOptions = session.agent as unknown as {
+		maxToolCallsPerPrompt?: number;
+	};
+	assert.equal(agentWithPrivateOptions.maxToolCallsPerPrompt, 2);
+});
