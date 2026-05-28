@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.14.5] - 2026-05-28
+
+### Added
+- feat(status): show loop transition history
+- feat(agent-core): record loop transition history
+- feat(status): show loop policy in status
+- feat(agent-core): report loop policy in results
+- feat(cli): expose tool result budget control
+- feat(cli): expose recovery loop controls
+- feat(print): add loop failure exit policies
+- feat(cli): add output budget loop controls
+- feat(cli): add loop control flags
+- feat(print): expose loop result summaries
+- feat(acp): show last loop result in session status
+- feat(rpc): support loop policy updates
+- feat(runtime): expose loop policy updates
+- feat(rpc): expose last loop result in state
+- feat(sal): record loop outcome in tool traces
+- feat(tui): show last loop result in status
+- feat(extensions): expose agent result events
+- feat(agent-core): support runtime loop policy updates
+- feat(agent-core): report limit transitions
+- feat(agent-core): store last agent result
+- feat(agent-core): expose loop policy options
+- feat(agent-core): summarize standard loop tool batches
+- feat(agent-core): bound standard tool result batches
+- feat(agent-core): continue standard loop outputs
+- feat(agent-core): recover standard loop model errors
+- feat(agent-core): emit standard loop result telemetry
+- feat(agent-core): add standard stop hook continuations
+- feat(agent-core): align standard tool lifecycle
+- feat(commands): describe model completions
+- feat(commands): describe login completions
+
+### Fixed
+- fix(ai): retry empty stream completions
+- fix(ai): recover stream factory failures
+- fix(ai): honor eventless stream results
+- fix(ai): emit retry abort stream errors
+- fix(agent-core): finalize stream end results
+- fix(agent-core): record standard follow-up transitions
+- fix(agent-core): record standard tool-result transitions
+- fix(ai): prune empty replay assistant messages
+- fix(ai): ignore duplicate replay tool results
+- fix(ai): drop orphan replay tool results
+- fix(ai): close trailing replay tool calls
+- fix(agent-core): close skipped limit tool calls
+- fix(agent-core): prune recovered standard result messages
+- fix(agent-core): prune recovered streaming result messages
+- fix(agent-core): tombstone recovered streaming tool denials
+- fix(runtime): prune recoverable retry error tails
+- fix(ai): drop interrupted orphan tool results
+- fix(print): require continuation transition for joined output
+- fix(print): join automatic continuation output
+- fix(agent-core): close interrupted tool calls
+- fix(agent-core): retain loop transition history in state
+- fix(print): emit loop result before error exit
+- fix(agent-core): clear stale run results
+- fix(tui): stabilize terminal render loop
+- fix(commands): match language names
+- fix(commands): match mcp server names
+- fix(commands): match login provider names
+
+### Documentation
+- docs(agent-core): align loop framework capabilities
+- docs(arch-review): add Phase 2 synthesis and Phase 3a top-level decisions
+- docs(self-awareness): extension telemetry smoke test + operating guide
+- docs(diagnosis): SOP v4 — single rolling branch + Review Agent SOP
+
+### Maintenance
+- chore(ai): refresh generated model catalog
+
+
 ## [1.14.4] - 2026-05-27
 
 ### Added
