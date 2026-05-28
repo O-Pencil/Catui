@@ -252,7 +252,34 @@ async function runLoop(
 	let stopHookActive = false;
 	let stopHookContinuationCount = 0;
 	// Check for steering messages at start (user may have typed while waiting)
-	let pendingMessages: AgentMessage[] = (await config.getSteeringMessages?.()) || [];
+	const initialSteeringMessages = await waitForAbortableOperation(
+		config.getSteeringMessages ? config.getSteeringMessages() : [],
+		signal,
+	);
+	if (initialSteeringMessages.type === "aborted") {
+		const finalMessage = createLoopLimitMessage(config, "Request was aborted");
+		finalMessage.stopReason = "aborted";
+		currentContext.messages.push(finalMessage);
+		newMessages.push(finalMessage);
+		stream.push({ type: "message_start", message: { ...finalMessage } });
+		stream.push({ type: "message_end", message: finalMessage });
+		stream.push({ type: "turn_end", message: finalMessage, toolResults: [] });
+		finishStandardLoop(stream, newMessages, {
+			config,
+			turnCount,
+			toolCallCount,
+			startedAt,
+			usage,
+			permissionDenials,
+			stopReason: "aborted",
+			transitions,
+			lastTransition,
+			errorMessage: finalMessage.errorMessage,
+			errorSubtype: "aborted",
+		});
+		return;
+	}
+	let pendingMessages: AgentMessage[] = initialSteeringMessages.value || [];
 
 	// Outer loop: continues when queued follow-up messages arrive after agent would stop
 	while (true) {

@@ -173,13 +173,17 @@ async function runStructuredAdaptiveQueryLoop(
 	const maxStopHookContinuations = config.maxStopHookContinuations ?? DEFAULT_MAX_STOP_HOOK_CONTINUATIONS;
 	const maxModelErrorRecoveryAttempts =
 		config.maxModelErrorRecoveryAttempts ?? DEFAULT_MAX_MODEL_ERROR_RECOVERY_ATTEMPTS;
+	const initialSteeringMessages = await waitForAbortableOperation(
+		config.getSteeringMessages ? config.getSteeringMessages() : [],
+		signal,
+	);
 	const state: QueryLoopState = {
 		config,
 		turnCount: 0,
 		toolCallCount: 0,
 		transition: { reason: "start" },
 		transitions: [],
-		pendingMessages: (await config.getSteeringMessages?.()) || [],
+		pendingMessages: initialSteeringMessages.type === "resolved" ? initialSteeringMessages.value || [] : [],
 		pendingToolUseSummaries: [],
 		stopHookActive: false,
 		stopHookContinuationCount: 0,
@@ -191,6 +195,20 @@ async function runStructuredAdaptiveQueryLoop(
 		usage: emptyUsage(),
 		permissionDenials: [],
 	};
+	if (initialSteeringMessages.type === "aborted") {
+		const finalMessage = createLoopLimitMessage(config, "Request was aborted");
+		finalMessage.stopReason = "aborted";
+		currentContext.messages.push(finalMessage);
+		newMessages.push(finalMessage);
+		stream.push({ type: "message_start", message: { ...finalMessage } });
+		stream.push({ type: "message_end", message: finalMessage });
+		stream.push({ type: "turn_end", message: finalMessage, toolResults: [] });
+		state.finalStopReason = "aborted";
+		state.finalErrorMessage = finalMessage.errorMessage;
+		state.finalErrorSubtype = "aborted";
+		finish(stream, newMessages, state);
+		return;
+	}
 	let firstTurn = true;
 
 	while (true) {
