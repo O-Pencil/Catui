@@ -203,6 +203,67 @@ describe("agentLoop with AgentMessage", () => {
 		expect(result.permissionDenials).toEqual([]);
 	});
 
+	it("should finalize standard loop streams that end with a result but no done event", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			getFollowUpMessages: (() => {
+				let delivered = false;
+				return () => {
+					if (delivered) return [];
+					delivered = true;
+					return [createUserMessage("follow up")];
+				};
+			})(),
+		};
+
+		let callIndex = 0;
+		let sawFinalAssistantInSecondRequest = false;
+		const stream = agentLoop([createUserMessage("hello")], context, config, undefined, (_model, ctx) => {
+			if (callIndex === 1) {
+				sawFinalAssistantInSecondRequest = ctx.messages.some(
+					(message) =>
+						message.role === "assistant" &&
+						message.content.some((part) => part.type === "text" && part.text === "final"),
+				);
+			}
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.end(createAssistantMessage([{ type: "text", text: "final" }]));
+				} else {
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "second" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		const assistantEnds = events.filter(
+			(event): event is Extract<AgentEvent, { type: "message_end" }> =>
+				event.type === "message_end" && event.message.role === "assistant",
+		);
+		expect(assistantEnds.map((event) => event.message.content)).toEqual([
+			[{ type: "text", text: "final" }],
+			[{ type: "text", text: "second" }],
+		]);
+		expect(sawFinalAssistantInSecondRequest).toBe(true);
+	});
+
 	it("should let a standard loop recovery hook replace context and retry model errors", async () => {
 		const context: AgentContext = {
 			systemPrompt: "",
@@ -2996,6 +3057,67 @@ describe("structuredAdaptiveAgentLoop", () => {
 			expect(result.permissionDenials).toEqual([]);
 			expect(typeof result.durationMs).toBe("number");
 		}
+	});
+
+	it("should finalize structured-adaptive streams that end with a result but no done event", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			getFollowUpMessages: (() => {
+				let delivered = false;
+				return () => {
+					if (delivered) return [];
+					delivered = true;
+					return [createUserMessage("follow up")];
+				};
+			})(),
+		};
+
+		let callIndex = 0;
+		let sawFinalAssistantInSecondRequest = false;
+		const stream = structuredAdaptiveAgentLoop([createUserMessage("hello")], context, config, undefined, (_model, ctx) => {
+			if (callIndex === 1) {
+				sawFinalAssistantInSecondRequest = ctx.messages.some(
+					(message) =>
+						message.role === "assistant" &&
+						message.content.some((part) => part.type === "text" && part.text === "final"),
+				);
+			}
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.end(createAssistantMessage([{ type: "text", text: "final" }]));
+				} else {
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "second" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) {
+			events.push(event);
+		}
+
+		const assistantEnds = events.filter(
+			(event): event is Extract<AgentEvent, { type: "message_end" }> =>
+				event.type === "message_end" && event.message.role === "assistant",
+		);
+		expect(assistantEnds.map((event) => event.message.content)).toEqual([
+			[{ type: "text", text: "final" }],
+			[{ type: "text", text: "second" }],
+		]);
+		expect(sawFinalAssistantInSecondRequest).toBe(true);
 	});
 
 	it("should classify context overflow errors in structured-adaptive agent_result", async () => {

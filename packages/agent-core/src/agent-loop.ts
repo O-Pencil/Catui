@@ -686,7 +686,15 @@ async function streamAssistantResponse(
 		}
 	}
 
-	return await response.result();
+	const finalMessage = await response.result();
+	if (addedPartial) {
+		context.messages[context.messages.length - 1] = finalMessage;
+	} else {
+		context.messages.push(finalMessage);
+		stream.push({ type: "message_start", message: { ...finalMessage } });
+	}
+	stream.push({ type: "message_end", message: finalMessage });
+	return finalMessage;
 }
 
 function finishStandardLoop(
