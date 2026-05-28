@@ -630,6 +630,11 @@ describe("agentLoop with AgentMessage", () => {
 		if (toolEnd?.type === "tool_execution_end") {
 			expect(toolEnd.isError).toBe(false);
 		}
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.lastTransition).toEqual({ reason: "tool_result", toolCallCount: 1 });
+		expect(result?.transitions).toEqual([{ reason: "tool_result", toolCallCount: 1 }]);
 	});
 
 	it("should stop before exceeding the per-prompt tool call limit", async () => {

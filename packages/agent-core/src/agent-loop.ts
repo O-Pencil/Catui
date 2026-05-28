@@ -466,6 +466,7 @@ async function runLoop(
 				if (pendingSummary) {
 					pendingToolUseSummaries.push(pendingSummary);
 				}
+				recordTransition({ reason: "tool_result", toolCallCount: toolCalls.length });
 			}
 
 			stream.push({ type: "turn_end", message, toolResults });
