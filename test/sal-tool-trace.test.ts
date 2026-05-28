@@ -52,3 +52,35 @@ test("sal tool trace caps sequence and summary payload size", () => {
 	assert.equal(firstSummary.completed_calls, 20);
 	assert.equal(firstSummary.avg_ms, 5);
 });
+
+test("sal tool trace includes agent loop outcome when available", () => {
+	const payload = buildToolTracePayload({
+		turnId: 5,
+		startedAtMs: Date.now(),
+		touchedFiles: new Set<string>(),
+		toolCalls: [],
+		prompt: "fix failing tests",
+		agentResult: {
+			stopReason: "toolUse",
+			turnCount: 4,
+			toolCallCount: 7,
+			durationMs: 1200,
+			permissionDenialCount: 1,
+			lastTransition: {
+				reason: "tool_call_limit_reached",
+				maxToolCalls: 6,
+				requestedToolCalls: 3,
+				toolCallCount: 5,
+			},
+		},
+	}, 1200) as Record<string, unknown>;
+
+	assert.deepEqual(payload.agent_loop, {
+		stop_reason: "toolUse",
+		turn_count: 4,
+		tool_call_count: 7,
+		duration_ms: 1200,
+		permission_denial_count: 1,
+		last_transition_reason: "tool_call_limit_reached",
+	});
+});

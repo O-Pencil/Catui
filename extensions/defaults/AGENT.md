@@ -68,11 +68,11 @@ loop/scheduler-controller.ts: SchedulerController - in-memory recurring task sto
 loop/scheduler-parser.ts: Loop command parsing with flags/subcommands, parseSchedulerCommand/parseDurationSpec/buildSchedulerHelp, --name/--max/--quiet
 loop/scheduler-types.ts: Scheduled loop types, LoopPayloadKind/ScheduledLoopTask/LoopStartSpec/ParsedSchedulerCommand
 loop/README.md: Loop extension documentation - recurring scheduler usage and flags
-sal/index.ts: SAL extension entry, enabled by default, registers flags, /sal:* commands, lifecycle hooks, terrain snapshot refresh, eval event emission, and stale-run cleanup scheduling; delegates config, context, runtime contracts, and tool_trace analytics to focused SAL modules
+sal/index.ts: SAL extension entry, enabled by default, registers flags, /sal:* commands, lifecycle hooks including agent_result, terrain snapshot refresh, eval event emission, and stale-run cleanup scheduling; delegates config, context, runtime contracts, and tool_trace analytics to focused SAL modules
 sal/sal-config.ts: SAL build metadata, eval environment constants, credential loading, truthy parsing, stale-cleanup/A-B flag resolution, experiment id normalization, and sidecar directory resolution
 sal/sal-context.ts: SAL anchor system-prompt injection formatting plus A/B sidecar turn-record persistence
-sal/sal-runtime.ts: SAL shared BuildMeta/TurnState/SalRuntime contracts used across config, context, trace, and entry modules
-sal/sal-trace.ts: SAL tool path extraction, task intent inference, and bounded tool_trace payload construction
+sal/sal-runtime.ts: SAL shared BuildMeta/TurnState/SalRuntime contracts used across config, context, trace, and entry modules, including per-turn loop outcome state
+sal/sal-trace.ts: SAL tool path extraction, task intent inference, and bounded tool_trace payload construction with loop outcome summary
 sal/terrain.ts: TerrainSnapshot/TerrainNode/TerrainEdge model, buildTerrainIndex(), checkDipCoverage(), isSnapshotStale(), moduleIdForPath(), parses P2 AGENT.md and P3 file headers
 sal/anchors.ts: StructuralAnchor/AnchorResolution model, locateTask(), locateAction(), evidence-driven scoring with tunable SalWeights, CJK bigram tokenization
 sal/weights.ts: SalWeights interface, SAL_DEFAULT_WEIGHTS, loadSalWeights() reads sal-config.json from workspace or .memory-experiments/sal/

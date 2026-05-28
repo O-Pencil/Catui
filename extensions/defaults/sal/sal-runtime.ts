@@ -2,7 +2,7 @@
  * [WHO]: Provides BuildMeta, ToolCallRecord, TurnState, SalDiagnosticReporter, SalRuntime shared contracts for the SAL extension
  * [FROM]: Depends on eval sink types, SAL anchors/terrain/weights types for runtime state shape
  * [TO]: Consumed by extensions/defaults/sal/index.ts plus SAL config, trace, and context helpers
- * [HERE]: extensions/defaults/sal/sal-runtime.ts - runtime contract boundary for Structural Anchor Localization modules
+ * [HERE]: extensions/defaults/sal/sal-runtime.ts - runtime contract boundary for Structural Anchor Localization modules, including per-turn loop outcome state
  */
 
 import type {
@@ -11,6 +11,7 @@ import type {
 	EvalSink,
 	EvalVariant,
 } from "./eval/index.js";
+import type { AgentRunResult } from "@pencil-agent/agent-core";
 import type { AnchorResolution } from "./anchors.js";
 import type { TerrainSnapshot } from "./terrain.js";
 import type { SalWeights } from "./weights.js";
@@ -33,6 +34,7 @@ export interface TurnState {
 	turnId: number;
 	startedAtMs: number;
 	taskResolution?: AnchorResolution;
+	agentResult?: AgentRunResult;
 	touchedFiles: Set<string>;
 	toolCalls: ToolCallRecord[];
 	prompt?: string;

@@ -1,8 +1,8 @@
 /**
- * [WHO]: SAL extension entry - enabled by default, registers --nosal/--sal-ab/--sal-rebuild-terrain flags, /sal:coverage /sal:status /sal:setup commands, before_agent_start/tool_execution_start/tool_execution_end/agent_end hooks; runtime no-op when --nosal is set
+ * [WHO]: SAL extension entry - enabled by default, registers --nosal/--sal-ab/--sal-rebuild-terrain flags, /sal:coverage /sal:status /sal:setup commands, before_agent_start/tool_execution_start/tool_execution_end/agent_result/agent_end hooks; runtime no-op when --nosal is set
  * [FROM]: Depends on core/extensions/types.ts (ToolExecutionStartEvent, ToolExecutionEndEvent), core/runtime/turn-context.ts (publishes structuralAnchor), extensions/defaults/sal/terrain.ts, anchors.ts, weights.ts, eval/index.ts (pluggable adapters)
  * [TO]: Loaded by builtin-extensions.ts as a default extension entry point
- * [HERE]: extensions/defaults/sal/index.ts - pluggable Structural Anchor Localization (SAL) extension; emits run_start/turn_anchor/tool_trace/run_end eval events with best-effort flush/close isolation; tool_trace captures per-turn tool usage profile (call counts, sequences, intent, errors) for self-awareness analytics
+ * [HERE]: extensions/defaults/sal/index.ts - pluggable Structural Anchor Localization (SAL) extension; emits run_start/turn_anchor/tool_trace/run_end eval events with best-effort flush/close isolation; tool_trace captures per-turn tool usage and loop outcome for self-awareness analytics
  */
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -16,6 +16,7 @@ import {
 } from "./eval/index.js";
 import type {
 	AgentEndEvent,
+	AgentResultEvent,
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
 	ExtensionAPI,
@@ -643,6 +644,21 @@ export default async function salExtension(api: ExtensionAPI) {
 			record.endMs = Date.now();
 			record.isError = event.isError;
 		}
+	});
+
+	api.on("agent_result", async (event: AgentResultEvent, _ctx: ExtensionContext) => {
+		runtime.turn.agentResult = {
+			stopReason: event.stopReason,
+			turnCount: event.turnCount,
+			toolCallCount: event.toolCallCount,
+			durationMs: event.durationMs,
+			usage: event.usage,
+			permissionDenialCount: event.permissionDenialCount,
+			permissionDenials: event.permissionDenials,
+			lastTransition: event.lastTransition,
+			errorMessage: event.errorMessage,
+			errorSubtype: event.errorSubtype,
+		};
 	});
 
 	api.on("agent_end", async (_event: AgentEndEvent, _ctx: ExtensionContext) => {

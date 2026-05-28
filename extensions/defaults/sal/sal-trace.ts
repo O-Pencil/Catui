@@ -2,7 +2,7 @@
  * [WHO]: Provides SAL tool-path extraction, task intent inference, and bounded tool_trace payload construction
  * [FROM]: Depends on node path helpers and terrain path normalization
  * [TO]: Consumed by extensions/defaults/sal/index.ts and SAL tool trace tests
- * [HERE]: extensions/defaults/sal/sal-trace.ts - per-turn tool analytics boundary for Structural Anchor Localization
+ * [HERE]: extensions/defaults/sal/sal-trace.ts - per-turn tool and loop-outcome analytics boundary for Structural Anchor Localization
  */
 
 import { isAbsolute, join, relative } from "node:path";
@@ -119,7 +119,7 @@ export function buildToolTracePayload(turn: TurnState, turnDuration: number): Re
 	const sequence = turn.toolCalls.slice(0, MAX_TOOL_SEQUENCE).map((tc) => tc.tool);
 	const completedToolCalls = turn.toolCalls.filter((tc) => tc.endMs != null).length;
 
-	return {
+	const payload: Record<string, unknown> = {
 		turn_id: turn.turnId,
 		tool_calls: summarizedTools,
 		tool_sequence: sequence,
@@ -137,4 +137,17 @@ export function buildToolTracePayload(turn: TurnState, turnDuration: number): Re
 		truncated_tool_summary: Math.max(0, toolSummary.size - summarizedTools.length),
 		duration_ms: turnDuration,
 	};
+
+	if (turn.agentResult) {
+		payload.agent_loop = {
+			stop_reason: turn.agentResult.stopReason,
+			turn_count: turn.agentResult.turnCount,
+			tool_call_count: turn.agentResult.toolCallCount,
+			duration_ms: turn.agentResult.durationMs,
+			permission_denial_count: turn.agentResult.permissionDenialCount ?? 0,
+			last_transition_reason: turn.agentResult.lastTransition?.reason,
+		};
+	}
+
+	return payload;
 }
