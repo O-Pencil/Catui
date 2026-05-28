@@ -209,7 +209,7 @@ function wrapWithRetry<TApi extends Api>(
 
 		while (attempt <= retryOptions.maxRetries) {
 			if (signal?.aborted) {
-				outerStream.end({
+				const errorMessage: AssistantMessage = {
 					role: "assistant",
 					content: [],
 					api: model.api,
@@ -219,7 +219,8 @@ function wrapWithRetry<TApi extends Api>(
 					errorMessage: "Request was aborted",
 					usage: emptyUsage(),
 					timestamp: Date.now(),
-				});
+				};
+				outerStream.push({ type: "error", reason: "error", error: errorMessage });
 				return;
 			}
 

@@ -7,7 +7,7 @@ config-path.ts: getDebugLogPath, debug log file path resolution, respects NANOPE
 debug-logger.ts: DebugLogLevel, DebugLogger, debug logging system for troubleshooting AI provider issues
 cli.ts: OAuth CLI tool, AI package CLI for managing credentials, handles login/token operations
 env-api-keys.ts: getEnvApiKey, environment-based API key utilities, lazy-loaded for browser/Vite compatibility
-stream.ts: stream, streamSimple, streaming entry functions, dispatches to registered API providers
+stream.ts: stream, streamSimple, streaming entry functions, dispatches to registered API providers, retry wrapper and abort event handling
 types.ts: ThinkingBudgets, StreamOptions, SimpleStreamOptions, TextContent, ThinkingContent, core AI types, foundational for all modules
 api-registry.ts: ApiProvider, registerApiProvider, getApiProvider, API endpoint registry for provider dispatch
 index.ts: ai barrel exports, entry point for package, exports all providers, models, types, utilities
