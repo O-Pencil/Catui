@@ -1843,6 +1843,65 @@ describe("agentLoop with AgentMessage", () => {
 		expect(sawStopHookMessage).toBe(true);
 	});
 
+	it("should abort standard loop while stop hooks are still running", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const controller = new AbortController();
+		let stopHookCalls = 0;
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			runStopHooks: () => {
+				stopHookCalls += 1;
+				queueMicrotask(() => controller.abort());
+				return new Promise(() => {});
+			},
+		};
+
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("answer")], context, config, controller.signal, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				mockStream.push({
+					type: "done",
+					reason: "stop",
+					message: createAssistantMessage([{ type: "text", text: "draft" }]),
+				});
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		await withTimeout(
+			(async () => {
+				for await (const event of stream) {
+					events.push(event);
+				}
+			})(),
+			100,
+		);
+
+		expect(callIndex).toBe(1);
+		expect(stopHookCalls).toBe(1);
+		const finalAssistant = events
+			.filter(
+				(event): event is Extract<AgentEvent, { type: "message_end" }> =>
+					event.type === "message_end" && event.message.role === "assistant",
+			)
+			.at(-1)?.message as AssistantMessage | undefined;
+		expect(finalAssistant?.stopReason).toBe("aborted");
+		expect(finalAssistant?.errorMessage).toBe("Request was aborted");
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.stopReason).toBe("aborted");
+		expect(result?.errorSubtype).toBe("aborted");
+	});
+
 	it("should record standard loop follow-up message continuations", async () => {
 		const context: AgentContext = {
 			systemPrompt: "",
@@ -4217,8 +4276,67 @@ describe("structuredAdaptiveAgentLoop", () => {
 					.filter((part) => part.type === "text")
 					.map((part) => part.text)
 					.join(""),
-			);
+		);
 		expect(assistantTexts).toEqual(["draft", "revised"]);
+	});
+
+	it("should abort structured-adaptive loop while stop hooks are still running", async () => {
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [],
+		};
+		const controller = new AbortController();
+		let hookCalls = 0;
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			runStopHooks: () => {
+				hookCalls += 1;
+				queueMicrotask(() => controller.abort());
+				return new Promise(() => {});
+			},
+		};
+
+		let callIndex = 0;
+		const stream = structuredAdaptiveAgentLoop([createUserMessage("answer")], context, config, controller.signal, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				mockStream.push({
+					type: "done",
+					reason: "stop",
+					message: createAssistantMessage([{ type: "text", text: "draft" }]),
+				});
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		await withTimeout(
+			(async () => {
+				for await (const event of stream) {
+					events.push(event);
+				}
+			})(),
+			100,
+		);
+
+		expect(callIndex).toBe(1);
+		expect(hookCalls).toBe(1);
+		const finalAssistant = events
+			.filter(
+				(event): event is Extract<AgentEvent, { type: "message_end" }> =>
+					event.type === "message_end" && event.message.role === "assistant",
+			)
+			.at(-1)?.message as AssistantMessage | undefined;
+		expect(finalAssistant?.stopReason).toBe("aborted");
+		expect(finalAssistant?.errorMessage).toBe("Request was aborted");
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(result?.stopReason).toBe("aborted");
+		expect(result?.errorSubtype).toBe("aborted");
 	});
 
 	it("should stop when stop hook continuation limit is reached", async () => {

@@ -373,12 +373,30 @@ async function runStructuredAdaptiveQueryLoop(
 
 			if (config.runStopHooks && !state.stopHookActive) {
 				state.stopHookActive = true;
-				const stopHookResult = await config.runStopHooks({
-					message,
-					messages: currentContext.messages,
-				});
+				const stopHookResult = await waitForAbortableOperation(
+					config.runStopHooks({
+						message,
+						messages: currentContext.messages,
+					}),
+					signal,
+				);
 				state.stopHookActive = false;
-				if (stopHookResult.action === "continue" && stopHookResult.messages.length > 0) {
+				if (stopHookResult.type === "aborted") {
+					const finalMessage = createLoopLimitMessage(config, "Request was aborted");
+					finalMessage.stopReason = "aborted";
+					currentContext.messages.push(finalMessage);
+					newMessages.push(finalMessage);
+					stream.push({ type: "message_start", message: { ...finalMessage } });
+					stream.push({ type: "message_end", message: finalMessage });
+					stream.push({ type: "turn_end", message: finalMessage, toolResults: [] });
+					state.finalStopReason = "aborted";
+					state.finalErrorMessage = finalMessage.errorMessage;
+					state.finalErrorSubtype = "aborted";
+					finish(stream, newMessages, state);
+					return;
+				}
+				const resolvedStopHookResult = stopHookResult.value;
+				if (resolvedStopHookResult.action === "continue" && resolvedStopHookResult.messages.length > 0) {
 					if (state.stopHookContinuationCount >= maxStopHookContinuations) {
 						const limitMessage = createLoopLimitMessage(
 							config,
@@ -401,7 +419,7 @@ async function runStructuredAdaptiveQueryLoop(
 						return;
 					}
 					state.stopHookContinuationCount += 1;
-					state.pendingMessages = stopHookResult.messages;
+					state.pendingMessages = resolvedStopHookResult.messages;
 					recordTransition(state, {
 						reason: "stop_hook_blocking",
 						continuationCount: state.stopHookContinuationCount,

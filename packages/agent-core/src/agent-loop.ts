@@ -521,12 +521,39 @@ async function runLoop(
 
 			if (!hasMoreToolCalls && config.runStopHooks && !stopHookActive) {
 				stopHookActive = true;
-				const stopHookResult = await config.runStopHooks({
-					message,
-					messages: currentContext.messages,
-				});
+				const stopHookResult = await waitForAbortableOperation(
+					config.runStopHooks({
+						message,
+						messages: currentContext.messages,
+					}),
+					signal,
+				);
 				stopHookActive = false;
-				if (stopHookResult.action === "continue" && stopHookResult.messages.length > 0) {
+				if (stopHookResult.type === "aborted") {
+					const finalMessage = createLoopLimitMessage(config, "Request was aborted");
+					finalMessage.stopReason = "aborted";
+					currentContext.messages.push(finalMessage);
+					newMessages.push(finalMessage);
+					stream.push({ type: "message_start", message: { ...finalMessage } });
+					stream.push({ type: "message_end", message: finalMessage });
+					stream.push({ type: "turn_end", message: finalMessage, toolResults: [] });
+					finishStandardLoop(stream, newMessages, {
+						config,
+						turnCount,
+						toolCallCount,
+						startedAt,
+						usage,
+						permissionDenials,
+						stopReason: "aborted",
+						transitions,
+						lastTransition,
+						errorMessage: finalMessage.errorMessage,
+						errorSubtype: "aborted",
+					});
+					return;
+				}
+				const resolvedStopHookResult = stopHookResult.value;
+				if (resolvedStopHookResult.action === "continue" && resolvedStopHookResult.messages.length > 0) {
 					if (stopHookContinuationCount >= maxStopHookContinuations) {
 						const limitMessage = createLoopLimitMessage(
 							config,
@@ -557,7 +584,7 @@ async function runLoop(
 						return;
 					}
 					stopHookContinuationCount += 1;
-					pendingMessages = stopHookResult.messages;
+					pendingMessages = resolvedStopHookResult.messages;
 					recordTransition({
 						reason: "stop_hook_blocking",
 						continuationCount: stopHookContinuationCount,
