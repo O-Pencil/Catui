@@ -134,7 +134,7 @@ Agent Communication Protocol mode.
 
 **P3 Contract:**
 `acp-mode.ts`:
-- [WHO]: Provides AcpMode class, runAcpMode()
+- [WHO]: Provides AcpMode class, runAcpMode(), ACP status formatting helpers
 - [FROM]: Depends on agent-session
 - [TO]: Consumed by main.ts
 - [HERE]: modes/acp/acp-mode.ts - ACP protocol handler

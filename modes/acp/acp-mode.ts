@@ -1,11 +1,11 @@
 /**
- * [WHO]: runAcpMode(), AcpMode class
+ * [WHO]: runAcpMode(), AcpMode class, ACP status formatting helpers
  * [FROM]: Depends on @agentclientprotocol/sdk, agent-core, ai
  * [TO]: Consumed by modes/index.ts
  * [HERE]: modes/acp/acp-mode.ts - ACP protocol integration
  */
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentMessage, AgentTool } from "@pencil-agent/agent-core";
+import type { AgentMessage, AgentRunResult, AgentTool } from "@pencil-agent/agent-core";
 import type { Model } from "@pencil-agent/ai";
 import type {
 	AuthenticateRequest,
@@ -224,6 +224,32 @@ function deferAcpNotification(task: () => Promise<void> | void): void {
 				process.stderr.write(`[acp_session_bootstrap_error] ${message}\n`);
 			});
 	});
+}
+
+function formatAcpDuration(durationMs: number): string {
+	if (durationMs < 1000) return `${Math.round(durationMs)}ms`;
+	return `${(durationMs / 1000).toFixed(1)}s`;
+}
+
+function plural(count: number, singular: string, pluralValue = `${singular}s`): string {
+	return `${count} ${count === 1 ? singular : pluralValue}`;
+}
+
+function formatAcpLoopResultLines(result: AgentRunResult | undefined): string[] {
+	if (!result) return [];
+	const lines = [
+		`Last loop: ${result.stopReason}, ${plural(result.turnCount, "turn")}, ${plural(result.toolCallCount, "tool")}, ${formatAcpDuration(result.durationMs)}`,
+	];
+	if (result.lastTransition) {
+		lines.push(`Loop transition: ${result.lastTransition.reason}`);
+	}
+	if (result.permissionDenialCount && result.permissionDenialCount > 0) {
+		lines.push(`Tool denials: ${result.permissionDenialCount}`);
+	}
+	if (result.errorSubtype || result.errorMessage) {
+		lines.push(`Loop error: ${result.errorSubtype ?? result.errorMessage}`);
+	}
+	return lines;
 }
 
 function getMessageText(message: AgentMessage): string {
@@ -855,6 +881,7 @@ class NanoPencilAgent implements acp.Agent {
 				`Model: ${current ? `${current.provider}/${current.id}` : "none"}`,
 				`Thinking: ${this.session.thinkingLevel}`,
 				`Agent loop: ${this.session.agentLoopFramework}`,
+				...formatAcpLoopResultLines(this.session.state.lastResult),
 				`Messages: ${stats.totalMessages} total (${stats.userMessages} user, ${stats.assistantMessages} assistant, ${stats.toolResults} tool results)`,
 				`Tool calls: ${stats.toolCalls}`,
 			];
@@ -1293,6 +1320,7 @@ export const __testUtils = {
 	buildAcpAvailableCommands,
 	createAvailableCommandInput,
 	deferAcpNotification,
+	formatAcpLoopResultLines,
 	isAdvertisableAcpCommand,
 	normalizeAcpCommandName,
 };

@@ -43,3 +43,26 @@ test("acp bootstrap updates are deferred until after the current turn", async ()
 	await Promise.resolve();
 	assert.equal(events.join(","), "sync,deferred");
 });
+
+test("acp loop result lines summarize the last agent result", () => {
+	assert.deepEqual(
+		__testUtils.formatAcpLoopResultLines({
+			stopReason: "toolUse",
+			turnCount: 4,
+			toolCallCount: 7,
+			durationMs: 1200,
+			permissionDenialCount: 1,
+			lastTransition: {
+				reason: "tool_call_limit_reached",
+				maxToolCalls: 6,
+				requestedToolCalls: 3,
+				toolCallCount: 5,
+			},
+		}),
+		[
+			"Last loop: toolUse, 4 turns, 7 tools, 1.2s",
+			"Loop transition: tool_call_limit_reached",
+			"Tool denials: 1",
+		],
+	);
+});
