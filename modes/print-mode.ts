@@ -22,6 +22,10 @@ export interface PrintModeOptions {
 	initialImages?: ImageContent[];
 	/** In text mode, emit the final agent loop result as one JSON line on stderr */
 	printLoopResult?: boolean;
+	/** Exit non-zero when the final agent loop result is an error. */
+	failOnAgentError?: boolean;
+	/** Exit non-zero when the final agent loop result includes tool permission denials. */
+	failOnToolDenial?: boolean;
 }
 
 export interface PrintModeResult {
@@ -36,6 +40,17 @@ export function formatPrintLoopResult(result: AgentRunResult | undefined): strin
 function emitPrintLoopResult(result: AgentRunResult | undefined): void {
 	const loopResult = formatPrintLoopResult(result);
 	if (loopResult) console.error(loopResult);
+}
+
+function shouldFailForLoopResult(result: AgentRunResult | undefined, options: PrintModeOptions): boolean {
+	if (!result) return false;
+	if (options.failOnAgentError && (result.stopReason === "error" || result.stopReason === "aborted" || result.errorSubtype)) {
+		return true;
+	}
+	if (options.failOnToolDenial && (result.permissionDenialCount ?? 0) > 0) {
+		return true;
+	}
+	return false;
 }
 
 /**
@@ -141,6 +156,10 @@ export async function runPrintMode(session: AgentSession, options: PrintModeOpti
 				}
 			}
 		}
+	}
+
+	if (shouldFailForLoopResult(session.state.lastResult, options)) {
+		exitCode = 1;
 	}
 
 	// Ensure stdout is fully flushed before returning

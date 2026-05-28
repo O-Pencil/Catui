@@ -1085,6 +1085,8 @@ export async function main(args: string[]) {
 			initialMessage,
 			initialImages,
 			printLoopResult: parsed.printLoopResult,
+			failOnAgentError: parsed.failOnAgentError,
+			failOnToolDenial: parsed.failOnToolDenial,
 		});
 		stopThemeWatcher();
 		if (process.stdout.writableLength > 0) {

@@ -40,6 +40,10 @@ export interface Args {
 	print?: boolean;
 	/** In text print mode, emit the final agent loop result as stderr JSON. */
 	printLoopResult?: boolean;
+	/** In print mode, exit non-zero when the final agent result is an error. */
+	failOnAgentError?: boolean;
+	/** In print mode, exit non-zero when any tool permission denial occurred. */
+	failOnToolDenial?: boolean;
 	/** Non-persistent agent loop framework override for this process/session. */
 	agentLoopFramework?: AgentLoopFrameworkInput;
 	/** Non-persistent loop policy overrides for this process/session. */
@@ -197,6 +201,10 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			result.print = true;
 		} else if (arg === "--print-loop-result") {
 			result.printLoopResult = true;
+		} else if (arg === "--fail-on-agent-error") {
+			result.failOnAgentError = true;
+		} else if (arg === "--fail-on-tool-denial") {
+			result.failOnToolDenial = true;
 		} else if (arg === "--agent-loop" && i + 1 < args.length) {
 			const framework = args[++i];
 			const normalized = parseAgentLoopFramework(framework);
@@ -326,6 +334,8 @@ ${chalk.bold("Options:")}
   --mode <mode>                  Output mode: text (default), json, or rpc
   --print, -p                    Non-interactive mode: process prompt and exit
   --print-loop-result            In text print mode, write final loop result JSON to stderr
+  --fail-on-agent-error          In print mode, exit non-zero when final loop result is an error
+  --fail-on-tool-denial          In print mode, exit non-zero when tools were denied
   --agent-loop <framework>       Override loop framework: standard or weak-model-compatible
   --max-turns-per-prompt <n>     Stop a prompt after n assistant turns
   --max-tool-calls-per-prompt <n> Stop a prompt after n tool calls
