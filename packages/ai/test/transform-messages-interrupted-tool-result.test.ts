@@ -91,4 +91,17 @@ describe("transformMessages interrupted tool results", () => {
 		expect(result.map((message) => message.role)).toEqual(["user", "assistant", "toolResult", "user"]);
 		expect((result[2] as ToolResultMessage).toolCallId).toBe(normalizeToolCallId("call_read|opaque/provider/id"));
 	});
+
+	it("closes trailing assistant tool calls before replay", () => {
+		const messages: Message[] = [
+			{ role: "user", content: "read the file", timestamp: 1 },
+			makeToolCallingAssistant("toolUse"),
+		];
+
+		const result = transformMessages(messages, makeAnthropicModel(), normalizeToolCallId);
+
+		expect(result.map((message) => message.role)).toEqual(["user", "assistant", "toolResult"]);
+		expect((result[2] as ToolResultMessage).toolCallId).toBe(normalizeToolCallId("call_read|opaque/provider/id"));
+		expect((result[2] as ToolResultMessage).isError).toBe(true);
+	});
 });

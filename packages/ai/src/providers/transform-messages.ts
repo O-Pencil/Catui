@@ -115,18 +115,7 @@ export function transformMessages<TApi extends Api>(
 		if (msg.role === "assistant") {
 			// If we have pending orphaned tool calls from a previous assistant, insert synthetic results now
 			if (pendingToolCalls.length > 0) {
-				for (const tc of pendingToolCalls) {
-					if (!existingToolResultIds.has(tc.id)) {
-						result.push({
-							role: "toolResult",
-							toolCallId: tc.id,
-							toolName: tc.name,
-							content: [{ type: "text", text: "No result provided" }],
-							isError: true,
-							timestamp: Date.now(),
-						} as ToolResultMessage);
-					}
-				}
+				result.push(...createMissingToolResults(pendingToolCalls, existingToolResultIds));
 				pendingToolCalls = [];
 				existingToolResultIds = new Set();
 			}
@@ -164,18 +153,7 @@ export function transformMessages<TApi extends Api>(
 		} else if (msg.role === "user") {
 			// User message interrupts tool flow - insert synthetic results for orphaned calls
 			if (pendingToolCalls.length > 0) {
-				for (const tc of pendingToolCalls) {
-					if (!existingToolResultIds.has(tc.id)) {
-						result.push({
-							role: "toolResult",
-							toolCallId: tc.id,
-							toolName: tc.name,
-							content: [{ type: "text", text: "No result provided" }],
-							isError: true,
-							timestamp: Date.now(),
-						} as ToolResultMessage);
-					}
-				}
+				result.push(...createMissingToolResults(pendingToolCalls, existingToolResultIds));
 				pendingToolCalls = [];
 				existingToolResultIds = new Set();
 			}
@@ -185,5 +163,25 @@ export function transformMessages<TApi extends Api>(
 		}
 	}
 
+	if (pendingToolCalls.length > 0) {
+		result.push(...createMissingToolResults(pendingToolCalls, existingToolResultIds));
+	}
+
 	return result;
+}
+
+function createMissingToolResults(
+	pendingToolCalls: ToolCall[],
+	existingToolResultIds: ReadonlySet<string>,
+): ToolResultMessage[] {
+	return pendingToolCalls
+		.filter((tc) => !existingToolResultIds.has(tc.id))
+		.map((tc) => ({
+			role: "toolResult",
+			toolCallId: tc.id,
+			toolName: tc.name,
+			content: [{ type: "text", text: "No result provided" }],
+			isError: true,
+			timestamp: Date.now(),
+		}));
 }
