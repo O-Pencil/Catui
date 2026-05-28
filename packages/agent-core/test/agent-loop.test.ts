@@ -3119,6 +3119,11 @@ describe("structuredAdaptiveAgentLoop", () => {
 		expect(result?.stopReason).toBe("stop");
 		expect(result?.permissionDenialCount).toBe(0);
 		expect(result?.permissionDenials).toEqual([]);
+		const returnedMessages = await stream.result();
+		expect(returnedMessages.some((message) => message.role === "toolResult")).toBe(false);
+		expect(
+			returnedMessages.some((message) => message.role === "assistant" && message.stopReason === "error"),
+		).toBe(false);
 	});
 
 	it("should allow stop hooks to inject a continuation turn", async () => {

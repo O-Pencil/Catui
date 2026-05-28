@@ -237,6 +237,7 @@ async function runStructuredAdaptiveQueryLoop(
 			resolveMaxToolConcurrency(config.maxToolConcurrency),
 			config.canUseTool,
 		);
+		const responseStartMessageCount = newMessages.length;
 		const message = await streamAssistantResponse(
 			currentContext,
 			config,
@@ -301,6 +302,7 @@ async function runStructuredAdaptiveQueryLoop(
 				if (recovery.action === "retry") {
 					stream.push({ type: "turn_end", message, toolResults: allToolResults });
 					state.modelErrorRecoveryCount = attempt;
+					newMessages.splice(responseStartMessageCount);
 					currentContext.messages = recovery.messages;
 					recordTransition(
 						state,
