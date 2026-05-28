@@ -118,7 +118,12 @@ export interface CreateAgentSessionOptions {
   /** Optional runtime loop policy overrides applied at session creation. */
   loopPolicy?: Pick<
     AgentLoopPolicyOptions,
-    "maxTurnsPerPrompt" | "maxToolCallsPerPrompt" | "maxToolConcurrency" | "maxToolResultBatchSizeChars"
+    | "maxTurnsPerPrompt"
+    | "maxToolCallsPerPrompt"
+    | "maxToolConcurrency"
+    | "maxToolResultBatchSizeChars"
+    | "outputTokenBudget"
+    | "maxOutputTokenRecoveryAttempts"
   >;
   /** Maximum assistant turns allowed for one prompt. */
   maxTurnsPerPrompt?: number;
@@ -128,6 +133,10 @@ export interface CreateAgentSessionOptions {
   maxToolConcurrency?: number;
   /** Aggregate tool-result batch budget in characters. */
   maxToolResultBatchSizeChars?: number;
+  /** Optional target for automatic continuation when output is under-complete. */
+  outputTokenBudget?: AgentLoopPolicyOptions["outputTokenBudget"];
+  /** Maximum automatic output-token recovery turns per prompt. */
+  maxOutputTokenRecoveryAttempts?: number;
   /** Models available for cycling (Ctrl+P in interactive mode) */
   scopedModels?: Array<{ model: Model<any>; thinkingLevel: ThinkingLevel }>;
 
@@ -475,6 +484,9 @@ export async function createAgentSession(
     maxToolConcurrency: options.maxToolConcurrency ?? options.loopPolicy?.maxToolConcurrency,
     maxTurnsPerPrompt: options.maxTurnsPerPrompt ?? options.loopPolicy?.maxTurnsPerPrompt,
     maxToolCallsPerPrompt: options.maxToolCallsPerPrompt ?? options.loopPolicy?.maxToolCallsPerPrompt,
+    outputTokenBudget: options.outputTokenBudget ?? options.loopPolicy?.outputTokenBudget,
+    maxOutputTokenRecoveryAttempts:
+      options.maxOutputTokenRecoveryAttempts ?? options.loopPolicy?.maxOutputTokenRecoveryAttempts,
     getApiKey: async (provider) => {
       // Use the provider argument from the in-flight request;
       // agent.state.model may already be switched mid-turn.

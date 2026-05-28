@@ -62,6 +62,30 @@ test("parse args recognizes non-persistent agent loop controls", () => {
 	assert.deepEqual(args.messages, ["Run bounded checks"]);
 });
 
+test("parse args recognizes output continuation loop controls", () => {
+	const args = parseArgs([
+		"--output-token-budget",
+		"1200",
+		"--output-token-budget-threshold",
+		"0.75",
+		"--output-token-budget-continuations",
+		"2",
+		"--max-output-token-recovery-attempts",
+		"3",
+		"Write the migration plan",
+	]);
+
+	assert.deepEqual(args.loopPolicy, {
+		outputTokenBudget: {
+			targetTokens: 1200,
+			thresholdPct: 0.75,
+			maxContinuations: 2,
+		},
+		maxOutputTokenRecoveryAttempts: 3,
+	});
+	assert.deepEqual(args.messages, ["Write the migration plan"]);
+});
+
 test("text print mode can emit final agent loop result as stderr JSON", async () => {
 	const stdout: string[] = [];
 	const stderr: string[] = [];

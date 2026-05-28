@@ -45,7 +45,11 @@ export interface Args {
 	/** Non-persistent loop policy overrides for this process/session. */
 	loopPolicy?: Pick<
 		AgentLoopPolicyOptions,
-		"maxTurnsPerPrompt" | "maxToolCallsPerPrompt" | "maxToolConcurrency"
+		| "maxTurnsPerPrompt"
+		| "maxToolCallsPerPrompt"
+		| "maxToolConcurrency"
+		| "outputTokenBudget"
+		| "maxOutputTokenRecoveryAttempts"
 	>;
 	export?: string;
 	noSkills?: boolean;
@@ -92,6 +96,20 @@ function parsePositiveIntegerOption(flag: string, value: string): number | undef
 	return undefined;
 }
 
+function parseNonNegativeIntegerOption(flag: string, value: string): number | undefined {
+	const parsed = Number(value);
+	if (Number.isInteger(parsed) && parsed >= 0) return parsed;
+	console.error(chalk.yellow(`Warning: Invalid ${flag} value "${value}". Expected a non-negative integer.`));
+	return undefined;
+}
+
+function parseUnitIntervalOption(flag: string, value: string): number | undefined {
+	const parsed = Number(value);
+	if (Number.isFinite(parsed) && parsed > 0 && parsed <= 1) return parsed;
+	console.error(chalk.yellow(`Warning: Invalid ${flag} value "${value}". Expected a number in (0, 1].`));
+	return undefined;
+}
+
 function setLoopPolicyOption<K extends keyof NonNullable<Args["loopPolicy"]>>(
 	result: Args,
 	key: K,
@@ -107,6 +125,11 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 		fileArgs: [],
 		unknownFlags: new Map(),
 	};
+	const outputTokenBudget: {
+		targetTokens?: number;
+		thresholdPct?: number;
+		maxContinuations?: number;
+	} = {};
 
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
@@ -195,6 +218,18 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 		} else if (arg === "--max-tool-concurrency" && i + 1 < args.length) {
 			const value = parsePositiveIntegerOption(arg, args[++i]);
 			if (value !== undefined) setLoopPolicyOption(result, "maxToolConcurrency", value);
+		} else if (arg === "--output-token-budget" && i + 1 < args.length) {
+			const value = parsePositiveIntegerOption(arg, args[++i]);
+			if (value !== undefined) outputTokenBudget.targetTokens = value;
+		} else if (arg === "--output-token-budget-threshold" && i + 1 < args.length) {
+			const value = parseUnitIntervalOption(arg, args[++i]);
+			if (value !== undefined) outputTokenBudget.thresholdPct = value;
+		} else if (arg === "--output-token-budget-continuations" && i + 1 < args.length) {
+			const value = parseNonNegativeIntegerOption(arg, args[++i]);
+			if (value !== undefined) outputTokenBudget.maxContinuations = value;
+		} else if (arg === "--max-output-token-recovery-attempts" && i + 1 < args.length) {
+			const value = parseNonNegativeIntegerOption(arg, args[++i]);
+			if (value !== undefined) setLoopPolicyOption(result, "maxOutputTokenRecoveryAttempts", value);
 		} else if (arg === "--export" && i + 1 < args.length) {
 			result.export = args[++i];
 		} else if ((arg === "--extension" || arg === "-e") && i + 1 < args.length) {
@@ -255,6 +290,14 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 		}
 	}
 
+	if (outputTokenBudget.targetTokens !== undefined) {
+		setLoopPolicyOption(result, "outputTokenBudget", {
+			targetTokens: outputTokenBudget.targetTokens,
+			thresholdPct: outputTokenBudget.thresholdPct,
+			maxContinuations: outputTokenBudget.maxContinuations,
+		});
+	}
+
 	return result;
 }
 
@@ -287,6 +330,10 @@ ${chalk.bold("Options:")}
   --max-turns-per-prompt <n>     Stop a prompt after n assistant turns
   --max-tool-calls-per-prompt <n> Stop a prompt after n tool calls
   --max-tool-concurrency <n>     Max concurrent safe tool calls in compatible loop
+  --output-token-budget <n>      Continue when final output is below n tokens
+  --output-token-budget-threshold <n> Continuation threshold ratio in (0,1], default loop policy
+  --output-token-budget-continuations <n> Max output-budget continuations
+  --max-output-token-recovery-attempts <n> Max recovery turns after output-token stops
   --continue, -c                 Continue previous session
   --resume, -r                   Select a session to resume
   --session <path>               Use specific session file

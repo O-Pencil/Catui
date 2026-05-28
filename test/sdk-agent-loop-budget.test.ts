@@ -67,6 +67,43 @@ test("createAgentSession accepts explicit loop framework and prompt limits", asy
 	assert.equal(agentWithPrivateOptions.maxToolConcurrency, 2);
 });
 
+test("createAgentSession accepts output continuation loop policy", async () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "nanopencil-sdk-output-budget-"));
+	const agentCtx = { id: "sdk-output-budget-test", path: agentDir };
+
+	const { session } = await createAgentSession({
+		cwd: process.cwd(),
+		agentCtx,
+		agentDir,
+		settingsManager: SettingsManager.inMemory(),
+		model: getModel("openai", "gpt-4o-mini"),
+		enableSoul: false,
+		loopPolicy: {
+			outputTokenBudget: {
+				targetTokens: 1200,
+				thresholdPct: 0.75,
+				maxContinuations: 2,
+			},
+			maxOutputTokenRecoveryAttempts: 3,
+		},
+	});
+
+	const agentWithPrivateOptions = session.agent as unknown as {
+		outputTokenBudget?: {
+			targetTokens: number;
+			thresholdPct?: number;
+			maxContinuations?: number;
+		};
+		maxOutputTokenRecoveryAttempts?: number;
+	};
+	assert.deepEqual(agentWithPrivateOptions.outputTokenBudget, {
+		targetTokens: 1200,
+		thresholdPct: 0.75,
+		maxContinuations: 2,
+	});
+	assert.equal(agentWithPrivateOptions.maxOutputTokenRecoveryAttempts, 3);
+});
+
 test("AgentSession forwards runtime loop policy updates into Agent", async () => {
 	const agentDir = mkdtempSync(join(tmpdir(), "nanopencil-sdk-loop-policy-"));
 	const agentCtx = { id: "sdk-loop-policy-test", path: agentDir };
