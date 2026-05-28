@@ -7,6 +7,7 @@
 import * as crypto from "node:crypto";
 import * as readline from "readline";
 import type { AgentSession } from "../../core/runtime/agent-session.js";
+import type { AgentLoopPolicyOptions } from "@pencil-agent/agent-core";
 import { buildExtensionSlashCommands } from "../../core/runtime/slash-command-catalog.js";
 import { inferSlashCommandCategory, type SlashCommandInfo } from "../../core/slash-commands.js";
 import type {
@@ -21,6 +22,7 @@ import type {
 	RpcExtensionUIResponse,
 	RpcResponse,
 	RpcSessionState,
+	RpcLoopPolicyOptions,
 	RpcSlashCommand,
 } from "./rpc-types.js";
 
@@ -31,6 +33,7 @@ export type {
 	RpcExtensionUIResponse,
 	RpcResponse,
 	RpcSessionState,
+	RpcLoopPolicyOptions,
 } from "./rpc-types.js";
 
 type RpcSlashCommandCatalogSession = Pick<AgentSession, "extensionRunner" | "promptTemplates" | "resourceLoader">;
@@ -109,6 +112,35 @@ export function buildRpcSessionState(session: RpcStateSession): RpcSessionState 
 		messageCount: session.messages.length,
 		pendingMessageCount: session.pendingMessageCount,
 	};
+}
+
+export function buildRpcLoopPolicyOptions(policy: RpcLoopPolicyOptions): Partial<AgentLoopPolicyOptions> {
+	const out: Partial<AgentLoopPolicyOptions> = {};
+	if ("maxToolResultBatchSizeChars" in policy) {
+		out.maxToolResultBatchSizeChars = policy.maxToolResultBatchSizeChars ?? undefined;
+	}
+	if ("maxModelErrorRecoveryAttempts" in policy) {
+		out.maxModelErrorRecoveryAttempts = policy.maxModelErrorRecoveryAttempts ?? undefined;
+	}
+	if ("maxOutputTokenRecoveryAttempts" in policy) {
+		out.maxOutputTokenRecoveryAttempts = policy.maxOutputTokenRecoveryAttempts ?? undefined;
+	}
+	if ("outputTokenBudget" in policy) {
+		out.outputTokenBudget = policy.outputTokenBudget ?? undefined;
+	}
+	if ("maxStopHookContinuations" in policy) {
+		out.maxStopHookContinuations = policy.maxStopHookContinuations ?? undefined;
+	}
+	if ("maxToolConcurrency" in policy) {
+		out.maxToolConcurrency = policy.maxToolConcurrency ?? undefined;
+	}
+	if ("maxTurnsPerPrompt" in policy) {
+		out.maxTurnsPerPrompt = policy.maxTurnsPerPrompt ?? undefined;
+	}
+	if ("maxToolCallsPerPrompt" in policy) {
+		out.maxToolCallsPerPrompt = policy.maxToolCallsPerPrompt ?? undefined;
+	}
+	return out;
 }
 
 /**
@@ -506,6 +538,11 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			case "set_agent_loop_framework": {
 				session.setAgentLoopFramework(command.framework ?? undefined);
 				return success(id, "set_agent_loop_framework");
+			}
+
+			case "set_loop_policy": {
+				session.setLoopPolicy(buildRpcLoopPolicyOptions(command.policy));
+				return success(id, "set_loop_policy");
 			}
 
 			// =================================================================

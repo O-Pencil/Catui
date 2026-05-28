@@ -4,7 +4,7 @@ import type { ExtensionRunner } from "../core/extensions/index.js";
 import type { ResourceLoader } from "../core/config/resource-loader.js";
 import type { PromptTemplate } from "../core/prompt/prompt-templates.js";
 import type { Skill } from "../core/skills.js";
-import { buildRpcSessionState, buildRpcSlashCommands } from "../modes/rpc/rpc-mode.js";
+import { buildRpcLoopPolicyOptions, buildRpcSessionState, buildRpcSlashCommands } from "../modes/rpc/rpc-mode.js";
 
 const promptTemplates = [
 	{
@@ -111,5 +111,32 @@ test("rpc session state exposes last agent loop result", () => {
 		toolCallCount: 4,
 		durationMs: 250,
 		lastTransition: { reason: "tool_result", toolCallCount: 2 },
+	});
+});
+
+test("rpc loop policy maps serializable controls and clears nullable fields", () => {
+	assert.deepEqual(
+		buildRpcLoopPolicyOptions({
+			maxToolCallsPerPrompt: 4,
+			maxTurnsPerPrompt: null,
+			outputTokenBudget: {
+				targetTokens: 1200,
+				thresholdPct: 0.75,
+				maxContinuations: 2,
+			},
+		}),
+		{
+			maxToolCallsPerPrompt: 4,
+			maxTurnsPerPrompt: undefined,
+			outputTokenBudget: {
+				targetTokens: 1200,
+				thresholdPct: 0.75,
+				maxContinuations: 2,
+			},
+		},
+	);
+
+	assert.deepEqual(buildRpcLoopPolicyOptions({ outputTokenBudget: null }), {
+		outputTokenBudget: undefined,
 	});
 });

@@ -43,6 +43,7 @@ export type RpcCommand =
 
 	// Agent loop
 	| { id?: string; type: "set_agent_loop_framework"; framework: AgentLoopFrameworkInput | null }
+	| { id?: string; type: "set_loop_policy"; policy: RpcLoopPolicyOptions }
 
 	// Queue modes
 	| { id?: string; type: "set_steering_mode"; mode: "all" | "one-at-a-time" }
@@ -114,6 +115,23 @@ export interface RpcSessionState {
 	autoCompactionEnabled: boolean;
 	messageCount: number;
 	pendingMessageCount: number;
+}
+
+export interface RpcOutputTokenBudget {
+	targetTokens: number;
+	thresholdPct?: number;
+	maxContinuations?: number;
+}
+
+export interface RpcLoopPolicyOptions {
+	maxToolResultBatchSizeChars?: number | null;
+	maxModelErrorRecoveryAttempts?: number | null;
+	maxOutputTokenRecoveryAttempts?: number | null;
+	outputTokenBudget?: RpcOutputTokenBudget | null;
+	maxStopHookContinuations?: number | null;
+	maxToolConcurrency?: number | null;
+	maxTurnsPerPrompt?: number | null;
+	maxToolCallsPerPrompt?: number | null;
 }
 
 // ============================================================================

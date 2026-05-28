@@ -11,7 +11,7 @@ import type { ImageContent } from "@pencil-agent/ai";
 import type { SessionStats } from "../../core/runtime/agent-session.js";
 import type { BashResult } from "../../core/bash-executor.js";
 import type { CompactionResult } from "../../core/session/compaction/index.js";
-import type { RpcCommand, RpcResponse, RpcSessionState, RpcSlashCommand } from "./rpc-types.js";
+import type { RpcCommand, RpcLoopPolicyOptions, RpcResponse, RpcSessionState, RpcSlashCommand } from "./rpc-types.js";
 
 // ============================================================================
 // Types
@@ -264,6 +264,13 @@ export class RpcClient {
 	 */
 	async setAgentLoopFramework(framework: AgentLoopFrameworkInput | null): Promise<void> {
 		await this.send({ type: "set_agent_loop_framework", framework });
+	}
+
+	/**
+	 * Update runtime loop policy for subsequent turns. Use null to clear nullable policy fields.
+	 */
+	async setLoopPolicy(policy: RpcLoopPolicyOptions): Promise<void> {
+		await this.send({ type: "set_loop_policy", policy });
 	}
 
 	/**

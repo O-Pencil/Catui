@@ -109,7 +109,7 @@ JSON-RPC over stdin/stdout for IDE integration.
 
 **P3 Contract:**
 `rpc-mode.ts`:
-- [WHO]: Provides runRpcMode(), buildRpcSlashCommands(), buildRpcSessionState()
+- [WHO]: Provides runRpcMode(), buildRpcSlashCommands(), buildRpcSessionState(), buildRpcLoopPolicyOptions()
 - [FROM]: Depends on agent-session, rpc-client
 - [TO]: Consumed by main.ts
 - [HERE]: modes/rpc/rpc-mode.ts - IDE bridge
@@ -123,7 +123,7 @@ JSON-RPC over stdin/stdout for IDE integration.
 
 **P3 Contract:**
 `rpc-types.ts`:
-- [WHO]: Provides RpcRequest, RpcResponse, RpcSessionState types
+- [WHO]: Provides RpcRequest, RpcResponse, RpcSessionState, RpcLoopPolicyOptions types
 - [FROM]: No dependencies
 - [TO]: Consumed by rpc-client, rpc-mode
 - [HERE]: modes/rpc/rpc-types.ts - RPC protocol definitions
