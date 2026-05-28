@@ -196,6 +196,7 @@ import {
   getPersonaArgumentCompletions,
   getThinkingArgumentCompletions,
 } from "./slash-command-arguments.js";
+import { formatAgentLoopStatusLines } from "./agent-loop-status.js";
 
 /** Interface for components that can be expanded/collapsed */
 interface Expandable {
@@ -6158,6 +6159,9 @@ export class InteractiveMode {
     lines.push(theme.fg("border", `│`) + padLine(modelLine, width) + theme.fg("border", `│`));
     const loopLine = `  Agent loop:           ${this.session.agentLoopFramework}`;
     lines.push(theme.fg("border", `│`) + padLine(loopLine, width) + theme.fg("border", `│`));
+    for (const line of formatAgentLoopStatusLines(state.lastResult)) {
+      lines.push(theme.fg("border", `│`) + padLine(`  ${line}`, width) + theme.fg("border", `│`));
+    }
 
     // Directory (with git branch if available)
     let cwd = this.session.cwd;

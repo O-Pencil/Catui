@@ -34,6 +34,7 @@ Primary TUI mode for terminal-based interaction.
 ```
 interactive/
 ├── interactive-mode.ts    # Main TUI controller
+├── agent-loop-status.ts   # /status loop outcome formatting
 ├── components/            # UI widgets (41 files)
 │   ├── index.ts           # Component barrel exports
 │   ├── custom-editor.ts   # Custom input editor with keybindings

@@ -4,6 +4,7 @@
 
 Member List
 interactive-mode.ts: TUI orchestration hub, coordinates AgentSession with terminal UI, handles input/output loop
+agent-loop-status.ts: formatAgentLoopStatusLines(), formats last agent loop result telemetry for /status
 theme/theme.ts: Theme loader and definitions, ThemeJson schema validation, chalk-based color system
 components/index.ts: Component barrel exports, re-exports all UI components for extensions
 components/extension-selector.ts: Extension selector UI, keyboard navigation with timeout support
