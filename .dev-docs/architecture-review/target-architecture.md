@@ -15,7 +15,8 @@ based_on:
   - findings/F07-dist-bundle-composition.md
   - findings/F08-quality-rules-not-enforced.md
   - top-level-structure-review.md  # ★ Phase 2.5 顶层评审
-  - industry-protocol-survey.md    # ★ Phase 3a 协议/runtime 业界调研（PARP 对位证据）
+  - evolution/PARP.md              # ★ 演进组：PARP 定义（原 §3.5 迁出）
+  - evolution/industry-protocol-survey.md  # ★ 演进组：协议/runtime 业界调研（PARP 对位证据）
 benchmark_projects:  # ★ grilling 期间业界对标
   - openclaw/openclaw       # 375k★ TS pnpm monorepo
   - continuedev/continue    # 33k★ TS yarn monorepo - 候选 D 同形参考
@@ -30,11 +31,13 @@ product_charter: .PENCIL.md
 audience: pencil maintainer
 ```
 
+> **修订说明（2026-05-29 · 重构/演进分组）**：本文归入**重构组**（behavior-preserving，目标"功能不变"）。原 §3.5 PARP、§5 D5 的 continuity 内核、§4 目录树里的 `core/continuity/` `core/agent-profile/` 及 extension-sdk 的 PARP 协议文件，全部属**演进组（net-new）**，已迁出到 `evolution/PARP.md` 与 `evolution/product-roadmap.md`。本文目录树对这些演进落点统一标注 `【EVOLUTION-RESERVED】`——本轮重构**不建**，仅由 `evolution/PARP.md §5` 的 3 个接缝（S1/S2/S3）预留形状，使未来落地是纯增量。
+>
 > **修订说明（2026-05-28）**：原 §4 目录结构基于"在现有 packages/core/modes/extensions 四分法下做减法"。Phase 2.5 顶层评审揭示 packages/ 是"形式上的多包，实质上的单包"，且 README 三层（Cognitive/Tool/Interface）与代码目录无映射。Phase 3a grilling 选定**候选 D**（详见 top-level-structure-review.md §6.D），§4 据此重写为基于 `core/` + `core/lib/` + `core/platform/` + `packages/` (3 真发布包) 的目标结构。
 >
 > 本文是 Phase 2 与 Phase 3 之间的**综合层**，把 8 个 finding + 顶层评审综合为一份目标架构愿景。**不取代** finding cards（每个 finding 的 deletion test、benefits 仍在原卡中），但提供一个**单一可争论的整体设计**。
 >
-> **文档职责**：本文维护"目标是什么"——目录结构、功能域映射、PARP/continuity 协议边界、迁移批次。`top-level-structure-review.md` 只维护"为什么选择候选 D"；`refactor-plan.md` 只维护"按什么顺序执行"。
+> **文档职责**：本文维护**重构组**的"目标是什么"——目录结构、功能域映射、现状→端态迁移映射。`top-level-structure-review.md` 只维护"为什么选择候选 D"；`refactor-plan.md` 只维护批次与 ADR；**`execution-plan/` 按 Phase 维护任务与验证 DoD**；演进组见 `evolution/`。
 
 ---
 
@@ -124,107 +127,13 @@ audience: pencil maintainer
 
 ---
 
-## 3.5 上位抽象：Pencil Agent Runtime Protocol（PARP）
+## 3.5 上位抽象：PARP → 已迁出到演进组
 
-候选 D 解决"代码应该怎么摆"；PARP 解释"这些目录共同抽象出什么"。
-
-**定义**：Pencil 的底层不是单一 CLI，而是一套可宿主、可组合、可扩展的 **Agent Runtime Protocol**。CLI 是默认 host profile；Browser 是 browser tool runtime + browser agent profile；Gateway 是 remote host adapter；Editor 是 caller-owned tool runtime。nanoPencil 的长期定位不是"一个 CLI + 插件"，而是 Pencil 生态里能配置出多类 PencilAgent 的 runtime 内核。
-
-> **PARP ≠ 新 wire protocol**（避免被误解为造轮子）：PARP **不重新定义** Editor↔Agent、Host↔Tool、Host↔Host 的传输层；它是一份**组合契约**（composition contract），把以下已有事实标准在 pencil 内统一组装：
-> - **MCP**（Model Context Protocol）= Tool Runtime 的远程分支事实标准
-> - **ACP**（Agent Client Protocol）= Editor Host Adapter 事实标准
-> - **A2A**（Agent2Agent Protocol）= 未来 PencilAgent ↔ PencilAgent 跨 runtime 通信
+> **【已迁移 · 2026-05-29】** PARP（Pencil Agent Runtime Protocol）的完整定义、组合公式、五层协议边界、工具协议化 endpoint、与候选 D 的关系，已迁出到 **`evolution/PARP.md`**（演进组）。业界对位证据见 `evolution/industry-protocol-survey.md`。
 >
-> PARP 真正自定义的只有 **Continuity 层**（canonical state / merge policy / prompt injection policy）和 **Agent Profile schema**（参考 Microsoft Agent Framework 1.0 YAML 形态）。其余四层通过 re-export 或薄封装对接业界标准。
+> **为什么迁出**：PARP 是候选 D 之上的"产品架构解释层 + 未来演进方向"（net-new），**不是本轮重构（behavior-preserving）的一部分，也不是其前提**。把它留在本文会让重构端态与演进愿景混淆，并导致执行批次把"机械搬迁"与"协议/连续性内核新增"捆在一起。
 >
-> 业界对位证据、五层覆盖矩阵、来源清单详见 `industry-protocol-survey.md` §2、§6、§9。
-
-### 3.5.1 PARP 的组合公式
-
-```text
-PencilAgent =
-  Agent Loop
-  + Tool Runtime
-  + Agent Profile
-  + Continuity
-  + Host Adapter
-  + Permission Policy
-```
-
-不同形态只是 profile 与 runtime 组合不同：
-
-```text
-CLI PencilAgent
-  = local shell/file/edit/grep tools
-  + terminal host surface
-  + local workspace
-  + default continuity
-
-Browser PencilAgent
-  = browser tool runtime（open/click/type/screenshot/extract/waitFor）
-  + browser session state
-  + browser-specific loop policy
-  + browser permission policy
-
-Gateway PencilAgent
-  = remote tool transport
-  + HTTP/SSE host adapter
-  + multi-agent isolation
-  + usage/billing boundary
-
-Editor PencilAgent
-  = caller-owned workspace tools
-  + ACP / Remote HTTP bridge
-  + document/context runtime
-```
-
-### 3.5.2 五层协议边界
-
-| PARP 层 | 责任 | 目标目录 | **业界对位标准**（详见 industry-protocol-survey.md §6）|
-|---------|------|----------|-------------------------------------|
-| Agent Loop | 模型 → 工具 → 观察 → 下一步；不关心具体 host | `core/runtime/` + `core/lib/agent-core/` | 内部实现；参考 Scaffold paper 5 原语（ReAct / generate-test-repair / plan-execute / retry / tree search）|
-| Tool Runtime | CLI / Browser / Editor / MCP / Remote 等工具执行环境 | `core/tools/` + `extensions/*` + `packages/extension-sdk/tools.ts` | **MCP** = 远程/hosted/mcp 分支事实标准；local/browser 由 pencil 实现但接口与 MCP 同形 |
-| Agent Profile | 把 loop policy、tool runtime、continuity、权限组合成一种 PencilAgent | `core/agent-profile/` | 内部实现；schema 参考 **Microsoft Agent Framework 1.0** 声明式 YAML；OpenAI Agents SDK `Agent` 原语 |
-| Host Adapter | CLI / ACP / Gateway HTTP / Editor / Browser session 等宿主适配 | `modes/` + Gateway SDK 嵌入 + ACP | **ACP** = Editor host adapter 事实标准；**A2A** = 未来 PencilAgent ↔ PencilAgent 跨 runtime 通信；CLI host adapter 由 pencil 自定义 |
-| Continuity | 记忆、灵魂、认知地图、长期状态合并 | `core/continuity/` + `packages/mem-core/` + `packages/soul-core/` | **★ 业界协议全部留白**（A2A 明确声明 "without access to memory/state/tools"；MCP/ACP 不管）——pencil 的真正独立贡献 |
-| Permission Policy | 沙箱、approval、guardrails | `core/extensions-host/permissions.ts` + extension-sdk | 内部实现；参考 **OpenAI Agents SDK Guardrails** 双模式（parallel/blocking）+ input/output 双侧检查 |
-
-### 3.5.3 工具也是协议化 endpoint
-
-工具不应只是散落的函数，而是 Agent Loop 可调用的协议化 endpoint：
-
-```ts
-interface AgentToolProtocol {
-  name: string;
-  schema: JsonSchema;
-  invoke(input: unknown, context: ToolInvocationContext): Promise<ToolResult>;
-  permissions: PermissionSpec;
-  runtime: "local" | "remote" | "browser" | "mcp" | "hosted";
-}
-```
-
-在这个模型下，`bash`、`read_file`、`edit`、`browser.click`、`browser.open`、`editor.insert_text`、MCP tools、remote tools 都是同一套 Tool Protocol 的不同实现。Browser 能力可以作为 `extensions/optional/browser/` 提供的 **Browser Tool Runtime**，而 Browser Agent 则是一个使用该 runtime 的 **Agent Profile**，不是把整个 browser agent 塞进普通插件。
-
-**与 MCP 对齐**：对于 `runtime: 'remote' | 'mcp' | 'hosted'` 三个分支，wire format **直接采用 MCP**（2025-11 spec：JSON-RPC + stdio/Streamable HTTP + OAuth 2.1）；`runtime: 'local' | 'browser'` 由 pencil 内部实现但接口形态与 MCP 同形（schema / invoke / result）以便未来合流。AgentToolProtocol 不重新发明远程工具调用协议。
-
-### 3.5.4 与候选 D 的关系
-
-PARP 不替代候选 D，也不新增一个必须立即完成的大批次。它是候选 D 的命名原则和抽象边界：
-
-- `packages/extension-sdk/` 不只是 plugin SDK，而是公开 runtime protocol 的稳定入口
-- `extensions/optional/browser/` 从"低频大资产扩展"重新归类为 Browser Tool Runtime
-- 新增 `core/agent-profile/`，先承载 profile schema / built-in profiles，不急于做 marketplace 或 UI
-- `core/continuity/` 继续保留 Memory/Soul 的官方连续性解释权，profile 只能选择或配置 continuity 策略，不能绕过 merge policy
-
-**extension-sdk 的协议来源原则**：`packages/extension-sdk/` 的协议文件应当**优先 re-export 或薄封装业界标准类型**，而非自造：
-
-- `host-adapter.ts` ← 主要 re-export `@agentclientprotocol/sdk` 类型 + pencil 自定义的 CLI host adapter
-- `tool-runtime.ts` ← 主要 re-export `@modelcontextprotocol/sdk` 类型 + pencil 自定义的 local/browser runtime（接口与 MCP 同形）
-- `a2a-bridge.ts` ← 预留 A2A 类型 stub（B0 不必实现，留命名占位）
-- `agent-profile.ts` ← **pencil 自定义**（参考 MS Agent FW 1.0 YAML，但 schema 自主）
-- `memory-store.ts` / `memory-candidate.ts` / `soul-facet-provider.ts` / `cognitive-model-provider.ts` ← **pencil 自定义**（A2A/MCP/ACP 全部留白）
-
-短期落地只要求类型命名和目录语义向 PARP 对齐；完整多 Agent Profile 平台化留给后续阶段。
+> **本轮重构与 PARP 的唯一交集**：在 `refactor-plan.md` B1/B2 预留 3 个接缝（S1 工具契约判别字段 / S2 组合根单 config 装配 / S3 mem-soul 依赖反转，详见 `evolution/PARP.md §5`），使未来 PARP 落地是纯增量、不引发二次重构。除此之外 PARP 的目录（`core/continuity/`、`core/agent-profile/`）、extension-sdk 的协议文件、a2a-bridge 等本轮**一律不建**，在 §4 目录树中统一标注 `【EVOLUTION-RESERVED】`。
 
 ---
 
@@ -275,28 +184,25 @@ nanoPencil/
 │   │   ├── wrapper.ts
 │   │   ├── registry.ts                  ← 【新】tool/theme/command/hook/provider 注册中心
 │   │   ├── sandbox.ts                   ← 【新】risk-level 沙箱
-│   │   ├── permissions.ts               ← 【新】第三方扩展权限提示
-│   │   └── cognitive-provider-bridge.ts ← 【新】MemoryStore / SoulFacet / CognitiveModel provider 桥接
+│   │   └── permissions.ts               ← 【新】第三方扩展权限提示
+│   │   #  cognitive-provider-bridge.ts  ← 【EVOLUTION-RESERVED】continuity provider 桥接，演进 E3 时新增
 │   │
-│   ├── continuity/                       ← ★ 【新 D5】连续性内核（官方解释权）
-│   │   ├── canonical-state.ts            ← Memory/Soul/SAL 可引用的长期状态 schema
-│   │   ├── provenance.ts                 ← 状态来源、confidence、scope、版本
-│   │   ├── merge-policy.ts               ← 插件候选更新如何进入 canonical state
-│   │   ├── prompt-injection-policy.ts    ← 哪些状态可进入 system prompt / recall prompt
-│   │   ├── cognitive-model-contract.ts   ← SAL 等派生认知模型的只读/候选更新边界
-│   │   └── README.md                     ← 面向人/技术的双层解释映射
+│   │  # 【EVOLUTION-RESERVED】core/continuity/ 连续性内核（canonical-state/provenance/
+│   │  #  merge-policy/prompt-injection-policy/cognitive-model-contract）本轮不建，
+│   │  #  见 evolution/PARP.md §6 + product-roadmap.md E3。重构只需 S3 接缝（mem/soul 依赖反转）。
 │   │
 │   ├── session/                         ← 不变
 │   ├── prompt/                          ← 不变
 │   ├── model/                           ← 不变
-│   ├── agent-profile/                   ← ★ 【新 PARP】Agent Profile schema / built-in profiles / profile resolver
+│   │  # 【EVOLUTION-RESERVED】core/agent-profile/（Agent Profile schema/built-in/resolver）
+│   │  #  本轮不建，见 evolution/PARP.md §6 + product-roadmap.md E4。重构只需 S2 接缝（组合根单 config）。
 │   ├── sub-agent/                       ← 不变
 │   ├── agent-dir/                       ← 不变
 │   ├── persona/                         ← 不变
 │   ├── workspace/                       ← 不变
 │   ├── export-html/                     ← 不变
 │   ├── slash-commands.ts                ← 不变
-│   ├── soul-integration.ts              ← 【F04 修】不再 import sdk.ts；改走 continuity + soul-core 官方 engine
+│   ├── soul-integration.ts              ← 【F04 修】不再 import sdk.ts（重构）；接 continuity 留演进 E3
 │   ├── soul-options-contract.ts         ← 【新】soul ↔ sdk 共享契约（低层 option，不承载身份解释权）
 │   ├── model-registry.ts                ← 不变
 │   ├── model-resolver.ts                ← 不变
@@ -355,8 +261,7 @@ nanoPencil/
 │
 ├── extensions/                          ← 第一方扩展（dev 时直接加载，OpenClaw 风）
 │   ├── builtin/                         ← 【rename】"defaults" → "builtin"
-│   │   ├── memory-binding/              ← ★ 【新】把 mem-core 官方 engine 接到 continuity
-│   │   ├── soul-binding/                ← ★ 【新】把 soul-core 官方 engine 接到 continuity
+│   │   #  memory-binding/ soul-binding/ ← 【EVOLUTION-RESERVED】engine↔continuity 桥接，演进 E3 新增
 │   │   ├── sal/  mcp/  loop/  diagnostics/  soul/  presence/
 │   │   ├── grub/  team/  subagent/  plan/  recap/
 │   │   ├── discipline/  interview/  idle-think/
@@ -370,25 +275,25 @@ nanoPencil/
 │   └── third-party.md                   ← ★ 【新】第三方扩展开发指南
 │
 ├── packages/                            ← ★ 候选 D：只放真发布的子包（3 个）
-│   ├── extension-sdk/                   ← ★ 【新】协议 + 类型契约（等同 Continue 的 continue-sdk）
+│   ├── extension-sdk/                   ← ★ 【新 · B0b】协议 + 类型契约（等同 Continue 的 continue-sdk）
 │   │   ├── src/
 │   │   │   ├── index.ts                 ← 总入口
-│   │   │   ├── agent-profile.ts         ← ★ Agent Profile 协议（pencil 自定义；参考 MS Agent FW 1.0 YAML）
-│   │   │   ├── host-adapter.ts          ← ★ Host Adapter 协议（re-export ACP types + pencil CLI host adapter）
-│   │   │   ├── tools.ts                 ← Tool 协议
-│   │   │   ├── tool-runtime.ts          ← ★ Tool Runtime 协议（re-export MCP types + pencil local/browser runtime）
-│   │   │   ├── a2a-bridge.ts            ← ★ 【新】预留 A2A（PencilAgent↔PencilAgent）类型 stub；B0 仅占位
+│   │   │   │  ─── 重构（B0b）落地的稳定协议 ───
+│   │   │   ├── tools.ts                 ← Tool 协议（含 S1 接缝：runtime? / permissions? 可选字段）
 │   │   │   ├── themes.ts                ← Theme 协议
 │   │   │   ├── hooks.ts                 ← Hook 协议
 │   │   │   ├── commands.ts              ← SlashCommand 协议
-│   │   │   ├── memory-store.ts          ← ★ Memory 存储介质协议（jsonl/sqlite/vector/mem0/zep；pencil 自定义，业界留白）
-│   │   │   ├── memory-candidate.ts      ← ★ 插件提交 memory 候选更新，不直接写 canonical state（pencil 自定义）
-│   │   │   ├── soul-facet-provider.ts   ← ★ 外部人格侧面/偏好信号 provider（pencil 自定义）
-│   │   │   ├── cognitive-model-provider.ts ← ★ SAL/认知地图等派生模型 provider（pencil 自定义）
 │   │   │   ├── permissions.ts           ← 参考 OpenAI Agents SDK Guardrails 双模式
-│   │   │   └── lifecycle.ts             ← Extension / Context / Factory
+│   │   │   ├── lifecycle.ts             ← Extension / Context / Factory
+│   │   │   │  ─── 【EVOLUTION-RESERVED】以下 PARP 协议文件本轮不建（见 evolution/PARP.md §6）───
+│   │   │   #  agent-profile.ts          ← 演进 E4（pencil 自定义；参考 MS Agent FW 1.0 YAML）
+│   │   │   #  host-adapter.ts           ← 演进（re-export ACP types + pencil CLI host adapter）
+│   │   │   #  tool-runtime.ts           ← 演进 E2（re-export MCP types + local/browser runtime）
+│   │   │   #  a2a-bridge.ts             ← 演进 E6（A2A 类型 stub）
+│   │   │   #  memory-store.ts / memory-candidate.ts ← 演进 E3
+│   │   │   #  soul-facet-provider.ts / cognitive-model-provider.ts ← 演进 E3
 │   │   ├── package.json                 ← @pencil-agent/extension-sdk
-│   │   │                                   peerDependencies: @agentclientprotocol/sdk, @modelcontextprotocol/sdk
+│   │   │                                   peerDependencies: @agentclientprotocol/sdk, @modelcontextprotocol/sdk（演进接入时）
 │   │   ├── tsconfig.build.json
 │   │   └── README.md                    ← 第三方开发者手册
 │   │
@@ -450,9 +355,9 @@ nanoPencil/
 | `packages/tui/` | `core/lib/tui/` | 同上 |
 | `packages/mem-core/` | `packages/mem-core/` | 不变（保独立发布身份） |
 | `packages/soul-core/` | `packages/soul-core/` | 不变（保独立发布身份） |
-| — | `packages/extension-sdk/` | ★ 新增 |
+| — | `packages/extension-sdk/` | ★ 新增（B0b：稳定协议 tools/themes/hooks/commands/permissions/lifecycle）|
 | `core/extensions/` | `core/extensions-host/` | rename，避免与 `extensions/` 顶层撞名 |
-| — | `core/agent-profile/` | ★ 新增（PARP：profile schema / built-in profiles / resolver） |
+| — | ~~`core/agent-profile/`~~ | 【EVOLUTION-RESERVED】演进 E4，本轮不建（见 evolution/PARP.md §6）|
 | `core/i18n/` | `core/platform/i18n/` | 升到 platform/ 横切 |
 | `core/telemetry/` | `core/platform/telemetry/` | 同上 |
 | `core/utils/` | `core/platform/utils/` | 同上 |
@@ -460,8 +365,8 @@ nanoPencil/
 | `core/keybindings.ts` | `core/platform/keybindings.ts` | 同上 |
 | `extensions/defaults/` | `extensions/builtin/` | rename（更准确） |
 | `extensions/defaults/browser/` | `extensions/optional/browser/` | F07 迁移 |
-| — | `extensions/builtin/memory-binding/` | ★ 新增（官方 MemoryEngine ↔ continuity 桥接） |
-| — | `extensions/builtin/soul-binding/` | ★ 新增（官方 SoulEngine ↔ continuity 桥接） |
+| — | ~~`extensions/builtin/memory-binding/`~~ | 【EVOLUTION-RESERVED】演进 E3，本轮不建 |
+| — | ~~`extensions/builtin/soul-binding/`~~ | 【EVOLUTION-RESERVED】演进 E3，本轮不建 |
 | `scripts/bundle-deps.js` | (删除) | 走 npm 自然解析 |
 
 ---
@@ -474,9 +379,9 @@ nanoPencil/
 
 - `core/lib/agent-core/`：**纯 Agent loop 抽象**（model → tool → output），不知道 pencil 业务；**当前 0 外部消费者 → 退 lib 不发布**。若未来真出现外部消费者，跑 `promote-to-package.ts agent-core` 升回 `packages/agent-core/` 即可
 - `core/runtime/`：pencil 业务的 "Composition Root" 层 —— 把 agent-core + tools + session + extensions-host 黏在一起
-- `core/tools/`：内置工具实现；在 PARP 下它们是 Tool Runtime 的本地实现，不在 lib 是因为它绑定 pencil 的"信任模型"（bash 沙箱、edit 行号、ls 截断）
-- `core/agent-profile/`：PARP 的 profile 层，负责把 loop policy、tool runtime、continuity、permissions 组合成 CLI / Browser / Remote / Editor 等 PencilAgent 形态；B0 只要求 schema + 内置 profile，完整 marketplace 不在本轮范围
-- **拆 F01 后**：`runtime/` 内 7 个子模块各自 < 400 行，`agent-session.ts` 是装配壳
+- `core/tools/`：内置工具实现；它们绑定 pencil 的"信任模型"（bash 沙箱、edit 行号、ls 截断），不入 lib
+- **拆 F01 后**：`runtime/` 内 7 个子模块各自 < 400 行，`agent-session.ts` 是装配壳；**S2 接缝**——组合根从单一 config 对象装配（为未来 agent-profile 留形状，本轮不建 profile）
+- 【EVOLUTION-RESERVED】`core/agent-profile/`（PARP profile 层）属演进 E4，本轮不建，见 `evolution/PARP.md §6`
 
 ### D2 扩展运行时 → `core/extensions-host/` + `extensions/{builtin,optional}/`
 
@@ -484,8 +389,8 @@ nanoPencil/
 - `extensions/builtin/`：用户大概率用到的扩展，启动时 eager load；**rename** "defaults" → "builtin"（更准确）
 - `extensions/optional/`：用户**需要时才启用**的扩展（资产重、影响隐私、需配置）
 - **拆 F05 后**：扩展类型按消费域分 4 个文件（生命周期 / 工具 / UI / 命令）
-- **F07 后**：browser 从 builtin 迁到 optional —— 不是"功能降级"，是"诚实地表达成本"；在 PARP 下它应被标注为 Browser Tool Runtime，供 `browser-agent` profile 组合使用
-- **Q12 协议化后**：`extensions/builtin/memory-binding/` 是 Memory 默认绑定；`soul-binding/` 是 Soul 默认绑定；第三方实现走 user-dir 或 npm tier
+- **F07 后**：browser 从 builtin 迁到 optional —— 不是"功能降级"，是"诚实地表达成本"。（未来在 PARP 下重归类为 Browser Tool Runtime 属演进 E2/E5，本轮只做 builtin→optional 迁移）
+- **第三方扩展（B0b）**：4-tier loader + extension-sdk 稳定协议（tools/themes/hooks/commands）直接兑现 README "Plugin system"；Memory/Soul 的 provider/adapter 协议属演进 E3
 
 ### D3 AI Provider 抽象 → `core/lib/ai/`
 
@@ -501,27 +406,21 @@ nanoPencil/
 - `core/platform/config/`：settings / auth / resource-loader；SOP §3.3 stability contract，**任何变更走 REVIEW**
 - 用户态 `~/.pencils/agents/<id>/`：charter "Privacy First"、**任何 refactor 不可破坏向后兼容**
 
-### D5 认知域 → `core/continuity/` + `packages/mem-core/` + `packages/soul-core/` + `extensions/builtin/{memory,soul}-binding/` + `extensions/builtin/sal/`
+### D5 认知域 → `packages/mem-core/` + `packages/soul-core/` + `extensions/builtin/sal/`（重构范围）；`core/continuity/` 属演进 E3
 
-- `core/continuity/`：**官方连续性内核**，定义 canonical state、provenance、merge policy、prompt injection policy。它不是"预先写死的核心身份内容"，而是 PencilAgent 如何形成、更新、解释"我是谁"的机制边界
-- `packages/mem-core/` `packages/soul-core/`：**两个真发布的官方基础实现包**，对应 README 力推的 NanoMem / NanoSoul。它们是 Pencil 的默认器官级能力，不是普通可选插件
-- 为什么是 packages 而非 core/lib：**maintainer 明确战略保留独立发布身份**，且未来可能跨 Pencil 子项目复用；但它们仍通过 `core/continuity/` 的规则进入 host
-- `extensions/builtin/memory-binding/` `soul-binding/`：把 mem-core / soul-core 接入 host 的桥接扩展；桥接的是官方 engine 与低层 provider / store，不把长期人格解释权交给扩展
-- **Q12 协议化关键（修订）**：第三方可写 `MemoryStore`、`MemoryCandidateProvider`、`SoulFacetProvider`、`CognitiveModelProvider` 等 provider/adapter，提供存储介质、检索候选、人格侧面或认知地图；最终是否 merge、是否长期保存、是否进入 prompt，仍由 `core/continuity/` + 官方 engine 决定
-- `extensions/builtin/sal/`：留在扩展形态（不升包），通过 `core/platform/telemetry/` 通道写 `eval_*` 表；若 SAL 认知地图进入规划/召回/反思链路，则实现 `CognitiveModelProvider`，作为 **derived cognitive model** 被官方连续性内核消费，而不是直接成为 canonical state
-- **修 U3 反向依赖**：mem-core 不再 import `@pencil-agent/nano-pencil`，只 import `@pencil-agent/extension-sdk` 的低层协议契约；canonical state 与 merge 规则由 host 的 `core/continuity/` 定义
+**本轮重构范围（behavior-preserving）**：
 
-#### D5.1 面向人 vs 面向技术的双层解释
+- `packages/mem-core/` `packages/soul-core/`：**两个真发布的官方基础实现包**，对应 README 力推的 NanoMem / NanoSoul。本轮只调整其**发布/依赖身份**，不改其行为
+- 为什么是 packages 而非 core/lib：**maintainer 明确战略保留独立发布身份**（注：soul-core 当前 npm 404、0 消费者，属"战略保留"例外，已在顶层评审记名）
+- **修 U3 反向依赖（S3 接缝）**：mem-core 不再 import `@pencil-agent/nano-pencil`，只 import `@pencil-agent/extension-sdk` 的低层协议契约。这是为未来 continuity 内核插入预留的干净接口
+- `extensions/builtin/sal/`：留在扩展形态（不升包），通过 `core/platform/telemetry/` 通道写 `eval_*` 表（1.14.3 已完成，行为不变）
 
-| 面向人的说法 | 技术层面的定义 |
-|--------------|----------------|
-| 记忆 | `MemoryEngine` + `MemoryStore` + `RecallPolicy` |
-| 灵魂 / 性格 | `SoulEngine` + `SelfModel` + `BehaviorProfile` |
-| 经验沉淀 | `Episode` → `Consolidation` → `LongTermMemory` |
-| 性格变化 | `ReflectionEvent` → `SoulUpdateCandidate` → `MergePolicy` |
-| 认知地图 | `DerivedCognitiveModel` / `CognitiveModelProvider` |
-| 身体器官 | `Provider` / `Store` / `Adapter` |
-| 自我连续性 | `CanonicalAgentState` + `VersionedMergePolicy` + `PromptInjectionPolicy` |
+**【EVOLUTION-RESERVED】演进 E3（net-new，本轮不建，见 `evolution/PARP.md §6` + `evolution/product-roadmap.md E3`）**：
+
+- `core/continuity/`：官方连续性内核（canonical state / provenance / merge policy / prompt injection policy）
+- `extensions/builtin/{memory-binding,soul-binding}/`：官方 engine ↔ continuity 桥接
+- extension-sdk 的 `MemoryStore` / `MemoryCandidateProvider` / `SoulFacetProvider` / `CognitiveModelProvider` 协议
+- 人/技术双层解释映射表（记忆/灵魂/经验沉淀/性格变化/认知地图/自我连续性 ↔ Engine/Store/MergePolicy/...）随 continuity 设计一并落到 `core/continuity/README.md`
 
 ### D6 UI / 入口形态 → `modes/` + `core/lib/tui/`
 
@@ -551,7 +450,9 @@ nanoPencil/
 
 下面 9 个是初版 grilling 决策点。**grilling 期间扩展到 14 个**（新增 Q10–Q14，详见 `top-level-structure-review.md §8`）。
 
-### 6.0 grilling 状态总览
+> **【2026-05-29 单一决策源】** Q1–Q15 的**权威状态表已统一到 `refactor-plan.md` 的 ADR 决策表**，本表仅作历史摘要，避免三文档漂移。其中 Q12（continuity 深度）/ Q15（PARP 命名）属**演进组决策**，论证迁至 `evolution/PARP.md` 与 `evolution/industry-protocol-survey.md`。
+
+### 6.0 grilling 状态总览（历史摘要 · 权威见 refactor-plan ADR 表）
 
 | Q | 议题 | 状态 |
 |---|------|------|
@@ -566,10 +467,10 @@ nanoPencil/
 | **Q9** D8 平台基础设施 | 🔒 已决议 → `core/platform/` 集中 |
 | **Q10** 顶层结构候选 | 🔒 已决议 → 候选 D（详见 top-level §6.D）|
 | **Q11** cognitive/ 命名 | 🔒 已决议 → 不用 cognitive，mem/soul 直接放 packages |
-| **Q12** 第三方扩展深度 | 🔒 已决议 → 协议化（Q12 = 粒度 3；D5 下收窄为 provider/adapter/candidate，不外包连续性内核）|
-| **Q13** Privacy vs telemetry 对齐 | 🟨 待 grilling（独立决策）|
+| **Q12** 第三方扩展深度 | 🔒 重构部分（tools/themes/hooks/commands 协议化，B0b）；continuity provider/candidate 部分 → **演进 E3**（见 evolution/）|
+| **Q13** Privacy vs telemetry 对齐 | 🟨 待 grilling（独立决策；建议提到守门同级，见 refactor-plan）|
 | **Q14** core/ 杂物间拆开 | 🔒 已决议 → 拆 + 多管一层 |
-| **Q15** PARP 命名是否引发"造轮子"误解 | 🔒 已决议 → PARP = composition contract over MCP/ACP/A2A；命名不变；文档显式声明（详见 §3.5 与 industry-protocol-survey.md）|
+| **Q15** PARP 命名是否引发"造轮子"误解 | 🔒 **演进组决策** → PARP = composition contract over MCP/ACP/A2A；论证见 `evolution/PARP.md` + `evolution/industry-protocol-survey.md`|
 
 **剩余 grilling 焦点**：Q2 / Q3 / Q5 / Q6 / Q8 / Q13。
 
@@ -707,27 +608,25 @@ nanoPencil/
 
 ---
 
-## 7. 从现状到目标的迁移路径（candidate D 落地版）
+## 7. 从现状到目标的迁移路径（高层映射）
 
-把 refactor-plan.md §3.1 的 B1–B6 与本文 §4 目标目录、§6 决策点拉通。**候选 D 决议后新增 B0 顶层骨架重组**：
+> **职责切分（2026-05-29）**：批次权威排序见 `refactor-plan.md`；**每 Phase 任务与验证 DoD 见 `execution-plan/`**；本节只保留现状→端态高层映射。
 
-| 批次 | Phase 3 决策门控 | 落到目录的具体动作 | 风险 |
-|------|------------------|--------------------|------|
-| **B0** ★ 顶层骨架重组（候选 D）| 🔒 Q10/Q11/Q12/Q14 已决议 | 1. 新建 `packages/extension-sdk/`（含 Agent Profile / Host Adapter / Tool Runtime / MemoryStore / MemoryCandidate / SoulFacet / CognitiveModel provider 协议）<br>2. 新建 `core/continuity/`（canonical state / provenance / merge policy / prompt injection policy）<br>3. 新建 `core/agent-profile/`（profile schema + built-in CLI/browser/remote/editor profile 草案）<br>4. `packages/ai/` `agent-core/` `tui/` → `core/lib/ai/` `agent-core/` `tui/`<br>5. `core/i18n/` `utils/` `telemetry/` `config/` `keybindings.ts` → `core/platform/`<br>6. `core/extensions/` → `core/extensions-host/`<br>7. `extensions/defaults/` → `extensions/builtin/`<br>8. 新建 `extensions/builtin/memory-binding/` `soul-binding/`<br>9. 改 host package.json：真依赖 3 个真包<br>10. 删 `scripts/bundle-deps.js`<br>11. 新建 `scripts/promote-to-package.ts`<br>12. 写 `CODEMOD.md` + 跑 ts-morph codemod | 中-高（路径全变，且 D5 连续性内核与 PARP profile/protocol 是语义新增，不应按纯机械迁移低估）|
-| **B1** 治环 + 守门 | **必须先答 Q5**（contract 文件粒度）+ **Q8** | 1. 新建 `core/_internal.ts` 或 `*-contract.ts` ✦Q5<br>2. 新建 `core/mcp/mcp-types.ts`（F04）<br>3. 新建 `core/soul-options-contract.ts`（F04）<br>4. 新建 `core/lib/ai/event-stream-types.ts`（F04）<br>5. mem-core 切到 `@pencil-agent/extension-sdk`（修 U3）<br>6. 新建 `scripts/verify-quality.ts` + GitHub workflow（F08）—— **必须先答 Q8** | 低 |
-| **B2** god 拆 runtime | 🔒 Q1 已决议 | `core/runtime/` 抽出 7 个子模块；`agent-session.ts` 退化为壳；新建 `core/theme-contract.ts` 解 U2 | 中（外部 API 不变） |
-| **B3** god 拆 UI | 🔒 Q7 已决议 | `modes/_shell/cancellation.ts` 抽出；`modes/interactive/` 新增 `controllers/` 5 个；`state/` 1 个；snapshot tests 覆盖 | 中-高（TUI 行为零回归） |
-| **B4** 入口与体积 | **必须先答 Q2**（browser）+ **Q3**（公共 export） | `modes/index.ts` 退化为 facade；`main.ts` 改 dynamic dispatch；按 Q2 把 browser 迁到 `extensions/optional/`；按 Q3 决定 `index.ts` 收窄程度 | 中（触碰 SOP §3.3） |
-| **B5** bundle 重设计 | **必须先答 Q6**（models 拆分） | B0 已删 bundle-deps；本批次接 esbuild；按 Q6 拆 `core/lib/ai/models.generated.ts` 为 11 个 per-provider 文件 | 中（构建管线重写，规模小于原版） |
-| **B6** SDK 表面收窄 | 已在 Q3 决定 → major bump 或不做 | 2.x 版本：`index.ts` 仅 stable API；子路径暴露 `InteractiveMode` 等 | 高（须 deprecation 期） |
+本轮重构（behavior-preserving）要落地的端态变化，归为四组：
+
+| 组 | 现状→端态动作 | 对应批次（详见 refactor-plan）|
+|----|--------------|------------------------------|
+| **骨架机械搬迁** | `packages/{ai,agent-core,tui}`→`core/lib/`；`core/{i18n,utils,telemetry,config,keybindings}`→`core/platform/`；`core/extensions/`→`core/extensions-host/`；`extensions/defaults/`→`extensions/builtin/`；删 `bundle-deps.js`；host 真依赖 3 包；新建 `promote-to-package.ts` | **B0a**（codemod，行为等价）|
+| **扩展能力（B0b）** | 新建 `packages/extension-sdk/`（稳定协议 tools/themes/hooks/commands/permissions/lifecycle，含 S1 接缝可选字段）+ `core/extensions-host/` 4-tier loader | **B0b** |
+| **治环 + 守门 + god 拆 + 体积** | F03/F04 治环、F08 守门、F01/F02 god 拆（含 S2/S3 接缝）、F06/F07 入口与体积 | **B1–B5** |
+| **【EVOLUTION-RESERVED】** | `core/continuity/`、`core/agent-profile/`、extension-sdk 的 PARP 协议文件、`extensions/builtin/{memory,soul}-binding/` | **不在本轮**，见 `evolution/PARP.md §6` + `evolution/product-roadmap.md` |
 
 ### 7.1 关键观察
 
-1. **B0 是新增的"前提批次"** —— 必须先做完顶层骨架重组，否则下游所有 import 路径都要二次返工
-2. **B0 风险评估**：路径迁移部分可用 ts-morph codemod 完成；但 `core/continuity/` 是 D5 语义新增，必须补 canonical state / merge policy / prompt injection policy 的最小设计，不能按纯机械迁移低估
-3. **B0 + B1 必须紧挨着合**：B0 改路径 + B1 引入 extension-sdk 与 mem-core 低层协议切换
-4. **grilling 剩余依赖**：B1 还依赖 Q5+Q8；B4 依赖 Q2+Q3；B5 依赖 Q6
-5. **可并行**：B2 与 B3 互不依赖，可由两人并行推进
+1. **原 B0 已拆为 B0a（纯机械搬迁，可一天 ship）+ B0b（extension-sdk + loader）**——把"搬动代码"与"新建协议"分离，使重构组可独立验收"功能不变"。
+2. **continuity / agent-profile / PARP 协议文件移出批次链**——它们是 net-new，归演进组按需 gate；本轮只在 B1/B2 预留 S1/S2/S3 三个接缝（见 `evolution/PARP.md §5`）。
+3. **唯一二次重构风险点 B6（对外 SDK 收窄）**：靠"extension-sdk 是唯一只增不改协议生长面"对冲（见 `evolution/dev-conventions.md §3`）。
+4. 批次排序/门控/可并行性以 `refactor-plan.md` 为准。
 
 ---
 
@@ -746,23 +645,35 @@ nanoPencil/
 
 ---
 
-## 9. 文档职责与后续使用
+## 9. 文档职责与后续使用（重构组 / 演进组分离）
+
+### 重构组（behavior-preserving，目标"功能不变"）
 
 | 文档 | 角色 |
 |------|------|
-| `top-level-structure-review.md` | **决策依据** —— 为什么选择候选 D，为什么 packages 只保真发布包，为什么需要 PARP / continuity |
-| **`target-architecture.md`（本文）** | **目标架构** —— 目录树、功能域映射、PARP / continuity 协议边界、迁移路径 |
-| `industry-protocol-survey.md` | **协议对位证据** —— PARP 五层 × ACP/MCP/A2A/LangGraph/OpenAI/MS/Vercel/Continue 覆盖矩阵、论文支撑、对核心文档的修订建议 |
-| `refactor-plan.md` | **执行排序** —— 批次依赖、风险窗口、剩余 grilling 门控 |
+| `top-level-structure-review.md` | **决策依据** —— 为什么选择候选 D，为什么 packages 只保真发布包 |
+| **`target-architecture.md`（本文）** | **架构改造结论** —— 目录树（端态）、功能域映射、现状→端态高层迁移 |
+| `refactor-plan.md` | **架构改造计划** —— 批次排序、门控、风险、**单一 ADR 决策状态表**、S1/S2/S3 接缝验收条件 |
+| `execution-plan/` | **可执行 runbook** —— 按 Phase 分文件：任务 + 验证 DoD + sign-off |
+| `refactor-validation.md` | **重构验收** —— 功能不变（溯源 `llm-wiki`）、分层、无冗余、性能；两分支比对（重构后填充）|
 | `findings/F01–F08-*.md` | **微观判断** —— 每个 finding 独立 deletion test、benefits、proposed direction |
-| `architecture-review-202605271527.html` | **辩论入口** —— Phase 3 grilling 的可视化总览 |
+
+### 演进组（net-new，重构后按需 gate）
+
+| 文档 | 角色 |
+|------|------|
+| `evolution/PARP.md` | **PARP 协议定义** —— 组合公式、五层边界、工具协议化、3 个接缝预留 |
+| `evolution/industry-protocol-survey.md` | **协议对位证据** —— PARP 五层 × ACP/MCP/A2A/工业框架/论文覆盖矩阵 |
+| `evolution/product-roadmap.md` | **产品演进规划** —— continuity/profile/browser-runtime/多 agent 的 gate 与排期 |
+| `evolution/dev-conventions.md` | **未来开发约规** —— 目录归属判据、依赖方向、协议生长面纪律、promote 流程 |
 
 后续维护规则：
 
-1. 目录结构、协议边界、PARP / continuity 的细节只改本文
+1. 目录结构、功能域映射、现状→端态映射只改本文（**不含 PARP/continuity 细节**，那些在 `evolution/`）
 2. 候选 D 的论证、A/B/C 的历史对照只改 `top-level-structure-review.md`
-3. 执行批次、优先级、剩余决策门控只改 `refactor-plan.md`
-4. finding cards 只在具体 finding 的 deletion test 或 proposed direction 需要刷新时更新
+3. 执行批次、优先级、决策状态（ADR）、接缝验收只改 `refactor-plan.md`
+4. PARP / continuity / agent-profile / 产品路线 / 开发约规只改 `evolution/`
+5. finding cards 只在具体 finding 的 deletion test 或 proposed direction 需要刷新时更新
 
 ---
 
@@ -777,6 +688,7 @@ nanoPencil/
 - [x] **Phase 3a 业界对标**（OpenClaw / Continue.dev / Codex / Nanobot / Aider）
 - [x] **Phase 3a grilling — 顶层骨架已决议**（Q1/Q4/Q7/Q9/Q10/Q11/Q12/Q14 = 候选 D）
 - [x] **本文修订到候选 D**（§4 目录结构 + §5 功能域映射 + §7 迁移路径 + B0 批次）
+- [x] **重构组 / 演进组分离（2026-05-29）**：PARP/continuity/agent-profile 迁出到 `evolution/`；本文目录树标 EVOLUTION-RESERVED；§7 拆 B0a/B0b；§9 文档职责重列
 - [ ] Phase 3b grilling — 战术决策（Q2/Q3/Q5/Q6/Q8/Q13）
 - [ ] Finding cards 据本文修订（U3/U2 等议题刷新到候选 D 措辞）
 - [ ] Phase 3 ADRs（若有驳回）

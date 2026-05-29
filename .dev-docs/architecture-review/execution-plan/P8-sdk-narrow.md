@@ -1,0 +1,50 @@
+# P8 — SDK 表面收窄（B6 · 可选）
+
+```yaml
+phase: P8
+batch: B6
+status: optional
+risk: high
+depends_on: [P6]
+blocks: []
+findings: [F03-step3, F06-deprecate]
+seams: []
+```
+
+## 目标
+
+收窄 host `index.ts` 公共 export；2.x major bump。**唯一"功能不变"的例外**：对外 API 有意收窄。
+
+## 进入条件
+
+- [ ] P1–P6 已完成且 [sign-off](./sign-off-main.md) 前置项满足（或 maintainer 决定 P8 与 sign-off 同窗口）
+- [ ] 发版窗口开启（不与 patch 混发）
+
+## 任务清单
+
+- [ ] **F03** 步骤 3：`index.ts` 仅 stable SDK 接口（✦**Q3** major vs deprecate 6mo）
+- [ ] **F06**：deprecate root exports；子路径暴露 `InteractiveMode` 等
+- [ ] **纪律**：新协议类型只进 `extension-sdk`，不进 host `index.ts`（`../evolution/dev-conventions.md` §3）
+- [ ] CHANGELOG + migration guide
+
+## 验证门控（DoD）
+
+| # | 检查项 | 通过标准 |
+|---|--------|---------|
+| V8-1 | 有意 breaking | 对外 API 变更**仅为文档化收窄**，非功能回归 |
+| V8-2 | Gateway/扩展宿主 | `Pencil-Agent-Gateway` / `native-host` 消费者 smoke 通过 |
+| V8-3 | deprecation | 6mo alias 路径（若 Q3 选 B）或 major 文档齐全 |
+
+## 提交建议
+
+- `feat(p8)!: narrow public SDK surface`（major bump）
+
+## 决策门控
+
+| 门控 | 议题 |
+|------|------|
+| ✦Q3 | major bump 2.0 vs deprecate + 6mo |
+
+## 参考
+
+- Finding：`../findings/F03-root-barrel-causes-cycles.md`

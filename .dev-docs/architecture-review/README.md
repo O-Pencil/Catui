@@ -37,6 +37,33 @@ This is a one-shot exercise. After the maintainer has acted on the Arch Agent's 
 └── handoff.md               ← boundary contract between the Arch Agent and the self-diagnosis agent
 ```
 
+### Outputs map（产物分两组 · 2026-05-29）
+
+评审产物分为**重构组**（behavior-preserving，目标"功能不变"）与**演进组**（net-new，重构后按需 gate）：
+
+```
+architecture-review/
+│  ── 重构组 ──
+├── top-level-structure-review.md   决策依据（为什么候选 D）
+├── target-architecture.md          架构改造结论（端态目录 + 功能域映射）
+├── refactor-plan.md                架构改造计划（批次 + 单一 ADR 状态表 + S1/S2/S3 接缝验收）
+├── execution-plan/                 可执行 runbook（README + P0–P8 分 Phase + sign-off）
+│   ├── README.md                   分支策略 + Phase 索引 + 总进度
+│   ├── P0-prepare.md … P8-sdk-narrow.md
+│   └── sign-off-main.md            两分支对比 + 合 main 签字
+├── execution-plan.md               → 指向 execution-plan/ 的入口
+├── refactor-validation.md          重构验收（功能不变，溯源 llm-wiki；重构后填充）
+├── findings/F01–F08                微观判断
+│
+└── evolution/                      ── 演进组 ──
+    ├── PARP.md                      PARP 协议定义（原 target-arch §3.5 迁入）
+    ├── industry-protocol-survey.md  协议对位证据
+    ├── product-roadmap.md           产品演进规划
+    └── dev-conventions.md           重构后未来开发约规
+```
+
+> 注：本 handbook 原定位是 one-shot 重构评审（见 §"What this handbook is NOT"）。演进组（PARP/路线/约规）是 grilling 期间衍生的产品方向，独立成册以免污染重构组的"功能不变"验收。
+
 **Read order for the Arch Agent** (this is also `inputs.md` §1):
 
 1. `README.md` (you are here)

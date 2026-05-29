@@ -15,6 +15,8 @@ new_review_targets:
   - 与 README/CHARTER 初衷的对齐度
 ```
 
+> **【2026-05-29 · 重构组】** 本文属**重构组**决策依据。**候选 D 的骨架因 F01–F08 + 本文顶层评审本身成立，不以 PARP 为前提**——它恰好对未来 PARP 友好（接缝见 `refactor-plan.md` B1/B2），但即使永不做 PARP，候选 D 依旧是正确的结构决策。本文中涉及 PARP/continuity 的论证（原 §5.5.B、§6.D.1.1、§6.D.6 的内核部分）已迁/指向**演进组** `evolution/PARP.md` 与 `evolution/industry-protocol-survey.md`。
+>
 > **本文范围**：回答"为什么选择候选 D"。完整目标目录、协议草图与迁移动作以 `target-architecture.md` 为准；本文只保留证据、候选对比、决策原则。
 >
 > 本文在 target-architecture.md 之上，回答 4 个元问题 ——
@@ -338,20 +340,11 @@ extensions/
 
 **结论**：候选 D 路线（`core/` + 精选 `packages/`）有 Continue.dev 直接背书。
 
-### 5.5.B 协议 / Runtime 对标（PARP 命名争议补做）
+### 5.5.B 协议 / Runtime 对标 → 已迁出到演进组
 
-grilling 期间 PARP 命名出现"被误解为造轮子"的风险。为避免 maintainer / 外部贡献者把 PARP 当作"又一个 wire protocol"，独立调研落到 [`industry-protocol-survey.md`](./industry-protocol-survey.md)。**核心结论 3 句话**：
-
-1. PARP 五层中 **Host Adapter / Tool Runtime / Host↔Host 三层已有事实标准**：
-   - **ACP**（Agent Client Protocol，Zed/Linux Foundation v1）= Editor Host Adapter 事实标准；nanoPencil 已用 `@agentclientprotocol/sdk@^0.16.1`
-   - **MCP**（Model Context Protocol，Anthropic 2025-11 spec）= Tool Runtime 远程分支事实标准；97M+ monthly SDK downloads
-   - **A2A**（Agent2Agent Protocol，Google→Linux Foundation v1.2）= 未来 PencilAgent ↔ PencilAgent 通信事实标准
-
-2. PARP **Agent Profile 层**有 4 个工业框架可参考（**Microsoft Agent Framework 1.0** 声明式 YAML / OpenAI Agents SDK / Vercel AI SDK 6 / LangGraph）+ 2 篇论文支撑（arXiv 2604.03515 "Inside the Scaffold" 13 agent 源码分类；arXiv 2603.05344 OpenDev terminal coding agent）。
-
-3. PARP **Continuity 层是业界唯一空白**：A2A 明确声明 "agents exchange information without access to memory/state/tools"；MCP/ACP 不管 memory；LangGraph/MS Agent FW 仅有浅层 state——pencil 的 `core/continuity/` 是**真正独立的设计贡献**。
-
-**对 PARP 文档的硬约束**：本节及调研报告 §6 覆盖矩阵生效后，PARP 章节必须明确写 **"PARP is not a new wire protocol; it's a composition contract over MCP + ACP + A2A"**，且 `packages/extension-sdk/host-adapter.ts` / `tool-runtime.ts` 必须 re-export 业界标准类型而非自造。详见 `industry-protocol-survey.md` §7 修订建议表与 `target-architecture.md` §3.5 已落地措辞。
+> **【已迁移 · 2026-05-29】** 协议/Runtime 对标是 **PARP（演进组）** 的证据层，与候选 D 的结构决策无关，已整体移到 `evolution/industry-protocol-survey.md`；PARP 定义见 `evolution/PARP.md`。
+>
+> 一句话留档：候选 D 选择 `core/` + 精选 `packages/` 的结构理由来自 §5.5.A 项目布局对标（Continue.dev 同形），**不依赖**协议层证据。协议层证据只服务未来 PARP，是否做 PARP 不影响本文的候选 D 结论。
 
 ## 6. 顶层结构调整提案（候选 D 主推 + A/B/C 对照）
 
@@ -509,31 +502,11 @@ Pencil/                                  ← ecosystem 顶层
 >
 > **Memory / Soul 是 PencilAgent 的器官级基础能力**：官方保留连续性内核（canonical state、provenance、merge policy、prompt injection policy），mem-core / soul-core 提供官方基础实现；第三方通过 provider / adapter / candidate seam 接入存储、检索、人格侧面和派生认知模型，而不是直接替换 Pencil 的长期自我解释机制。
 
-#### 6.D.1.1 上位抽象：Pencil Agent Runtime Protocol（PARP）
+#### 6.D.1.1 上位抽象：PARP → 已迁出到演进组
 
-grilling 后新增一个独立但与候选 D 集成的解释层：**Pencil Agent Runtime Protocol（PARP）**。
-
-PARP 的一句话定义：
-
-> nanoPencil 不只是一个 CLI agent，而是一套可宿主、可组合、可扩展的 Agent Runtime Protocol；CLI、Browser、Gateway、Editor 都是这套协议在不同 host adapter、tool runtime、agent profile 下的形态。
-
-> **PARP ≠ 新 wire protocol**：它是一份 **composition contract over MCP（Tool Runtime 远程分支）+ ACP（Editor Host Adapter）+ A2A（Host↔Host）** 加 pencil 自定义的 Continuity 层与 Agent Profile schema。五层 × 业界协议覆盖矩阵、论文与工业框架对位证据详见 [`industry-protocol-survey.md`](./industry-protocol-survey.md) §6（核心矩阵）与 §2–§4（逐层证据）。
-
-PARP 不替代候选 D；候选 D 是目录与发布边界，PARP 是候选 D 之上的产品架构解释：
-
-```text
-PencilAgent =
-  Agent Loop
-  + Tool Runtime
-  + Agent Profile
-  + Continuity
-  + Host Adapter
-  + Permission Policy
-```
-
-因此，`extensions/optional/browser/` 不只是一个普通插件，而是 **Browser Tool Runtime**；`browser-agent` 则是一个 Agent Profile（browser tools + browser loop policy + browser permission policy + continuity）。CLI 同理是默认 `cli-agent` profile，而 Gateway / editor 是不同 host adapter 与 tool runtime 的组合。
-
-短期约束：PARP 只作为候选 D 的命名原则与协议边界，不新增一整套平台化批次。B0 只需要给 `packages/extension-sdk/` 和 `core/agent-profile/` 留出最小 schema / protocol 落点。
+> **【已迁移 · 2026-05-29】** PARP（Pencil Agent Runtime Protocol）是候选 D 之上的产品架构解释层（演进组，net-new），完整定义见 `evolution/PARP.md`。
+>
+> **与本文（候选 D）的关系**：PARP **不是**候选 D 成立的理由，候选 D 是纯结构决策（见 §5.5.A Continue.dev 同形）。本轮重构与 PARP 的唯一交集是在 `refactor-plan.md` B1/B2 预留 3 个接缝（S1/S2/S3），使未来 PARP 落地为纯增量。`core/continuity/`、`core/agent-profile/`、`packages/extension-sdk/` 的 PARP 协议文件**本轮不建**。
 
 ### 6.D.2 选择性归类（5 个现 packages 重新分类）
 
@@ -552,9 +525,9 @@ PencilAgent =
 
 ```text
 nanoPencil/
-├── core/        ← 仓库核心：runtime/tools/mcp/extensions-host/continuity/agent-profile + lib/platform
+├── core/        ← 仓库核心：runtime/tools/mcp/extensions-host + lib/platform（continuity/agent-profile = 演进保留）
 ├── modes/       ← 入口形态：interactive/print/rpc/acp
-├── extensions/  ← 第一方能力实现：builtin/optional，其中 browser 是 optional Browser Tool Runtime
+├── extensions/  ← 第一方能力实现：builtin/optional（browser 本轮 builtin→optional；升 Tool Runtime = 演进）
 ├── packages/    ← 仅放真发布包：extension-sdk/mem-core/soul-core
 └── scripts/     ← 质量守门、发布、迁移辅助工具
 ```
@@ -575,7 +548,7 @@ nanoPencil/
 |------|------|----------------|
 | 顶层目录命名 | **保留 `core/`** | Continue.dev 同样选 `core/`；语义诚实 |
 | core 内部分层 | **多管一层**：业务子目录 + `lib/` + `platform/` | 一次性架构决策防止再变杂物间 |
-| 上位抽象 | **PARP：Pencil Agent Runtime Protocol** | CLI / Browser / Gateway / Editor 都是 profile + runtime + host adapter 的组合 |
+| 上位抽象（PARP）| **演进组**，不在本轮重构 | 见 `evolution/PARP.md`；本轮只预留 S1/S2/S3 接缝 |
 | ai/agent-core/tui 归属 | 退到 `core/lib/` | 当前 0 外部消费者；无发布纪律 |
 | 未来发布 ai-core | **设计 4**（手工挪 30 分钟 + 可选 promote 脚本） | Continue 历史也是手工挪过 |
 | 真发布的包数量 | 3 个（extension-sdk + mem-core + soul-core） | Continue 用 8 个，3 个起步可扩 |
@@ -600,11 +573,15 @@ nanoPencil/
 
 grilling 后修订：原先的 "MemoryProvider / SoulProvider 可替换默认实现" 表述过粗，容易把 PencilAgent 的长期自我解释权外包给第三方插件。新的边界是：
 
+**本轮重构落地（behavior-preserving）**：
+- **mem-core / soul-core 保独立发布身份**（soul-core 属"战略保留"例外，已记名）
+- **S3 接缝**：mem-core 不再 import `@pencil-agent/nano-pencil`，改 import `@pencil-agent/extension-sdk` 的低层协议（修 U3）——为未来 continuity 内核留干净接口
+
+**【EVOLUTION-RESERVED】演进 E3（见 `evolution/PARP.md §6`）**：
 - **官方定义连续性内核**：`core/continuity/` 定义 canonical state、provenance、merge policy、prompt injection policy
-- **官方提供基础实现**：`mem-core` / `soul-core` 是 Pencil 的默认器官级能力，不是普通 optional extension
-- **第三方只插拔技术层**：插件可提供 storage、retrieval candidate、soul facet、cognitive model、外部知识 adapter
+- **第三方只插拔技术层**：storage / retrieval candidate / soul facet / cognitive model / 外部知识 adapter
 - **最终解释权不外包**：是否 merge、是否长期保存、是否进入 prompt，仍由官方 continuity + engine 决定
-- **SAL 认知地图定位**：若只分析/可视化，留在 builtin extension；若参与 recall / planning / reflection，则作为 `CognitiveModelProvider` 提供 derived cognitive model，不直接写 canonical state
+- **SAL 认知地图定位**：若只分析/可视化，留在 builtin extension；若参与 recall/planning/reflection，则作为 `CognitiveModelProvider` 提供 derived cognitive model，不直接写 canonical state
 
 ### 6.D.7 未来发布机制（设计 4 + 可选辅助工具）
 
