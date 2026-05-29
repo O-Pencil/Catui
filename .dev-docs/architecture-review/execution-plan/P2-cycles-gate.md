@@ -2,13 +2,15 @@
 
 ```yaml
 phase: P2
+macro_stage: B        # 功能级
 batch: B1
 status: pending
 risk: low
-depends_on: [P1]
-blocks: [P4, P5]
+depends_on: [门组A]    # 大阶段一收尾后
+blocks: [P3, P4, P5]
 findings: [F03, F04, F08]
 seams: []
+gate: gates.md#门组-b
 ```
 
 ## 目标
@@ -28,12 +30,14 @@ seams: []
 
 ## 验证门控（DoD）
 
-| # | 检查项 | 通过标准 |
-|---|--------|---------|
-| V2-1 | 无环 | `madge` 零循环依赖（对照 P0 基线归零）|
-| V2-2 | 守门上线 | `verify-quality` 在 CI 对 PR 生效 |
-| V2-3 | R1 一致 | README 表述与 telemetry 实际默认行为一致 |
-| V2-4 | 测试 | 现有测试仍全绿 |
+> 出口以 [gates.md 门组 B](./gates.md#门组-b--功能级出口大阶段二逐域草案--待你定稿) 为准（草案，待 maintainer 功能评审定稿）。下为本域专属补充：
+
+| # | 检查项 | 通过标准 | 对应门组 B |
+|---|--------|---------|-----------|
+| V2-1 | 无环 | `madge` 零循环依赖（对照 P0 基线归零）| GB-5 |
+| V2-2 | 守门正式化 | `verify-quality` 从 P1 增量模式转**全量** PR 守门 | GB-5 |
+| V2-3 | R1 一致 | README 表述与 telemetry 实际默认行为一致 | GB-2 |
+| V2-4 | 测试 | 现有测试仍全绿 | GB-2 |
 
 ## 提交建议
 

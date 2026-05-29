@@ -2,14 +2,15 @@
 
 ```yaml
 phase: P5
+macro_stage: B        # 功能级
 batch: B3
 status: pending
 risk: medium-high
-depends_on: [P2]
+depends_on: [P4]       # ★ 改串行：P4 runtime 契约稳定后再拆 UI
 blocks: [P6]
 findings: [F02, F05-partial]
 seams: []
-parallel_with: [P4]
+gate: gates.md#门组-b
 ```
 
 ## 目标
@@ -20,7 +21,7 @@ parallel_with: [P4]
 
 - [ ] [P2 DoD](./P2-cycles-gate.md#验证门控dod) 全过
 - [ ] [P0](./P0-prepare.md) characterization / snapshot 基线就绪
-- [ ] 建议：P4 部分 runtime 契约稳定后启动（可与 P4 并行但注意 merge 冲突）
+- [ ] [P4 DoD](./P4-runtime-split.md#验证门控dod) 全过（串行：runtime 契约稳定后再拆 UI）
 
 ## 任务清单
 
@@ -33,12 +34,15 @@ parallel_with: [P4]
 
 ## 验证门控（DoD）
 
-| # | 检查项 | 通过标准 |
-|---|--------|---------|
-| V5-1 | TUI 零回归 | snapshot / characterization **全过**（本 Phase 最高风险项）|
-| V5-2 | 公共 API | 符号表不变 |
-| V5-3 | 行数 | interactive-mode 壳 < 500 行 |
-| V5-4 | 冒烟 | interactive 模式完整会话 smoke 通过 |
+> 出口以 [gates.md 门组 B](./gates.md#门组-b--功能级出口大阶段二逐域草案--待你定稿) 为准。本 phase 最高风险，TUI 零回归是命门（依赖 P0 的 TUI characterization 脚手架）。本域补充：
+
+| # | 检查项 | 通过标准 | 门组 B |
+|---|--------|---------|--------|
+| V5-1 | TUI 零回归（硬）| P0 的 TUI snapshot / characterization **全过** | GB-2 |
+| V5-2 | 边界守恒（硬）| controllers/state 不反向依赖 mount；UI 不直接碰 runtime 内部（经契约）| **GB-1** |
+| V5-3 | 公共 API | 符号表不变 | GB-2 |
+| V5-4 | 单一职责 | controller 职责单一（行数仅信号）| GB-4 |
+| V5-5 | 冒烟 | interactive 完整会话 smoke 通过 | GB-2 |
 
 ## 提交建议
 

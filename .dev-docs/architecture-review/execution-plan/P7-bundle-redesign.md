@@ -2,6 +2,7 @@
 
 ```yaml
 phase: P7
+macro_stage: B        # 功能级（可选）
 batch: B5
 status: optional
 risk: high
@@ -9,6 +10,7 @@ depends_on: [P6]
 blocks: []
 findings: [F07-mid]
 seams: []
+gate: gates.md#门组-b
 ```
 
 ## 目标

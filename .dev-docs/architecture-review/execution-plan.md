@@ -6,8 +6,10 @@
 
 | Phase | 文件 |
 |-------|------|
-| 索引 + 分支策略 | [execution-plan/README.md](./execution-plan/README.md) |
-| P0 准备 | [P0-prepare.md](./execution-plan/P0-prepare.md) |
+| 索引 + 两大阶段 + 分支策略 | [execution-plan/README.md](./execution-plan/README.md) |
+| 约束① 迁移分类 D/R/N/U | [migration-classification.md](./execution-plan/migration-classification.md) |
+| 约束② 门组 A/B | [gates.md](./execution-plan/gates.md) |
+| P0 基线+分类 | [P0-prepare.md](./execution-plan/P0-prepare.md) |
 | P1 骨架搬迁 | [P1-skeleton-move.md](./execution-plan/P1-skeleton-move.md) |
 | P2 治环+守门 | [P2-cycles-gate.md](./execution-plan/P2-cycles-gate.md) |
 | P3 扩展能力 | [P3-extension-sdk.md](./execution-plan/P3-extension-sdk.md) |

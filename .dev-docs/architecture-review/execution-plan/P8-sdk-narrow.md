@@ -2,6 +2,7 @@
 
 ```yaml
 phase: P8
+macro_stage: B        # 功能级（可选）；含 root index.ts 这个 R 单元的最终拆分
 batch: B6
 status: optional
 risk: high
@@ -9,6 +10,7 @@ depends_on: [P6]
 blocks: []
 findings: [F03-step3, F06-deprecate]
 seams: []
+gate: gates.md#门组-b
 ```
 
 ## 目标

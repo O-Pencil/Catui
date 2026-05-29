@@ -2,13 +2,15 @@
 
 ```yaml
 phase: P6
+macro_stage: B        # 功能级
 batch: B4
 status: pending
 risk: medium
 depends_on: [P5]
-blocks: [P7]
+blocks: [P7, P8]
 findings: [F06, F07-short]
 seams: []
+gate: gates.md#门组-b
 ```
 
 ## 目标
@@ -28,12 +30,14 @@ lazy 入口分派、browser opt-in、ai lazy provider；改善冷启动与安装
 
 ## 验证门控（DoD）
 
-| # | 检查项 | 通过标准 |
-|---|--------|---------|
-| V6-1 | 冷启动 | ≤ P0 基线（理想下降）|
-| V6-2 | 体积 | dist 体积 ≤ P0 基线 |
-| V6-3 | 功能 | 全 mode smoke（interactive/print/rpc/acp）通过 |
-| V6-4 | browser | 按 Q2 决议验证 opt-in 路径可用 |
+> 出口以 [gates.md 门组 B](./gates.md#门组-b--功能级出口大阶段二逐域草案--待你定稿) 为准。本域补充（性能项）：
+
+| # | 检查项 | 通过标准 | 门组 B |
+|---|--------|---------|--------|
+| V6-1 | 冷启动 | ≤ P0 基线（理想下降）| GB-2 |
+| V6-2 | 体积 | dist 体积 ≤ P0 基线 | GB-2 |
+| V6-3 | 功能 | 全 mode smoke（interactive/print/rpc/acp）通过 | GB-2 |
+| V6-4 | browser | 按 Q2 决议验证 opt-in 路径可用（注：builtin→optional 改变自动加载，属有意行为变更，按 GB-2 声明）| GB-2 |
 
 ## 提交建议
 

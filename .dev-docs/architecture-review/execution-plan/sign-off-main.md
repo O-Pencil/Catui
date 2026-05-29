@@ -3,7 +3,9 @@
 ```yaml
 phase: sign-off
 status: pending
-depends_on: [P1, P2, P3, P4, P5, P6]
+depends_on:
+  stage_A: [门组A]              # P0–P1 目录级全过
+  stage_B: [P2, P3, P4, P5, P6] # 功能级逐域过门组B
 optional: [P7, P8]
 merge_target: main
 merge_policy: maintainer_sign_off_required
@@ -17,8 +19,9 @@ merge_policy: maintainer_sign_off_required
 
 ## 进入条件
 
-- [ ] [P1](./P1-skeleton-move.md) – [P6](./P6-entry-volume.md) 各自 DoD 全过
-- [ ] [P3](./P3-extension-sdk.md) DoD 全过（可与 P2 并行完成）
+- [ ] **大阶段一**：P0–P1 过 [门组 A](./gates.md#门组-a--目录级出口大阶段一收尾定稿)
+- [ ] **阶段间**：maintainer 功能维度评审已定稿 [门组 B](./gates.md)
+- [ ] **大阶段二**：P2–P6 各域过门组 B（含 P3 的 S3 依赖反转）
 - [ ] [P7](./P7-bundle-redesign.md) / [P8](./P8-sdk-narrow.md) 若跳过，须在下方 Record 显式记 `skipped`
 
 ## 验收清单（两分支对比）
