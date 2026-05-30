@@ -1,21 +1,21 @@
 /**
  * [WHO]: Tests idle-think runtime budget, cleanup, diagnostics, and insight persistence behavior
- * [FROM]: Depends on node:test and extensions/defaults/idle-think/idle-think-runtime.ts
+ * [FROM]: Depends on node:test and extensions/builtin/idle-think/idle-think-runtime.ts
  * [TO]: Consumed by extension quality verification
  * [HERE]: test/idle-think-runtime.test.ts - focused behavior coverage for idle exploration lifecycle
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ExtensionAPI, ExtensionContext } from "../core/extensions/types.js";
+import type { ExtensionAPI, ExtensionContext } from "../core/extensions-host/types.js";
 import {
 	cleanup,
 	createState,
 	maybeRunExploration,
 	type IdleThinkDeps,
 	type IdleThinkState,
-} from "../extensions/defaults/idle-think/idle-think-runtime.js";
-import type { CuriosityQueue } from "../extensions/defaults/idle-think/curiosity.js";
+} from "../extensions/builtin/idle-think/idle-think-runtime.js";
+import type { CuriosityQueue } from "../extensions/builtin/idle-think/curiosity.js";
 
 function createApiHarness() {
 	const diagnostics: unknown[] = [];

@@ -120,7 +120,7 @@ push 到 main 且修改了 `charter/` 目录时，自动在以下仓库开 issue
 **维护者边界合约**：
 - 无 cron / 无自动调度；所有 runs 手动 dispatch
 - 不写入用户状态（`~/.pencils/agents/<id>/`）
-- 不将内部工具注入用户 session（`extensions/defaults/` 外）
+- 不将内部工具注入用户 session（`extensions/builtin/` 外）
 
 ---
 

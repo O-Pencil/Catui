@@ -1,15 +1,15 @@
 /**
  * [WHO]: Verifies recap renderer header accounting and content extraction behavior
- * [FROM]: Depends on node:test, node:assert, extensions/defaults/recap/recap-renderer, recap-types
- * [TO]: Guards the recap message renderer registered by extensions/defaults/recap/index.ts
+ * [FROM]: Depends on node:test, node:assert, extensions/builtin/recap/recap-renderer, recap-types
+ * [TO]: Guards the recap message renderer registered by extensions/builtin/recap/index.ts
  * [HERE]: test/recap-renderer.test.ts - focused rendering coverage for recap custom messages
  */
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Usage } from "@pencil-agent/ai";
-import type { MessageRenderer } from "../core/extensions/types.js";
-import { createRecapRenderer } from "../extensions/defaults/recap/recap-renderer.js";
-import type { RecapEntry } from "../extensions/defaults/recap/recap-types.js";
+import type { MessageRenderer } from "../core/extensions-host/types.js";
+import { createRecapRenderer } from "../extensions/builtin/recap/recap-renderer.js";
+import type { RecapEntry } from "../extensions/builtin/recap/recap-types.js";
 
 const theme = {
 	fg: (_name: string, text: string) => text,

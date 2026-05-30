@@ -6,7 +6,7 @@
  */
 import type { AssistantMessage } from "@pencil-agent/ai";
 import { isContextOverflow } from "@pencil-agent/ai";
-import { sleep } from "../utils/sleep.js";
+import { sleep } from "../platform/utils/sleep.js";
 
 /** Retry settings from SettingsManager */
 export interface RetrySettings {

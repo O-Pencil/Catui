@@ -58,9 +58,9 @@
 
 | 文件 | 行 | 说明 |
 |------|----|------|
-| `extensions/defaults/loop/cron-tools/cron-create-tool.ts` | 51 | `addCronTask(ctx.cwd, {...})` — 传入 ctx.cwd |
-| `extensions/defaults/loop/cron/cron-scheduler.ts` | 298 | `createCronScheduler({ dir: api.cwd })` — 使用 api.cwd |
-| `extensions/defaults/loop/cron/cron-tasks.ts` | 72 | `CRON_FILE_REL = ".nanopencil/cron-tasks.json"` |
+| `extensions/builtin/loop/cron-tools/cron-create-tool.ts` | 51 | `addCronTask(ctx.cwd, {...})` — 传入 ctx.cwd |
+| `extensions/builtin/loop/cron/cron-scheduler.ts` | 298 | `createCronScheduler({ dir: api.cwd })` — 使用 api.cwd |
+| `extensions/builtin/loop/cron/cron-tasks.ts` | 72 | `CRON_FILE_REL = ".nanopencil/cron-tasks.json"` |
 | `core/runtime/agent-session.ts` | 396 | `this._cwd = config.cwd` — 来自 CreateAgentSessionOptions |
 | `core/runtime/sdk.ts` | 283 | `const cwd = options.cwd ?? process.cwd()` |
 

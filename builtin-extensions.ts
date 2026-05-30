@@ -15,26 +15,26 @@ const require = createRequire(import.meta.url);
 
 /** Built-in extension paths */
 const BUNDLED_NANOMEM_EXTENSION_PACKAGES = join(__dirname, "packages", "mem-core", "extension.js");
-const BUNDLED_LINK_WORLD_EXTENSION = join(__dirname, "extensions", "defaults", "link-world", "index.js");
-const BUNDLED_BROWSER_EXTENSION = join(__dirname, "extensions", "defaults", "browser", "index.js");
-const BUNDLED_SECURITY_AUDIT_EXTENSION = join(__dirname, "extensions", "defaults", "security-audit", "index.js");
-const BUNDLED_SOUL_EXTENSION = join(__dirname, "extensions", "defaults", "soul", "index.js");
-const BUNDLED_PRESENCE_EXTENSION = join(__dirname, "extensions", "defaults", "presence", "index.js");
-const BUNDLED_INTERVIEW_EXTENSION = join(__dirname, "extensions", "defaults", "interview", "index.js");
-const BUNDLED_LOOP_EXTENSION = join(__dirname, "extensions", "defaults", "loop", "index.js");
-const BUNDLED_PLAN_EXTENSION = join(__dirname, "extensions", "defaults", "plan", "index.js");
-const BUNDLED_DISCIPLINE_EXTENSION = join(__dirname, "extensions", "defaults", "discipline", "index.js");
-const BUNDLED_DIAGNOSTICS_EXTENSION = join(__dirname, "extensions", "defaults", "diagnostics", "index.js");
-const BUNDLED_SAL_EXTENSION = join(__dirname, "extensions", "defaults", "sal", "index.js");
-const BUNDLED_TOKEN_SAVE_EXTENSION = join(__dirname, "extensions", "defaults", "token-save", "index.js");
-const BUNDLED_GRUB_EXTENSION = join(__dirname, "extensions", "defaults", "grub", "index.js");
-const BUNDLED_SUBAGENT_EXTENSION = join(__dirname, "extensions", "defaults", "subagent", "index.js");
-const BUNDLED_TEAM_EXTENSION = join(__dirname, "extensions", "defaults", "team", "index.js");
-const BUNDLED_IDLE_THINK_EXTENSION = join(__dirname, "extensions", "defaults", "idle-think", "index.js");
-const BUNDLED_BTW_EXTENSION = join(__dirname, "extensions", "defaults", "btw", "index.js");
-const BUNDLED_RECAP_EXTENSION = join(__dirname, "extensions", "defaults", "recap", "index.js");
-const BUNDLED_DEBUG_EXTENSION = join(__dirname, "extensions", "defaults", "debug", "index.js");
-const BUNDLED_MCP_EXTENSION = join(__dirname, "extensions", "defaults", "mcp", "index.js");
+const BUNDLED_LINK_WORLD_EXTENSION = join(__dirname, "extensions", "builtin", "link-world", "index.js");
+const BUNDLED_BROWSER_EXTENSION = join(__dirname, "extensions", "builtin", "browser", "index.js");
+const BUNDLED_SECURITY_AUDIT_EXTENSION = join(__dirname, "extensions", "builtin", "security-audit", "index.js");
+const BUNDLED_SOUL_EXTENSION = join(__dirname, "extensions", "builtin", "soul", "index.js");
+const BUNDLED_PRESENCE_EXTENSION = join(__dirname, "extensions", "builtin", "presence", "index.js");
+const BUNDLED_INTERVIEW_EXTENSION = join(__dirname, "extensions", "builtin", "interview", "index.js");
+const BUNDLED_LOOP_EXTENSION = join(__dirname, "extensions", "builtin", "loop", "index.js");
+const BUNDLED_PLAN_EXTENSION = join(__dirname, "extensions", "builtin", "plan", "index.js");
+const BUNDLED_DISCIPLINE_EXTENSION = join(__dirname, "extensions", "builtin", "discipline", "index.js");
+const BUNDLED_DIAGNOSTICS_EXTENSION = join(__dirname, "extensions", "builtin", "diagnostics", "index.js");
+const BUNDLED_SAL_EXTENSION = join(__dirname, "extensions", "builtin", "sal", "index.js");
+const BUNDLED_TOKEN_SAVE_EXTENSION = join(__dirname, "extensions", "builtin", "token-save", "index.js");
+const BUNDLED_GRUB_EXTENSION = join(__dirname, "extensions", "builtin", "grub", "index.js");
+const BUNDLED_SUBAGENT_EXTENSION = join(__dirname, "extensions", "builtin", "subagent", "index.js");
+const BUNDLED_TEAM_EXTENSION = join(__dirname, "extensions", "builtin", "team", "index.js");
+const BUNDLED_IDLE_THINK_EXTENSION = join(__dirname, "extensions", "builtin", "idle-think", "index.js");
+const BUNDLED_BTW_EXTENSION = join(__dirname, "extensions", "builtin", "btw", "index.js");
+const BUNDLED_RECAP_EXTENSION = join(__dirname, "extensions", "builtin", "recap", "index.js");
+const BUNDLED_DEBUG_EXTENSION = join(__dirname, "extensions", "builtin", "debug", "index.js");
+const BUNDLED_MCP_EXTENSION = join(__dirname, "extensions", "builtin", "mcp", "index.js");
 
 export type BuiltinExtensionRiskLevel = "passive" | "command" | "tool" | "background" | "write-capable";
 export type BuiltinExtensionTestContract = "lifecycle" | "external-process" | "resource-discovery" | "write-guard";
@@ -103,7 +103,7 @@ function findPackageRoot(startDir: string): string | null {
 /**
  * Get the list of built-in extension paths that NanoPencil loads by default
  *
- * Returns all default-enabled extension paths (defaults/):
+ * Returns all default-enabled extension paths (builtin/):
  * - NanoMem (persistent memory)
  * - Soul (AI personality evolution)
  * - LinkWorld (internet search)
@@ -123,7 +123,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_DIAGNOSTICS_EXTENSION)) {
 		paths.push(BUNDLED_DIAGNOSTICS_EXTENSION);
 	} else {
-		const diagnosticsTs = join(__dirname, "extensions", "defaults", "diagnostics", "index.ts");
+		const diagnosticsTs = join(__dirname, "extensions", "builtin", "diagnostics", "index.ts");
 		if (existsSync(diagnosticsTs)) paths.push(diagnosticsTs);
 	}
 
@@ -136,7 +136,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_SAL_EXTENSION)) {
 		paths.push(BUNDLED_SAL_EXTENSION);
 	} else {
-		const salTs = join(__dirname, "extensions", "defaults", "sal", "index.ts");
+		const salTs = join(__dirname, "extensions", "builtin", "sal", "index.ts");
 		if (existsSync(salTs)) paths.push(salTs);
 	}
 
@@ -144,7 +144,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_TOKEN_SAVE_EXTENSION)) {
 		paths.push(BUNDLED_TOKEN_SAVE_EXTENSION);
 	} else {
-		const tokenSaveTs = join(__dirname, "extensions", "defaults", "token-save", "index.ts");
+		const tokenSaveTs = join(__dirname, "extensions", "builtin", "token-save", "index.ts");
 		if (existsSync(tokenSaveTs)) paths.push(tokenSaveTs);
 	}
 
@@ -173,11 +173,11 @@ export function getBuiltinExtensionPaths(): string[] {
 		}
 	}
 
-	// === link-world extension (built-in source, compiled to dist/extensions/defaults/link-world) ===
+	// === link-world extension (built-in source, compiled to dist/extensions/builtin/link-world) ===
 	if (existsSync(BUNDLED_LINK_WORLD_EXTENSION)) {
 		paths.push(BUNDLED_LINK_WORLD_EXTENSION);
 	} else {
-		const linkWorldTs = join(__dirname, "extensions", "defaults", "link-world", "index.ts");
+		const linkWorldTs = join(__dirname, "extensions", "builtin", "link-world", "index.ts");
 		if (existsSync(linkWorldTs)) paths.push(linkWorldTs);
 	}
 
@@ -185,15 +185,15 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_BROWSER_EXTENSION)) {
 		paths.push(BUNDLED_BROWSER_EXTENSION);
 	} else {
-		const browserTs = join(__dirname, "extensions", "defaults", "browser", "index.ts");
+		const browserTs = join(__dirname, "extensions", "builtin", "browser", "index.ts");
 		if (existsSync(browserTs)) paths.push(browserTs);
 	}
 
-	// === Security Audit extension (built-in source, compiled to dist/extensions/defaults/security-audit) ===
+	// === Security Audit extension (built-in source, compiled to dist/extensions/builtin/security-audit) ===
 	if (existsSync(BUNDLED_SECURITY_AUDIT_EXTENSION)) {
 		paths.push(BUNDLED_SECURITY_AUDIT_EXTENSION);
 	} else {
-		const securityAuditTs = join(__dirname, "extensions", "defaults", "security-audit", "index.ts");
+		const securityAuditTs = join(__dirname, "extensions", "builtin", "security-audit", "index.ts");
 		if (existsSync(securityAuditTs)) paths.push(securityAuditTs);
 	}
 
@@ -201,14 +201,14 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_SOUL_EXTENSION)) {
 		paths.push(BUNDLED_SOUL_EXTENSION);
 	} else {
-		const soulTs = join(__dirname, "extensions", "defaults", "soul", "index.ts");
+		const soulTs = join(__dirname, "extensions", "builtin", "soul", "index.ts");
 		if (existsSync(soulTs)) paths.push(soulTs);
 	}
 
 	if (existsSync(BUNDLED_PRESENCE_EXTENSION)) {
 		paths.push(BUNDLED_PRESENCE_EXTENSION);
 	} else {
-		const presenceTs = join(__dirname, "extensions", "defaults", "presence", "index.ts");
+		const presenceTs = join(__dirname, "extensions", "builtin", "presence", "index.ts");
 		if (existsSync(presenceTs)) paths.push(presenceTs);
 	}
 
@@ -217,7 +217,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_INTERVIEW_EXTENSION)) {
 		paths.push(BUNDLED_INTERVIEW_EXTENSION);
 	} else {
-		const interviewTs = join(__dirname, "extensions", "defaults", "interview", "index.ts");
+		const interviewTs = join(__dirname, "extensions", "builtin", "interview", "index.ts");
 		if (existsSync(interviewTs)) paths.push(interviewTs);
 	}
 
@@ -225,7 +225,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_GRUB_EXTENSION)) {
 		paths.push(BUNDLED_GRUB_EXTENSION);
 	} else {
-		const grubTs = join(__dirname, "extensions", "defaults", "grub", "index.ts");
+		const grubTs = join(__dirname, "extensions", "builtin", "grub", "index.ts");
 		if (existsSync(grubTs)) paths.push(grubTs);
 	}
 
@@ -233,7 +233,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_LOOP_EXTENSION)) {
 		paths.push(BUNDLED_LOOP_EXTENSION);
 	} else {
-		const loopTs = join(__dirname, "extensions", "defaults", "loop", "index.ts");
+		const loopTs = join(__dirname, "extensions", "builtin", "loop", "index.ts");
 		if (existsSync(loopTs)) paths.push(loopTs);
 	}
 
@@ -241,7 +241,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_PLAN_EXTENSION)) {
 		paths.push(BUNDLED_PLAN_EXTENSION);
 	} else {
-		const planTs = join(__dirname, "extensions", "defaults", "plan", "index.ts");
+		const planTs = join(__dirname, "extensions", "builtin", "plan", "index.ts");
 		if (existsSync(planTs)) paths.push(planTs);
 	}
 
@@ -249,7 +249,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_DISCIPLINE_EXTENSION)) {
 		paths.push(BUNDLED_DISCIPLINE_EXTENSION);
 	} else {
-		const disciplineTs = join(__dirname, "extensions", "defaults", "discipline", "index.ts");
+		const disciplineTs = join(__dirname, "extensions", "builtin", "discipline", "index.ts");
 		if (existsSync(disciplineTs)) paths.push(disciplineTs);
 	}
 
@@ -257,7 +257,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_SUBAGENT_EXTENSION)) {
 		paths.push(BUNDLED_SUBAGENT_EXTENSION);
 	} else {
-		const subagentTs = join(__dirname, "extensions", "defaults", "subagent", "index.ts");
+		const subagentTs = join(__dirname, "extensions", "builtin", "subagent", "index.ts");
 		if (existsSync(subagentTs)) paths.push(subagentTs);
 	}
 
@@ -265,7 +265,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_TEAM_EXTENSION)) {
 		paths.push(BUNDLED_TEAM_EXTENSION);
 	} else {
-		const teamTs = join(__dirname, "extensions", "defaults", "team", "index.ts");
+		const teamTs = join(__dirname, "extensions", "builtin", "team", "index.ts");
 		if (existsSync(teamTs)) paths.push(teamTs);
 	}
 
@@ -273,7 +273,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_IDLE_THINK_EXTENSION)) {
 		paths.push(BUNDLED_IDLE_THINK_EXTENSION);
 	} else {
-		const idleThinkTs = join(__dirname, "extensions", "defaults", "idle-think", "index.ts");
+		const idleThinkTs = join(__dirname, "extensions", "builtin", "idle-think", "index.ts");
 		if (existsSync(idleThinkTs)) paths.push(idleThinkTs);
 	}
 
@@ -281,7 +281,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_BTW_EXTENSION)) {
 		paths.push(BUNDLED_BTW_EXTENSION);
 	} else {
-		const btwTs = join(__dirname, "extensions", "defaults", "btw", "index.ts");
+		const btwTs = join(__dirname, "extensions", "builtin", "btw", "index.ts");
 		if (existsSync(btwTs)) paths.push(btwTs);
 	}
 
@@ -289,7 +289,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_RECAP_EXTENSION)) {
 		paths.push(BUNDLED_RECAP_EXTENSION);
 	} else {
-		const recapTs = join(__dirname, "extensions", "defaults", "recap", "index.ts");
+		const recapTs = join(__dirname, "extensions", "builtin", "recap", "index.ts");
 		if (existsSync(recapTs)) paths.push(recapTs);
 	}
 
@@ -297,7 +297,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_DEBUG_EXTENSION)) {
 		paths.push(BUNDLED_DEBUG_EXTENSION);
 	} else {
-		const debugTs = join(__dirname, "extensions", "defaults", "debug", "index.ts");
+		const debugTs = join(__dirname, "extensions", "builtin", "debug", "index.ts");
 		if (existsSync(debugTs)) paths.push(debugTs);
 	}
 
@@ -305,7 +305,7 @@ export function getBuiltinExtensionPaths(): string[] {
 	if (existsSync(BUNDLED_MCP_EXTENSION)) {
 		paths.push(BUNDLED_MCP_EXTENSION);
 	} else {
-		const mcpTs = join(__dirname, "extensions", "defaults", "mcp", "index.ts");
+		const mcpTs = join(__dirname, "extensions", "builtin", "mcp", "index.ts");
 		if (existsSync(mcpTs)) paths.push(mcpTs);
 	}
 

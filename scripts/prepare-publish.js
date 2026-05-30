@@ -2,8 +2,8 @@
  * 发布前从 package.json 移除「已打进 dist 的依赖」。
  *
  * 原因：
- * - @pencil-agent/agent-core 用的是 "file:./packages/agent-core"，发布后 tarball 里没有 packages/，npm install 会报错。
- * - @mariozechner/ai / @mariozechner/tui 在 npm 上的 API 和本地 packages/ai、packages/tui 不一致，已全部打进 dist/packages/，不应再依赖 npm 版本。
+ * - @pencil-agent/agent-core 用的是 "file:./core/lib/agent-core"，发布后 tarball 里没有 packages/，npm install 会报错。
+ * - @mariozechner/ai / @mariozechner/tui 在 npm 上的 API 和本地 core/lib/ai、core/lib/tui 不一致，已全部打进 dist/packages/，不应再依赖 npm 版本。
  *
  * 使用：发布前执行一次，然后 npm publish。发布后可 git checkout package.json 恢复（若需要继续本地开发）。
  *

@@ -58,7 +58,7 @@ export function computeStructuralBoost(entry: BaseMemoryV2): number {
 	}
 
 	// Fallback: infer module paths from tags when no explicit paths exist.
-	// Tags often contain path segments like "core/config" or filenames.
+	// Tags often contain path segments like "core/platform/config" or filenames.
 	// Use a weak match (0.5× weight via reduced return) to avoid conflating
 	// with the relevance signal which already scores tag overlap.
 	if (entryPaths.length === 0) {

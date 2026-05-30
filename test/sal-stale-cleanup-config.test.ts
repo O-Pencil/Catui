@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveStaleCleanupEnabled } from "../extensions/defaults/sal/index.js";
+import { resolveStaleCleanupEnabled } from "../extensions/builtin/sal/index.js";
 
 test("sal stale cleanup: defaults to disabled", () => {
 	assert.equal(resolveStaleCleanupEnabled(undefined, undefined), false);

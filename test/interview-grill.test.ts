@@ -8,8 +8,8 @@ import type {
 	ExtensionCommandContext,
 	ExtensionContext,
 	RegisteredTool,
-} from "../core/extensions/types.js";
-import interviewExtension from "../extensions/defaults/interview/index.js";
+} from "../core/extensions-host/types.js";
+import interviewExtension from "../extensions/builtin/interview/index.js";
 
 function createSessionManager(lastUserText?: string) {
 	const entries = lastUserText

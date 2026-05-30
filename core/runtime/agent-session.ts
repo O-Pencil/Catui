@@ -1,6 +1,6 @@
 /**
  * [WHO]: AgentSession class, session lifecycle, event emission, in-loop recovery adapter, pruneRecoverableErrorTail()
- * [FROM]: Depends on agent-core, ai, core/tools/*, core/session/*, core/config/*
+ * [FROM]: Depends on agent-core, ai, core/tools/*, core/session/*, core/platform/config/*
  * [TO]: Consumed by core/index.ts, core/runtime/sdk.ts, modes/interactive/interactive-mode.ts, modes/print-mode.ts, modes/rpc/rpc-mode.ts, modes/acp/acp-mode.ts, modes/rpc/rpc-types.ts, modes/rpc/rpc-client.ts, modes/interactive/components/footer.ts, modes/interactive/components/skill-invocation-message.ts
  * [HERE]: Central runtime hub; all modes delegate to this class
  */
@@ -51,7 +51,7 @@ import {
   type BashResult,
   executeBash as executeBashCommand,
   executeBashWithOperations,
-} from "../bash-executor.js";
+} from "../platform/exec/bash-executor.js";
 import {
   type CompactionResult,
   calculateContextTokens,
@@ -65,8 +65,8 @@ import {
 import { CompactionCoordinator } from "../session/compaction/compaction-coordinator.js";
 import { ToolOrchestrator } from "../tools/orchestrator.js";
 import { ModelSwitcher } from "../model/index.js";
-import { DEFAULT_THINKING_LEVEL } from "../defaults.js";
-import { createExtensionTelemetrySink } from "../telemetry/index.js";
+import { DEFAULT_THINKING_LEVEL } from "../platform/config/defaults.js";
+import { createExtensionTelemetrySink } from "../platform/telemetry/index.js";
 import {
   exportSessionToHtml,
   type ToolHtmlRenderer,
@@ -98,7 +98,7 @@ import {
   type TurnStartEvent,
   wrapRegisteredTools,
   wrapToolsWithExtensions,
-} from "../extensions/index.js";
+} from "../extensions-host/index.js";
 import type { BashExecutionMessage, CustomMessage } from "../messages.js";
 import type { ModelRegistry } from "../model-registry.js";
 import {
@@ -108,12 +108,12 @@ import {
 import type {
   ResourceExtensionPaths,
   ResourceLoader,
-} from "../config/resource-loader.js";
+} from "../platform/config/resource-loader.js";
 import { getLatestCompactionEntry, SessionManager, type SessionEntry, type BranchSummaryEntry, type CompactionEntry } from "../session/session-manager.js";
-import type { SettingsManager } from "../config/settings-manager.js";
+import type { SettingsManager } from "../platform/config/settings-manager.js";
 import { AgentDirContext } from "../agent-dir/agent-dir-context.js";
 
-import { t } from "../i18n/index.js";
+import { t } from "../platform/i18n/index.js";
 import { toSoulContext, extractSessionContext } from "../soul-integration.js";
 import { buildSystemPrompt } from "../prompt/system-prompt.js";
 import type { BashOperations } from "../tools/bash.js";
@@ -124,7 +124,7 @@ import {
   type SessionSlashCommandDescriptor,
 } from "./slash-command-catalog.js";
 import { RetryCoordinator, type RetryCoordinatorHost, type RetrySessionEvent } from "./retry-coordinator.js";
-import { createLogger, type AgentLogger } from "../utils/logger.js";
+import { createLogger, type AgentLogger } from "../platform/utils/logger.js";
 
 export type { SessionSlashCommandDescriptor } from "./slash-command-catalog.js";
 

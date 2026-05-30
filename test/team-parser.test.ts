@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildTeamHelp, getTeamArgumentCompletions, parseTeamCommand } from "../extensions/defaults/team/team-parser.js";
-import { selectAutoTeamPlan } from "../extensions/defaults/team/team-presets.js";
-import { parseTeamMentions } from "../extensions/defaults/team/team-orchestrator.js";
-import { renderTeamDashboard } from "../extensions/defaults/team/team-dashboard.js";
-import { updateTeamUi } from "../extensions/defaults/team/team-ui.js";
-import type { PersistedTeammate } from "../extensions/defaults/team/team-types.js";
+import { buildTeamHelp, getTeamArgumentCompletions, parseTeamCommand } from "../extensions/builtin/team/team-parser.js";
+import { selectAutoTeamPlan } from "../extensions/builtin/team/team-presets.js";
+import { parseTeamMentions } from "../extensions/builtin/team/team-orchestrator.js";
+import { renderTeamDashboard } from "../extensions/builtin/team/team-dashboard.js";
+import { updateTeamUi } from "../extensions/builtin/team/team-ui.js";
+import type { PersistedTeammate } from "../extensions/builtin/team/team-types.js";
 
 test("team-parser: parses root list and help commands", () => {
 	assert.deepEqual(parseTeamCommand("team", ""), { command: "list" });

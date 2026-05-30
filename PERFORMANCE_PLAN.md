@@ -185,7 +185,7 @@ jiti 每次启动都重新编译 TypeScript 扩展
 2. 启动时优先加载缓存，fallback 到 jiti
 
 ```typescript
-// core/extensions/loader.ts
+// core/extensions-host/loader.ts
 const cachePath = getExtensionCachePath(extPath);
 if (existsSync(cachePath)) {
   return import(cachePath);  // 直接加载，~10ms
@@ -292,7 +292,7 @@ scripts/startup-benchmark.cjs - Benchmark 脚本
 main.ts                       - 启动入口，checkpoint 标记位置
 core/mcp/mcp-client.ts        - MCP 客户端
 core/runtime/sdk.ts           - SDK 工厂
-core/config/resource-loader.ts - 资源加载器
+core/platform/config/resource-loader.ts - 资源加载器
 ```
 
 ### C. 环境要求

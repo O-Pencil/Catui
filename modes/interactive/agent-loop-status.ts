@@ -9,7 +9,7 @@ import {
 	formatLoopPolicySummary,
 	formatLoopTransitionHistory,
 	formatLoopTransitionSummary,
-} from "../agent-loop-result-format.js";
+} from "../utils/agent-loop-result-format.js";
 
 const LABEL_WIDTH = 22;
 

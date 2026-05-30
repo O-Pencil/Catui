@@ -22,7 +22,7 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 
 `index.ts`: Barrel exports for core API surface, re-exports runtime, tools, extensions
 
-### Internationalization (`core/i18n/`)
+### Internationalization (`core/platform/i18n/`)
 
 `index.ts`: i18n core - locale management, translation function `t()`
 
@@ -50,7 +50,7 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 
 `orchestrator.ts`: Tool execution ordering and dependency resolution
 
-### Extension System (`core/extensions/`)
+### Extension System (`core/extensions-host/`)
 
 `loader.ts`: Discovers extensions from npm packages, local paths, workspace config
 
@@ -118,7 +118,7 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 
 `model-resolver.ts`: Resolves model IDs to provider configurations
 
-### Configuration (`core/config/`)
+### Configuration (`core/platform/config/`)
 
 `settings-manager.ts`: Two-tier settings (global + project-local), merge logic, agent loop defaults
 
@@ -134,13 +134,31 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 
 `prompt-templates.ts`: Template library for various prompt types
 
-### Other Modules
+### Platform Infrastructure (`core/platform/`)
 
-`defaults.ts`: Default configuration values
+`config/defaults.ts`: Default configuration values
 
-`diagnostics.ts`: Health checks and system diagnostics
+`config/diagnostics.ts`: Health checks and system diagnostics
 
 `keybindings.ts`: Keybinding definitions for TUI
+
+`exec/bash-executor.ts`: Shared bash execution logic with streaming, truncation, cancellation, and explicit cwd support
+
+`exec/exec.ts`: Shared child-process execution helper for extension and package manager commands
+
+`timings.ts`: Startup/runtime checkpoint timing helper for profiling initialization phases
+
+`utils/`: Logging, shell, sleep, and external tool helpers
+
+### Internal Libraries (`core/lib/`)
+
+`ai/`: Private workspace library for model APIs and providers (`@pencil-agent/ai`)
+
+`agent-core/`: Private workspace library for agent loop primitives (`@pencil-agent/agent-core`)
+
+`tui/`: Private workspace library for terminal UI components (`@pencil-agent/tui`)
+
+### Other Modules
 
 `messages.ts`: Message handling and formatting
 
@@ -148,21 +166,13 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 
 `slash-commands.ts`: Built-in slash command implementations
 
-`bash-executor.ts`: Shared bash execution logic with streaming, truncation, cancellation, and explicit cwd support
-
-`exec.ts`: Shared child-process execution helper for extension and package manager commands
-
 `package-manager.ts`: Package source installation, update, removal, and resource discovery for npm/git/local packages
 
 `soul-integration.ts`: Soul manager loading, prompt injection, and session context extraction bridge
 
-`timings.ts`: Startup/runtime checkpoint timing helper for profiling initialization phases
+`model/custom-providers.ts`: Custom provider registration
 
-`custom-providers.ts`: Custom provider registration
-
-`footer-data-provider.ts`: Footer information for TUI
-
-`mcp-manager.ts`: MCP server lifecycle management, - [WHO]: McpManager
+`mcp/mcp-manager.ts`: MCP server lifecycle management, - [WHO]: McpManager
 - [FROM]: mcp/
 - [TO]: (check imports)
 - [HERE]: MCP orchestration

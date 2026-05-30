@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildToolTracePayload, inferIntent } from "../extensions/defaults/sal/index.js";
+import { buildToolTracePayload, inferIntent } from "../extensions/builtin/sal/index.js";
 
 test("sal intent inference matches Chinese prompts without word boundaries", () => {
 	assert.equal(inferIntent("帮我修复这个报错"), "fix");

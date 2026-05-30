@@ -10,7 +10,7 @@
 
 
 import { type EditorAction, getEditorKeybindings, type KeyId } from "@pencil-agent/tui";
-import type { AppAction, KeybindingsManager } from "../../../core/keybindings.js";
+import type { AppAction, KeybindingsManager } from "../../../core/platform/keybindings.js";
 import { theme } from "../theme/theme.js";
 
 /**

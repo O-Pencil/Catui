@@ -1,7 +1,7 @@
 /**
  * [WHO]: WorktreeManager class - temporary workspace and git worktree management
  * [FROM]: Depends on node:fs/promises, node:path, node:child_process
- * [TO]: Consumed by ./index.ts, core/sub-agent/*, extensions/defaults/subagent/*, extensions/defaults/team/*
+ * [TO]: Consumed by ./index.ts, core/sub-agent/*, extensions/builtin/subagent/*, extensions/builtin/team/*
  * [HERE]: core/workspace/worktree-manager.ts - workspace management for SubAgents
  */
 

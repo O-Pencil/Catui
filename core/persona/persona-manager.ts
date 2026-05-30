@@ -1,7 +1,7 @@
 /**
  * [WHO]: PersonaManager class, persona state and path management
  * [FROM]: Depends on node:fs, node:path, agent-dir-context
- * [TO]: Consumed by core/config/resource-loader.ts
+ * [TO]: Consumed by core/platform/config/resource-loader.ts
  * [HERE]: core/persona/persona-manager.ts - persona management layer
  */
 import { existsSync, readdirSync, readFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";

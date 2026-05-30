@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeExperimentId, resolveSalAbEnabled, resolveSalSidecarDir } from "../extensions/defaults/sal/index.js";
+import { normalizeExperimentId, resolveSalAbEnabled, resolveSalSidecarDir } from "../extensions/builtin/sal/index.js";
 
 test("sal experiment: normalizes experiment ids into safe path segments", () => {
 	assert.equal(normalizeExperimentId(undefined), undefined);

@@ -7,7 +7,7 @@
 
 import { type Component, truncateToWidth, visibleWidth } from "@pencil-agent/tui";
 import type { AgentSession } from "../../../core/runtime/agent-session.js";
-import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.js";
+import type { ReadonlyFooterDataProvider } from "../footer-data-provider.js";
 import { theme } from "../theme/theme.js";
 
 /**

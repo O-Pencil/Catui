@@ -1,7 +1,7 @@
 /**
  * [WHO]: ModelRegistry class, model definitions, API key resolution
  * [FROM]: Depends on ai, typebox, config modules
- * [TO]: Consumed by index.ts, main.ts, nanopencil-defaults.ts, core/runtime/sdk.ts, core/runtime/agent-session.ts, core/extensions/runner.ts, core/extensions/types.ts, cli/list-models.ts, modes/interactive/components/model-selector.ts, and test files
+ * [TO]: Consumed by index.ts, main.ts, nanopencil-defaults.ts, core/runtime/sdk.ts, core/runtime/agent-session.ts, core/extensions-host/runner.ts, core/extensions-host/types.ts, cli/list-models.ts, modes/interactive/components/model-selector.ts, and test files
  * [HERE]: core/model-registry.ts - model catalog and credential management
  */
 import {
@@ -24,8 +24,8 @@ import AjvModule from "ajv";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { getAgentDir } from "../config.js";
-import type { AuthStorage } from "./config/auth-storage.js";
-import { clearConfigValueCache, resolveConfigValue, resolveHeaders } from "./config/resolve-config-value.js";
+import type { AuthStorage } from "./platform/config/auth-storage.js";
+import { clearConfigValueCache, resolveConfigValue, resolveHeaders } from "./platform/config/resolve-config-value.js";
 
 const Ajv = (AjvModule as any).default || AjvModule;
 

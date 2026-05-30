@@ -9,14 +9,14 @@
 The `extensions/` module contains built-in extensions that extend nanoPencil's capabilities. Extensions can register tools, slash commands, keybindings, and hook into agent lifecycle events.
 
 **Extension Categories:**
-- `defaults/`: Auto-loaded on startup (unless disabled)
+- `builtin/`: Auto-loaded on startup (unless disabled)
 - `optional/`: Opt-in via configuration or flags
 
 ---
 
 ## Member List
 
-### Default Extensions (`extensions/defaults/`)
+### Default Extensions (`extensions/builtin/`)
 
 Auto-loaded extensions available to all users.
 
@@ -24,7 +24,7 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with /interview command, interview tool, lightweight before_agent_start hook
-    - [FROM]: core/extensions/types, core/session/session-manager
+    - [FROM]: core/extensions-host/types, core/session/session-manager
     - [HERE]: interview extension entry
 
 **Design Principle (CRITICAL):**
@@ -42,7 +42,7 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with /grub command, locale-aware GRUB_MESSAGE_TYPE renderer, before_agent_start/context/input/agent_end hooks
-    - [FROM]: core/extensions/types, @pencil-agent/tui
+    - [FROM]: core/extensions-host/types, @pencil-agent/tui
     - [HERE]: grub extension entry
 
 `grub-controller.ts`: GrubController - state machine for autonomous iterations, localized prompt generation, GrubTaskState management
@@ -59,7 +59,7 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with /loop command, LOOP_MESSAGE_TYPE renderer, session-scoped recurring scheduler with pause/resume/run-now/max-runs/quiet
-    - [FROM]: core/extensions/types, @pencil-agent/tui
+    - [FROM]: core/extensions-host/types, @pencil-agent/tui
     - [HERE]: loop extension entry
 
 `scheduler-controller.ts`: SchedulerController - in-memory recurring task store with pause/resume/run-now, MAX_SCHEDULED_TASKS=50
@@ -74,7 +74,7 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: link-world entry
 
 `linkworld.ts`: Main link-world logic
@@ -85,14 +85,14 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with /btw command, BTW_MESSAGE_TYPE renderer
-    - [FROM]: core/extensions/types, @pencil-agent/ai
+    - [FROM]: core/extensions-host/types, @pencil-agent/ai
     - [HERE]: btw extension entry
 
 #### recap/ — On-Demand Situational Recap
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with /recap command (Free deterministic by default, --smart for LLM synthesis), RECAP_MESSAGE_TYPE renderer with inline token/cost badge (Smart only)
-    - [FROM]: core/extensions/types, @pencil-agent/tui, ./recap-extractor, ./recap-synthesizer, ./recap-renderer, ./recap-types
+    - [FROM]: core/extensions-host/types, @pencil-agent/tui, ./recap-extractor, ./recap-synthesizer, ./recap-renderer, ./recap-types
     - [HERE]: recap extension entry
 
 `recap-types.ts`: RECAP_MESSAGE_TYPE constant, RecapEntry / RecapSource / RecapTriggerReason / RecapSettings types, RECAP_DEFAULTS budgets
@@ -118,7 +118,7 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with /debug command, before_agent_start hook (injects diagnostic system prompt), agent_end cleanup, dispatched via sendUserMessage for streaming output
-    - [FROM]: core/extensions/types, @pencil-agent/tui, ./collectors
+    - [FROM]: core/extensions-host/types, @pencil-agent/tui, ./collectors
     - [HERE]: debug extension entry
 
 `collectors.ts`: Diagnostic data collection, collectSystemInfo/collectModelInfo/collectSessionInfo/collectConfigInfo/collectGitInfo/collectAgentState, sanitizeForLLM, formatDiagnosticData
@@ -127,7 +127,7 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with /plan command, EnterPlanMode/ExitPlanMode tools, plan file management
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: plan extension entry
 
 `plan-file-manager.ts`: PlanFileManager — plan file path management and I/O
@@ -143,14 +143,14 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with opening + idle presence lines, uses NanoMemEngine episodes/preferences/lessons + git/cwd snapshot
-    - [FROM]: core/extensions/types, @pencil-agent/tui
+    - [FROM]: core/extensions-host/types, @pencil-agent/tui
     - [HERE]: presence extension entry
 
 #### sal/ — Structural Anchor Learning
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with /sal:coverage /sal:status /sal:setup commands, before_agent_start/tool_execution_start/agent_end hooks
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: sal extension entry
 
 `terrain.ts`: TerrainSnapshot/TerrainNode/TerrainEdge model, buildTerrainIndex(), checkDipCoverage()
@@ -162,7 +162,7 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with /subagent: /subagent:run/:stop/:status/:report/:apply commands, SUBAGENT_MESSAGE_TYPE renderer
-    - [FROM]: core/extensions/types, @pencil-agent/tui
+    - [FROM]: core/extensions-host/types, @pencil-agent/tui
     - [HERE]: subagent extension entry
 
 `subagent-runner.ts`: SubAgent orchestration — research and implement roles
@@ -173,7 +173,7 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface for MCP
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: MCP extension entry
 
 `mcp-management.md`: MCP configuration and usage guide
@@ -184,7 +184,7 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: security extension entry
 
 `interface.ts`: Security audit interface definitions
@@ -200,7 +200,7 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface
-    - [FROM]: core/extensions/types, soul-core
+    - [FROM]: core/extensions-host/types, soul-core
     - [HERE]: soul extension entry
 
 **Note**: Core implementation in `packages/soul-core/`
@@ -209,7 +209,7 @@ Auto-loaded extensions available to all users.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface for team
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: team extension entry
 
 `team-controller.ts`: Multi-agent coordination logic
@@ -226,14 +226,14 @@ Extensions that must be explicitly enabled.
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: simplify extension entry
 
 #### export-html/ — HTML Export Extension
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: export extension entry
 
 ---
@@ -242,7 +242,7 @@ Extensions that must be explicitly enabled.
 
 ```typescript
 // Standard extension pattern
-import type { Extension, ExtensionContext } from '../../core/extensions/types';
+import type { Extension, ExtensionContext } from '../../core/extensions-host/types';
 
 export default function createExtension(): Extension {
   return {

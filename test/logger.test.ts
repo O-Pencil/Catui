@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createLogger, type LogEntry } from "../core/utils/logger.js";
+import { createLogger, type LogEntry } from "../core/platform/utils/logger.js";
 
 test("logger child includes structured context without leaking to parent", () => {
 	const entries: LogEntry[] = [];

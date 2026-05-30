@@ -9,11 +9,11 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import type { ExtensionAPI, ResourcesDiscoverEvent, ResourcesDiscoverResult } from "../core/extensions/types.js";
-import browserExtension from "../extensions/defaults/browser/index.js";
-import disciplineExtension from "../extensions/defaults/discipline/index.js";
-import linkWorldExtension from "../extensions/defaults/link-world/index.js";
-import mcpExtension from "../extensions/defaults/mcp/index.js";
+import type { ExtensionAPI, ResourcesDiscoverEvent, ResourcesDiscoverResult } from "../core/extensions-host/types.js";
+import browserExtension from "../extensions/builtin/browser/index.js";
+import disciplineExtension from "../extensions/builtin/discipline/index.js";
+import linkWorldExtension from "../extensions/builtin/link-world/index.js";
+import mcpExtension from "../extensions/builtin/mcp/index.js";
 
 function createApiHarness(agentDir: string) {
 	const handlers = new Map<string, Array<(event: ResourcesDiscoverEvent) => ResourcesDiscoverResult | Promise<ResourcesDiscoverResult> | undefined>>();

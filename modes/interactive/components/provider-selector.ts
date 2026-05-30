@@ -18,7 +18,7 @@ import {
 import {
 	getCustomProtocolProviderDefinition,
 	isCustomProtocolProvider,
-} from "../../../core/custom-providers.js";
+} from "../../../core/model/custom-providers.js";
 import { theme } from "../theme/theme.js";
 import { DynamicBorder } from "./dynamic-border.js";
 

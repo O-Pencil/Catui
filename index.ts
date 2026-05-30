@@ -28,7 +28,7 @@ export {
 	FileAuthStorageBackend,
 	InMemoryAuthStorageBackend,
 	type OAuthCredential,
-} from "./core/config/auth-storage.js";
+} from "./core/platform/config/auth-storage.js";
 // Compaction
 export {
 	type BranchPreparation,
@@ -137,7 +137,7 @@ export type {
 	UserBashEventResult,
 	WidgetPlacement,
 	WriteToolCallEvent,
-} from "./core/extensions/index.js";
+} from "./core/extensions-host/index.js";
 export {
 	createExtensionRuntime,
 	discoverAndLoadExtensions,
@@ -154,9 +154,9 @@ export {
 	wrapRegisteredTools,
 	wrapToolsWithExtensions,
 	wrapToolWithExtensions,
-} from "./core/extensions/index.js";
+} from "./core/extensions-host/index.js";
 // Footer data provider (git branch + extension statuses - data not otherwise available to extensions)
-export type { ReadonlyFooterDataProvider } from "./core/footer-data-provider.js";
+export type { ReadonlyFooterDataProvider } from "./modes/interactive/footer-data-provider.js";
 export { convertToLlm } from "./core/messages.js";
 export { ModelRegistry } from "./core/model-registry.js";
 export type {
@@ -168,8 +168,8 @@ export type {
 	ResolvedResource,
 } from "./core/package-manager.js";
 export { DefaultPackageManager } from "./core/package-manager.js";
-export type { ResourceCollision, ResourceDiagnostic, ResourceLoader } from "./core/config/resource-loader.js";
-export { DefaultResourceLoader } from "./core/config/resource-loader.js";
+export type { ResourceCollision, ResourceDiagnostic, ResourceLoader } from "./core/platform/config/resource-loader.js";
+export { DefaultResourceLoader } from "./core/platform/config/resource-loader.js";
 // SDK for programmatic usage
 export {
 	type CreateAgentSessionOptions,
@@ -219,7 +219,7 @@ export {
 	type PackageSource,
 	type RetrySettings,
 	SettingsManager,
-} from "./core/config/settings-manager.js";
+} from "./core/platform/config/settings-manager.js";
 // Skills
 export {
 	formatSkillsForPrompt,
@@ -345,4 +345,4 @@ export {
 export { copyToClipboard } from "./modes/utils/clipboard.js";
 export { parseFrontmatter, stripFrontmatter } from "./utils/frontmatter.js";
 // Shell utilities
-export { getShellConfig } from "./core/utils/shell.js";
+export { getShellConfig } from "./core/platform/utils/shell.js";

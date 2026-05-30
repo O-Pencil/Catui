@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PencilAgent } from "../core/runtime/pencil-agent.js";
-import { AuthStorage } from "../core/config/auth-storage.js";
+import { AuthStorage } from "../core/platform/config/auth-storage.js";
 import { ModelRegistry } from "../core/model-registry.js";
 
 function makeRegistry(): ModelRegistry {

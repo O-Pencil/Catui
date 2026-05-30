@@ -1,14 +1,14 @@
 #!/usr/bin/env tsx
 /**
  * [WHO]: Provides offline Free recap evaluation CLI — reads a session .jsonl, runs extractFreeRecap, prints structured + formatted output
- * [FROM]: Depends on extensions/defaults/recap/recap-extractor for the pure extraction logic, node:fs for jsonl reading
+ * [FROM]: Depends on extensions/builtin/recap/recap-extractor for the pure extraction logic, node:fs for jsonl reading
  * [TO]: Invoked manually by maintainers to sanity-check Free quality against real sessions before promoting to default
  * [HERE]: scripts/eval-recap.ts - quality calibration tool for the recap Free path
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { extractFreeRecap, formatFreeRecap, walkSessionActivity } from "../extensions/defaults/recap/recap-extractor.js";
+import { extractFreeRecap, formatFreeRecap, walkSessionActivity } from "../extensions/builtin/recap/recap-extractor.js";
 import type { SessionEntry } from "../core/session/session-manager.js";
 
 function readSessionEntries(path: string): SessionEntry[] {

@@ -47,7 +47,7 @@ test("default extension directories are represented in metadata", () => {
 		.filter((entry) => statSync(join(process.cwd(), "extensions", "defaults", entry)).isDirectory());
 
 	for (const directory of defaultDirectories) {
-		assert.ok(metadataIds.has(directory), `Missing built-in extension metadata for extensions/defaults/${directory}.`);
+		assert.ok(metadataIds.has(directory), `Missing built-in extension metadata for extensions/builtin/${directory}.`);
 	}
 });
 
@@ -94,8 +94,8 @@ test("high-risk extension metadata declares matching test contracts", () => {
 
 test("split extension boundaries stay within the file-size guideline", () => {
 	for (const filePath of [
-		"extensions/defaults/sal/index.ts",
-		"extensions/defaults/team/team-runtime.ts",
+		"extensions/builtin/sal/index.ts",
+		"extensions/builtin/team/team-runtime.ts",
 	]) {
 		const lineCount = readFileSync(filePath, "utf-8").split("\n").length;
 		assert.ok(lineCount <= 800, `${filePath} has ${lineCount} lines and should stay at or below the 800-line guideline.`);

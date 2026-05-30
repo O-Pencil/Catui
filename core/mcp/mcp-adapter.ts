@@ -1,10 +1,10 @@
 /**
  * [WHO]: createMCPTool(), loadMCPTools(), getMCPToolDisplayName()
  * [FROM]: Depends on extensions, mcp-client, mcp-guidance
- * [TO]: Consumed by core/mcp/index.ts, core/mcp-manager.ts
+ * [TO]: Consumed by core/mcp/index.ts, core/mcp/mcp-manager.ts
  * [HERE]: core/mcp/mcp-adapter.ts - adapts MCP tools to NanoPencil tool system
  */
-import type { ToolDefinition } from "../extensions/index.js";
+import type { ToolDefinition } from "../extensions-host/index.js";
 import type { MCPClient, MCPTool } from "./mcp-client.js";
 import { formatGuidanceMessage, getAPIKeyGuidance } from "./mcp-guidance.js";
 

@@ -18,20 +18,20 @@ import { selectSession } from "./cli/session-picker.js";
 import { APP_NAME, resolveAgentDirContext, VERSION } from "./config.js";
 import { ensureAgentMetadata } from "./core/agent-dir/agent-metadata.js";
 import { MigrationManager, type MigrationOptions } from "./core/agent-dir/migration-tool.js";
-import { AuthStorage } from "./core/config/auth-storage.js";
-import { DEFAULT_THINKING_LEVEL } from "./core/defaults.js";
-import type { LoadExtensionsResult } from "./core/extensions/index.js";
-import { KeybindingsManager } from "./core/keybindings.js";
+import { AuthStorage } from "./core/platform/config/auth-storage.js";
+import { DEFAULT_THINKING_LEVEL } from "./core/platform/config/defaults.js";
+import type { LoadExtensionsResult } from "./core/extensions-host/index.js";
+import { KeybindingsManager } from "./core/platform/keybindings.js";
 import { ModelRegistry } from "./core/model-registry.js";
 import { resolveCliModel, resolveModelScope, type ScopedModel } from "./core/model-resolver.js";
 import { DefaultPackageManager } from "./core/package-manager.js";
-import { DefaultResourceLoader } from "./core/config/resource-loader.js";
+import { DefaultResourceLoader } from "./core/platform/config/resource-loader.js";
 import { CreateAgentSessionOptions, createAgentSession } from "./core/runtime/sdk.js";
 import { SessionManager } from "./core/session/session-manager.js";
-import { SettingsManager } from "./core/config/settings-manager.js";
+import { SettingsManager } from "./core/platform/config/settings-manager.js";
 import { AgentDirContext, defaultAgentDirContext, loadAgentDirContext } from "./core/agent-dir/agent-dir-context.js";
 
-import { time } from "./core/timings.js";
+import { time } from "./core/platform/timings.js";
 import { allTools } from "./core/tools/index.js";
 import { runMigrations, showDeprecationWarnings } from "./migrations.js";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.js";
@@ -42,7 +42,7 @@ import { isDevRuntime, reportDiagnostic } from "./utils/diagnostics.js";
 import {
 	CUSTOM_ANTHROPIC_PROVIDER,
 	CUSTOM_OPENAI_PROVIDER,
-} from "./core/custom-providers.js";
+} from "./core/model/custom-providers.js";
 import {
 	ensureNanopencilCodingPlanAuth,
 	ensureNanopencilDefaultConfig,

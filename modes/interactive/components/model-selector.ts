@@ -17,7 +17,7 @@ import {
 	Text,
 	type TUI,
 } from "@pencil-agent/tui";
-import type { SettingsManager } from "../../../core/config/settings-manager.js";
+import type { SettingsManager } from "../../../core/platform/config/settings-manager.js";
 import type { ModelRegistry } from "../../../core/model-registry.js";
 import { theme } from "../theme/theme.js";
 import { promptForApiKey } from "./apikey-input.js";

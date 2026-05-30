@@ -1,14 +1,14 @@
 /**
  * [WHO]: MCPClient class, MCPServerConfig, MCPTool, MCPToolResult
  * [FROM]: Depends on child_process, node:fs, config, auth-storage, mcp-config
- * [TO]: Consumed by core/mcp/index.ts, core/mcp-manager.ts, core/mcp/mcp-adapter.ts, core/mcp/mcp-config.ts
+ * [TO]: Consumed by core/mcp/index.ts, core/mcp/mcp-manager.ts, core/mcp/mcp-adapter.ts, core/mcp/mcp-config.ts
  * [HERE]: core/mcp/mcp-client.ts - MCP client for JSON-RPC over stdio
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { getAgentDir } from "../../config.js";
-import { AuthStorage } from "../config/auth-storage.js";
+import { AuthStorage } from "../platform/config/auth-storage.js";
 import { getMCPConfigPath } from "./mcp-config.js";
 
 // Log level control: DEBUG shows all MCP messages, RELEASE only shows summary

@@ -1,19 +1,19 @@
 /**
  * [WHO]: Verifies extension agent_result hook delivery
- * [FROM]: Depends on node:test, core/extensions/runner.ts, core/extensions/types.ts
+ * [FROM]: Depends on node:test, core/extensions-host/runner.ts, core/extensions-host/types.ts
  * [TO]: Consumed by repository test runner
  * [HERE]: test/extension-agent-result.test.ts - guards agent loop result observability for extensions
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ExtensionRunner } from "../core/extensions/runner.js";
+import { ExtensionRunner } from "../core/extensions-host/runner.js";
 import { AgentSession } from "../core/runtime/agent-session.js";
 import type {
 	AgentResultEvent,
 	Extension,
 	ExtensionRuntime,
-} from "../core/extensions/types.js";
+} from "../core/extensions-host/types.js";
 
 function createRunner(extensions: Extension[]): ExtensionRunner {
 	const runtime: ExtensionRuntime = {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { InsForgeEvalSink } from "../extensions/defaults/sal/eval/insforge-sink.js";
-import type { EvalEventEnvelope } from "../extensions/defaults/sal/eval/types.js";
+import { InsForgeEvalSink } from "../extensions/builtin/sal/eval/insforge-sink.js";
+import type { EvalEventEnvelope } from "../extensions/builtin/sal/eval/types.js";
 
 function event(eventType: EvalEventEnvelope["event_type"]): EvalEventEnvelope {
 	return {

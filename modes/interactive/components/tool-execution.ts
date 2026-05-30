@@ -19,12 +19,12 @@ import {
 	truncateToWidth,
 } from "@pencil-agent/tui";
 import stripAnsi from "strip-ansi";
-import type { ToolDefinition } from "../../../core/extensions/types.js";
+import type { ToolDefinition } from "../../../core/extensions-host/types.js";
 import { computeEditDiff, type EditDiffError, type EditDiffResult } from "../../../core/tools/edit-diff.js";
 import { allTools } from "../../../core/tools/index.js";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize } from "../../../core/tools/truncate.js";
 import { convertToPng } from "../../utils/image-convert.js";
-import { sanitizeBinaryOutput } from "../../../core/utils/shell.js";
+import { sanitizeBinaryOutput } from "../../../core/platform/utils/shell.js";
 import { getLanguageFromPath, highlightCode, theme } from "../theme/theme.js";
 import { renderDiff } from "./diff.js";
 import { keyHint } from "./keybinding-hints.js";

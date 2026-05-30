@@ -10,7 +10,7 @@ import { type Static, Type } from "@sinclair/typebox";
 import { spawn } from "child_process";
 import { readFileSync, statSync } from "fs";
 import path from "path";
-import { ensureTool } from "../utils/tools-manager.js";
+import { ensureTool } from "../platform/utils/tools-manager.js";
 import { validateIntegerWindowOption } from "./input-validation.js";
 import { resolveToCwd } from "./path-utils.js";
 import {

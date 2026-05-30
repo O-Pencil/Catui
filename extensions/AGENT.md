@@ -9,27 +9,27 @@
 The `extensions/` module contains built-in extensions that extend nanoPencil's capabilities. Extensions can register tools, slash commands, keybindings, and hook into agent lifecycle events.
 
 **Extension Categories:**
-- `defaults/`: Auto-loaded on startup (unless disabled)
+- `builtin/`: Auto-loaded on startup (unless disabled)
 - `optional/`: Opt-in via configuration or flags
 
 ---
 
 ## Member List
 
-### Default Extensions (`extensions/defaults/`)
+### Default Extensions (`extensions/builtin/`)
 
 Auto-loaded extensions available to all users.
 
 Current default extension directories:
 `browser/`, `btw/`, `debug/`, `diagnostics/`, `discipline/`, `grub/`, `idle-think/`, `interview/`, `link-world/`, `loop/`, `mcp/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `soul/`, `subagent/`, `team/`, `token-save/`.
 
-The complete file-level member list for defaults lives in `extensions/defaults/AGENT.md`; this parent map records category boundaries and high-level responsibilities.
+The complete file-level member list for defaults lives in `extensions/builtin/AGENT.md`; this parent map records category boundaries and high-level responsibilities.
 
 #### discipline/ — Engineering Workflow Skills
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with `skill` tool, resources_discover registration for built-in workflow skills, and lightweight before_agent_start bootstrap
-    - [FROM]: core/extensions/types, node path/url/fs
+    - [FROM]: core/extensions-host/types, node path/url/fs
     - [HERE]: discipline extension entry
 
 `skills/`: Default skills for design clarification, root-cause debugging, TDD, verification before completion, plan writing/execution, review handling, worktree setup, and branch finishing
@@ -42,7 +42,7 @@ The complete file-level member list for defaults lives in `extensions/defaults/A
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with diagnostic:event listener and /report-issue command
-    - [FROM]: core/extensions/types, @pencil-agent/tui, diagnostics helpers
+    - [FROM]: core/extensions-host/types, @pencil-agent/tui, diagnostics helpers
     - [HERE]: diagnostics extension entry
 
 `diagnostic-buffer.ts`: Session-local diagnostic dedupe and prompt gating
@@ -61,7 +61,7 @@ The complete file-level member list for defaults lives in `extensions/defaults/A
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with bash tool_result/user_bash filtering, savings tracking, and /tokensave command
-    - [FROM]: core/extensions/types, core/bash-executor, token-save filters/tracking helpers
+    - [FROM]: core/extensions-host/types, core/platform/exec/bash-executor, token-save filters/tracking helpers
     - [TO]: Auto-loaded by builtin-extensions.ts
     - [HERE]: token-save extension entry
 
@@ -91,7 +91,7 @@ The complete file-level member list for defaults lives in `extensions/defaults/A
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with /interview command, interview tool, lightweight before_agent_start hook
-    - [FROM]: core/extensions/types, core/session/session-manager
+    - [FROM]: core/extensions-host/types, core/session/session-manager
     - [HERE]: interview extension entry
 
 **Design Principle (CRITICAL):**
@@ -109,7 +109,7 @@ The complete file-level member list for defaults lives in `extensions/defaults/A
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with /grub command, GRUB_MESSAGE_TYPE renderer, before_agent_start/context/input/agent_end hooks
-    - [FROM]: core/extensions/types, @pencil-agent/tui
+    - [FROM]: core/extensions-host/types, @pencil-agent/tui
     - [HERE]: grub extension entry
 
 `grub-controller.ts`: GrubController - state machine for autonomous iterations, durable GrubTaskState management, feature-list baseline validation
@@ -140,7 +140,7 @@ The complete file-level member list for defaults lives in `extensions/defaults/A
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension with /loop command, LOOP_MESSAGE_TYPE renderer, session-scoped recurring scheduler with pause/resume/run-now/max-runs/quiet
-    - [FROM]: core/extensions/types, @pencil-agent/tui
+    - [FROM]: core/extensions-host/types, @pencil-agent/tui
     - [HERE]: loop extension entry
 
 `scheduler-controller.ts`: SchedulerController - in-memory recurring task store with pause/resume/run-now, MAX_SCHEDULED_TASKS=50
@@ -155,7 +155,7 @@ The complete file-level member list for defaults lives in `extensions/defaults/A
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: link-world entry
 
 `index.ts`: Main link-world logic; registers `link_world_admin`, `link_world_exec`, optional `web_search`/`web_fetch`, `/link-world`, and resource discovery
@@ -166,7 +166,7 @@ The complete file-level member list for defaults lives in `extensions/defaults/A
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface for MCP
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: MCP extension entry
 
 `mcp-management.md`: MCP configuration and usage guide
@@ -177,7 +177,7 @@ The complete file-level member list for defaults lives in `extensions/defaults/A
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: security extension entry
 
 `interface.ts`: Security audit interface definitions
@@ -193,7 +193,7 @@ The complete file-level member list for defaults lives in `extensions/defaults/A
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface
-    - [FROM]: core/extensions/types, soul-core
+    - [FROM]: core/extensions-host/types, soul-core
     - [HERE]: soul extension entry
 
 **Note**: Core implementation in `packages/soul-core/`
@@ -202,7 +202,7 @@ The complete file-level member list for defaults lives in `extensions/defaults/A
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface for team
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: team extension entry
 
 `team-runtime.ts`: Teammate registry, queues, lifecycle, persistence, mailbox, permissions, and sub-agent execution
@@ -225,14 +225,14 @@ Optional extensions are not returned by `getBuiltinExtensionPaths()`; load them 
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: simplify extension entry
 
 #### export-html/ — HTML Export Extension
 
 **P3 Contract:**
 `index.ts`: - [WHO]: Extension interface
-    - [FROM]: core/extensions/types
+    - [FROM]: core/extensions-host/types
     - [HERE]: export extension entry
 
 ---
@@ -241,7 +241,7 @@ Optional extensions are not returned by `getBuiltinExtensionPaths()`; load them 
 
 ```typescript
 // Standard extension pattern
-import type { Extension, ExtensionContext } from '../../core/extensions/types';
+import type { Extension, ExtensionContext } from '../../core/extensions-host/types';
 
 export default function createExtension(): Extension {
   return {

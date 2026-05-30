@@ -1,7 +1,7 @@
 /**
  * [WHO]: MCPConfig, loadMcpConfig(), saveMcpConfig(), listEnabledMCPServers()
  * [FROM]: Depends on node:fs, node:path, node:os, config, mcp-client
- * [TO]: Consumed by core/index.ts, core/mcp-manager.ts, modes/interactive/interactive-mode.ts, extensions/defaults/mcp/index.ts
+ * [TO]: Consumed by core/index.ts, core/mcp/mcp-manager.ts, modes/interactive/interactive-mode.ts, extensions/builtin/mcp/index.ts
  * [HERE]: core/mcp/mcp-config.ts - MCP server configuration management
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";

@@ -1,6 +1,6 @@
 /**
  * [WHO]: Verifies loop extension scheduler lifecycle ownership and cleanup
- * [FROM]: Depends on node:test, node:assert, node:fs, node:os, node:path, extensions/defaults/loop
+ * [FROM]: Depends on node:test, node:assert, node:fs, node:os, node:path, extensions/builtin/loop
  * [TO]: Guards built-in extension metadata lifecycle contract for the default loop extension
  * [HERE]: test/loop-lifecycle.test.ts - focused session_start/session_shutdown coverage for loop timers
  */
@@ -9,8 +9,8 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import type { ExtensionAPI } from "../core/extensions/types.js";
-import loopExtension from "../extensions/defaults/loop/index.js";
+import type { ExtensionAPI } from "../core/extensions-host/types.js";
+import loopExtension from "../extensions/builtin/loop/index.js";
 
 function createApiHarness(agentDir: string) {
 	const handlers = new Map<string, Array<(event?: unknown, ctx?: unknown) => unknown>>();

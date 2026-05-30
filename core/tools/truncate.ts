@@ -1,7 +1,7 @@
 /**
  * [WHO]: TruncationResult, truncateHead(), truncateTail(), formatSize()
  * [FROM]: No external dependencies
- * [TO]: Consumed by core/tools/index.ts, core/tools/bash.ts, core/tools/read.ts, core/tools/grep.ts, core/tools/find.ts, core/tools/ls.ts, core/bash-executor.ts, modes/interactive/components/tool-execution.ts, modes/interactive/components/bash-execution.ts
+ * [TO]: Consumed by core/tools/index.ts, core/tools/bash.ts, core/tools/read.ts, core/tools/grep.ts, core/tools/find.ts, core/tools/ls.ts, core/platform/exec/bash-executor.ts, modes/interactive/components/tool-execution.ts, modes/interactive/components/bash-execution.ts
  * [HERE]: core/tools/truncate.ts - shared truncation utilities for tool outputs
  */
 export const DEFAULT_MAX_LINES = 2000;

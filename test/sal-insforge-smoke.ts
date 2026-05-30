@@ -13,8 +13,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { request } from "node:https";
 import { URL } from "node:url";
-import { InsForgeEvalSink } from "../extensions/defaults/sal/eval/insforge-sink.js";
-import type { EvalEventEnvelope } from "../extensions/defaults/sal/eval/types.js";
+import { InsForgeEvalSink } from "../extensions/builtin/sal/eval/insforge-sink.js";
+import type { EvalEventEnvelope } from "../extensions/builtin/sal/eval/types.js";
 
 interface Creds {
 	endpoint: string;

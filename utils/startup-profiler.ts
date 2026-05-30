@@ -1,7 +1,7 @@
 /**
  * [WHO]: profileCheckpoint(), getCheckpoints(), getProfileReport(), exportProfile()
  * [FROM]: Depends on node:fs, node:process, node:performance
- * [TO]: Consumed by main.ts, cli.ts, core/config/settings-manager.ts, core/runtime/sdk.ts
+ * [TO]: Consumed by main.ts, cli.ts, core/platform/config/settings-manager.ts, core/runtime/sdk.ts
  * [HERE]: utils/startup-profiler.ts - startup timing instrumentation with reporting
  */
 

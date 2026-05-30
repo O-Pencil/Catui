@@ -2,7 +2,7 @@
  * [WHO]: Provides selfDiagnosisCli() entrypoint for maintainer-invoked reflexive self-study runs
  * [FROM]: Depends on ./lib/eval-sink for the metric writer + VARIANT constant, node:child_process for pencil invocation, node:fs / node:path / node:util built-ins
  * [TO]: Consumed by maintainers via `npx tsx scripts/self-diagnosis/run.ts --archetype=<id>`; not imported by any extension or runtime
- * [HERE]: scripts/self-diagnosis/run.ts — orchestration shell. Variant tagging on eval_runs happens at child run_start via the NANOPENCIL_EVAL_VARIANT env var (read by extensions/defaults/sal/index.ts:755); no post-exit PATCH is performed.
+ * [HERE]: scripts/self-diagnosis/run.ts — orchestration shell. Variant tagging on eval_runs happens at child run_start via the NANOPENCIL_EVAL_VARIANT env var (read by extensions/builtin/sal/index.ts:755); no post-exit PATCH is performed.
  */
 
 import { parseArgs } from "node:util";

@@ -7,7 +7,7 @@
 /**
  * [WHO]: exportSessionToHtml, exportFromFile, type ToolHtmlRenderer, type ExportOptions, ExtExportOptions
  * [FROM]: Depends on node:path, node:url, ../../../core/session/session-manager.js, ../../../config.js, ../../../modes/interactive/theme/theme.js
- * [TO]: Loaded by core/extensions/loader.ts as extension entry point
+ * [TO]: Loaded by core/extensions-host/loader.ts as extension entry point
  * [HERE]: extensions/optional/export-html/index.ts -
  */
 
@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
-} from "../../../core/extensions/types.js";
+} from "../../../core/extensions-host/types.js";
 import { SessionManager } from "../../../core/session/session-manager.js";
 import { APP_NAME, getExportTemplateDir } from "../../../config.js";
 import { getResolvedThemeColors, getThemeExportColors } from "../../../modes/interactive/theme/theme.js";
@@ -112,7 +112,7 @@ function deriveExportColors(baseColor: string): { pageBg: string; cardBg: string
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 import type { SessionEntry } from "../../../core/session/session-manager.js";
-import type { ToolInfo } from "../../../core/extensions/types.js";
+import type { ToolInfo } from "../../../core/extensions-host/types.js";
 
 interface SessionData {
 	header: ReturnType<SessionManager["getHeader"]>;

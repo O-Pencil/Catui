@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { AuthStorage } from "../core/config/auth-storage.js";
+import { AuthStorage } from "../core/platform/config/auth-storage.js";
 import { ModelRegistry } from "../core/model-registry.js";
 
 describe("ModelRegistry agentLoopFramework config", () => {

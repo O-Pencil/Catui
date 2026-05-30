@@ -2,7 +2,7 @@
 
 Date: 2026-05-26
 
-Scope: `extensions/defaults/*`, `extensions/optional/*`, and the built-in extension registry in `builtin-extensions.ts`. The bundled `packages/mem-core` extension is noted as part of load order, but this audit focuses on extensions under `extensions/`.
+Scope: `extensions/builtin/*`, `extensions/optional/*`, and the built-in extension registry in `builtin-extensions.ts`. The bundled `packages/mem-core` extension is noted as part of load order, but this audit focuses on extensions under `extensions/`.
 
 ## Remediation Status
 
@@ -87,13 +87,13 @@ Status: **resolved**.
 
 Original evidence:
 
-- `presence` starts timers at `extensions/defaults/presence/index.ts:799-801`.
-- It resolves bundled packages through cwd-based candidates at `extensions/defaults/presence/index.ts:109-123`.
-- It relies on memory-derived language detection at `extensions/defaults/presence/index.ts:230-240`.
+- `presence` starts timers at `extensions/builtin/presence/index.ts:799-801`.
+- It resolves bundled packages through cwd-based candidates at `extensions/builtin/presence/index.ts:109-123`.
+- It relies on memory-derived language detection at `extensions/builtin/presence/index.ts:230-240`.
 - Test failure: `presence-locale: Chinese greeting when memory has Chinese preference` expected Chinese but got `Any ideas?`.
 - Test failure: `presence-runtime: resolves bundled packages from dist/packages` fails on `/private/var/...` vs `/var/...`.
 
-Impact: default-on UI behavior can be linguistically wrong, path-sensitive on macOS, and slow/flaky in test runs. Because it injects recent presence lines into the main system prompt at `extensions/defaults/presence/index.ts:851-875`, incorrect presence output can leak into actual agent behavior.
+Impact: default-on UI behavior can be linguistically wrong, path-sensitive on macOS, and slow/flaky in test runs. Because it injects recent presence lines into the main system prompt at `extensions/builtin/presence/index.ts:851-875`, incorrect presence output can leak into actual agent behavior.
 
 Resolution:
 
@@ -132,7 +132,7 @@ Original evidence:
 - `extensions/AGENT.md:21` describes default extensions but the detailed list starts with a subset and older contracts.
 - `extensions/AGENT.md:120-129` still references `linkworld.ts`, but the current implementation is `link-world/index.ts`.
 - `extensions/AGENT.md:167-170` references `team-controller.ts`, while the actual module has `team-runtime.ts`, `team-orchestrator.ts`, stores, mailbox, permissions, dashboard, and harness.
-- The accurate list exists in `extensions/defaults/AGENT.md`, but the parent map is stale.
+- The accurate list exists in `extensions/builtin/AGENT.md`, but the parent map is stale.
 
 Impact: DIP verification passes structurally, but the human navigation map is partially stale. This weakens the intended P1/P2/P3 evidence chain.
 
@@ -219,7 +219,7 @@ Use extension metadata as the invariant, not directory names or comments. The re
 The current registry tests enforce the policy layer:
 
 - default-on write-capable extensions require explicit approval;
-- every `extensions/defaults/*` directory has metadata;
+- every `extensions/builtin/*` directory has metadata;
 - every default-enabled default extension has a load path;
 - optional extensions are metadata-visible but not default-loaded.
 - background or timer-owning extensions declare lifecycle coverage and existing test files;
@@ -242,8 +242,8 @@ npx tsc -p tsconfig.build.json --noEmit
 npm run build
 node --test --import tsx packages/mem-core/test/archive-maintenance.test.ts test/presence-locale.test.ts
 node --test --import tsx packages/mem-core/test/extension-commands.test.ts
-node --test --import tsx $(rg --files test packages/mem-core/test packages/agent-core/test | rg '\.test\.ts$' | rg -v 'packages/agent-core/test/(agent-loop|agent|e2e|bedrock-models)\.test\.ts|test/(settings-agent-loop|model-registry-agent-loop)\.test\.ts')
-npx vitest run packages/agent-core/test/agent-loop.test.ts packages/agent-core/test/agent.test.ts packages/agent-core/test/e2e.test.ts packages/agent-core/test/bedrock-models.test.ts test/settings-agent-loop.test.ts test/model-registry-agent-loop.test.ts
+node --test --import tsx $(rg --files test packages/mem-core/test core/lib/agent-core/test | rg '\.test\.ts$' | rg -v 'core/lib/agent-core/test/(agent-loop|agent|e2e|bedrock-models)\.test\.ts|test/(settings-agent-loop|model-registry-agent-loop)\.test\.ts')
+npx vitest run core/lib/agent-core/test/agent-loop.test.ts core/lib/agent-core/test/agent.test.ts core/lib/agent-core/test/e2e.test.ts core/lib/agent-core/test/bedrock-models.test.ts test/settings-agent-loop.test.ts test/model-registry-agent-loop.test.ts
 ```
 
 Current final verification is recorded in the remediation status at the top of this report.

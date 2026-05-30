@@ -1,6 +1,6 @@
 /**
  * [WHO]: SessionSelectorComponent
- * [FROM]: Depends on node:child_process, node:fs, node:fs/promises, node:os, ../../../core/keybindings.js
+ * [FROM]: Depends on node:child_process, node:fs, node:fs/promises, node:os, ../../../core/platform/keybindings.js
  * [TO]: Consumed by modes/interactive/components/index.ts
  * [HERE]: modes/interactive/components/session-selector.ts -
  */
@@ -21,7 +21,7 @@ import {
 	truncateToWidth,
 	visibleWidth,
 } from "@pencil-agent/tui";
-import { KeybindingsManager } from "../../../core/keybindings.js";
+import { KeybindingsManager } from "../../../core/platform/keybindings.js";
 import type { SessionInfo, SessionListProgress } from "../../../core/session/session-manager.js";
 import { theme } from "../theme/theme.js";
 import { DynamicBorder } from "./dynamic-border.js";

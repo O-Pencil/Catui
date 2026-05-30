@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { getModel, type Model } from "@pencil-agent/ai";
-import { SettingsManager } from "../core/config/settings-manager.js";
+import { SettingsManager } from "../core/platform/config/settings-manager.js";
 import { createAgentSession } from "../core/runtime/sdk.js";
 
 test("createAgentSession passes aggregate tool result budget into Agent", async () => {

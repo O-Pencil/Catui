@@ -7,9 +7,9 @@ import { join } from "node:path";
 import test from "node:test";
 import type { SubAgentHandle, SubAgentResult } from "../core/sub-agent/index.js";
 import type { WorkspacePath } from "../core/workspace/index.js";
-import { TeamRuntime } from "../extensions/defaults/team/team-runtime.js";
-import { runLeaderOrchestration } from "../extensions/defaults/team/team-orchestrator.js";
-import { executePreset } from "../extensions/defaults/team/team-presets.js";
+import { TeamRuntime } from "../extensions/builtin/team/team-runtime.js";
+import { runLeaderOrchestration } from "../extensions/builtin/team/team-orchestrator.js";
+import { executePreset } from "../extensions/builtin/team/team-presets.js";
 
 function createTempDir(prefix: string): string {
 	return mkdtempSync(join(tmpdir(), prefix));

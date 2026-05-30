@@ -24,7 +24,7 @@ import {
 	Text,
 	type TUI,
 } from "@pencil-agent/tui";
-import type { KeybindingsManager } from "../../../core/keybindings.js";
+import type { KeybindingsManager } from "../../../core/platform/keybindings.js";
 import { getEditorTheme, theme } from "../theme/theme.js";
 import { DynamicBorder } from "./dynamic-border.js";
 import { appKeyHint, keyHint } from "./keybinding-hints.js";

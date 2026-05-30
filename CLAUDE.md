@@ -340,7 +340,9 @@ nanoPencil/
 |   |   |---- agent-session.ts   # Central session manager
 |   |   |---- sdk.ts             # Programmatic API factory
 |   |   |--- event-bus.ts       # Event emission system
-|   |---- extensions/         # Extension system
+|   |---- lib/                # Private workspace libraries (ai, agent-core, tui)
+|   |---- platform/           # Shared platform primitives
+|   |---- extensions-host/    # Extension system host
 |   |   |---- loader.ts       # Extension discovery
 |   |   |---- runner.ts       # Lifecycle management
 |   |   |---- wrapper.ts      # Tool wrapping
@@ -358,10 +360,10 @@ nanoPencil/
 |   |---- mcp/                # MCP protocol integration
 |   |---- session/            # Session management
 |   |---- model/              # Model management
-|   |---- config/             # Configuration
+|   |---- platform/config/    # Configuration
 |   |---- prompt/             # Prompt engineering
 |   |---- export-html/        # HTML export
-|   |--- utils/              # Utilities
+|   |--- platform/utils/     # Utilities
 |
 |---- modes/                  # Run modes (P2: modes/)
 |   |---- interactive/        # TUI mode
@@ -370,7 +372,7 @@ nanoPencil/
 |   |--- acp/                # ACP mode
 |
 |---- extensions/             # Built-in extensions (P2: extensions/)
-|   |---- defaults/           # Auto-loaded extensions
+|   |---- builtin/            # Auto-loaded extensions
 |   |   |---- interview/      # Requirement clarification
 |   |   |---- loop/           # Timed prompt scheduler
 |   |   |---- plan/           # Plan mode for read-only planning before coding
@@ -381,10 +383,7 @@ nanoPencil/
 |   |   |--- team/           # Multi-agent orchestration
 |   |--- optional/           # Opt-in extensions
 |
-|---- packages/               # Bundled packages (P2: packages/)
-|   |---- agent-core/         # Core Agent logic
-|   |---- ai/                 # Model APIs & providers
-|   |---- tui/                # Terminal UI components
+|---- packages/               # Bundled package-shaped integrations (P2: packages/)
 |   |---- mem-core/           # Persistent memory system
 |   |--- soul-core/          # AI personality engine
 |
@@ -402,11 +401,8 @@ nanoPencil/
 # Install dependencies
 npm install
 
-# Bundle local packages
-node scripts/bundle-deps.js
-
 # Build (TypeScript compile + resource copy)
-# build:deps runs packages/ai before packages/agent-core so @pencil-agent/ai dist exists for tsc
+# build:deps runs core/lib/ai before core/lib/agent-core so @pencil-agent/ai dist exists for tsc
 npm run build
 
 # Development (direct execution)
@@ -447,7 +443,7 @@ const { session } = await createAgentSession(options);
 | Print | `modes/print/print-mode.ts` | stdout/stdin streaming |
 | RPC | `modes/rpc/rpc-mode.ts` | IDE integration |
 
-### Extension System (`core/extensions/`)
+### Extension System (`core/extensions-host/`)
 
 Extensions receive `ExtensionContext` with:
 - `cwd`, `agentDir` - Directories

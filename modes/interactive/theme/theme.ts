@@ -1,7 +1,7 @@
 /**
  * [WHO]: Theme, getAvailableThemes, ThemeInfo, getAvailableThemesWithPaths, loadThemeFromPath
  * [FROM]: Depends on node:fs, node:path, @sinclair/typebox, @sinclair/typebox/compiler, chalk
- * [TO]: Consumed by main.ts, core/extensions/runner.ts, core/extensions/types.ts, core/runtime/agent-session.ts, core/export-html/index.ts, core/export-html/tool-renderer.ts, modes/interactive/components/*, extensions/optional/export-html/index.ts, extensions/optional/simplify/index.ts
+ * [TO]: Consumed by main.ts, core/extensions-host/runner.ts, core/extensions-host/types.ts, core/runtime/agent-session.ts, core/export-html/index.ts, core/export-html/tool-renderer.ts, modes/interactive/components/*, extensions/optional/export-html/index.ts, extensions/optional/simplify/index.ts
  * [HERE]: modes/interactive/theme/theme.ts - theme loader and definitions
  */
 

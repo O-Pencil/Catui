@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSubAgentHelp, parseSubAgentCommand } from "../extensions/defaults/subagent/subagent-parser.js";
+import { buildSubAgentHelp, parseSubAgentCommand } from "../extensions/builtin/subagent/subagent-parser.js";
 
 test("subagent-parser: parses colon subcommands", () => {
 	assert.deepEqual(parseSubAgentCommand("subagent:run", "analyze project"), {

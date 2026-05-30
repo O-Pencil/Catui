@@ -1,7 +1,7 @@
 /**
  * [WHO]: createAgentSession(options) → AgentSession + load results, loop framework/policy override wiring
- * [FROM]: Depends on agent-core, ai, core/config/*, core/tools/*, core/session/*, core/mcp-*, i18n/*
- * [TO]: Consumed by index.ts, main.ts, test/presence-opening.test.ts, extensions/defaults/team/index.ts
+ * [FROM]: Depends on agent-core, ai, core/platform/config/*, core/tools/*, core/session/*, core/mcp-*, i18n/*
+ * [TO]: Consumed by index.ts, main.ts, test/presence-opening.test.ts, extensions/builtin/team/index.ts
  * [HERE]: SDK factory; creates all services with DI, wires up extensions
  */
 import { join } from "node:path";
@@ -15,24 +15,24 @@ import {
 import type { Message, Model } from "@pencil-agent/ai";
 import { getAgentDir, getDocsPath } from "../../config.js";
 import { AgentSession } from "./agent-session.js";
-import { AuthStorage } from "../config/auth-storage.js";
-import { DEFAULT_THINKING_LEVEL } from "../defaults.js";
+import { AuthStorage } from "../platform/config/auth-storage.js";
+import { DEFAULT_THINKING_LEVEL } from "../platform/config/defaults.js";
 import type {
   ExtensionRunner,
   LoadExtensionsResult,
   ToolDefinition,
-} from "../extensions/index.js";
+} from "../extensions-host/index.js";
 import { convertToLlm } from "../messages.js";
-import { MCPManager } from "../mcp-manager.js";
+import { MCPManager } from "../mcp/mcp-manager.js";
 import { registerFigmaMcpOAuthProvider } from "../mcp/figma-auth.js";
 import { ModelRegistry } from "../model-registry.js";
 import { findInitialModel } from "../model-resolver.js";
-import type { ResourceLoader } from "../config/resource-loader.js";
-import { DefaultResourceLoader } from "../config/resource-loader.js";
+import type { ResourceLoader } from "../platform/config/resource-loader.js";
+import { DefaultResourceLoader } from "../platform/config/resource-loader.js";
 import { SessionManager } from "../session/session-manager.js";
-import { SettingsManager } from "../config/settings-manager.js";
+import { SettingsManager } from "../platform/config/settings-manager.js";
 import { AgentDirContext, defaultAgentDirContext } from "../agent-dir/agent-dir-context.js";
-import { time } from "../timings.js";
+import { time } from "../platform/timings.js";
 import {
   isSoulEnabled,
   toSoulContext,
@@ -201,7 +201,7 @@ export type {
   SlashCommandLocation,
   SlashCommandSource,
   ToolDefinition,
-} from "../extensions/index.js";
+} from "../extensions-host/index.js";
 export type { PromptTemplate } from "../prompt/prompt-templates.js";
 export type { Skill } from "../skills.js";
 export type { Tool } from "../tools/index.js";
@@ -325,7 +325,7 @@ export async function createAgentSession(
 
   // Initialize i18n with locale from settings (or default to English)
   const locale = settingsManager.getSettings().locale ?? "en";
-  const { setLocale } = await import("../i18n/index.js");
+  const { setLocale } = await import("../platform/i18n/index.js");
   setLocale(locale);
 
   // Use provided or create AuthStorage and ModelRegistry

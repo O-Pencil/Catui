@@ -158,15 +158,16 @@ nanoPencil/
 │
 ├── core/                  # Core functionality
 │   ├── runtime/           # Agent runtime & SDK
-│   ├── extensions/        # Extension system
+│   ├── lib/               # Private workspace libraries (ai, agent-core, tui)
+│   ├── platform/          # Shared platform primitives
+│   ├── extensions-host/   # Extension system host
 │   ├── tools/             # Built-in tools
 │   ├── mcp/               # MCP protocol integration
 │   ├── session/           # Session management
 │   ├── model/             # Model management
-│   ├── config/            # Configuration
 │   ├── prompt/            # Prompt engineering
 │   ├── export-html/       # HTML export
-│   └── utils/             # Utilities
+│   └── workspace/         # Workspace/worktree management
 │
 ├── modes/                 # Run modes
 │   ├── interactive/       # TUI mode
@@ -175,13 +176,10 @@ nanoPencil/
 │   └── acp/               # ACP mode
 │
 ├── extensions/            # Built-in extensions
-│   ├── defaults/          # Auto-loaded extensions
+│   ├── builtin/           # Auto-loaded extensions
 │   └── optional/          # Opt-in extensions
 │
-├── packages/              # Bundled npm packages
-│   ├── agent-core/        # Core Agent logic
-│   ├── ai/                # Model APIs & providers
-│   ├── tui/               # Terminal UI components
+├── packages/              # Bundled package-shaped integrations
 │   ├── mem-core/          # Persistent memory system
 │   └── soul-core/         # AI personality engine
 │
@@ -199,9 +197,6 @@ nanoPencil/
 ```bash
 # Install dependencies
 npm install
-
-# Bundle local packages (mem-core, soul-core)
-node scripts/bundle-deps.js
 
 # Build (TypeScript compile + resource copy)
 npm run build
@@ -252,7 +247,7 @@ const { session } = await createAgentSession(options);
 
 ## Key Subsystems
 
-### Extension System (`core/extensions/`)
+### Extension System (`core/extensions-host/`)
 
 | File | Purpose |
 |------|---------|
@@ -267,7 +262,7 @@ Extensions can:
 - Add UI components (dialogs, selectors, widgets)
 - Modify prompts and context
 
-### Built-in Extensions (`extensions/defaults/`)
+### Built-in Extensions (`extensions/builtin/`)
 
 | Extension | Purpose |
 |-----------|---------|

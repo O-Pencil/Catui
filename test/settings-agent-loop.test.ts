@@ -5,7 +5,7 @@
  * [HERE]: test/settings-agent-loop.test.ts - regression coverage for settings-level loop selection
  */
 import { describe, expect, it } from "vitest";
-import { SettingsManager } from "../core/config/settings-manager.js";
+import { SettingsManager } from "../core/platform/config/settings-manager.js";
 
 describe("SettingsManager agentLoopFramework", () => {
 	it("normalizes current and earlier experimental values", () => {

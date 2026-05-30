@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * [WHO]: Provides smokeExtTelemetryCli() — maintainer-invoked smoke test for the P0-P3 extension telemetry pipeline; queries ext_command_events / ext_llm_calls / ext_hook_events and reports whether rows landed
- * [FROM]: Depends on core/telemetry (loadInsforgeCredentials), node:https / node:http / node:url / node:os; no MCP, no pencil runtime
+ * [FROM]: Depends on core/platform/telemetry (loadInsforgeCredentials), node:https / node:http / node:url / node:os; no MCP, no pencil runtime
  * [TO]: Invoked manually by maintainers after exercising a pencil session, e.g. `npx tsx scripts/smoke-ext-telemetry.ts --since=5m`; documented in .dev-docs/self-awareness/extension-telemetry.md
  * [HERE]: scripts/smoke-ext-telemetry.ts - read-only verifier; does not write to the backend, does not spawn pencil, does not auto-load into user sessions
  */
@@ -9,7 +9,7 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { homedir } from "node:os";
 import { URL } from "node:url";
-import { loadInsforgeCredentials } from "../core/telemetry/index.js";
+import { loadInsforgeCredentials } from "../core/platform/telemetry/index.js";
 
 interface SmokeArgs {
 	sinceMinutes: number;

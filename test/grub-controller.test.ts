@@ -3,25 +3,25 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync, existsSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { GrubController } from "../extensions/defaults/grub/grub-controller.js";
-import { extractGrubDecision } from "../extensions/defaults/grub/grub-decision.js";
+import { GrubController } from "../extensions/builtin/grub/grub-controller.js";
+import { extractGrubDecision } from "../extensions/builtin/grub/grub-decision.js";
 import {
 	FeatureListDiffError,
 	createInitialFeatureList,
 	migrateChecklistToFeatureList,
 	validateFeatureListDiff,
 	writeFeatureList,
-} from "../extensions/defaults/grub/grub-feature-list.js";
-import { formatSnapshot, formatTaskState } from "../extensions/defaults/grub/grub-format.js";
+} from "../extensions/builtin/grub/grub-feature-list.js";
+import { formatSnapshot, formatTaskState } from "../extensions/builtin/grub/grub-format.js";
 import {
 	discoverActiveTasks,
 	loadState,
 	persistState,
 	pruneStale,
-} from "../extensions/defaults/grub/grub-persistence.js";
-import { parseGrubCommand } from "../extensions/defaults/grub/grub-parser.js";
-import { buildGrubHelp } from "../extensions/defaults/grub/grub-parser.js";
-import { resolveGrubTurn } from "../extensions/defaults/grub/grub-turn.js";
+} from "../extensions/builtin/grub/grub-persistence.js";
+import { parseGrubCommand } from "../extensions/builtin/grub/grub-parser.js";
+import { buildGrubHelp } from "../extensions/builtin/grub/grub-parser.js";
+import { resolveGrubTurn } from "../extensions/builtin/grub/grub-turn.js";
 
 function createTempWorkspace(): string {
 	return mkdtempSync(join(tmpdir(), "nanopencil-grub-"));

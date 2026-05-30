@@ -9,8 +9,8 @@ import { join } from "path";
 import { createInterface } from "readline";
 import { getAgentDir, getModelsPath } from "./config.js";
 import { defaultAgentDirContext, type AgentDirContext } from "./core/agent-dir/agent-dir-context.js";
-import { ensureCustomProtocolProvidersInModels } from "./core/custom-providers.js";
-import type { AuthStorage } from "./core/config/auth-storage.js";
+import { ensureCustomProtocolProvidersInModels } from "./core/model/custom-providers.js";
+import type { AuthStorage } from "./core/platform/config/auth-storage.js";
 import type { ModelRegistry } from "./core/model-registry.js";
 
 export const NANOPENCIL_DEFAULT_PROVIDER = "dashscope-coding";

@@ -9,7 +9,7 @@ import {
 	loadRecentInsights,
 	projectKeyFromCwd,
 	storeInsight,
-} from "../extensions/defaults/idle-think/insights.js";
+} from "../extensions/builtin/idle-think/insights.js";
 
 function withMemoryDir(fn: (memoryDir: string) => Promise<void>): Promise<void> {
 	const previous = process.env.NANOMEM_MEMORY_DIR;

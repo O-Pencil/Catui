@@ -1,7 +1,7 @@
 /**
  * [WHO]: SubAgentRuntime class - spawn, abort, lifecycle management for SubAgents
  * [FROM]: Depends on ./sub-agent-types, ./sub-agent-backend
- * [TO]: Consumed by ./index.ts, extensions/defaults/subagent/*
+ * [TO]: Consumed by ./index.ts, extensions/builtin/subagent/*
  * [HERE]: core/sub-agent/sub-agent-runtime.ts - SubAgent runtime implementation
  */
 

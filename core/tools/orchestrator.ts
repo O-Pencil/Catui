@@ -5,7 +5,7 @@
  * [HERE]: core/tools/orchestrator.ts - tool registration, lookup, and management
  */
 import type { AgentTool } from "@pencil-agent/agent-core";
-import type { ToolDefinition } from "../extensions/index.js";
+import type { ToolDefinition } from "../extensions-host/index.js";
 
 export interface ToolInfo {
 	name: string;

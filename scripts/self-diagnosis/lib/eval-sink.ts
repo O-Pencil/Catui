@@ -2,7 +2,7 @@
  * [WHO]: Provides writeSelfDiagnosisMetric() — one-shot POST to InsForge eval_metric_results; VARIANT constant for callers that need to assert the run originated from this script
  * [FROM]: Depends on node:fs / node:path / node:os / node:http / node:https / node:url via dynamic import (kept lazy to avoid pre-bundle cost for non-runtime callers)
  * [TO]: Consumed by ../run.ts after a reflexive task completes; never imported from extensions/ or core/
- * [HERE]: scripts/self-diagnosis/lib/eval-sink.ts — isolated write path. Variant tagging on eval_runs is done at run_start by the SAL extension via NANOPENCIL_EVAL_VARIANT env var (extensions/defaults/sal/index.ts:755 accepts "self-diagnosis" after the 2026-05-18 whitelist extension), so this module no longer needs a post-exit PATCH; it only writes the metric row.
+ * [HERE]: scripts/self-diagnosis/lib/eval-sink.ts — isolated write path. Variant tagging on eval_runs is done at run_start by the SAL extension via NANOPENCIL_EVAL_VARIANT env var (extensions/builtin/sal/index.ts:755 accepts "self-diagnosis" after the 2026-05-18 whitelist extension), so this module no longer needs a post-exit PATCH; it only writes the metric row.
  */
 
 import type { IncomingMessage } from "node:http";

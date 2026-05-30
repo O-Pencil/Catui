@@ -38,7 +38,7 @@ import type {
 } from "@agentclientprotocol/sdk";
 import type { AgentSession, ExtensionBindings } from "../../core/runtime/agent-session.js";
 import type { AgentSessionEvent } from "../../core/runtime/agent-session.js";
-import type { ExtensionUIContext } from "../../core/extensions/types.js";
+import type { ExtensionUIContext } from "../../core/extensions-host/types.js";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.js";
 import { SessionManager } from "../../core/session/session-manager.js";
 import { randomUUID } from "node:crypto";
@@ -47,7 +47,7 @@ import {
 	formatLoopPolicySummary,
 	formatLoopTransitionHistory,
 	formatLoopTransitionSummary,
-} from "../agent-loop-result-format.js";
+} from "../utils/agent-loop-result-format.js";
 import { theme } from "../interactive/theme/theme.js";
 
 type AcpModeId = "ask" | "read-only" | "bypass";

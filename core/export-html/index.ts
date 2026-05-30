@@ -9,7 +9,7 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import { basename, join } from "path";
 import { APP_NAME, getExportTemplateDir } from "../../config.js";
 import { getResolvedThemeColors, getThemeExportColors } from "../../modes/interactive/theme/theme.js";
-import type { ToolInfo } from "../extensions/types.js";
+import type { ToolInfo } from "../extensions-host/types.js";
 import type { SessionEntry } from "../session/session-manager.js";
 import { SessionManager } from "../session/session-manager.js";
 

@@ -4,7 +4,7 @@
  * [TO]: Consumed by AgentSession runtime construction
  * [HERE]: core/runtime/default-tools.ts - isolates default tool configuration from session orchestration
  */
-import type { SettingsManager } from "../config/settings-manager.js";
+import type { SettingsManager } from "../platform/config/settings-manager.js";
 import {
 	createAllTools,
 	createWorkspaceWriteGuard,

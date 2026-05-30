@@ -1,6 +1,6 @@
 /**
  * [WHO]: Issue-reporting end-to-end smoke (manual runner, not a unit test)
- * [FROM]: Reads .memory-experiments/credentials.json; uses extensions/defaults/diagnostics/reporter
+ * [FROM]: Reads .memory-experiments/credentials.json; uses extensions/builtin/diagnostics/reporter
  * [TO]: Run with `npx tsx test/diagnostics-issue-smoke.ts` to confirm pencil_issue_events ingest works
  * [HERE]: test/diagnostics-issue-smoke.ts - sends a synthetic diagnostic report through reportDiagnostics() and reads it back via ik_
  *
@@ -10,8 +10,8 @@ import { readFileSync } from "node:fs";
 import { request } from "node:https";
 import { URL } from "node:url";
 import { join } from "node:path";
-import { reportDiagnostics } from "../extensions/defaults/diagnostics/reporter.js";
-import type { DiagnosticRecord } from "../extensions/defaults/diagnostics/types.js";
+import { reportDiagnostics } from "../extensions/builtin/diagnostics/reporter.js";
+import type { DiagnosticRecord } from "../extensions/builtin/diagnostics/types.js";
 
 interface Creds {
 	endpoint: string;

@@ -1,13 +1,13 @@
 /**
  * [WHO]: RpcCommand, RpcResponse, RpcSessionState, RpcSlashCommand types
- * [FROM]: Depends on agent-core, ai, core/runtime, core/bash-executor, core/session/compaction
+ * [FROM]: Depends on agent-core, ai, core/runtime, core/platform/exec/bash-executor, core/session/compaction
  * [TO]: Consumed by modes/index.ts, modes/rpc/rpc-client.ts, modes/rpc/rpc-mode.ts
  * [HERE]: modes/rpc/rpc-types.ts - RPC protocol type definitions
  */
 import type { AgentLoopFramework, AgentMessage, AgentRunResult, ThinkingLevel } from "@pencil-agent/agent-core";
 import type { ImageContent, Model } from "@pencil-agent/ai";
 import type { SessionStats } from "../../core/runtime/agent-session.js";
-import type { BashResult } from "../../core/bash-executor.js";
+import type { BashResult } from "../../core/platform/exec/bash-executor.js";
 import type { CompactionResult } from "../../core/session/compaction/index.js";
 import type { SlashCommandCategory } from "../../core/slash-commands.js";
 

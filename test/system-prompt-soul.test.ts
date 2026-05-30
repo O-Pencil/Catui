@@ -1,6 +1,6 @@
 /**
  * [WHO]: system prompt and before_agent_start regression tests
- * [FROM]: Depends on node:test, core/prompt/system-prompt.ts, core/extensions/runner.ts
+ * [FROM]: Depends on node:test, core/prompt/system-prompt.ts, core/extensions-host/runner.ts
  * [TO]: Consumed by repository test runner
  * [HERE]: test/system-prompt-soul.test.ts - guards Soul layering and append-only extension prompt behavior
  */
@@ -8,13 +8,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildSystemPrompt } from "../core/prompt/system-prompt.js";
-import { ExtensionRunner } from "../core/extensions/runner.js";
+import { ExtensionRunner } from "../core/extensions-host/runner.js";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
 	Extension,
 	ExtensionRuntime,
-} from "../core/extensions/types.js";
+} from "../core/extensions-host/types.js";
 
 function createBeforeAgentStartExtension(
 	path: string,

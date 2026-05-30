@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { VERSION } from "../config.js";
-import { buildReportPayload } from "../extensions/defaults/diagnostics/reporter.js";
-import type { DiagnosticRecord } from "../extensions/defaults/diagnostics/types.js";
+import { buildReportPayload } from "../extensions/builtin/diagnostics/reporter.js";
+import type { DiagnosticRecord } from "../extensions/builtin/diagnostics/types.js";
 
 function makeRecord(context: DiagnosticRecord["context"] = {}): DiagnosticRecord {
 	const now = "2026-05-03T00:00:00.000Z";

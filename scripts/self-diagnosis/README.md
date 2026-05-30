@@ -38,7 +38,7 @@ node --import tsx scripts/self-diagnosis/run.ts --archetype=A
 # Writes: one eval_metric_results row, variant='self-diagnosis'
 ```
 
-## Why not in `extensions/defaults/`
+## Why not in `extensions/builtin/`
 
 Default extensions auto-load in every user session. Self-diagnosis would (a) consume user tokens, (b) probe a backend whose credentials are developer-only, (c) write data the user has no consent to. Keeping it in `scripts/` enforces the manual-only contract.
 

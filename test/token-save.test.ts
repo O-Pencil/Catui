@@ -4,13 +4,13 @@ import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getBuiltinExtensionPaths } from "../builtin-extensions.ts";
-import { executeBash } from "../core/bash-executor.ts";
-import { loadTokenSaveConfigFilters } from "../extensions/defaults/token-save/config.ts";
-import { classifyCommand, estimateTokens, filterTokenSaveOutput } from "../extensions/defaults/token-save/filters.ts";
-import { splitShellSegments } from "../extensions/defaults/token-save/lexer.ts";
-import { applyTokenSavePlan, applyTokenSaveStream } from "../extensions/defaults/token-save/runner.ts";
-import { planCommand } from "../extensions/defaults/token-save/rewrite.ts";
-import { applyTomlStyleFilter } from "../extensions/defaults/token-save/toml-dsl.ts";
+import { executeBash } from "../core/platform/exec/bash-executor.ts";
+import { loadTokenSaveConfigFilters } from "../extensions/builtin/token-save/config.ts";
+import { classifyCommand, estimateTokens, filterTokenSaveOutput } from "../extensions/builtin/token-save/filters.ts";
+import { splitShellSegments } from "../extensions/builtin/token-save/lexer.ts";
+import { applyTokenSavePlan, applyTokenSaveStream } from "../extensions/builtin/token-save/runner.ts";
+import { planCommand } from "../extensions/builtin/token-save/rewrite.ts";
+import { applyTomlStyleFilter } from "../extensions/builtin/token-save/toml-dsl.ts";
 
 test("builtin extensions include token-save by default", () => {
 	const paths = getBuiltinExtensionPaths();
@@ -52,7 +52,7 @@ test("token-save compacts git status output", () => {
 		"  modified:   extensions/AGENT.md",
 		...Array.from({ length: 30 }, (_, i) => `  modified:   packages/example/file-${i}.ts`),
 		"Untracked files:",
-		"  extensions/defaults/token-save/index.ts",
+		"  extensions/builtin/token-save/index.ts",
 		"no changes added to commit",
 	].join("\n");
 

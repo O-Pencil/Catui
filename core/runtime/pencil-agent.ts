@@ -22,7 +22,7 @@ import {
   type ToolName,
   allTools,
 } from "../tools/index.js";
-import { AuthStorage } from "../config/auth-storage.js";
+import { AuthStorage } from "../platform/config/auth-storage.js";
 import { SessionManager } from "../session/session-manager.js";
 import { ModelRegistry } from "../model-registry.js";
 import type { Api, Model } from "@pencil-agent/ai";

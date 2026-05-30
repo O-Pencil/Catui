@@ -62,7 +62,7 @@ import {
   isCustomProtocolProvider,
   saveCustomProtocolProviderApiKey,
   saveCustomProtocolProviderConfig,
-} from "../../core/custom-providers.js";
+} from "../../core/model/custom-providers.js";
 import {
   type AgentSession,
   type AgentSessionEvent,
@@ -76,16 +76,16 @@ import type {
   ExtensionUIContext,
   ExtensionUIDialogOptions,
   ExtensionWidgetOptions,
-} from "../../core/extensions/index.js";
+} from "../../core/extensions-host/index.js";
 import {
   FooterDataProvider,
   type ReadonlyFooterDataProvider,
-} from "../../core/footer-data-provider.js";
-import { type AppAction, KeybindingsManager } from "../../core/keybindings.js";
+} from "./footer-data-provider.js";
+import { type AppAction, KeybindingsManager } from "../../core/platform/keybindings.js";
 import { createCompactionSummaryMessage } from "../../core/messages.js";
 import { listMCPServers, setMCPServerEnabled } from "../../core/mcp/mcp-config.js";
 import { resolveModelScope } from "../../core/model-resolver.js";
-import type { ResourceDiagnostic } from "../../core/config/resource-loader.js";
+import type { ResourceDiagnostic } from "../../core/platform/config/resource-loader.js";
 import {
   type SessionContext,
   SessionManager,
@@ -97,7 +97,7 @@ import {
   getLocalizedCommands,
   inferSlashCommandCategory,
 } from "../../core/slash-commands.js";
-import { t } from "../../core/i18n/index.js";
+import { t } from "../../core/platform/i18n/index.js";
 import {
   getActivePersonaId,
   getPersonaDir,
@@ -124,8 +124,8 @@ import {
   ensureTool,
   getToolPath,
   prewarmTool,
-} from "../../core/utils/tools-manager.js";
-import { printTimings, time } from "../../core/timings.js";
+} from "../../core/platform/utils/tools-manager.js";
+import { printTimings, time } from "../../core/platform/timings.js";
 import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime.js";
 import { formatDimensionNote, resizeImage } from "../utils/image-resize.js";
 import { ArminComponent } from "./components/armin.js";
@@ -7193,7 +7193,7 @@ export class InteractiveMode {
 
   private async handleLanguageCommand(text: string): Promise<void> {
     const { setLocale, getLocale, AVAILABLE_LOCALES, LOCALE_NAMES } = await import(
-      "../../core/i18n/index.js"
+      "../../core/platform/i18n/index.js"
     );
     const currentLocale = getLocale();
 

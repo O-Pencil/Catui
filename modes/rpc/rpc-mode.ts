@@ -1,6 +1,6 @@
 /**
  * [WHO]: runRpcMode(), buildRpcSlashCommands(), buildRpcSessionState(), RpcMode class
- * [FROM]: Depends on node:crypto, core/runtime/agent-session, core/extensions
+ * [FROM]: Depends on node:crypto, core/runtime/agent-session, core/extensions-host
  * [TO]: Consumed by modes/index.ts
  * [HERE]: modes/rpc/rpc-mode.ts - IDE integration via JSON-RPC over stdin/stdout
  */
@@ -14,7 +14,7 @@ import type {
 	ExtensionUIContext,
 	ExtensionUIDialogOptions,
 	ExtensionWidgetOptions,
-} from "../../core/extensions/index.js";
+} from "../../core/extensions-host/index.js";
 import { type Theme, theme } from "../interactive/theme/theme.js";
 import type {
 	RpcCommand,

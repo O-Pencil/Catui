@@ -4,7 +4,7 @@
  * [TO]: Consumed by core/tools/index.ts (not directly imported)
  * [HERE]: core/tools/source.ts - tool source abstraction (builtin, MCP, extension)
  */
-import type { ToolDefinition } from "../extensions/types.js";
+import type { ToolDefinition } from "../extensions-host/types.js";
 
 export type ToolSourceType = "builtin" | "mcp" | "extension";
 

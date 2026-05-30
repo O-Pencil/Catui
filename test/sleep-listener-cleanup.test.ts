@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sleep } from "../core/utils/sleep.js";
+import { sleep } from "../core/platform/utils/sleep.js";
 
 // Verifies sleep() does not stack abort listeners on a long-lived signal.
 // Before the fix every successful sleep left a dangling listener, so 11

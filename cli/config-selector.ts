@@ -1,12 +1,12 @@
 /**
  * [WHO]: ConfigSelectorOptions, ConfigSelector, runConfigSelector()
- * [FROM]: Depends on tui, core/config, modes/interactive/components
+ * [FROM]: Depends on tui, core/platform/config, modes/interactive/components
  * [TO]: Consumed by main.ts
  * [HERE]: cli/config-selector.ts - TUI config selector for `nanopencil config` command
  */
 import { ProcessTerminal, TUI } from "@pencil-agent/tui";
 import type { ResolvedPaths } from "../core/package-manager.js";
-import type { SettingsManager } from "../core/config/settings-manager.js";
+import type { SettingsManager } from "../core/platform/config/settings-manager.js";
 import { ConfigSelectorComponent } from "../modes/interactive/components/config-selector.js";
 import { initTheme, stopThemeWatcher } from "../modes/interactive/theme/theme.js";
 

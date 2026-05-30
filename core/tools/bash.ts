@@ -11,7 +11,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import type { AgentTool } from "@pencil-agent/agent-core";
 import { type Static, Type } from "@sinclair/typebox";
 import { spawn } from "child_process";
-import { getShellConfig, getShellEnv, killProcessTree } from "../utils/shell.js";
+import { getShellConfig, getShellEnv, killProcessTree } from "../platform/utils/shell.js";
 import { validatePositiveNumberOption } from "./input-validation.js";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult, truncateTail } from "./truncate.js";
 

@@ -4,8 +4,8 @@
  * [TO]: Consumed by AgentSession and extension core bindings when exposing command catalogs
  * [HERE]: core/runtime/slash-command-catalog.ts - shared slash command catalog assembly for runtime adapters
  */
-import type { ResourceLoader } from "../config/resource-loader.js";
-import type { ExtensionRunner } from "../extensions/index.js";
+import type { ResourceLoader } from "../platform/config/resource-loader.js";
+import type { ExtensionRunner } from "../extensions-host/index.js";
 import type { PromptTemplate } from "../prompt/prompt-templates.js";
 import {
 	BUILTIN_SLASH_COMMANDS,

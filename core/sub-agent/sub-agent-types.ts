@@ -1,7 +1,7 @@
 /**
  * [WHO]: SubAgent types - SubAgentSpec, SubAgentEvent, SubAgentHandle, SubAgentBackend, SubAgentResult
  * [FROM]: Depends on @pencil-agent/agent-core, @pencil-agent/ai, core/tools
- * [TO]: Consumed by ./sub-agent-runtime, ./sub-agent-backend, ./index.ts, extensions/defaults/subagent/*, extensions/defaults/team/*
+ * [TO]: Consumed by ./sub-agent-runtime, ./sub-agent-backend, ./index.ts, extensions/builtin/subagent/*, extensions/builtin/team/*
  * [HERE]: core/sub-agent/sub-agent-types.ts - SubAgent type definitions
  * [COVENANT]: Change these types → update P1 architecture diagram
  */

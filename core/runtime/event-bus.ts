@@ -1,7 +1,7 @@
 /**
  * [WHO]: EventBus, EventBusController, createEventBus()
  * [FROM]: Depends on node:events
- * [TO]: Consumed by index.ts, core/extensions/loader.ts, extensions/defaults/loop/index.ts
+ * [TO]: Consumed by index.ts, core/extensions-host/loader.ts, extensions/builtin/loop/index.ts
  * [HERE]: core/runtime/event-bus.ts - typed event emission system
  */
 import { EventEmitter } from "node:events";

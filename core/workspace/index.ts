@@ -1,7 +1,7 @@
 /**
  * [WHO]: Barrel exports - WorktreeManager, WorkspacePath
  * [FROM]: Depends on ./worktree-manager
- * [TO]: Consumed by core/sub-agent/*, extensions/defaults/subagent/*, extensions/defaults/team/*
+ * [TO]: Consumed by core/sub-agent/*, extensions/builtin/subagent/*, extensions/builtin/team/*
  * [HERE]: core/workspace/index.ts - workspace management public API
  */
 

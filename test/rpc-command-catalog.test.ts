@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ExtensionRunner } from "../core/extensions/index.js";
-import type { ResourceLoader } from "../core/config/resource-loader.js";
+import type { ExtensionRunner } from "../core/extensions-host/index.js";
+import type { ResourceLoader } from "../core/platform/config/resource-loader.js";
 import type { PromptTemplate } from "../core/prompt/prompt-templates.js";
 import type { Skill } from "../core/skills.js";
 import { buildRpcLoopPolicyOptions, buildRpcSessionState, buildRpcSlashCommands } from "../modes/rpc/rpc-mode.js";

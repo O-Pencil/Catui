@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../core/extensions/types.js";
-import planExtension from "../extensions/defaults/plan/index.js";
-import { createExitPlanModeTool } from "../extensions/defaults/plan/exit-plan-mode-tool.js";
+import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../core/extensions-host/types.js";
+import planExtension from "../extensions/builtin/plan/index.js";
+import { createExitPlanModeTool } from "../extensions/builtin/plan/exit-plan-mode-tool.js";
 import {
 	getPlan,
 	getPlanFilePath,
@@ -13,13 +13,13 @@ import {
 	getPlansDirectory,
 	resetPlansDirectoryCache,
 	writePlan,
-} from "../extensions/defaults/plan/plan-file-manager.js";
-import { shouldAllowToolCall } from "../extensions/defaults/plan/plan-permissions.js";
+} from "../extensions/builtin/plan/plan-file-manager.js";
+import { shouldAllowToolCall } from "../extensions/builtin/plan/plan-permissions.js";
 import {
 	getPlanModeExitInstructions,
 	getPlanModeInstructions,
 	getPlanModeReentryInstructions,
-} from "../extensions/defaults/plan/plan-workflow-prompt.js";
+} from "../extensions/builtin/plan/plan-workflow-prompt.js";
 
 function createTempProject() {
 	const cwd = mkdtempSync(join(tmpdir(), "nanopencil-plan-"));

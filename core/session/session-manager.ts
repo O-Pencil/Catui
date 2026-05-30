@@ -1,7 +1,7 @@
 /**
  * [WHO]: SessionManager class, session persistence, branching, forking
  * [FROM]: Depends on agent-core, ai, node:fs, node:crypto, config.ts
- * [TO]: Consumed by index.ts, main.ts, core/runtime/sdk.ts, core/runtime/agent-session.ts, modes/interactive/interactive-mode.ts, modes/acp/acp-mode.ts, cli/session-picker.ts, modes/interactive/components/session-selector.ts, extensions/optional/export-html/index.ts, extensions/defaults/team/index.ts, extensions/defaults/interview/index.ts, and test files
+ * [TO]: Consumed by index.ts, main.ts, core/runtime/sdk.ts, core/runtime/agent-session.ts, modes/interactive/interactive-mode.ts, modes/acp/acp-mode.ts, cli/session-picker.ts, modes/interactive/components/session-selector.ts, extensions/optional/export-html/index.ts, extensions/builtin/team/index.ts, extensions/builtin/interview/index.ts, and test files
  * [HERE]: core/session/session-manager.ts - session state persistence to JSONL
  */
 import type { AgentMessage } from "@pencil-agent/agent-core";

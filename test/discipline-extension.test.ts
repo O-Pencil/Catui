@@ -1,6 +1,6 @@
 /**
  * [WHO]: Verifies built-in discipline extension registration, skill discovery, and bootstrap prompt behavior
- * [FROM]: Depends on node:test, node:assert, node:fs, builtin-extensions, discipline extension, core/extensions/types
+ * [FROM]: Depends on node:test, node:assert, node:fs, builtin-extensions, discipline extension, core/extensions-host/types
  * [TO]: Consumed by focused extension/skill verification commands
  * [HERE]: test/discipline-extension.test.ts - default discipline workflow regression tests
  */
@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { builtInExtensions, getBuiltinExtensionPaths } from "../builtin-extensions.ts";
-import disciplineExtension from "../extensions/defaults/discipline/index.ts";
+import disciplineExtension from "../extensions/builtin/discipline/index.ts";
 import { loadSkillsFromDir } from "../core/skills.ts";
 import type {
 	BeforeAgentStartEvent,
@@ -20,7 +20,7 @@ import type {
 	ResourcesDiscoverEvent,
 	ResourcesDiscoverResult,
 	ToolDefinition,
-} from "../core/extensions/types.ts";
+} from "../core/extensions-host/types.ts";
 
 type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
 

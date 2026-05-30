@@ -1,7 +1,7 @@
 /**
  * [WHO]: PromptTemplate, loadPromptTemplates(), PromptTemplateLoader
  * [FROM]: Depends on node:fs, node:os, node:path, config, utils/frontmatter
- * [TO]: Consumed by core/config/resource-loader.ts
+ * [TO]: Consumed by core/platform/config/resource-loader.ts
  * [HERE]: core/prompt/prompt-templates.ts - prompt template loading and management
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";

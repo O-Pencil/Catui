@@ -1,6 +1,6 @@
 /**
  * [WHO]: SAL extension lifecycle tests for process listener cleanup
- * [FROM]: Depends on node:test and extensions/defaults/sal
+ * [FROM]: Depends on node:test and extensions/builtin/sal
  * [TO]: Consumed by extension quality verification
  * [HERE]: test/sal-lifecycle.test.ts - guards default extension reload/shutdown behavior
  */
@@ -10,8 +10,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import type { ExtensionAPI, ExtensionContext } from "../core/extensions/types.js";
-import salExtension from "../extensions/defaults/sal/index.js";
+import type { ExtensionAPI, ExtensionContext } from "../core/extensions-host/types.js";
+import salExtension from "../extensions/builtin/sal/index.js";
 
 test("sal removes emergency process listeners on session shutdown", async () => {
 	const cwd = mkdtempSync(join(tmpdir(), "nanopencil-sal-lifecycle-"));

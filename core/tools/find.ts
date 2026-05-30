@@ -10,7 +10,7 @@ import { spawnSync } from "child_process";
 import { existsSync } from "fs";
 import { globSync } from "glob";
 import path from "path";
-import { ensureTool } from "../utils/tools-manager.js";
+import { ensureTool } from "../platform/utils/tools-manager.js";
 import { validateIntegerWindowOption } from "./input-validation.js";
 import { resolveToCwd } from "./path-utils.js";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate.js";

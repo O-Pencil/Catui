@@ -1,6 +1,6 @@
 /**
  * [WHO]: RpcClient class, RpcClientOptions
- * [FROM]: Depends on child_process, readline, agent-core, ai, core/runtime, core/bash-executor, core/session/compaction
+ * [FROM]: Depends on child_process, readline, agent-core, ai, core/runtime, core/platform/exec/bash-executor, core/session/compaction
  * [TO]: Consumed by modes/index.ts
  * [HERE]: modes/rpc/rpc-client.ts - programmatic RPC client
  */
@@ -9,7 +9,7 @@ import * as readline from "node:readline";
 import type { AgentEvent, AgentLoopFramework, AgentMessage, ThinkingLevel } from "@pencil-agent/agent-core";
 import type { ImageContent } from "@pencil-agent/ai";
 import type { SessionStats } from "../../core/runtime/agent-session.js";
-import type { BashResult } from "../../core/bash-executor.js";
+import type { BashResult } from "../../core/platform/exec/bash-executor.js";
 import type { CompactionResult } from "../../core/session/compaction/index.js";
 import type { RpcCommand, RpcLoopPolicyOptions, RpcResponse, RpcSessionState, RpcSlashCommand } from "./rpc-types.js";
 

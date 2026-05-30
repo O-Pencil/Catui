@@ -1,6 +1,6 @@
 /**
  * [WHO]: Provides bindExtensionCore() — wires AgentSession host methods to ExtensionRunner APIs, including LLM call telemetry (every ctx.completeSimple / completeSimpleWithUsage / completeJson emits one ext_llm_calls row)
- * [FROM]: Depends on ExtensionRunner, model/session/resource abstractions, slash command metadata, core/telemetry (getExtCallerContext for caller attribution + LlmCallEventInput shape)
+ * [FROM]: Depends on ExtensionRunner, model/session/resource abstractions, slash command metadata, core/platform/telemetry (getExtCallerContext for caller attribution + LlmCallEventInput shape)
  * [TO]: Consumed by AgentSession when initializing extension runtime capabilities
  * [HERE]: core/runtime/extension-core-bindings.ts - the LLM-call instrumentation point; reads AsyncLocalStorage context pushed by runner.invokeCommand (user-initiated=true) or runner.invokeHookHandler (user-initiated=false) to attribute each call. is_user_initiated=false rows grouped by extension_name + caller_context are the idle-thinking bug detector.
  */
@@ -15,20 +15,20 @@ import type {
 } from "@pencil-agent/ai";
 import { completeSimple } from "@pencil-agent/ai";
 import type { ThinkingLevel } from "@pencil-agent/agent-core";
-import type { SettingsManager } from "../config/settings-manager.js";
-import type { ResourceLoader } from "../config/resource-loader.js";
+import type { SettingsManager } from "../platform/config/settings-manager.js";
+import type { ResourceLoader } from "../platform/config/resource-loader.js";
 import type {
 	ExtensionActions,
 	ExtensionContextActions,
 	ExtensionRunner,
 	ToolInfo,
-} from "../extensions/index.js";
+} from "../extensions-host/index.js";
 import type { ModelRegistry } from "../model-registry.js";
 import type { PromptTemplate } from "../prompt/prompt-templates.js";
 import type { SessionManager } from "../session/session-manager.js";
-import type { ContextUsage } from "../extensions/types.js";
+import type { ContextUsage } from "../extensions-host/types.js";
 import type { CompactionResult } from "../session/compaction/index.js";
-import { getExtCallerContext, type LlmCallEventInput } from "../telemetry/index.js";
+import { getExtCallerContext, type LlmCallEventInput } from "../platform/telemetry/index.js";
 import { buildExtensionSlashCommands } from "./slash-command-catalog.js";
 
 function getStructuredToolChoice(model: Model<any>, toolName: string): unknown {

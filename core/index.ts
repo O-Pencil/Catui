@@ -19,7 +19,7 @@ export {
   type BashResult,
   executeBash,
   executeBashWithOperations,
-} from "./bash-executor.js";
+} from "./platform/exec/bash-executor.js";
 export type { CompactionResult } from "./session/compaction/index.js";
 export {
   createEventBus,
@@ -82,10 +82,10 @@ export {
   type TurnEndEvent,
   type TurnStartEvent,
   wrapToolsWithExtensions,
-} from "./extensions/index.js";
+} from "./extensions-host/index.js";
 
 // MCP (Model Context Protocol) support
-export { MCPManager } from "./mcp-manager.js";
+export { MCPManager } from "./mcp/mcp-manager.js";
 
 // Debug logging (re-exported from ai package)
 export {
@@ -93,7 +93,7 @@ export {
 	createDebugLogger,
 	debug,
 	type DebugLogLevel,
-} from "../packages/ai/dist/debug-logger.js";
+} from "./lib/ai/dist/debug-logger.js";
 export type {
   MCPServerConfig,
   MCPTool,

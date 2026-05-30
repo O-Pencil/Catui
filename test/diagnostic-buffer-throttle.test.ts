@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { DiagnosticBuffer } from "../extensions/defaults/diagnostics/diagnostic-buffer.js";
+import { DiagnosticBuffer } from "../extensions/builtin/diagnostics/diagnostic-buffer.js";
 
 const event = {
 	source: "mem-core.extract",

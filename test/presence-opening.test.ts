@@ -4,14 +4,14 @@ import { join } from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createAgentSession } from "../core/runtime/sdk.js";
-import { DefaultResourceLoader } from "../core/config/resource-loader.js";
-import { SettingsManager } from "../core/config/settings-manager.js";
+import { DefaultResourceLoader } from "../core/platform/config/resource-loader.js";
+import { SettingsManager } from "../core/platform/config/settings-manager.js";
 import { SessionManager } from "../core/session/session-manager.js";
-import { AuthStorage } from "../core/config/auth-storage.js";
+import { AuthStorage } from "../core/platform/config/auth-storage.js";
 import { ModelRegistry } from "../core/model-registry.js";
 import { allTools } from "../core/tools/index.js";
-import { setLocale, tValue } from "../core/i18n/index.js";
-import { __testUtils } from "../extensions/defaults/presence/index.js";
+import { setLocale, tValue } from "../core/platform/i18n/index.js";
+import { __testUtils } from "../extensions/builtin/presence/index.js";
 
 function presenceExtensionPath(cwd: string): string {
 	return join(cwd, "extensions", "defaults", "presence", "index.ts");

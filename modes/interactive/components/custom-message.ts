@@ -8,7 +8,7 @@
 import type { TextContent } from "@pencil-agent/ai";
 import type { Component } from "@pencil-agent/tui";
 import { Box, Container, Markdown, type MarkdownTheme, Spacer, Text } from "@pencil-agent/tui";
-import type { MessageRenderer } from "../../../core/extensions/types.js";
+import type { MessageRenderer } from "../../../core/extensions-host/types.js";
 import type { CustomMessage } from "../../../core/messages.js";
 import { getMarkdownTheme, theme } from "../theme/theme.js";
 

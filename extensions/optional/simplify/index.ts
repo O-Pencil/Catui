@@ -1,6 +1,6 @@
 /**
  * [WHO]: Simplify extension - Claude Code style code simplification tool
- * [FROM]: Depends on @pencil-agent/ai, @pencil-agent/tui, child_process, fs, path, core/extensions/types, modes/interactive/components/dynamic-border, modes/interactive/theme/theme
+ * [FROM]: Depends on @pencil-agent/ai, @pencil-agent/tui, child_process, fs, path, core/extensions-host/types, modes/interactive/components/dynamic-border, modes/interactive/theme/theme
  * [TO]: Consumed by builtin-extensions.ts as optional extension
  * [HERE]: extensions/optional/simplify/index.ts - code simplification for NanoPencil
  *
@@ -17,7 +17,7 @@ import { Container, Markdown, matchesKey, Text } from "@pencil-agent/tui";
 import { execFileSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { isAbsolute, join, relative, resolve } from "path";
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../core/extensions/types.js";
+import type { ExtensionAPI, ExtensionCommandContext } from "../../../core/extensions-host/types.js";
 import { DynamicBorder } from "../../../modes/interactive/components/dynamic-border.js";
 import { getMarkdownTheme } from "../../../modes/interactive/theme/theme.js";
 

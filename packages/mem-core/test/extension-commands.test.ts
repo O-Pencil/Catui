@@ -5,10 +5,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createAgentSession } from "@pencil-agent/nano-pencil";
 import { getBuiltinExtensionPaths } from "../../../builtin-extensions.js";
-import { DefaultResourceLoader } from "../../../core/config/resource-loader.js";
-import { SettingsManager } from "../../../core/config/settings-manager.js";
+import { DefaultResourceLoader } from "../../../core/platform/config/resource-loader.js";
+import { SettingsManager } from "../../../core/platform/config/settings-manager.js";
 import { SessionManager } from "../../../core/session/session-manager.js";
-import { AuthStorage } from "../../../core/config/auth-storage.js";
+import { AuthStorage } from "../../../core/platform/config/auth-storage.js";
 import { ModelRegistry } from "../../../core/model-registry.js";
 import { allTools } from "../../../core/tools/index.js";
 

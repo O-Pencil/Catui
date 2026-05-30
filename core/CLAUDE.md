@@ -22,7 +22,7 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 
 `index.ts`: Barrel exports for core API surface, re-exports runtime, tools, extensions
 
-### Internationalization (`core/i18n/`)
+### Internationalization (`core/platform/i18n/`)
 
 `index.ts`: i18n core - locale management, translation function `t()`
 
@@ -50,7 +50,7 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 
 `orchestrator.ts`: Tool execution ordering and dependency resolution
 
-### Extension System (`core/extensions/`)
+### Extension System (`core/extensions-host/`)
 
 `loader.ts`: Discovers extensions from npm packages, local paths, workspace config
 
@@ -124,7 +124,7 @@ The `core/` module contains the central business logic for nanoPencil. It orches
 `retry-coordinator.ts`: RetryCoordinator, RetrySessionEvent — retry coordination for transient failures
 `turn-context.ts`: TurnContext interface, TURN_CONTEXT_GLOBAL_KEY, setTurnContext/getTurnContext/resetTurnContext — per-turn hint bus for SAL decoupling
 
-### Telemetry (`core/telemetry/`)
+### Telemetry (`core/platform/telemetry/`)
 
 Shared base layer for insforge-backed telemetry sinks. Factored out of SAL's eval sink so future ext-telemetry pipelines (ext_command_events / ext_llm_calls / ext_hook_events) reuse the same HTTP transport, credential loader, and batching machinery without duplicating SAL's plumbing.
 
@@ -137,7 +137,7 @@ Shared base layer for insforge-backed telemetry sinks. Factored out of SAL's eva
 `caller-context.ts`: AsyncLocalStorage-backed ExtCallerContext bus + runWithExtCallerContext + getExtCallerContext — pushed by runner.invokeCommand (user_initiated=true) and runner.invokeHookHandler (user_initiated=false), read by extension-core-bindings LLM wrappers; the is_user_initiated flag is the explicit idle-thinking-class bug detector
 `index.ts`: Barrel — the only entry point external callers should import from
 
-### Configuration (`core/config/`)
+### Configuration (`core/platform/config/`)
 
 `settings-manager.ts`: Two-tier settings (global + project-local), merge logic
 
@@ -153,13 +153,31 @@ Shared base layer for insforge-backed telemetry sinks. Factored out of SAL's eva
 
 `prompt-templates.ts`: Template library for various prompt types
 
-### Other Modules
+### Platform Infrastructure (`core/platform/`)
 
-`defaults.ts`: Default configuration values
+`config/defaults.ts`: Default configuration values
 
-`diagnostics.ts`: Health checks and system diagnostics
+`config/diagnostics.ts`: Health checks and system diagnostics
 
 `keybindings.ts`: Keybinding definitions for TUI
+
+`exec/bash-executor.ts`: Shared bash execution logic
+
+`exec/exec.ts`: Subprocess execution helper
+
+`timings.ts`: Performance timing utilities
+
+`utils/`: Shared utilities
+
+### Internal Libraries (`core/lib/`)
+
+`ai/`: Private workspace library for model APIs and providers
+
+`agent-core/`: Private workspace library for agent loop primitives
+
+`tui/`: Private workspace library for terminal UI components
+
+### Other Modules
 
 `messages.ts`: Message handling and formatting
 
@@ -167,13 +185,9 @@ Shared base layer for insforge-backed telemetry sinks. Factored out of SAL's eva
 
 `slash-commands.ts`: Built-in slash command implementations
 
-`bash-executor.ts`: Shared bash execution logic
+`model/custom-providers.ts`: Custom provider registration
 
-`custom-providers.ts`: Custom provider registration
-
-`footer-data-provider.ts`: Footer information for TUI
-
-`mcp-manager.ts`: MCP server lifecycle management, - [WHO]: McpManager
+`mcp/mcp-manager.ts`: MCP server lifecycle management, - [WHO]: McpManager
 - [FROM]: mcp/
 - [TO]: (check imports)
 - [HERE]: MCP orchestration
@@ -181,15 +195,9 @@ Shared base layer for insforge-backed telemetry sinks. Factored out of SAL's eva
 
 `export-html/`: HTML export functionality with templates
 
-`exec.ts`: Subprocess execution helper
-
 `package-manager.ts`: Package discovery, resource loading, extension enumeration
 
 `soul-integration.ts`: Soul AI personality integration bridge
-
-`timings.ts`: Performance timing utilities
-
-`utils/`: Shared utilities
 
 `model-registry.ts`: Manages model definitions, handles API key resolution, appendOpenRouterModel writes custom OpenRouter ids to models.json
 

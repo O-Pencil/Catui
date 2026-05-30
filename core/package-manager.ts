@@ -13,7 +13,7 @@ import ignore from "ignore";
 import { minimatch } from "minimatch";
 import { CONFIG_DIR_NAME } from "../config.js";
 import { type GitSource, parseGitUrl } from "../utils/git.js";
-import type { PackageSource, SettingsManager } from "./config/settings-manager.js";
+import type { PackageSource, SettingsManager } from "./platform/config/settings-manager.js";
 
 const NETWORK_TIMEOUT_MS = 10000;
 

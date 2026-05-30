@@ -3,9 +3,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { AuthStorage } from "../core/config/auth-storage.js";
-import { DefaultResourceLoader } from "../core/config/resource-loader.js";
-import { SettingsManager } from "../core/config/settings-manager.js";
+import { AuthStorage } from "../core/platform/config/auth-storage.js";
+import { DefaultResourceLoader } from "../core/platform/config/resource-loader.js";
+import { SettingsManager } from "../core/platform/config/settings-manager.js";
 import { ModelRegistry } from "../core/model-registry.js";
 import { createAgentSession } from "../core/runtime/sdk.js";
 import { SessionManager } from "../core/session/session-manager.js";
