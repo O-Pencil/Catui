@@ -2,7 +2,7 @@
 
 ```yaml
 group: refactor
-status: skeleton-deferred     # 轻量骨架；严格编写留到架构重构完成后两分支比对
+status: phase_a_light_validated # 轻量骨架 + P1 目录级轻量验收记录
 produced_at: 2026-05-29
 purpose: |
   定义"重构后如何证明功能不变 + 分层清晰 + 无冗余 + 性能"。
@@ -61,9 +61,46 @@ baseline_source:
 
 ---
 
-## 4. 状态
+## 4. Phase A 轻量验收记录（2026-05-30）
+
+执行分支：`refactor/arch-candidate-d`
+
+当前验收范围：只验证 P1 目录级骨架和接线；不在低性能机器运行 build/test/CLI smoke。
+
+| 门 | 结果 | 证据 |
+|----|------|------|
+| GA-1 结构同构 | 部分通过 | `core/lib/{ai,agent-core,tui}`、`core/platform/{config,exec,i18n,telemetry,utils}`、`core/extensions-host`、`extensions/builtin` 已在位；`packages/` 仅保留 `mem-core`/`soul-core` |
+| GA-2 行为不变 | 待重型验证 | characterization harness 已存在于 `tests/characterization/`；需在可用机器回放 golden/cassette |
+| GA-3 逻辑零改 | 部分通过 | 本轮轻量检查确认旧路径迁移和 workspace 接线；完整逻辑 diff review 仍需 maintainer code review |
+| GA-4 可编译可跑 | 外部已过 / 本机未跑 | maintainer 已反馈 `npm run build` 在 `91ab9de` 通过；本机因资源限制不跑 build/test/run |
+| GA-5 DIP 同构 | 待工具验证 | 相关 `AGENT.md`/`CLAUDE.md` 路径已随搬迁更新；`verify-dip.ts` 属 Node/tsx 校验，本机未跑 |
+| GA-6 R/U 已消化 | 部分通过 | R 单元未拆；U 项已按分类落到 `core/platform/exec`、`core/model`、`core/mcp`、`modes/interactive`、`modes/utils` 等位置 |
+
+轻量命令结果：
+
+- `git status --short --branch`：干净，已对齐 `origin/refactor/arch-candidate-d`
+- 旧路径扫描：`packages/{ai,agent-core,tui}`、`extensions/defaults`、`core/extensions/`、`core/{config,i18n,telemetry,utils}/` 等旧路径在源码/脚本/文档接线扫描中无命中
+- workspace 接线：`package.json` / `package-lock.json` 指向 `core/lib/*` + `packages/{mem-core,soul-core}`
+- `scripts/bundle-deps.js`：已不在 git 索引
+- 残留清理：仓库根目录的 0 字节未跟踪文件 `node`、`npm`、`npx` 已删除；不加入 `.gitignore`，因为它们不是合法生成目录
+
+低性能机器不执行项：
+
+- `npm install`
+- `npm run build`
+- `npm test` / vitest
+- CLI 4 mode smoke
+- `scripts/collect-baseline.ts`
+- `verify-dip.ts` / `verify-quality.ts`
+
+下一步：在性能足够的机器上补齐 GA-2/GA-4/GA-5 的重型验证后，进入 maintainer 功能维度评审并定稿门组 B。
+
+---
+
+## 5. 状态
 
 - [x] 验收骨架 + llm-wiki 基线指认
+- [x] P1 目录级轻量验收记录
 - [ ] 重构完成后：重新生成 llm-wiki 并 diff
 - [ ] 逐维度填充结论
 - [ ] 两分支（重构前/后）对比签字

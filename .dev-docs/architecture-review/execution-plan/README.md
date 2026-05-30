@@ -54,7 +54,7 @@ main (冻结基线)
 | Phase | 文件 | 内容 | 状态 | 依赖 |
 |-------|------|------|------|------|
 | **P0** 基线+分类 | [P0-prepare.md](./P0-prepare.md) | 基线数字 + characterization(含 TUI) + 补 §4 的 U 落点 + 冻结 D/R/N 清单 | 🟡 进行中 | — |
-| **P1** 骨架搬迁 | [P1-skeleton-move.md](./P1-skeleton-move.md) | D 直接搬 + R blob 安置 + workspace 接线(仅现存包) + 删 bundle-deps + DIP 同步 + 增量守门预上线 | ⬜ | P0 |
+| **P1** 骨架搬迁 | [P1-skeleton-move.md](./P1-skeleton-move.md) | D 直接搬 + R blob 安置 + workspace 接线(仅现存包) + 删 bundle-deps + DIP 同步 + 增量守门预上线 | 🟡 实现完成；门组 A 重型验证待补 | P0 |
 | — | **门组 A 验收** + maintainer 功能维度评审 → 定稿门组 B | — | ⬜ | P1 |
 
 ### 大阶段二 · 功能级（逐域过门组 B）
@@ -89,7 +89,8 @@ main (冻结基线)
 
 - [x] 切执行分支 + 执行方案目录化 + 两大阶段模型
 - [ ] 【A】[P0](./P0-prepare.md)：基线 + 补 §4(U) + 冻结 [分类清单](./migration-classification.md)
-- [ ] 【A】[P1](./P1-skeleton-move.md) → 门组 A 验收
+- [x] 【A】[P1](./P1-skeleton-move.md)：目录级骨架实现完成
+- [ ] 【A】门组 A 重型验收补齐（symbols diff / characterization / verify-dip / test / smoke）
 - [ ] ★ maintainer 功能维度评审 → 定稿 [门组 B](./gates.md)
 - [ ] 【B】[P2](./P2-cycles-gate.md) → [P3](./P3-extension-sdk.md)
 - [ ] 【B】[P4](./P4-runtime-split.md) / [P5](./P5-ui-split.md) → [P6](./P6-entry-volume.md) → [P7?](./P7-bundle-redesign.md) / [P8?](./P8-sdk-narrow.md)

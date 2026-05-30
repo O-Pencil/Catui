@@ -4,7 +4,7 @@
 phase: P1
 macro_stage: A        # 目录级
 batch: B0a
-status: pending
+status: implementation_complete_gate_partial
 risk: low-medium
 depends_on: [P0]
 blocks: [P2]
@@ -49,6 +49,12 @@ classification: migration-classification.md
 
 直接套用 [gates.md 门组 A](./gates.md#门组-a--目录级出口大阶段一收尾定稿)：GA-1 结构同构 / GA-2 行为不变 / GA-3 逻辑零改 / GA-4 可编译可跑 / GA-5 DIP 同构 / GA-6 R/U 已消化。
 另：**增量守门预上线**——`verify-quality` 以"基线全红、只 gate 增量"模式接入 CI（治环本体留 P2）。
+
+### 轻量验收记录（2026-05-30）
+
+- P1 目录骨架和 workspace 接线已完成；见 [`../refactor-validation.md`](../refactor-validation.md#4-phase-a-轻量验收记录2026-05-30)。
+- 本机资源不足，不运行 build/test/CLI smoke/Node 校验脚本；GA-2/GA-4/GA-5 的重型验证留给 maintainer 机器。
+- 0 字节残留文件 `node`、`npm`、`npx` 已确认是误生成文件并清理，不加入 `.gitignore`。
 
 ## 提交建议
 
