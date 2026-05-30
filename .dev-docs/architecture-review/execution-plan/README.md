@@ -44,6 +44,8 @@ main (冻结基线)
 ```
 
 > ★ **阶段间 handoff**：大阶段一收尾后，maintainer 再走一轮**功能维度**架构评审，产出门组 B 的逐域质量标准（见 `gates.md` 待定稿项）。大阶段二据此执行。
+>
+> ★ **基线策略**：冻结 `main` 是唯一行为基线来源。P1 骨架迁移与 P2 治环不被 characterization cassette/golden 阻塞；但进入 P4/P5（拆 `agent-session.ts` / `interactive-mode.ts`）前，必须已从冻结 `main` 录制 characterization cassette/golden，并保存公共 API 符号 snapshot。
 
 ---
 

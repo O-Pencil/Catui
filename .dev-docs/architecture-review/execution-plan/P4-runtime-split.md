@@ -21,7 +21,7 @@ gate: gates.md#门组-b
 ## 进入条件
 
 - [ ] [P2 DoD](./P2-cycles-gate.md#验证门控dod) 全过
-- [ ] [P0](./P0-prepare.md) characterization 基线 + 公共 API 符号表 snapshot 就绪
+- [ ] [P0](./P0-prepare.md) 来自冻结 `main` 的 characterization cassette/golden + 公共 API 符号表 snapshot 就绪
 
 ## 任务清单
 
