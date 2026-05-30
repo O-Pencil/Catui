@@ -1,0 +1,23 @@
+/**
+ * [WHO]: hasBedrockCredentials utility - AWS credential checker for tests
+ * [FROM]: No external dependencies
+ * [TO]: Consumed by agent-core Bedrock tests
+ * [HERE]: core/lib/agent-core/test/bedrock-utils.ts - test utility
+ *
+ * Check if any valid AWS credentials are configured for Bedrock.
+ */
+
+/**
+ * Check if any valid AWS credentials are configured for Bedrock.
+ * Returns true if any of the following are set:
+ * - AWS_PROFILE (named profile from ~/.aws/credentials)
+ * - AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (IAM keys)
+ * - AWS_BEARER_TOKEN_BEDROCK (Bedrock API key)
+ */
+export function hasBedrockCredentials(): boolean {
+	return !!(
+		process.env.AWS_PROFILE ||
+		(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ||
+		process.env.AWS_BEARER_TOKEN_BEDROCK
+	);
+}

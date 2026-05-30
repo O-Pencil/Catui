@@ -1,14 +1,14 @@
 /**
  * [WHO]: TUI viewport render regression tests
- * [FROM]: Depends on node:test, packages/tui/src/tui.ts, packages/tui/test/virtual-terminal.ts
+ * [FROM]: Depends on node:test, core/lib/tui/src/tui.ts, core/lib/tui/test/virtual-terminal.ts
  * [TO]: Consumed by repository test runner
  * [HERE]: test/tui-viewport-render.test.ts - verifies bottom input updates overwrite the same visible row instead of stacking
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CURSOR_MARKER, TUI, type Component } from "../packages/tui/src/tui.js";
-import { VirtualTerminal } from "../packages/tui/test/virtual-terminal.js";
+import { CURSOR_MARKER, TUI, type Component } from "../core/lib/tui/src/tui.js";
+import { VirtualTerminal } from "../core/lib/tui/test/virtual-terminal.js";
 
 class TestComponent implements Component {
 	public lines: string[] = [];

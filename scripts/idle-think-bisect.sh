@@ -21,8 +21,8 @@
 #   ./scripts/idle-think-bisect.sh summary       # 汇总所有测试结果
 #
 # 前提：
-#   - packages/ai 已编译（含 NANOPENCIL_TRACE_API 追踪器）
-#   - 确认追踪器: grep "API-TRACE" packages/ai/dist/stream.js
+#   - core/lib/ai 已编译（含 NANOPENCIL_TRACE_API 追踪器）
+#   - 确认追踪器: grep "API-TRACE" core/lib/ai/dist/stream.js
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
@@ -53,9 +53,9 @@ timestamp() { date "+%Y%m%d-%H%M%S"; }
 
 # 检查追踪器是否已编译
 check_tracer() {
-    if ! grep -q "API-TRACE" packages/ai/dist/stream.js 2>/dev/null; then
+    if ! grep -q "API-TRACE" core/lib/ai/dist/stream.js 2>/dev/null; then
         err "追踪器未编译到 dist！请先运行:"
-        err "  cd packages/ai && npx tsc -p tsconfig.build.json"
+        err "  cd core/lib/ai && npx tsc -p tsconfig.build.json"
         err "  或: ./scripts/idle-think-bisect.sh build-tracer"
         exit 1
     fi
@@ -64,9 +64,9 @@ check_tracer() {
 
 # 编译追踪器
 build_tracer() {
-    log "编译 packages/ai (含 API 追踪器)..."
-    (cd packages/ai && npx tsc -p tsconfig.build.json 2>&1 | tail -3)
-    if grep -q "API-TRACE" packages/ai/dist/stream.js; then
+    log "编译 core/lib/ai (含 API 追踪器)..."
+    (cd core/lib/ai && npx tsc -p tsconfig.build.json 2>&1 | tail -3)
+    if grep -q "API-TRACE" core/lib/ai/dist/stream.js; then
         log "✓ 编译成功，追踪器已生效"
     else
         err "✗ 编译后未找到追踪器代码"
@@ -272,23 +272,23 @@ phase_commit_diff() {
     log "  git stash  # 保存当前修改"
     log "  git checkout $COMMIT_BEFORE_IDLE_THINK"
     log ""
-    log "  # 注入追踪器到 packages/ai/src/stream.ts（如果该commit没有）"
+    log "  # 注入追踪器到 core/lib/ai/src/stream.ts（如果该commit没有）"
     log "  # 检查是否有追踪代码:"
-    log "  grep 'API-TRACE' packages/ai/src/stream.ts"
+    log "  grep 'API-TRACE' core/lib/ai/src/stream.ts"
     log ""
     log "  # 如果没有，手动在 stream() 和 streamSimple() 入口加:"
     log "  #   if (process.env.NANOPENCIL_TRACE_API === '1') {"
     log "  #     console.error('[API-TRACE #' + (++globalThis.__apiCount || (globalThis.__apiCount=1)) + ']', new Error().stack?.split('\\n').slice(1,6).join('\\n'));"
     log "  #   }"
     log ""
-    log "  cd packages/ai && npx tsc -p tsconfig.build.json && cd ../.."
+    log "  cd core/lib/ai && npx tsc -p tsconfig.build.json && cd ../.."
     log "  NANOPENCIL_TRACE_API=1 npx tsx cli.ts --print --no-session --provider $PROVIDER --model $MODEL \"$TASK\" 2>/tmp/trace-before-idle-think.log 1>/dev/null"
     log "  echo \"Before idle-think:\"; grep -c 'API-TRACE' /tmp/trace-before-idle-think.log"
     log ""
     log "─── 步骤 2: 在 idle-think 引入后的 commit 测试 ───"
     log ""
     log "  git checkout $COMMIT_IDLE_THINK"
-    log "  cd packages/ai && npx tsc -p tsconfig.build.json && cd ../.."
+    log "  cd core/lib/ai && npx tsc -p tsconfig.build.json && cd ../.."
     log "  NANOPENCIL_TRACE_API=1 npx tsx cli.ts --print --no-session --provider $PROVIDER --model $MODEL \"$TASK\" 2>/tmp/trace-after-idle-think.log 1>/dev/null"
     log "  echo \"After idle-think:\"; grep -c 'API-TRACE' /tmp/trace-after-idle-think.log"
     log ""
@@ -398,7 +398,7 @@ case "${1:-help}" in
         echo "用法: $0 <command> [args]"
         echo ""
         echo "Commands:"
-        echo "  build-tracer     编译 packages/ai 追踪器"
+        echo "  build-tracer     编译 core/lib/ai 追踪器"
         echo "  task             任务态对比（7组配置）"
         echo "  idle [分钟]     挂机态监控（默认5分钟）"
         echo "  commit-diff      输出 commit 对比步骤"

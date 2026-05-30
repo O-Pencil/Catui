@@ -1,0 +1,46 @@
+{
+	"name": "@pencil-agent/agent-core",
+	"private": true,
+	"version": "0.0.1",
+	"description": "General-purpose agent with transport abstraction, state management, and attachment support",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"clean": "node -e \"require('fs').rmSync('./dist',{recursive:true,force:true})\"",
+		"build": "npx tsc -p tsconfig.build.json",
+		"dev": "npx tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+		"test": "vitest --run",
+		"prepublishOnly": "npm run clean && npm run build"
+	},
+	"dependencies": {
+		"@pencil-agent/ai": "0.0.1"
+	},
+	"keywords": [
+		"ai",
+		"agent",
+		"llm",
+		"transport",
+		"state-management",
+		"pencil-agent"
+	],
+	"author": "nanoPencil Team",
+	"license": "GPL-3.0",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/O-Pencil/nanoPencil.git"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	},
+	"devDependencies": {
+    "@sinclair/typebox": "^0.34.48",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.4"
+  }
+}

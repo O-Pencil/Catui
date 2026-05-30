@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TUI } from "../packages/tui/src/tui.js";
-import type { Terminal } from "../packages/tui/src/terminal.js";
+import { TUI } from "../core/lib/tui/src/tui.js";
+import type { Terminal } from "../core/lib/tui/src/terminal.js";
 
 class FakeTerminal implements Terminal {
 	public writes: string[] = [];

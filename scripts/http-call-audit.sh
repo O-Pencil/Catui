@@ -7,9 +7,9 @@
 # 与 minimax-billing-calibration.sh 配合使用来交叉验证厂商面板数据。
 #
 # 工作原理：
-#   通过 NANOPENCIL_TRACE_API=1 环境变量启用 packages/ai/src/stream.ts 中的
+#   通过 NANOPENCIL_TRACE_API=1 环境变量启用 core/lib/ai/src/stream.ts 中的
 #   调用追踪器，统计每次 streamSimple() 被调用的次数和调用栈。
-#   ⚠️ 前提：packages/ai 需要已编译（追踪代码在 dist/ 中才生效）
+#   ⚠️ 前提：core/lib/ai 需要已编译（追踪代码在 dist/ 中才生效）
 #
 # 用法:
 #   ./scripts/http-call-audit.sh <phase>
@@ -76,8 +76,8 @@ console.log(m?.current_interval_usage_count ?? '?');
 
 # 检查 tracer 是否编译
 check_tracer() {
-    if ! grep -q "API-TRACE" "$PROJECT_ROOT/packages/ai/dist/stream.js" 2>/dev/null; then
-        warn "⚠️  packages/ai/dist/stream.js 中没有 API-TRACE 代码"
+    if ! grep -q "API-TRACE" "$PROJECT_ROOT/core/lib/ai/dist/stream.js" 2>/dev/null; then
+        warn "⚠️  core/lib/ai/dist/stream.js 中没有 API-TRACE 代码"
         warn "   请先运行: $0 build-tracer"
         return 1
     fi
@@ -188,16 +188,16 @@ run_single_test() {
 phase_build_tracer() {
     log "═══ Phase: Build Tracer ═══"
     log ""
-    log "编译 packages/ai，确保 API-TRACE 代码在 dist 中生效..."
+    log "编译 core/lib/ai，确保 API-TRACE 代码在 dist 中生效..."
     log ""
 
-    cd "$PROJECT_ROOT/packages/ai"
+    cd "$PROJECT_ROOT/core/lib/ai"
     npx tsc -p tsconfig.build.json 2>&1 | tail -3
 
-    if grep -q "API-TRACE" "$PROJECT_ROOT/packages/ai/dist/stream.js" 2>/dev/null; then
+    if grep -q "API-TRACE" "$PROJECT_ROOT/core/lib/ai/dist/stream.js" 2>/dev/null; then
         log "✓ 追踪器已就绪"
     else
-        err "✗ 编译后仍未找到 API-TRACE，请检查 packages/ai/src/stream.ts"
+        err "✗ 编译后仍未找到 API-TRACE，请检查 core/lib/ai/src/stream.ts"
     fi
 }
 
@@ -423,7 +423,7 @@ phase_patch_test() {
     log "目标: 验证当前代码修改对 HTTP 调用次数的影响"
     log ""
     log "⚠️  请确认你已经 apply 了要测试的 patch"
-    log "⚠️  如果修改了 packages/ai/src/，请先运行: $0 build-tracer"
+    log "⚠️  如果修改了 core/lib/ai/src/，请先运行: $0 build-tracer"
     log ""
     sep
 
