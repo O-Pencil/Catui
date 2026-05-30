@@ -389,17 +389,16 @@ export async function createAgentSession(
     }
   }
 
-  let thinkingLevel = options.thinkingLevel;
-
-  // If session has data, restore thinking level from it
-  if (thinkingLevel === undefined && hasExistingSession) {
+  let thinkingLevel: ThinkingLevel;
+  if (options.thinkingLevel !== undefined) {
+    thinkingLevel = options.thinkingLevel;
+  } else if (hasExistingSession) {
+    // If session has data, restore thinking level from it
     thinkingLevel = hasThinkingEntry
       ? (existingSession.thinkingLevel as ThinkingLevel)
       : (settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL);
-  }
-
-  // Fall back to settings default
-  if (thinkingLevel === undefined) {
+  } else {
+    // Fall back to settings default
     thinkingLevel =
       settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL;
   }
