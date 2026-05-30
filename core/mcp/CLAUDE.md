@@ -10,6 +10,7 @@ mcp-client.ts: MCPClient class, MCP client for JSON-RPC over stdio, key invarian
 mcp-guidance.ts: APIKeyGuidance interface, getAPIKeyGuidance(), formatGuidanceMessage(), getMissingKeyServers(), requiresAPIKey(), API key guidance for MCP servers
 mcp-adapter.ts: createMCPTool(), loadMCPTools(), getMCPToolDisplayName(), adapts MCP tools to NanoPencil tool system, converts MCP tool schema to ToolDefinition
 index.ts: MCP module barrel exports, re-exports MCPClient, MCP contracts, createMCPTool, loadMCPTools, guidance utilities
+mcp-manager.ts: MCPManager class, MCP server lifecycle and tool integration, manages client connections and tool registration
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
 
