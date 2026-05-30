@@ -1,0 +1,5 @@
+{
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "input": "Reply with exactly: hello from characterization"
+}
