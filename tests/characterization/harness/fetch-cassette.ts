@@ -74,9 +74,13 @@ export function installCassette(cassettePath: string, modelHosts: string[], reco
   }
 
   // replay
-  const recorded: RecordedResponse[] = existsSync(cassettePath)
-    ? (JSON.parse(readFileSync(cassettePath, "utf8")) as RecordedResponse[])
-    : [];
+  if (!existsSync(cassettePath)) {
+    throw new Error(`characterization: missing cassette ${cassettePath}; run RECORD=1 on main first`);
+  }
+  const recorded = JSON.parse(readFileSync(cassettePath, "utf8")) as RecordedResponse[];
+  if (recorded.length === 0) {
+    throw new Error(`characterization: empty cassette ${cassettePath}; re-run RECORD=1 on main`);
+  }
   let i = 0;
   global.fetch = (async (input: string | URL | Request) => {
     if (!hosts.has(headerHost(input))) {

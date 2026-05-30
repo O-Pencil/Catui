@@ -49,14 +49,14 @@ function captureStdio(): { stop: () => string } {
   };
   console.log = sink;
   console.error = sink;
-  (process.stdout as NodeJS.WriteStream).write = ((chunk: unknown) => {
+  const writeToBuffer = (chunk: unknown, encodingOrCallback?: BufferEncoding | ((err?: Error | null) => void), callback?: (err?: Error | null) => void) => {
     buf += typeof chunk === "string" ? chunk : String(chunk);
+    const cb = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
+    cb?.();
     return true;
-  }) as typeof process.stdout.write;
-  (process.stderr as NodeJS.WriteStream).write = ((chunk: unknown) => {
-    buf += typeof chunk === "string" ? chunk : String(chunk);
-    return true;
-  }) as typeof process.stderr.write;
+  };
+  (process.stdout as NodeJS.WriteStream).write = writeToBuffer as typeof process.stdout.write;
+  (process.stderr as NodeJS.WriteStream).write = writeToBuffer as typeof process.stderr.write;
   return {
     stop() {
       console.log = origLog;

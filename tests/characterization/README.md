@@ -53,6 +53,12 @@ npx vitest run --config tests/characterization/vitest.config.ts
 #   全绿 = 行为不变；红 = 回归（或大阶段二有意变更，--update 黄金 + 留理由）
 ```
 
+Replay 前置条件：
+
+- 每个 `cases/<name>/` 必须已经有 `cassette.json`。
+- `tests/characterization/__golden__/<name>.txt` 必须已经存在。
+- 如果缺 cassette，测试会快速失败并提示先在 `main` 上执行 `RECORD=1`，不会继续进入模型循环。
+
 ## 接到哪些门
 
 | 门 | 用法 |
