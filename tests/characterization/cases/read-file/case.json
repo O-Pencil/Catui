@@ -1,0 +1,6 @@
+{
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "input": "Read the file note.txt and tell me what it says.",
+  "workspace": "workspace"
+}
