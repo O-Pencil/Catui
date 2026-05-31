@@ -42,22 +42,24 @@ gate: gates.md#门组-a   # 仅前置产出，无独立出口门
 | # | 检查项 | 通过标准 |
 |---|--------|---------|
 | V0-1 | 基线脚本 | `scripts/collect-baseline.ts` 就绪、文档化要收集的 5 项数据 ✅ |
-| V0-2 | 基线数字 | maintainer 在冻结 main 跑脚本后 Baseline Record 已填（**可与 P1/P2 解耦；P4/P5 前必须补齐**）|
+| V0-2 | 基线数字 | ✅ 已填(2026-05-31,main@0eea985):符号 296 + dist 3.61MB 可靠;tsc/cycle 标注为非阻塞后补。★ 符号快照 TXT 待提交到 `baseline/`(P4 diff 基线)|
 | V0-3 | TUI 脚手架 | print-mode 黄金输出对比可跑、能捕获行为（非 placeholder）|
 | V0-4 | §4 无盲区 | U 行全部在 §4.2.1 有落点；D/R/N 冻结 ✅ |
 
 ## Baseline Record（P0 填写 · 直接粘贴 `scripts/collect-baseline.ts` 输出）
 
 ```yaml
-llm_wiki_baseline_commit: _待填_
-cycle_count_before: _待填_
-tsc_no_emit_ms: _待填_
-dist_size_mb: _待填_              # 需带 --build
-public_api_symbols_count: _待填_
-public_api_symbols_snapshot: _待填_   # .baseline-out/public-api-symbols.txt 存档路径
-recorded_at: _待填_
-recorded_on_branch: main
+llm_wiki_baseline_commit: 0eea985eb1d820fa1be21cf4e8c07251d40051a2
+cycle_count_before: 0          # ⚠ madge 视角;按 U3,madge 跨包跳过 → 低估 main 真实环数。重构侧权威=verify-quality SCC(已 0)
+tsc_no_emit_ms: not_captured   # ⚠ Windows 上 npx tsc spawn 返回 exit -1(2ms 未真跑)。非 P4 blocker,P6 前可后补
+dist_size_mb: 3.61             # ✅ node 走盘
+public_api_symbols_count: 296  # ✅ TS 编译器 API(P4 硬指标)
+public_api_symbols_snapshot: .dev-docs/architecture-review/baseline/public-api-symbols-main.txt  # ★ 待提交(P4 diff 基线)
+recorded_at: 2026-05-31T15:59:29.689Z
+recorded_on_branch: main (0eea985)
 ```
+
+> **可靠性标注**:符号快照(296)+ dist(3.61MB)+ commit 可靠,P4/P6 验收够用。`tsc_no_emit_ms` 在 Windows 未捕获(spawn 失败),`cycle_count_before` 是 madge 低估值——两者非 P4 blocker;真正的"无环"由 `verify-quality` SCC(重构分支已 0)保证。
 
 ## 提交建议
 
