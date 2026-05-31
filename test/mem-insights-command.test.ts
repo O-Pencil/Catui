@@ -3,14 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAgentSession } from "@pencil-agent/nano-pencil";
-import { getBuiltinExtensionPaths } from "../../../builtin-extensions.js";
-import { DefaultResourceLoader } from "../../../core/platform/config/resource-loader.js";
-import { SettingsManager } from "../../../core/platform/config/settings-manager.js";
-import { SessionManager } from "../../../core/session/session-manager.js";
-import { AuthStorage } from "../../../core/platform/config/auth-storage.js";
-import { ModelRegistry } from "../../../core/model-registry.js";
-import { allTools } from "../../../core/tools/index.js";
+import { createAgentSession } from "../core/runtime/sdk.js";
+import { getBuiltinExtensionPaths } from "../builtin-extensions.js";
+import { DefaultResourceLoader } from "../core/platform/config/resource-loader.js";
+import { SettingsManager } from "../core/platform/config/settings-manager.js";
+import { SessionManager } from "../core/session/session-manager.js";
+import { AuthStorage } from "../core/platform/config/auth-storage.js";
+import { ModelRegistry } from "../core/model-registry.js";
+import { allTools } from "../core/tools/index.js";
 
 test("extension-commands: mem-insights creates an HTML report and emits visible status", async () => {
 	const cwd = process.cwd();

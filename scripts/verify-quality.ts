@@ -47,17 +47,12 @@ const TEMPORARY_BOUNDARY_EXCEPTIONS = new Map<string, string>([
   ],
 ]);
 
-// Published packages must not depend on the host. Tracked until the S3 dependency
-// inversion lands in P3 (mem/soul depend on @pencil-agent/extension-sdk instead).
+// Published packages must not depend on the host. S3 dependency inversion is complete:
+// mem-core/soul-core depend on @pencil-agent/extension-sdk, and the lone host-coupled
+// integration test was relocated to host-side test/. No exceptions remain.
 const HOST_PACKAGE = "@pencil-agent/nano-pencil";
 const PUBLISHED_PACKAGE_PREFIXES = ["packages/mem-core/", "packages/soul-core/"];
-const HOST_REVERSE_DEP_EXCEPTIONS = new Map<string, string>([
-  // P3.2b inverted src/extension.ts onto @pencil-agent/extension-sdk — its exception is removed.
-  [
-    "packages/mem-core/test/extension-commands.test.ts",
-    "S3: mem-core integration test creates a host AgentSession; relocate to host-side extension tests or extension-sdk fixtures. Remove after test relocation.",
-  ],
-]);
+const HOST_REVERSE_DEP_EXCEPTIONS = new Map<string, string>();
 
 function toRepoPath(abs: string): string {
   return normalize(relative(REPO, abs)).replaceAll("\\", "/");
