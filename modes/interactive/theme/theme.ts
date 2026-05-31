@@ -1,5 +1,5 @@
 /**
- * [WHO]: Theme, getAvailableThemes, ThemeInfo, getAvailableThemesWithPaths, loadThemeFromPath
+ * [WHO]: ThemeContract, getAvailableThemes, ThemeInfo, getAvailableThemesWithPaths, loadThemeFromPath
  * [FROM]: Depends on node:fs, node:path, @sinclair/typebox, @sinclair/typebox/compiler, chalk
  * [TO]: Consumed by main.ts, core/extensions-host/runner.ts, core/extensions-host/types.ts, core/runtime/agent-session.ts, core/export-html/index.ts, core/export-html/tool-renderer.ts, modes/interactive/components/*, extensions/optional/export-html/index.ts, extensions/optional/simplify/index.ts
  * [HERE]: modes/interactive/theme/theme.ts - theme loader and definitions
@@ -117,8 +117,10 @@ type ThemeJson = Static<typeof ThemeJsonSchema>;
 const validateThemeJson = TypeCompiler.Compile(ThemeJsonSchema);
 
 // Theme type vocabulary now lives in core/theme-contract.ts (U2 seam); re-exported here for
-// existing modes/extension consumers that import these names from this module.
-export type { ThemeColor, ThemeBg, ColorMode } from "../../../core/theme-contract.js";
+// existing modes/extension consumers that import these names from this module. The exported
+// `Theme` type IS the contract (the class above, ThemeImpl, is its implementation) so every
+// `import type { Theme } from "./theme.js"` transparently gets the contract — no consumer churn.
+export type { ThemeColor, ThemeBg, ColorMode, Theme } from "../../../core/theme-contract.js";
 
 // ============================================================================
 // Color Utilities
@@ -301,7 +303,7 @@ function resolveThemeColors<T extends Record<string, ColorValue>>(
 // Theme Class
 // ============================================================================
 
-export class Theme implements ThemeContract {
+export class ThemeImpl implements ThemeContract {
 	readonly name?: string;
 	readonly sourcePath?: string;
 	private fgColors: Map<ThemeColor, string>;
@@ -541,7 +543,7 @@ function loadThemeJson(name: string): ThemeJson {
 	return parseThemeJsonContent(name, content);
 }
 
-function createTheme(themeJson: ThemeJson, mode?: ColorMode, sourcePath?: string): Theme {
+function createTheme(themeJson: ThemeJson, mode?: ColorMode, sourcePath?: string): ThemeContract {
 	const colorMode = mode ?? detectColorMode();
 	const resolvedColors = resolveThemeColors(themeJson.colors, themeJson.vars);
 	const fgColors: Record<ThemeColor, string | number> = {} as Record<ThemeColor, string | number>;
@@ -561,19 +563,19 @@ function createTheme(themeJson: ThemeJson, mode?: ColorMode, sourcePath?: string
 			fgColors[key as ThemeColor] = value;
 		}
 	}
-	return new Theme(fgColors, bgColors, colorMode, {
+	return new ThemeImpl(fgColors, bgColors, colorMode, {
 		name: themeJson.name,
 		sourcePath,
 	});
 }
 
-export function loadThemeFromPath(themePath: string, mode?: ColorMode): Theme {
+export function loadThemeFromPath(themePath: string, mode?: ColorMode): ThemeContract {
 	const content = fs.readFileSync(themePath, "utf-8");
 	const themeJson = parseThemeJsonContent(themePath, content);
 	return createTheme(themeJson, mode, themePath);
 }
 
-function loadTheme(name: string, mode?: ColorMode): Theme {
+function loadTheme(name: string, mode?: ColorMode): ThemeContract {
 	const registeredTheme = registeredThemes.get(name);
 	if (registeredTheme) {
 		return registeredTheme;
@@ -582,7 +584,7 @@ function loadTheme(name: string, mode?: ColorMode): Theme {
 	return createTheme(themeJson, mode);
 }
 
-export function getThemeByName(name: string): Theme | undefined {
+export function getThemeByName(name: string): ThemeContract | undefined {
 	try {
 		return loadTheme(name);
 	} catch {
@@ -618,7 +620,7 @@ const THEME_KEY = Symbol.for("@pencil-agent/nano-pencil:theme");
 
 // Export theme as a getter that reads from globalThis
 // This ensures all module instances (tsx, jiti) see the same theme
-export const theme: Theme = new Proxy({} as Theme, {
+export const theme: ThemeContract = new Proxy({} as ThemeContract, {
 	get(_target, prop) {
 		const t = (globalThis as Record<symbol, Theme>)[THEME_KEY];
 		if (!t) throw new Error("Theme not initialized. Call initTheme() first.");
@@ -626,16 +628,16 @@ export const theme: Theme = new Proxy({} as Theme, {
 	},
 });
 
-function setGlobalTheme(t: Theme): void {
+function setGlobalTheme(t: ThemeContract): void {
 	(globalThis as Record<symbol, Theme>)[THEME_KEY] = t;
 }
 
 let currentThemeName: string | undefined;
 let themeWatcher: fs.FSWatcher | undefined;
 let onThemeChangeCallback: (() => void) | undefined;
-const registeredThemes = new Map<string, Theme>();
+const registeredThemes = new Map<string, ThemeContract>();
 
-export function setRegisteredThemes(themes: Theme[]): void {
+export function setRegisteredThemes(themes: ThemeContract[]): void {
 	registeredThemes.clear();
 	for (const theme of themes) {
 		if (theme.name) {
@@ -683,7 +685,7 @@ export function setTheme(name: string, enableWatcher: boolean = false): { succes
 	}
 }
 
-export function setThemeInstance(themeInstance: Theme): void {
+export function setThemeInstance(themeInstance: ThemeContract): void {
 	setGlobalTheme(themeInstance);
 	currentThemeName = "<in-memory>";
 	stopThemeWatcher(); // Can't watch a direct instance
@@ -895,10 +897,10 @@ export function getThemeExportColors(themeName?: string): {
 
 type CliHighlightTheme = Record<string, (s: string) => string>;
 
-let cachedHighlightThemeFor: Theme | undefined;
+let cachedHighlightThemeFor: ThemeContract | undefined;
 let cachedCliHighlightTheme: CliHighlightTheme | undefined;
 
-function buildCliHighlightTheme(t: Theme): CliHighlightTheme {
+function buildCliHighlightTheme(t: ThemeContract): CliHighlightTheme {
 	return {
 		keyword: (s: string) => t.fg("syntaxKeyword", s),
 		built_in: (s: string) => t.fg("syntaxType", s),
@@ -918,7 +920,7 @@ function buildCliHighlightTheme(t: Theme): CliHighlightTheme {
 	};
 }
 
-function getCliHighlightTheme(t: Theme): CliHighlightTheme {
+function getCliHighlightTheme(t: ThemeContract): CliHighlightTheme {
 	if (cachedHighlightThemeFor !== t || !cachedCliHighlightTheme) {
 		cachedHighlightThemeFor = t;
 		cachedCliHighlightTheme = buildCliHighlightTheme(t);

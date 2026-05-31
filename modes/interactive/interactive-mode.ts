@@ -183,10 +183,10 @@ import {
   setRegisteredThemes,
   setTheme,
   setThemeInstance,
-  Theme,
   type ThemeColor,
   theme,
 } from "./theme/theme.js";
+import type { Theme } from "../../core/theme-contract.js";
 import {
   getAgentLoopArgumentCompletions,
   getLanguageArgumentCompletions,
@@ -1925,7 +1925,9 @@ export class InteractiveMode {
       getAllThemes: () => getAvailableThemesWithPaths(),
       getTheme: (name) => getThemeByName(name),
       setTheme: (themeOrName) => {
-        if (themeOrName instanceof Theme) {
+        // themeOrName is `string | Theme` (Theme is the contract interface, so narrow by typeof
+        // rather than `instanceof` — an interface has no runtime constructor to test against).
+        if (typeof themeOrName !== "string") {
           setThemeInstance(themeOrName);
           this.ui.requestRender();
           return { success: true };

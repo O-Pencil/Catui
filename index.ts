@@ -338,7 +338,7 @@ export {
 	getSettingsListTheme,
 	highlightCode,
 	initTheme,
-	Theme,
+	type Theme,
 	type ThemeColor,
 } from "./modes/interactive/theme/theme.js";
 // Clipboard utilities
