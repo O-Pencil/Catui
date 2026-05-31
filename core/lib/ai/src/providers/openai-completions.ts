@@ -87,7 +87,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 	model: Model<"openai-completions">,
 	context: Context,
 	options?: OpenAICompletionsOptions,
-): AssistantMessageEventStream => {
+) => {
 	const stream = new AssistantMessageEventStream();
 
 	(async () => {
@@ -475,7 +475,7 @@ export const streamSimpleOpenAICompletions: StreamFunction<"openai-completions",
 	model: Model<"openai-completions">,
 	context: Context,
 	options?: SimpleStreamOptions,
-): AssistantMessageEventStream => {
+) => {
 	const apiKey = options?.apiKey || getEnvApiKey(model.provider);
 	if (!apiKey) {
 		throw new Error(`No API key for provider: ${model.provider}`);

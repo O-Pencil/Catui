@@ -64,7 +64,7 @@ export const streamAzureOpenAIResponses: StreamFunction<"azure-openai-responses"
 	model: Model<"azure-openai-responses">,
 	context: Context,
 	options?: AzureOpenAIResponsesOptions,
-): AssistantMessageEventStream => {
+) => {
 	const stream = new AssistantMessageEventStream();
 
 	// Start async processing
@@ -129,7 +129,7 @@ export const streamSimpleAzureOpenAIResponses: StreamFunction<"azure-openai-resp
 	model: Model<"azure-openai-responses">,
 	context: Context,
 	options?: SimpleStreamOptions,
-): AssistantMessageEventStream => {
+) => {
 	const apiKey = options?.apiKey || getEnvApiKey(model.provider);
 	if (!apiKey) {
 		throw new Error(`No API key for provider: ${model.provider}`);

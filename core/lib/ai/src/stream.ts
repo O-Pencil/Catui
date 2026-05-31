@@ -13,6 +13,7 @@ import type {
 	Api,
 	AssistantMessage,
 	AssistantMessageEvent,
+	AssistantMessageEventStreamContract,
 	Context,
 	Model,
 	ProviderStreamOptions,
@@ -301,7 +302,7 @@ export async function completeSimple<TApi extends Api>(
  */
 function wrapWithRetry<TApi extends Api>(
 	model: Pick<Model<TApi>, "api" | "provider" | "id">,
-	createStream: () => AssistantMessageEventStream,
+	createStream: () => AssistantMessageEventStreamContract,
 	retryOptions: Required<RetryOptions>,
 	signal?: AbortSignal,
 ): AssistantMessageEventStream {
@@ -316,7 +317,7 @@ function wrapWithRetry<TApi extends Api>(
 				return;
 			}
 
-			let innerStream: AssistantMessageEventStream;
+			let innerStream: AssistantMessageEventStreamContract;
 			try {
 				innerStream = createStream();
 			} catch (error) {

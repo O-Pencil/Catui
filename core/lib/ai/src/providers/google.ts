@@ -56,7 +56,7 @@ export const streamGoogle: StreamFunction<"google-generative-ai", GoogleOptions>
 	model: Model<"google-generative-ai">,
 	context: Context,
 	options?: GoogleOptions,
-): AssistantMessageEventStream => {
+) => {
 	const stream = new AssistantMessageEventStream();
 
 	(async () => {
@@ -279,7 +279,7 @@ export const streamSimpleGoogle: StreamFunction<"google-generative-ai", SimpleSt
 	model: Model<"google-generative-ai">,
 	context: Context,
 	options?: SimpleStreamOptions,
-): AssistantMessageEventStream => {
+) => {
 	const apiKey = options?.apiKey || getEnvApiKey(model.provider);
 	if (!apiKey) {
 		throw new Error(`No API key for provider: ${model.provider}`);

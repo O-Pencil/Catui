@@ -330,7 +330,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli", GoogleGe
 	model: Model<"google-gemini-cli">,
 	context: Context,
 	options?: GoogleGeminiCliOptions,
-): AssistantMessageEventStream => {
+) => {
 	const stream = new AssistantMessageEventStream();
 
 	(async () => {
@@ -798,7 +798,7 @@ export const streamSimpleGoogleGeminiCli: StreamFunction<"google-gemini-cli", Si
 	model: Model<"google-gemini-cli">,
 	context: Context,
 	options?: SimpleStreamOptions,
-): AssistantMessageEventStream => {
+) => {
 	const apiKey = options?.apiKey;
 	if (!apiKey) {
 		throw new Error("Google Cloud Code Assist requires OAuth authentication. Use /login to authenticate.");

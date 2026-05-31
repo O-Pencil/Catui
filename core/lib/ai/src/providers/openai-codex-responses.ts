@@ -109,7 +109,7 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 	model: Model<"openai-codex-responses">,
 	context: Context,
 	options?: OpenAICodexResponsesOptions,
-): AssistantMessageEventStream => {
+) => {
 	const stream = new AssistantMessageEventStream();
 
 	(async () => {
@@ -261,7 +261,7 @@ export const streamSimpleOpenAICodexResponses: StreamFunction<"openai-codex-resp
 	model: Model<"openai-codex-responses">,
 	context: Context,
 	options?: SimpleStreamOptions,
-): AssistantMessageEventStream => {
+) => {
 	const apiKey = options?.apiKey || getEnvApiKey(model.provider);
 	if (!apiKey) {
 		throw new Error(`No API key for provider: ${model.provider}`);

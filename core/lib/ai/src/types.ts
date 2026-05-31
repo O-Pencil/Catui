@@ -244,7 +244,7 @@ export type AssistantMessageEvent =
 	| { type: "done"; reason: Extract<StopReason, "stop" | "length" | "toolUse">; message: AssistantMessage }
 	| { type: "error"; reason: Extract<StopReason, "aborted" | "error">; error: AssistantMessage };
 
-type AssistantMessageEventStreamContract = AsyncEventStream<AssistantMessageEvent, AssistantMessage>;
+export type AssistantMessageEventStreamContract = AsyncEventStream<AssistantMessageEvent, AssistantMessage>;
 
 /**
  * Compatibility settings for OpenAI-compatible completions APIs.
