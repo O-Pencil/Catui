@@ -27,11 +27,12 @@ gate: gates.md#门组-b
 
 | 检查点 | 内容 | 验证 | 状态 |
 |--------|------|------|------|
-| **P3.0** 地基 | `packages/extension-sdk/` 包骨架(package.json/tsconfig/index)+ 自包含 **S1 词汇**(`tools.ts`: ToolRuntime/ToolPermissions/ToolRuntimeDescriptor)+ host workspaces 注册 | `npm i` + `tsc -b packages/extension-sdk`(V3-1) | ✅ 本次 |
-| **P3.1** 协议抽取 | 把 themes/hooks/commands/permissions 稳定子集从 host `types.ts` 抽进 extension-sdk;host 反向 import 并 re-export(对外 barrel 不变) | host + sdk 同时 `tsc --noEmit` | ⬜ |
-| **P3.2** 生命周期 + **S3** | `lifecycle.ts`: `ExtensionAPI`/`ExtensionContext`/`ExtensionFactory` + **`SessionManagerContract`**(`countTouchedSince`/`getSessionFile` 等 mem-core 实际用到的少数方法);`mem-core` 改依赖 extension-sdk,去掉 host 的 `SessionManager` value import + 测试里的 `createAgentSession` | `tsc` + `vitest`(mem-core);删 `verify-quality.ts` 2 条 HOST_REVERSE_DEP_EXCEPTIONS 后 `verify:quality` 仍绿 | ⬜ |
-| **P3.3** 4-tier loader | `core/extensions-host/loader.ts` 扩展 builtin → optional → user-dir → npm 四层发现 | `vitest` 扩展加载行为不变(V3-4) | ⬜ |
-| **P3.4** host 真依赖 | host `package.json` `dependencies` 加 `@pencil-agent/{extension-sdk,mem-core,soul-core}: workspace:^` | `npm i` 干净 + 全 mode 冒烟 | ⬜ |
+| **P3.0** 地基 | `packages/extension-sdk/` 包骨架 + 自包含 **S1 词汇**(`tools.ts`)+ host workspaces 注册 | `tsc -b packages/extension-sdk`(V3-1) | ✅ |
+| **P3.1** S1 host 采纳 | host `ToolDefinition extends ToolRuntimeDescriptor`(首个 host→sdk 跨包引用) | `tsc --noEmit` 绿 | ✅ |
+| **P3.2a** SessionManager 实例委托 | `countTouchedSince` 加实例方法 + 纳入 `ReadonlySessionManager`(S3 前置) | host `tsc` 绿 | ✅ |
+| **P3.2b** 生命周期 + **S3** | `lifecycle.ts`(ExtensionAPI/Context/Factory + `SessionManagerContract`)+ `tools.ts` 补 ToolResult/ToolContract;`mem-core` 改依赖 extension-sdk;删 gate 的 extension.ts 例外 | `tsc -b sdk` + host/mem-core `tsc --noEmit` + `verify:quality` 绿 | ✅ |
+| **P3.3** 4-tier loader | `discoverNpmExtensions()` 补 npm 发现层(排除一方包),接为 tier 4 | `tsc` + `verify:quality` 绿(V3-4 行为不变) | ✅ |
+| **P3.4** host 真依赖 | host `dependencies` 加 `@pencil-agent/{extension-sdk@^0.1.0,mem-core@^1.1.0,soul-core@^0.1.0}`(npm 用真实版本,非 `workspace:`)+ extension-sdk 进 `build:deps` | ★ `npm install` 重生成 **package-lock.json**(CI `npm ci` 依赖)+ `npm run build` + 全 mode 冒烟 | 🔄 待 lock |
 
 > **S3 已摸清(P3.2 输入)**:mem-core 对 host 的 value 依赖仅 `SessionManager.countTouchedSince(ctx.cwd, …)` 一处(extension.ts:640)+ `ctx.sessionManager.getSessionFile()`;soul-core 零 host 依赖。故 `SessionManagerContract` 只需覆盖这几个方法。
 

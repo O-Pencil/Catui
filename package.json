@@ -29,7 +29,7 @@
     "build": "npm run clean:dist && npm run build:deps && tsc -p tsconfig.build.json && npm run copy:theme:json && npm run copy:assets && npm run build:meta",
     "build:meta": "node scripts/generate-build-meta.js",
     "build:release": "npm run generate-models --prefix core/lib/ai && npm run build",
-    "build:deps": "npm run build --prefix core/lib/ai && npm run build --prefix core/lib/agent-core && npm run build --prefix core/lib/tui",
+    "build:deps": "npm run build --prefix packages/extension-sdk && npm run build --prefix core/lib/ai && npm run build --prefix core/lib/agent-core && npm run build --prefix core/lib/tui",
     "clean:dist": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "copy:theme:json": "node -e \"const fs=require('fs');const p=require('path');const d='dist/modes/interactive/theme';if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});fs.readdirSync('modes/interactive/theme').forEach(f=>{if(f.endsWith('.json'))fs.copyFileSync(p.join('modes/interactive/theme',f),p.join(d,f))})\"",
     "copy:assets": "node scripts/copy-assets.js",
@@ -116,7 +116,10 @@
     "undici": "^7.19.1",
     "yaml": "^2.8.2",
     "zod": "^4.3.6",
-    "zod-to-json-schema": "^3.24.6"
+    "zod-to-json-schema": "^3.24.6",
+    "@pencil-agent/extension-sdk": "^0.1.0",
+    "@pencil-agent/mem-core": "^1.1.0",
+    "@pencil-agent/soul-core": "^0.1.0"
   },
   "optionalDependencies": {
     "koffi": "^2.9.0"
