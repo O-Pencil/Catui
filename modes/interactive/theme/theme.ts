@@ -622,14 +622,14 @@ const THEME_KEY = Symbol.for("@pencil-agent/nano-pencil:theme");
 // This ensures all module instances (tsx, jiti) see the same theme
 export const theme: ThemeContract = new Proxy({} as ThemeContract, {
 	get(_target, prop) {
-		const t = (globalThis as Record<symbol, Theme>)[THEME_KEY];
+		const t = (globalThis as Record<symbol, ThemeContract>)[THEME_KEY];
 		if (!t) throw new Error("Theme not initialized. Call initTheme() first.");
 		return (t as unknown as Record<string | symbol, unknown>)[prop];
 	},
 });
 
 function setGlobalTheme(t: ThemeContract): void {
-	(globalThis as Record<symbol, Theme>)[THEME_KEY] = t;
+	(globalThis as Record<symbol, ThemeContract>)[THEME_KEY] = t;
 }
 
 let currentThemeName: string | undefined;
