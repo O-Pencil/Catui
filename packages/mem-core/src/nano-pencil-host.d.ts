@@ -1,8 +1,9 @@
 /**
  * [WHO]: Type declarations for @pencil-agent/nano-pencil host interface
  * [FROM]: No external dependencies
- * [TO]: Consumed by packages/mem-core for host type checking
- * [HERE]: packages/mem-core/src/nano-pencil-host.d.ts - ambient type declarations
+ * [TO]: Residual after S3 (P3.2b): src/ no longer imports the host; only test/extension-commands.test.ts
+ *       still references the host package. Remove together with that test relocation (P3 follow-up).
+ * [HERE]: packages/mem-core/src/nano-pencil-host.d.ts - ambient type declarations (legacy host shim)
  */
 
 declare module "@pencil-agent/nano-pencil" {

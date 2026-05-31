@@ -52,13 +52,10 @@ const TEMPORARY_BOUNDARY_EXCEPTIONS = new Map<string, string>([
 const HOST_PACKAGE = "@pencil-agent/nano-pencil";
 const PUBLISHED_PACKAGE_PREFIXES = ["packages/mem-core/", "packages/soul-core/"];
 const HOST_REVERSE_DEP_EXCEPTIONS = new Map<string, string>([
-  [
-    "packages/mem-core/src/extension.ts",
-    "S3: mem-core consumes host SessionManager/ExtensionAPI via package name; invert through @pencil-agent/extension-sdk in P3. Remove after P3.",
-  ],
+  // P3.2b inverted src/extension.ts onto @pencil-agent/extension-sdk — its exception is removed.
   [
     "packages/mem-core/test/extension-commands.test.ts",
-    "S3: mem-core integration test creates a host AgentSession; move to host-side extension tests or extension-sdk fixtures in P3. Remove after P3.",
+    "S3: mem-core integration test creates a host AgentSession; relocate to host-side extension tests or extension-sdk fixtures. Remove after test relocation.",
   ],
 ]);
 

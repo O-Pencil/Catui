@@ -1,6 +1,6 @@
 /**
  * [WHO]: default export (Extension), nanomem extension for NanoPencil integration
- * [FROM]: Depends on node:fs, node:fs/promises, node:path, @sinclair/typebox, @pencil-agent/nano-pencil
+ * [FROM]: Depends on node:fs, node:fs/promises, node:path, @sinclair/typebox, @pencil-agent/extension-sdk
  * [TO]: Consumed by packages/mem-core/src/index.ts
  * [HERE]: packages/mem-core/src/extension.ts - thin adapter bridging NanoPencil events to host-agnostic NanoMemEngine
  */
@@ -9,8 +9,7 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { Type } from "@sinclair/typebox";
-import type { ExtensionAPI, ExtensionContext } from "@pencil-agent/nano-pencil";
-import { SessionManager } from "@pencil-agent/nano-pencil";
+import type { ExtensionAPI, ExtensionContext } from "@pencil-agent/extension-sdk";
 import { NanoMemEngine } from "./engine.js";
 import { reportDiagnostic } from "./diagnostics.js";
 import { readDreamLockMtimeMs, rollbackDreamLock, tryAcquireDreamLock } from "./dream-lock.js";
@@ -637,7 +636,7 @@ export default function nanomemExtension(api: ExtensionAPI) {
 		if (Date.now() - lastSessionScanAtMs < scanIntervalMs) return;
 		lastSessionScanAtMs = Date.now();
 
-		const touchedCount = await SessionManager.countTouchedSince(ctx.cwd, lastAtMs, {
+		const touchedCount = await ctx.sessionManager.countTouchedSince(ctx.cwd, lastAtMs, {
 			excludeBasename: sessionId,
 		});
 		if (touchedCount < cfg.minSessions) return;

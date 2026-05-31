@@ -48,7 +48,8 @@
     "@pencil-agent/nano-pencil": "file:../..",
     "@types/node": "^20.11.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "@pencil-agent/extension-sdk": "file:../extension-sdk"
   },
   "repository": {
     "type": "git",
@@ -56,5 +57,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "peerDependencies": {
+    "@pencil-agent/extension-sdk": "^0.1.0"
   }
 }
