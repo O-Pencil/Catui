@@ -90,7 +90,7 @@ main (冻结基线)
 ## 3. 总进度
 
 - [x] 切执行分支 + 执行方案目录化 + 两大阶段模型
-- [ ] 【A】[P0](./P0-prepare.md)：基线 + 补 §4(U) + 冻结 [分类清单](./migration-classification.md)
+- [x] 【A】[P0](./P0-prepare.md)：补 §4(U) + 冻结分类 + 基线（符号 296 名快照入库 + dist 3.61MB；tsc/cycle 非阻塞后补；TUI 黄金留 P5）
 - [x] 【A】[P1](./P1-skeleton-move.md)：目录级骨架实现完成
 - [ ] 【A】门组 A 重型验收补齐（symbols diff / characterization / verify-dip / test / smoke）
 - [ ] ★ maintainer 功能维度评审 → 定稿 [门组 B](./gates.md)
