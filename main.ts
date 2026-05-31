@@ -35,7 +35,7 @@ import { time } from "./core/platform/timings.js";
 import { allTools } from "./core/tools/index.js";
 import { runMigrations, showDeprecationWarnings } from "./migrations.js";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.js";
-import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.js";
+import { initTheme, stopThemeWatcher, theme } from "./modes/interactive/theme/theme.js";
 import { exportFromFile } from "./core/export-html/index.js";
 import { profileCheckpoint } from "./utils/startup-profiler.js";
 import { isDevRuntime, reportDiagnostic } from "./utils/diagnostics.js";
@@ -954,6 +954,9 @@ export async function main(args: string[]) {
 	sessionOptions.authStorage = authStorage;
 	sessionOptions.modelRegistry = modelRegistry;
 	sessionOptions.resourceLoader = resourceLoader;
+	// Inject the theme so HTML export renders custom extension tools (the UI layer owns the
+	// theme; core/runtime no longer imports it — U2 seam). `theme` is the lazy singleton proxy.
+	sessionOptions.theme = theme;
 
 	// Handle CLI --api-key as runtime override (not persisted)
 	if (parsed.apiKey) {

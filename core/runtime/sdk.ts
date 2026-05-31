@@ -15,6 +15,7 @@ import {
 import type { Message, Model } from "@pencil-agent/ai";
 import { getAgentDir, getDocsPath } from "../../config.js";
 import { AgentSession } from "./agent-session.js";
+import type { Theme as ThemeContract } from "../theme-contract.js";
 import { AuthStorage } from "../platform/config/auth-storage.js";
 import { DEFAULT_THINKING_LEVEL } from "../platform/config/defaults.js";
 import type {
@@ -164,6 +165,13 @@ export interface CreateAgentSessionOptions extends SoulOptionsContract {
 
   /** External abort signal for stopping the session (e.g., from SubAgent runtime) */
   signal?: AbortSignal;
+
+  /**
+   * Theme for HTML-export custom-tool rendering. Provided by the composition root
+   * (UI layer); when omitted, HTML export skips custom-tool rendering. Keeps
+   * core/runtime free of a modes/ UI import (U2 seam).
+   */
+  theme?: ThemeContract;
 
   /** Suppress all console output. Default: false */
   silent?: boolean;
@@ -647,6 +655,7 @@ export async function createAgentSession(
     soulManager,
     soulManagerFactory,
     signal: options.signal,
+    theme: options.theme,
   });
 
   const extensionsResult = resourceLoader.getExtensions();

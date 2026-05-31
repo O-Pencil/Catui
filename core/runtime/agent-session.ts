@@ -31,7 +31,7 @@ import {
   supportsXhigh,
 } from "@pencil-agent/ai";
 import { getDocsPath } from "../../config.js";
-import { theme } from "../../modes/interactive/theme/theme.js";
+import type { Theme as ThemeContract } from "../theme-contract.js";
 import { stripFrontmatter } from "../../utils/frontmatter.js";
 
 /**
@@ -286,6 +286,13 @@ export interface AgentSessionConfig {
   extensionRunnerRef?: { current?: ExtensionRunner };
   /** External abort signal for stopping the session (e.g., from SubAgent runtime) */
   signal?: AbortSignal;
+  /**
+   * Theme used to render custom extension tools when exporting a session to HTML.
+   * Injected by the composition root (UI layer owns the theme); when omitted, HTML
+   * export still works but skips custom-tool rendering. Keeps core/runtime from
+   * importing the modes/ UI theme singleton (U2).
+   */
+  theme?: ThemeContract;
 }
 
 export interface ExtensionBindings {
@@ -411,6 +418,8 @@ export class AgentSession {
   private _turnIndex = 0;
 
   private _resourceLoader: ResourceLoader;
+  /** Injected theme for HTML-export custom-tool rendering (U2: no modes import). */
+  private _theme?: ThemeContract;
   private _customTools: ToolDefinition[];
   private _staticCustomTools: ToolDefinition[];
   private _mcpToolsFactory?: () => Promise<ToolDefinition[]>;
@@ -450,6 +459,7 @@ export class AgentSession {
     this.agentCtx = config.agentCtx;
     this._scopedModels = config.scopedModels ?? [];
     this._resourceLoader = config.resourceLoader;
+    this._theme = config.theme;
     this._staticCustomTools = config.customTools ?? [];
     this._mcpToolsFactory = config.mcpToolsFactory;
     this._soulManagerFactory = config.soulManagerFactory;
@@ -3479,13 +3489,16 @@ export class AgentSession {
   async exportToHtml(outputPath?: string): Promise<string> {
     const themeName = this.settingsManager.getTheme();
 
-    // Create tool renderer if we have an extension runner (for custom tool HTML rendering)
+    // Create tool renderer if we have an extension runner + an injected theme
+    // (for custom tool HTML rendering). Without a theme, export still works but
+    // skips custom-tool rendering — see AgentSessionConfig.theme (U2 seam).
     let toolRenderer: ToolHtmlRenderer | undefined;
-    if (this._extensionRunner) {
+    if (this._extensionRunner && this._theme) {
+      const exportTheme = this._theme;
       toolRenderer = createToolHtmlRenderer({
         getToolDefinition: (name) =>
           this._extensionRunner!.getToolDefinition(name),
-        theme,
+        theme: exportTheme,
       });
     }
 
