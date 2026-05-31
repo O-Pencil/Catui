@@ -4,7 +4,7 @@
 group: refactor
 produced_at: 2026-05-29
 gate_set_A: final          # 目录级出口门，本文定稿
-gate_set_B: draft          # 功能级出口门：起点模板；★ 大阶段一收尾后由 maintainer 功能维度评审定稿
+gate_set_B: final          # 功能级出口门：2026-05-31 功能维度评审定稿（GB-1 白名单 / GB-4 判定法 / 各域质量项）
 principle: |
   行数从"判决"降为"触发评审的信号"；"边界守恒"升为硬门。
   门组 A 证明"搬家没碰坏东西"；门组 B 证明"每个功能在新约束下被重审且服从边界"。
@@ -27,9 +27,9 @@ principle: |
 
 ---
 
-## 门组 B — 功能级出口（大阶段二逐域，**草案 · 待你定稿**）
+## 门组 B — 功能级出口（大阶段二逐域，**已定稿 2026-05-31**）
 
-> ★ 你将在大阶段一收尾后**再走一轮功能维度架构评审**，产出该域的质量标准。本表是**起点模板**，不是终稿；各功能域评审时据此细化/替换。
+> 功能维度架构评审已定稿：通用门(GB-1..6)+ 下方 GB-1 import 白名单 / GB-4 判定法 / 各域专属质量项。P4 起逐域据此验收。
 
 每评审一个功能域（裁决 **重写 / 保持 / 拆分**）后过：
 
@@ -42,11 +42,38 @@ principle: |
 | **GB-5 无环 + 守门** | madge + verify-quality | 零环；绿或带 deadline 白名单 | — |
 | **GB-6 契约/接缝** | 该域建立的契约 | `_internal` / S2 / S3 形状经 code review | — |
 
-### 待你定稿的开放项（功能评审时填）
+### 定稿（2026-05-31 · 功能维度评审）
 
-- [ ] GB-1 的 **import 白名单**逐目录写死（platform / runtime 子模块 / extension-sdk / mem-soul）
-- [ ] GB-4 的"单一职责"判定法（行数仅信号，真判据由你定）
-- [ ] 每个功能域（D1–D8）的**域专属质量项**（如 runtime 的并发安全、UI 的快照覆盖率）
+#### GB-1 import 白名单（逐层依赖方向，单向 DAG）
+
+依赖只能向**下/同层**，禁止向上/向 UI/向组合根。`verify-quality.ts` 已强制 platform↛业务、lib↛host、internal↛root-barrel、零环；本表是 P4/P5 拆分的**目标态**判据（code review + 后续可加规则）。
+
+| 层 | 允许 import | 禁止 import |
+|----|------------|------------|
+| **core/platform/** | node 内置、第三方、platform 内部 | 任何 `core/` 业务、`core/lib/`、`modes/`、`extensions*`、root barrel |
+| **core/lib/** (ai/agent-core/tui) | node、第三方、本包内 | 任何 host 模块(`core/runtime|tools|session|...`)、`modes/`、`extensions*` |
+| **core/runtime/ 子模块**(P4 产物) | `platform/`、`lib/`、业务域(`session|tools|model|mcp|prompt|export-html|agent-dir`)、runtime 内**契约/兄弟**、`*-contract.ts` | ❌ `modes/`(经 `theme-contract`/`ui-bridge` 注入)❌ 反向依赖**组合根**`agent-session.ts` ❌ root barrel |
+| **core/ 业务域**(session/tools/model/mcp/...) | `platform/`、`lib/`、本域、跨域**契约** | ❌ `modes/` ❌ `runtime/` 组合根 ❌ root barrel |
+| **modes/**(UI) | 任意 `core/`、`lib/`、`extensions-host` 契约 | ❌ 反向被 `core/` import(UI 是叶子) |
+| **packages/{mem,soul}-core** | `@pencil-agent/extension-sdk` | ❌ `@pencil-agent/nano-pencil`(S3,已清零) |
+
+**P4 必清的现存违规**:`agent-session.ts → modes/interactive/theme`(U2)→ 改走 `core/theme-contract.ts`。
+
+#### GB-4 单一职责判定法（行数仅信号）
+
+一个模块**通过**当且仅当全部满足:
+1. **一句话职责**:能用一句不含"和/以及/并"的话描述其职责;否则按连接词拆。
+2. **单一变更轴**:它只因**一类**原因变更(改 prompt 组装 vs 改 compaction 策略 vs 改 UI 绑定不应落在同一文件)。
+3. **import 内聚**:其依赖集中在 1–2 个域;依赖横跨 ≥4 个不相关域 = 拆分信号。
+4. 行数 >400 仅触发**复审**(非自动 fail);复审若满足 1–3 可豁免并记理由。
+
+#### 各域专属质量项（P4/P5 评审时附加)
+
+| 域 | 专属门 |
+|----|--------|
+| **P4 runtime** | 组合根**单 config 装配**(S2);`ToolOrchestrator` 唯一分发点(S1);abort/取消路径行为不变(characterization 覆盖) |
+| **P5 interactive UI** | TUI snapshot/characterization 零回归(最高风险);controllers 间无共享可变状态(经 state/ 单源);mount 入口 <500 行 |
+| **P6 入口** | 冷启动 ≤ P0 基线;lazy 边界不破坏 4 mode 冒烟 |
 
 ---
 
