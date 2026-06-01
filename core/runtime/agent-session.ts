@@ -115,6 +115,7 @@ import type { BashOperations } from "../tools/bash.js";
 import { createDefaultRuntimeTools } from "./default-tools.js";
 import { BashRunner } from "./bash-runner.js";
 import { AbortSlot } from "../platform/abort-slot.js";
+import { Listeners } from "../platform/listeners.js";
 import { nextCyclicIndex, pickThinkingLevelOnModelChange } from "./model-cycle.js";
 import {
   availableThinkingLevels,
@@ -371,7 +372,7 @@ export class AgentSession {
   // Event subscription state
   private _unsubscribeAgent?: () => void;
   private _detachExternalAbort?: () => void;
-  private _eventListeners: AgentSessionEventListener[] = [];
+  private readonly _listeners = new Listeners<AgentSessionEvent>();
 
   /** Tracks pending steering messages for UI display. Removed when delivered. */
   private _steeringMessages: string[] = [];
@@ -624,9 +625,7 @@ export class AgentSession {
 
   /** Emit an event to all listeners */
   private _emit(event: AgentSessionEvent): void {
-    for (const l of this._eventListeners) {
-      l(event);
-    }
+    this._listeners.emit(event);
   }
 
   // Track last assistant message for auto-compaction check
@@ -856,15 +855,7 @@ export class AgentSession {
    * Multiple listeners can be added. Returns unsubscribe function for this listener.
    */
   subscribe(listener: AgentSessionEventListener): () => void {
-    this._eventListeners.push(listener);
-
-    // Return unsubscribe function for this specific listener
-    return () => {
-      const index = this._eventListeners.indexOf(listener);
-      if (index !== -1) {
-        this._eventListeners.splice(index, 1);
-      }
-    };
+    return this._listeners.add(listener);
   }
 
   /**
@@ -895,7 +886,7 @@ export class AgentSession {
   dispose(): void {
     this._disconnectFromAgent();
     this._extensionRunner?.dispose();
-    this._eventListeners = [];
+    this._listeners.clear();
     if (this._detachExternalAbort) {
       this._detachExternalAbort();
       this._detachExternalAbort = undefined;
