@@ -37,7 +37,7 @@ The context seam comes first because every controller extraction depends on it. 
 | AS01 | selected | narrow `ModelControllerContext` implemented for current model slice |
 | AS02 | selected | `ModelController` owns model/thinking set, cycle, restore for current slice |
 | AS03 | selected | model/thinking restore is delegated to `ModelController`; switch flow remains lifecycle orchestration |
-| AS04 | selected | removed the shallow `CompactionCoordinator`; real compaction extraction remains a later P4 slice |
+| AS04 | in progress | P4.x-a: real `CompactionController` owns the manual compaction flow + its abort slot (narrow `CompactionControllerContext`, lifecycle as capabilities). P4.x-b: move auto-compaction + collapse abortCompaction/isCompacting. Boundary: branch-summary excluded (belongs to session-tree flow) |
 | AS05 | selected | `ToolRuntimeController` owns tool source merge, wrapping, active-name policy, and orchestrator registry updates |
 | AS06 | pending | enforced continuously |
 

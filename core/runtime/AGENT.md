@@ -15,6 +15,7 @@ retry-coordinator.ts: Retry coordination for transient failures, including post-
 bash-runner.ts: BashRunner class — bash execution + pending-message queue extracted from AgentSession (P4.1); deps injected as closures (getCwd/getShellCommandPrefix/appendToAgent/appendToSession/isStreaming), no Agent/SessionManager import
 session-context.ts: ModelControllerContext, ModelSelectPayload, and ScopedModel contracts; narrow capability seam for runtime controllers
 model-controller.ts: ModelController, CycleModelError, ModelCycleResult, owns model set/cycle/restore and thinking-level mutations formerly embedded in AgentSession
+compaction-controller.ts: CompactionController — owns the manual compaction flow + its abort slot (P4.x-a, AS04); reads session via narrow CompactionControllerContext (lifecycle disconnect/reconnect/abort as capabilities); auto-compaction stays in AgentSession until P4.x-b
 tool-runtime-controller.ts: ToolRuntimeController, ToolRuntimeBuildOptions, ToolRuntimeBuildResult, owns runtime tool source merge, extension wrapping, active tool resolution, and ToolOrchestrator registry updates
 thinking-levels.ts: pure thinking-level logic extracted from AgentSession (P4.2) — THINKING_LEVELS(_WITH_XHIGH), modelSupportsThinking/Xhigh, availableThinkingLevels, clampThinkingLevel, nextThinkingLevel; no session state, reusable by rpc/print
 model-cycle.ts: pure model-cycle decisions extracted from AgentSession (P4.2) — pickThinkingLevelOnModelChange, nextCyclicIndex; side effects are owned by model-controller.ts

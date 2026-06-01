@@ -100,6 +100,7 @@ import { BashRunner } from "./bash-runner.js";
 import { AbortSlot } from "../platform/abort-slot.js";
 import { Listeners } from "../platform/listeners.js";
 import { ModelController, type ModelCycleResult } from "./model-controller.js";
+import { CompactionController } from "./compaction-controller.js";
 import { ToolRuntimeController } from "./tool-runtime-controller.js";
 import { bindExtensionCore } from "./extension-core-bindings.js";
 import {
@@ -346,8 +347,7 @@ export class AgentSession {
   /** Messages queued to be included with the next user prompt as context ("asides"). */
   private _pendingNextTurnMessages: CustomMessage[] = [];
 
-  // Compaction state (cancellation via AbortSlot — P4.2 dedup)
-  private readonly _compactionSlot = new AbortSlot();
+  // Auto-compaction state (manual compaction lives in CompactionController — P4.x-a)
   private readonly _autoCompactionSlot = new AbortSlot();
 
   // Branch summarization state
@@ -396,6 +396,7 @@ export class AgentSession {
 
   // Controllers/coordinators (AgentSession responsibility decomposition)
   private readonly _modelController: ModelController;
+  private readonly _compactionController: CompactionController;
   private readonly _toolOrchestrator: ToolOrchestrator;
   private readonly _toolRuntimeController: ToolRuntimeController;
 
@@ -465,6 +466,24 @@ export class AgentSession {
           source,
         });
       },
+    });
+    this._compactionController = new CompactionController({
+      getModel: () => this.model,
+      getApiKey: (model) => this._modelRegistry.getApiKey(model),
+      getExtensionRunner: () => this._extensionRunner,
+      getBranch: () => this.sessionManager.getBranch(),
+      getEntries: () => this.sessionManager.getEntries(),
+      getCompactionSettings: () => this.settingsManager.getCompactionSettings(),
+      appendCompaction: (summary, firstKeptEntryId, tokensBefore, details, fromExtension) =>
+        this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension),
+      applyCompactedMessages: () => {
+        const sessionContext = this.sessionManager.buildSessionContext();
+        this.agent.replaceMessages(sessionContext.messages);
+      },
+      logInfo: (message, meta) => this._logger.info(message, meta),
+      disconnectFromAgent: () => this._disconnectFromAgent(),
+      reconnectToAgent: () => this._reconnectToAgent(),
+      abortAgent: () => this.abort(),
     });
     this.agent.setModelErrorRecovery((event) =>
       this._recoverModelErrorInLoop(event),
@@ -912,7 +931,7 @@ export class AgentSession {
 
   /** Whether auto-compaction is currently running */
   get isCompacting(): boolean {
-    return this._autoCompactionSlot.active || this._compactionSlot.active;
+    return this._autoCompactionSlot.active || this._compactionController.isCompacting;
   }
 
   /** All messages including custom types like BashExecutionMessage */
@@ -1630,127 +1649,14 @@ export class AgentSession {
    * @param customInstructions Optional instructions for the compaction summary
    */
   async compact(customInstructions?: string): Promise<CompactionResult> {
-    this._logger.info("Manual compaction started", { hasCustomInstructions: !!customInstructions });
-    this._disconnectFromAgent();
-    await this.abort();
-    const compactionSignal = this._compactionSlot.begin();
-
-    try {
-      if (!this.model) {
-        throw new Error("No model selected");
-      }
-
-      const apiKey = await this._modelRegistry.getApiKey(this.model);
-      if (!apiKey) {
-        throw new Error(`No API key for ${this.model.provider}`);
-      }
-
-      const pathEntries = this.sessionManager.getBranch();
-      const settings = this.settingsManager.getCompactionSettings();
-
-      const preparation = prepareCompaction(pathEntries, settings);
-      if (!preparation) {
-        // Check why we can't compact
-        const lastEntry = pathEntries[pathEntries.length - 1];
-        if (lastEntry?.type === "compaction") {
-          throw new Error("Already compacted");
-        }
-        throw new Error("Nothing to compact (session too small)");
-      }
-
-      let extensionCompaction: CompactionResult | undefined;
-      let fromExtension = false;
-
-      if (this._extensionRunner?.hasHandlers("session_before_compact")) {
-        const result = (await this._extensionRunner.emit({
-          type: "session_before_compact",
-          preparation,
-          branchEntries: pathEntries,
-          customInstructions,
-          signal: compactionSignal,
-        })) as SessionBeforeCompactResult | undefined;
-
-        if (result?.cancel) {
-          throw new Error("Compaction cancelled");
-        }
-
-        if (result?.compaction) {
-          extensionCompaction = result.compaction;
-          fromExtension = true;
-        }
-      }
-
-      let summary: string;
-      let firstKeptEntryId: string;
-      let tokensBefore: number;
-      let details: unknown;
-
-      if (extensionCompaction) {
-        // Extension provided compaction content
-        summary = extensionCompaction.summary;
-        firstKeptEntryId = extensionCompaction.firstKeptEntryId;
-        tokensBefore = extensionCompaction.tokensBefore;
-        details = extensionCompaction.details;
-      } else {
-        // Generate compaction result
-        const result = await compact(
-          preparation,
-          this.model,
-          apiKey,
-          customInstructions,
-          compactionSignal,
-        );
-        summary = result.summary;
-        firstKeptEntryId = result.firstKeptEntryId;
-        tokensBefore = result.tokensBefore;
-        details = result.details;
-      }
-
-      if (compactionSignal.aborted) {
-        throw new Error("Compaction cancelled");
-      }
-
-      this.sessionManager.appendCompaction(
-        summary,
-        firstKeptEntryId,
-        tokensBefore,
-        details,
-        fromExtension,
-      );
-      const newEntries = this.sessionManager.getEntries();
-      const sessionContext = this.sessionManager.buildSessionContext();
-      this.agent.replaceMessages(sessionContext.messages);
-
-      // Get the saved compaction entry for the extension event
-      const savedCompactionEntry = newEntries.find(
-        (e) => e.type === "compaction" && e.summary === summary,
-      ) as CompactionEntry | undefined;
-
-      if (this._extensionRunner && savedCompactionEntry) {
-        await this._extensionRunner.emit({
-          type: "session_compact",
-          compactionEntry: savedCompactionEntry,
-          fromExtension,
-        });
-      }
-
-      return {
-        summary,
-        firstKeptEntryId,
-        tokensBefore,
-        details,
-      };
-    } finally {
-      this._compactionSlot.clear();
-      this._reconnectToAgent();
-    }
+    return this._compactionController.compact(customInstructions);
   }
 
   /**
    * Cancel in-progress compaction (manual or auto).
    */
   abortCompaction(): void {
-    this._compactionSlot.abort();
+    this._compactionController.abort();
     this._autoCompactionSlot.abort();
   }
 

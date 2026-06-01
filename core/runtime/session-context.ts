@@ -1,7 +1,8 @@
 /**
- * [WHO]: Provides ScopedModel, ModelSelectPayload, ModelControllerContext runtime controller contracts
- * [FROM]: Depends on agent-core and ai public types plus auth-storage credential type
- * [TO]: Consumed by core/runtime/model-controller.ts and implemented by AgentSession composition wiring
+ * [WHO]: Provides ScopedModel, ModelSelectPayload, ModelControllerContext, CompactionControllerContext
+ * [FROM]: Depends on agent-core and ai public types, auth-storage credential type, session entry type,
+ *         and the extension runner type
+ * [TO]: Consumed by core/runtime/model-controller.ts, compaction-controller.ts; implemented by AgentSession
  * [HERE]: core/runtime/session-context.ts - S2 seam: narrow capability contracts for runtime controllers
  *
  * Controllers depend on capability functions rather than AgentSession, Agent, SessionManager,
@@ -11,7 +12,9 @@
 
 import type { AgentLoopFrameworkInput, AgentLoopPolicyOptions, ThinkingLevel } from "@pencil-agent/agent-core";
 import type { Model } from "@pencil-agent/ai";
+import type { ExtensionRunner } from "../extensions-host/index.js";
 import type { AuthCredential } from "../platform/config/auth-storage.js";
+import type { SessionEntry } from "../session/session-manager.js";
 
 /** Scoped model entry (from --models): a model plus its preferred thinking level. */
 export interface ScopedModel {
@@ -43,4 +46,35 @@ export interface ModelControllerContext {
   setDefaultModelAndProvider(provider: string, modelId: string): void;
   setDefaultThinkingLevel(level: ThinkingLevel): void;
   emitModelSelect(payload: ModelSelectPayload): Promise<void>;
+}
+
+/** Compaction settings the pipeline reads (mirrors SettingsManager.getCompactionSettings). */
+export interface CompactionSettings {
+  enabled: boolean;
+  reserveTokens: number;
+  keepRecentTokens: number;
+}
+
+/**
+ * Narrow capability surface for CompactionController. Manual compaction must disconnect the agent,
+ * abort the active turn, rebuild messages after summarizing, and reconnect — those lifecycle
+ * effects are exposed as capabilities rather than handing over the AgentSession.
+ */
+export interface CompactionControllerContext {
+  getModel(): Model<any> | undefined;
+  getApiKey(model: Model<any>): Promise<string | undefined>;
+  getExtensionRunner(): ExtensionRunner | undefined;
+  getBranch(): SessionEntry[];
+  getEntries(): SessionEntry[];
+  getCompactionSettings(): CompactionSettings;
+  appendCompaction(summary: string, firstKeptEntryId: string, tokensBefore: number, details: unknown, fromExtension: boolean): void;
+  /** Rebuild agent messages from the (post-compaction) session context. */
+  applyCompactedMessages(): void;
+  logInfo(message: string, meta?: Record<string, unknown>): void;
+  /** Detach the agent-event subscription before compacting. */
+  disconnectFromAgent(): void;
+  /** Re-attach the agent-event subscription after compacting. */
+  reconnectToAgent(): void;
+  /** Abort the in-flight agent turn before compacting. */
+  abortAgent(): Promise<void>;
 }
