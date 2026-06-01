@@ -81,7 +81,7 @@ export interface CompactionControllerContext {
   // Auto-compaction (loop-driven):
   emitAutoCompactionStart(reason: "overflow" | "threshold"): void;
   emitAutoCompactionEnd(payload: {
-    result?: CompactionResult;
+    result: CompactionResult | undefined;
     aborted: boolean;
     willRetry: boolean;
     errorMessage?: string;
