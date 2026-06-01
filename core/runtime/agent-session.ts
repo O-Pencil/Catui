@@ -104,7 +104,6 @@ import { BashRunner } from "./bash-runner.js";
 import { AbortSlot } from "../platform/abort-slot.js";
 import { Listeners } from "../platform/listeners.js";
 import { ModelController, type ModelCycleResult } from "./model-controller.js";
-import { clampThinkingLevel } from "./thinking-levels.js";
 import { bindExtensionCore } from "./extension-core-bindings.js";
 import {
   buildSessionSlashCommands,
@@ -2652,17 +2651,11 @@ export class AgentSession {
     const defaultThinkingLevel =
       this.settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL;
 
-    if (hasThinkingEntry) {
-      // Restore thinking level if saved (setThinkingLevel clamps to model capabilities)
-      this.setThinkingLevel(sessionContext.thinkingLevel as ThinkingLevel);
-    } else {
-      const availableLevels = this.getAvailableThinkingLevels();
-      const effectiveLevel = availableLevels.includes(defaultThinkingLevel)
-        ? defaultThinkingLevel
-        : clampThinkingLevel(defaultThinkingLevel, availableLevels);
-      this.agent.setThinkingLevel(effectiveLevel);
-      this.sessionManager.appendThinkingLevelChange(effectiveLevel);
-    }
+    this._modelController.restoreThinkingLevel({
+      hasThinkingEntry,
+      sessionThinkingLevel: sessionContext.thinkingLevel as ThinkingLevel,
+      defaultThinkingLevel,
+    });
 
     this._reconnectToAgent();
     return true;

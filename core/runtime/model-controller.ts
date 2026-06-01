@@ -98,6 +98,32 @@ export class ModelController {
   }
 
   /**
+   * Restore thinking state while switching/resuming a session.
+   *
+   * When the session has an explicit thinking entry, use the normal setter so
+   * clamping and default-setting persistence stay identical to user-driven changes.
+   * When the session has no entry, seed the session history from the configured
+   * default without changing the configured default itself.
+   */
+  restoreThinkingLevel(options: {
+    hasThinkingEntry: boolean;
+    sessionThinkingLevel: ThinkingLevel;
+    defaultThinkingLevel: ThinkingLevel;
+  }): void {
+    if (options.hasThinkingEntry) {
+      this.setThinkingLevel(options.sessionThinkingLevel);
+      return;
+    }
+
+    const availableLevels = this.getAvailableThinkingLevels();
+    const effectiveLevel = availableLevels.includes(options.defaultThinkingLevel)
+      ? options.defaultThinkingLevel
+      : clampThinkingLevel(options.defaultThinkingLevel, availableLevels);
+    this.ctx.setAgentThinkingLevel(effectiveLevel);
+    this.ctx.appendThinkingLevelChange(effectiveLevel);
+  }
+
+  /**
    * Cycle to next/previous model. Uses scoped models if available, otherwise all available models.
    * @returns The new model info, or undefined if only one model available
    */
