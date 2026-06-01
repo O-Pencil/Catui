@@ -49,26 +49,17 @@ import {
   type ContextUsage,
   type ExtensionCommandContextActions,
   type ExtensionErrorListener,
-  type AgentResultEvent,
   ExtensionRunner,
   type ExtensionUIContext,
   type InputSource,
-  type MessageEndEvent,
-  type MessageStartEvent,
-  type MessageUpdateEvent,
   type SessionBeforeCompactResult,
   type SessionBeforeForkResult,
   type SessionBeforeSwitchResult,
   type SessionBeforeTreeResult,
   type ShutdownHandler,
   type ToolDefinition,
-  type ToolExecutionEndEvent,
-  type ToolExecutionStartEvent,
-  type ToolExecutionUpdateEvent,
   type ToolInfo,
   type TreePreparation,
-  type TurnEndEvent,
-  type TurnStartEvent,
 } from "../extensions-host/index.js";
 import type { CustomMessage } from "../messages.js";
 import type { ModelRegistry } from "../model-registry.js";
@@ -99,6 +90,7 @@ import {
   getActiveBaseToolNames,
 } from "./prompt-assembly.js";
 import { exportSessionHtml, getLastAssistantText } from "./export-bridge.js";
+import { ExtensionEventBridge } from "./event-bridge.js";
 import { bindExtensionCore } from "./extension-core-bindings.js";
 import {
   buildSessionSlashCommands,
@@ -359,7 +351,7 @@ export class AgentSession {
   // Extension system
   private _extensionRunner: ExtensionRunner | undefined = undefined;
   private _slashCommandExecutor: SlashCommandExecutor | undefined = undefined;
-  private _turnIndex = 0;
+  private readonly _extensionEventBridge: ExtensionEventBridge;
 
   private _resourceLoader: ResourceLoader;
   /** Injected theme for HTML-export custom-tool rendering (U2: no modes import). */
@@ -434,6 +426,9 @@ export class AgentSession {
     this._extensionRunnerRef = config.extensionRunnerRef;
     this._soulManager = config.soulManager;
     this._baseToolsOverride = config.baseToolsOverride;
+    this._extensionEventBridge = new ExtensionEventBridge({
+      getExtensionRunner: () => this._extensionRunner,
+    });
     this._modelController = new ModelController({
       getModel: () => this.model,
       getThinkingLevel: () => this.thinkingLevel,
@@ -611,12 +606,12 @@ export class AgentSession {
     if (event.type === "message_update") {
       // Streaming updates: emit to UI immediately, don't await extensions
       this._emit(event);
-      this._emitExtensionEvent(event).catch((err) => {
+      this._extensionEventBridge.emitExtensionEvent(event).catch((err) => {
         this._logger.error("[extension] message_update event error", { error: err });
       });
     } else {
       // All other events: extensions run concurrently with UI notification
-      const extensionPromise = this._emitExtensionEvent(event);
+      const extensionPromise = this._extensionEventBridge.emitExtensionEvent(event);
       this._emit(event);
       await extensionPromise;
     }
@@ -726,80 +721,6 @@ export class AgentSession {
       }
     }
     return undefined;
-  }
-
-  /** Emit extension events based on agent events */
-  private async _emitExtensionEvent(event: AgentEvent): Promise<void> {
-    if (!this._extensionRunner) return;
-
-    if (event.type === "agent_start") {
-      this._turnIndex = 0;
-      await this._extensionRunner.emit({ type: "agent_start" });
-    } else if (event.type === "agent_result") {
-      const extensionEvent: AgentResultEvent = { ...event };
-      await this._extensionRunner.emit(extensionEvent);
-    } else if (event.type === "turn_start") {
-      const extensionEvent: TurnStartEvent = {
-        type: "turn_start",
-        turnIndex: this._turnIndex,
-        timestamp: Date.now(),
-      };
-      await this._extensionRunner.emit(extensionEvent);
-    } else if (event.type === "turn_end") {
-      const extensionEvent: TurnEndEvent = {
-        type: "turn_end",
-        turnIndex: this._turnIndex,
-        message: event.message,
-        toolResults: event.toolResults,
-      };
-      await this._extensionRunner.emit(extensionEvent);
-      this._turnIndex++;
-    } else if (event.type === "message_start") {
-      const extensionEvent: MessageStartEvent = {
-        type: "message_start",
-        message: event.message,
-      };
-      await this._extensionRunner.emit(extensionEvent);
-    } else if (event.type === "message_update") {
-      const extensionEvent: MessageUpdateEvent = {
-        type: "message_update",
-        message: event.message,
-        assistantMessageEvent: event.assistantMessageEvent,
-      };
-      await this._extensionRunner.emit(extensionEvent);
-    } else if (event.type === "message_end") {
-      const extensionEvent: MessageEndEvent = {
-        type: "message_end",
-        message: event.message,
-      };
-      await this._extensionRunner.emit(extensionEvent);
-    } else if (event.type === "tool_execution_start") {
-      const extensionEvent: ToolExecutionStartEvent = {
-        type: "tool_execution_start",
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        args: event.args,
-      };
-      await this._extensionRunner.emit(extensionEvent);
-    } else if (event.type === "tool_execution_update") {
-      const extensionEvent: ToolExecutionUpdateEvent = {
-        type: "tool_execution_update",
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        args: event.args,
-        partialResult: event.partialResult,
-      };
-      await this._extensionRunner.emit(extensionEvent);
-    } else if (event.type === "tool_execution_end") {
-      const extensionEvent: ToolExecutionEndEvent = {
-        type: "tool_execution_end",
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        result: event.result,
-        isError: event.isError,
-      };
-      await this._extensionRunner.emit(extensionEvent);
-    }
   }
 
   /**

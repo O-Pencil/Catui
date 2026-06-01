@@ -12,7 +12,7 @@ files_secondary:
   - modes/rpc/rpc-mode.ts
   - modes/acp/acp-mode.ts
   - modes/print-mode.ts
-status: proposed
+status: selected
 ```
 
 ## Problem
@@ -79,6 +79,10 @@ Accept a P4.7 implementation only if:
 - public `AgentSessionEvent` remains exported from `agent-session.ts`
 - `AgentSession` remains the only owner of post-agent-end ordering
 - behavior remains reachable through the same `session.subscribe()` API
+
+## Decision
+
+2026-06-01: introduce `ExtensionEventBridge` as a narrow internal runtime collaborator. It owns only extension-facing event mapping and extension turn indexing. `AgentSession` keeps the public event facade, listener fanout, session persistence, retry/compaction ordering after `agent_end`, Soul post-turn recording, and disconnect/reconnect lifecycle.
 
 ## References
 

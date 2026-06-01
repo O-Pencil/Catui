@@ -41,7 +41,7 @@ The context seam comes first because every controller extraction depends on it. 
 | AS04 | selected | P4.x-a/b landed: `CompactionController` owns manual + auto compaction flows, abort slots, and compaction lifecycle capabilities; `AgentSession` keeps loop continuation and facade wiring. Boundary: branch-summary remains with session-tree flow |
 | AS05 | selected | `ToolRuntimeController` owns tool source merge, wrapping, active-name policy, and orchestrator registry updates |
 | AS06 | selected | modes, SDK, sub-agent runtime, and package barrels continue through `AgentSession` / `createAgentSession`; controller collaborators are not exported through public barrels |
-| AS07 | proposed | event bridge may own extension event mapping/fanout only; `AgentSession` must retain public subscribe contract, persistence ordering, retry/compaction ordering, and Soul post-turn recording |
+| AS07 | selected | `ExtensionEventBridge` owns extension event mapping and turn indexing only; `AgentSession` retains public subscribe, persistence ordering, retry/compaction ordering, and Soul post-turn recording |
 
 ## Validation Checklist
 
