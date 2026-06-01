@@ -47,11 +47,7 @@ export class CycleModelError extends Error {
     this.name = "CycleModelError";
   }
 }
-import {
-  type BashResult,
-  executeBash as executeBashCommand,
-  executeBashWithOperations,
-} from "../platform/exec/bash-executor.js";
+import type { BashResult } from "../platform/exec/bash-executor.js";
 import {
   type CompactionResult,
   calculateContextTokens,
@@ -99,7 +95,7 @@ import {
   wrapRegisteredTools,
   wrapToolsWithExtensions,
 } from "../extensions-host/index.js";
-import type { BashExecutionMessage, CustomMessage } from "../messages.js";
+import type { CustomMessage } from "../messages.js";
 import type { ModelRegistry } from "../model-registry.js";
 import {
   expandPromptTemplate,
@@ -118,6 +114,7 @@ import { toSoulContext, extractSessionContext } from "../soul-integration.js";
 import { buildSystemPrompt } from "../prompt/system-prompt.js";
 import type { BashOperations } from "../tools/bash.js";
 import { createDefaultRuntimeTools } from "./default-tools.js";
+import { BashRunner } from "./bash-runner.js";
 import { bindExtensionCore } from "./extension-core-bindings.js";
 import {
   buildSessionSlashCommands,
@@ -408,9 +405,8 @@ export class AgentSession {
   // Structured logger (P2 - observability)
   private _logger!: AgentLogger;
 
-  // Bash execution state
-  private _bashAbortController: AbortController | undefined = undefined;
-  private _pendingBashMessages: BashExecutionMessage[] = [];
+  // Bash execution (extracted to BashRunner — P4.1)
+  private _bashRunner: BashRunner;
 
   // Extension system
   private _extensionRunner: ExtensionRunner | undefined = undefined;
@@ -460,6 +456,13 @@ export class AgentSession {
     this._scopedModels = config.scopedModels ?? [];
     this._resourceLoader = config.resourceLoader;
     this._theme = config.theme;
+    this._bashRunner = new BashRunner({
+      getCwd: () => this._cwd,
+      getShellCommandPrefix: () => this.settingsManager.getShellCommandPrefix(),
+      appendToAgent: (message) => this.agent.appendMessage(message),
+      appendToSession: (message) => this.sessionManager.appendMessage(message),
+      isStreaming: () => this.isStreaming,
+    });
     this._staticCustomTools = config.customTools ?? [];
     this._mcpToolsFactory = config.mcpToolsFactory;
     this._soulManagerFactory = config.soulManagerFactory;
@@ -1187,7 +1190,7 @@ export class AgentSession {
     }
 
     // Flush any pending bash messages before the new prompt
-    this._flushPendingBashMessages();
+    this._bashRunner.flushPending();
 
     // Validate model
     if (!this.model) {
@@ -2861,34 +2864,7 @@ export class AgentSession {
     onChunk?: (chunk: string) => void,
     options?: { excludeFromContext?: boolean; operations?: BashOperations },
   ): Promise<BashResult> {
-    this._bashAbortController = new AbortController();
-
-    // Apply command prefix if configured (e.g., "shopt -s expand_aliases" for alias support)
-    const prefix = this.settingsManager.getShellCommandPrefix();
-    const resolvedCommand = prefix ? `${prefix}\n${command}` : command;
-
-    try {
-      const result = options?.operations
-        ? await executeBashWithOperations(
-            resolvedCommand,
-            this._cwd,
-            options.operations,
-            {
-              onChunk,
-              signal: this._bashAbortController.signal,
-            },
-          )
-        : await executeBashCommand(resolvedCommand, {
-            onChunk,
-            signal: this._bashAbortController.signal,
-            cwd: this._cwd,
-          });
-
-      this.recordBashResult(command, result, options);
-      return result;
-    } finally {
-      this._bashAbortController = undefined;
-    }
+    return this._bashRunner.execute(command, onChunk, options);
   }
 
   /**
@@ -2900,64 +2876,24 @@ export class AgentSession {
     result: BashResult,
     options?: { excludeFromContext?: boolean },
   ): void {
-    const bashMessage: BashExecutionMessage = {
-      role: "bashExecution",
-      command,
-      output: result.output,
-      exitCode: result.exitCode,
-      cancelled: result.cancelled,
-      truncated: result.truncated,
-      fullOutputPath: result.fullOutputPath,
-      timestamp: Date.now(),
-      excludeFromContext: options?.excludeFromContext,
-    };
-
-    // If agent is streaming, defer adding to avoid breaking tool_use/tool_result ordering
-    if (this.isStreaming) {
-      // Queue for later - will be flushed on agent_end
-      this._pendingBashMessages.push(bashMessage);
-    } else {
-      // Add to agent state immediately
-      this.agent.appendMessage(bashMessage);
-
-      // Save to session
-      this.sessionManager.appendMessage(bashMessage);
-    }
+    this._bashRunner.recordResult(command, result, options);
   }
 
   /**
    * Cancel running bash command.
    */
   abortBash(): void {
-    this._bashAbortController?.abort();
+    this._bashRunner.abort();
   }
 
   /** Whether a bash command is currently running */
   get isBashRunning(): boolean {
-    return this._bashAbortController !== undefined;
+    return this._bashRunner.isRunning;
   }
 
   /** Whether there are pending bash messages waiting to be flushed */
   get hasPendingBashMessages(): boolean {
-    return this._pendingBashMessages.length > 0;
-  }
-
-  /**
-   * Flush pending bash messages to agent state and session.
-   * Called after agent turn completes to maintain proper message ordering.
-   */
-  private _flushPendingBashMessages(): void {
-    if (this._pendingBashMessages.length === 0) return;
-
-    for (const bashMessage of this._pendingBashMessages) {
-      // Add to agent state
-      this.agent.appendMessage(bashMessage);
-
-      // Save to session
-      this.sessionManager.appendMessage(bashMessage);
-    }
-
-    this._pendingBashMessages = [];
+    return this._bashRunner.hasPending;
   }
 
   // =========================================================================

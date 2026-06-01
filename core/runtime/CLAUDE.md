@@ -9,6 +9,7 @@ agent-session.ts: AgentSession class, central session lifecycle manager, wraps A
 turn-context.ts: Generic per-turn hint bus on globalThis, TURN_CONTEXT_GLOBAL_KEY, TurnContext interface (currently structuralAnchor), setTurnContext/getTurnContext/resetTurnContext; producer-side API for SAL→mem-core decoupling (mem-core has read-only mirror at packages/mem-core/src/turn-context.ts using same global key)
 pencil-agent.ts: PencilAgent helper class wrapping Agent core
 retry-coordinator.ts: Retry coordination for transient failures
+bash-runner.ts: BashRunner class — bash execution + pending-message queue extracted from AgentSession (P4.1); deps injected as closures (getCwd/getShellCommandPrefix/appendToAgent/appendToSession/isStreaming), no Agent/SessionManager import
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
 
