@@ -115,6 +115,7 @@ import type { BashOperations } from "../tools/bash.js";
 import { createDefaultRuntimeTools } from "./default-tools.js";
 import { BashRunner } from "./bash-runner.js";
 import { AbortSlot } from "../platform/abort-slot.js";
+import { nextCyclicIndex, pickThinkingLevelOnModelChange } from "./model-cycle.js";
 import {
   availableThinkingLevels,
   clampThinkingLevel,
@@ -1642,6 +1643,25 @@ export class AgentSession {
   }
 
   /**
+   * Apply a model change: persist to session + settings, set the thinking level
+   * (explicit when given, otherwise auto-picked from capabilities), and emit
+   * model_select. Shared by setModel and the cycle paths.
+   */
+  private async _applyModelChange(
+    model: Model<any>,
+    source: "set" | "cycle" | "restore",
+    explicitLevel?: ThinkingLevel,
+  ): Promise<void> {
+    const previousModel = this.model;
+    this.agent.setModel(model);
+    this.sessionManager.appendModelChange(model.provider, model.id);
+    this.settingsManager.setDefaultModelAndProvider(model.provider, model.id);
+    const newLevel = explicitLevel ?? pickThinkingLevelOnModelChange(model, this.thinkingLevel);
+    this.setThinkingLevel(newLevel);
+    await this._emitModelSelect(model, previousModel, source);
+  }
+
+  /**
    * Set model directly.
    * Validates API key, saves to session and settings.
    * @throws Error if no API key available for the model
@@ -1651,30 +1671,7 @@ export class AgentSession {
     if (!apiKey) {
       throw new Error(`No API key for ${model.provider}/${model.id}`);
     }
-
-    const previousModel = this.model;
-    this.agent.setModel(model);
-    this.sessionManager.appendModelChange(model.provider, model.id);
-    this.settingsManager.setDefaultModelAndProvider(model.provider, model.id);
-
-    // Auto-select thinking level based on model capabilities
-    const currentLevel = this.thinkingLevel;
-    let newLevel: ThinkingLevel;
-
-    if (!model.reasoning) {
-      // Model doesn't support thinking, force off
-      newLevel = "off";
-    } else if (currentLevel === "off") {
-      // Model supports thinking but current level is off, default to medium
-      newLevel = "medium";
-    } else {
-      // Keep current level but clamp to new model's capabilities
-      newLevel = currentLevel;
-    }
-
-    this.setThinkingLevel(newLevel);
-
-    await this._emitModelSelect(model, previousModel, "set");
+    await this._applyModelChange(model, "set");
   }
 
   /**
@@ -1729,25 +1726,10 @@ export class AgentSession {
     );
 
     if (currentIndex === -1) currentIndex = 0;
-    const len = scopedModels.length;
-    const nextIndex =
-      direction === "forward"
-        ? (currentIndex + 1) % len
-        : (currentIndex - 1 + len) % len;
+    const nextIndex = nextCyclicIndex(currentIndex, scopedModels.length, direction);
     const next = scopedModels[nextIndex];
 
-    // Apply model
-    this.agent.setModel(next.model);
-    this.sessionManager.appendModelChange(next.model.provider, next.model.id);
-    this.settingsManager.setDefaultModelAndProvider(
-      next.model.provider,
-      next.model.id,
-    );
-
-    // Apply thinking level (setThinkingLevel clamps to model capabilities)
-    this.setThinkingLevel(next.thinkingLevel);
-
-    await this._emitModelSelect(next.model, currentModel, "cycle");
+    await this._applyModelChange(next.model, "cycle", next.thinkingLevel);
 
     return {
       model: next.model,
@@ -1781,10 +1763,7 @@ export class AgentSession {
 
     while (attempts < len - 1) {
       attempts++;
-      nextIndex =
-        direction === "forward"
-          ? (nextIndex + 1) % len
-          : (nextIndex - 1 + len) % len;
+      nextIndex = nextCyclicIndex(nextIndex, len, direction);
 
       const candidate = availableModels[nextIndex];
       if (!candidate) continue;
@@ -1816,28 +1795,7 @@ export class AgentSession {
       );
     }
 
-    this.agent.setModel(nextModel);
-    this.sessionManager.appendModelChange(nextModel.provider, nextModel.id);
-    this.settingsManager.setDefaultModelAndProvider(
-      nextModel.provider,
-      nextModel.id,
-    );
-
-    // Auto-select thinking level based on model capabilities
-    const currentLevel = this.thinkingLevel;
-    let newLevel: ThinkingLevel;
-
-    if (!nextModel.reasoning) {
-      newLevel = "off";
-    } else if (currentLevel === "off") {
-      newLevel = "medium";
-    } else {
-      newLevel = currentLevel;
-    }
-
-    this.setThinkingLevel(newLevel);
-
-    await this._emitModelSelect(nextModel, currentModel, "cycle");
+    await this._applyModelChange(nextModel, "cycle");
 
     return {
       model: nextModel,

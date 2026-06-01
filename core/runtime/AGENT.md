@@ -14,6 +14,7 @@ pencil-agent.ts: PencilAgent helper class wrapping Agent core
 retry-coordinator.ts: Retry coordination for transient failures, including post-agent_continue retry and in-loop retry preparation
 bash-runner.ts: BashRunner class — bash execution + pending-message queue extracted from AgentSession (P4.1); deps injected as closures (getCwd/getShellCommandPrefix/appendToAgent/appendToSession/isStreaming), no Agent/SessionManager import
 thinking-levels.ts: pure thinking-level logic extracted from AgentSession (P4.2) — THINKING_LEVELS(_WITH_XHIGH), modelSupportsThinking/Xhigh, availableThinkingLevels, clampThinkingLevel, nextThinkingLevel; no session state, reusable by rpc/print
+model-cycle.ts: pure model-cycle decisions extracted from AgentSession (P4.2) — pickThinkingLevelOnModelChange, nextCyclicIndex; the side-effecting apply sequence stays in session via _applyModelChange
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
 
