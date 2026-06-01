@@ -15,7 +15,7 @@ status: selected
 
 ## Problem
 
-`AgentSession` already has a `CompactionCoordinator`, but a coordinator that is wired with placeholder callbacks does not reduce complexity. It can make the design look decomposed while the real behavior still lives in `AgentSession`.
+`AgentSession` already had a `CompactionCoordinator`, but a coordinator that is wired with placeholder callbacks does not reduce complexity. It can make the design look decomposed while the real behavior still lives in `AgentSession`.
 
 This is dangerous because it satisfies naming but not depth.
 
@@ -38,7 +38,7 @@ Do not mark P4 compaction as complete while coordinator wiring is placeholder.
 
 ## Decision
 
-2026-06-01: remove the shallow `CompactionCoordinator` placeholder. It had no real data ownership, no external consumer, and no independent behavior. A future compaction extraction must introduce a real pipeline/controller only when it owns thresholds, abort state, branch-summary coordination, and extension hook boundaries.
+2026-06-01: remove the shallow `CompactionCoordinator` placeholder. It had no real data ownership, no external consumer, and no independent behavior. P4.x-a/b now move the real compaction behavior into `CompactionController`; branch-summary coordination still remains outside that controller by design.
 
 ## Benefits
 
@@ -53,7 +53,7 @@ AgentSession owns compaction
 CompactionCoordinator exists but receives no real data
 
 GOOD
-AgentSession facade -> CompactionController/Coordinator -> compaction pipeline
+AgentSession facade -> CompactionController -> compaction pipeline
 ```
 
 ## References

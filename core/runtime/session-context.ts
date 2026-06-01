@@ -10,8 +10,9 @@
  * into a service locator while preserving one-directional imports.
  */
 
-import type { AgentLoopFrameworkInput, AgentLoopPolicyOptions, ThinkingLevel } from "@pencil-agent/agent-core";
+import type { AgentLoopFrameworkInput, AgentLoopPolicyOptions, AgentMessage, ThinkingLevel } from "@pencil-agent/agent-core";
 import type { Model } from "@pencil-agent/ai";
+import type { CompactionResult } from "../session/compaction/index.js";
 import type { ExtensionRunner } from "../extensions-host/index.js";
 import type { AuthCredential } from "../platform/config/auth-storage.js";
 import type { SessionEntry } from "../session/session-manager.js";
@@ -68,13 +69,23 @@ export interface CompactionControllerContext {
   getEntries(): SessionEntry[];
   getCompactionSettings(): CompactionSettings;
   appendCompaction(summary: string, firstKeptEntryId: string, tokensBefore: number, details: unknown, fromExtension: boolean): void;
-  /** Rebuild agent messages from the (post-compaction) session context. */
-  applyCompactedMessages(): void;
+  /** Rebuild agent messages from the (post-compaction) session context; returns the new messages. */
+  applyCompactedMessages(): AgentMessage[];
   logInfo(message: string, meta?: Record<string, unknown>): void;
-  /** Detach the agent-event subscription before compacting. */
+  /** Detach the agent-event subscription before compacting (manual only). */
   disconnectFromAgent(): void;
-  /** Re-attach the agent-event subscription after compacting. */
+  /** Re-attach the agent-event subscription after compacting (manual only). */
   reconnectToAgent(): void;
-  /** Abort the in-flight agent turn before compacting. */
+  /** Abort the in-flight agent turn before compacting (manual only). */
   abortAgent(): Promise<void>;
+  // Auto-compaction (loop-driven):
+  emitAutoCompactionStart(reason: "overflow" | "threshold"): void;
+  emitAutoCompactionEnd(payload: {
+    result?: CompactionResult;
+    aborted: boolean;
+    willRetry: boolean;
+    errorMessage?: string;
+  }): void;
+  getAutoCompactionEnabled(): boolean;
+  setAutoCompactionEnabled(enabled: boolean): void;
 }
