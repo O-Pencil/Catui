@@ -91,7 +91,6 @@ import { AgentDirContext } from "../agent-dir/agent-dir-context.js";
 
 import { t } from "../platform/i18n/index.js";
 import { toSoulContext, extractSessionContext } from "../soul-integration.js";
-import { buildSystemPrompt } from "../prompt/system-prompt.js";
 import type { BashOperations } from "../tools/bash.js";
 import { createDefaultRuntimeTools } from "./default-tools.js";
 import { BashRunner } from "./bash-runner.js";
@@ -100,6 +99,10 @@ import { Listeners } from "../platform/listeners.js";
 import { ModelController, type ModelCycleResult } from "./model-controller.js";
 import { CompactionController } from "./compaction-controller.js";
 import { ToolRuntimeController } from "./tool-runtime-controller.js";
+import {
+  buildRuntimeSystemPrompt,
+  getActiveBaseToolNames,
+} from "./prompt-assembly.js";
 import { bindExtensionCore } from "./extension-core-bindings.js";
 import {
   buildSessionSlashCommands,
@@ -981,36 +984,19 @@ export class AgentSession {
     toolNames: string[],
     options?: { soulInjection?: string },
   ): string {
-    const validToolNames = toolNames.filter((name) =>
-      this._baseToolRegistry.has(name),
-    );
-    const loaderSystemPrompt = this._resourceLoader.getSystemPrompt();
-    const loaderAppendSystemPrompt =
-      this._resourceLoader.getAppendSystemPrompt();
-    const appendSystemPrompt =
-      loaderAppendSystemPrompt.length > 0
-        ? loaderAppendSystemPrompt.join("\n\n")
-        : undefined;
-    const loadedSkills = this._resourceLoader.getSkills().skills;
-    const loadedContextFiles =
-      this._resourceLoader.getAgentsFiles().agentsFiles;
-
-    const soulInjection = options?.soulInjection ?? this._lastSoulInjection;
-
-    return buildSystemPrompt({
+    return buildRuntimeSystemPrompt({
       cwd: this._cwd,
-      skills: loadedSkills,
-      contextFiles: loadedContextFiles,
-      customPrompt: loaderSystemPrompt,
-      appendSystemPrompt,
-      selectedTools: validToolNames,
-      soulInjection,
+      resourceLoader: this._resourceLoader,
+      toolNames,
+      baseToolRegistry: this._baseToolRegistry,
+      soulInjection: options?.soulInjection ?? this._lastSoulInjection,
     });
   }
 
   private _getActiveBaseToolNames(): string[] {
-    return this.getActiveToolNames().filter((name) =>
-      this._baseToolRegistry.has(name),
+    return getActiveBaseToolNames(
+      this.getActiveToolNames(),
+      this._baseToolRegistry,
     );
   }
 
