@@ -47,9 +47,9 @@ The context seam comes first because every controller extraction depends on it. 
 | AS05 | selected | `ToolRuntimeController` owns tool source merge, wrapping, active-name policy, and orchestrator registry updates |
 | AS06 | selected | modes, SDK, sub-agent runtime, and package barrels continue through `AgentSession` / `createAgentSession`; controller collaborators are not exported through public barrels |
 | AS07 | selected | `ExtensionEventBridge` owns extension event mapping and turn indexing only; `AgentSession` retains public subscribe, persistence ordering, retry/compaction ordering, and Soul post-turn recording |
-| AS08 | proposed | lifecycle extraction should start with `newSession()` / `switchSession()` choreography only; reload, tree navigation, branch summary, MCP/Soul refresh, and tool rebuild policy need separate ownership decisions |
+| AS08 | selected | lifecycle extraction owns session identity-change choreography only: `newSession()`, `switchSession()`, and `fork()`; reload, tree navigation, branch summary, MCP/Soul refresh, and tool rebuild policy stay out |
 | AS10 | landed | `navigateTree()` (~206 lines, largest remaining method) owns real state (`_branchSummarySlot`) + behavior (tree positioning, branch summary, extension override) → extract `SessionTreeController` (incl. `abortBranchSummary` + the last abort slot). Next slice |
-| AS11 | grouped with AS08 | `fork()` is a session-identity change (new file), same shape as new/switch — implement under the lifecycle slice, not the tree controller |
+| AS11 | selected via AS08 | `fork()` is a session-identity change (new file), same shape as new/switch — implement under the lifecycle slice, not the tree controller |
 | AS09 | deferred | `reload()` is a runtime-rebuild + sequencing problem; only extract if paired with `_buildRuntime` as a `RuntimeRebuildController`. Lower priority than AS10 |
 | AS12 | rejected | `abort()`/`dispose()`/mode shutdown are thin sequencers over already-owned collaborators (RetryCoordinator/Agent/ExtensionRunner/Listeners); a teardown controller would own no state → RS-5 placeholder. Keep on `AgentSession` |
 

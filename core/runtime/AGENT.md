@@ -18,6 +18,7 @@ session-context.ts: ModelControllerContext, ModelSelectPayload, and ScopedModel 
 model-controller.ts: ModelController, CycleModelError, ModelCycleResult, owns model set/cycle/restore and thinking-level mutations formerly embedded in AgentSession
 compaction-controller.ts: CompactionController — owns manual + auto compaction flows and their abort slots (AS04); reads session via narrow CompactionControllerContext (lifecycle disconnect/reconnect/abort as capabilities); AgentSession remains the facade and loop continuation host
 session-tree-controller.ts: SessionTreeController — owns navigateTree() + branch summarization + the branch-summary abort slot (AS10); reads session via narrow SessionTreeControllerContext; after this slice AgentSession holds no abort slots
+session-lifecycle-controller.ts: SessionLifecycleController — owns new/switch/fork session identity-change choreography (AS08/AS11); reads session through SessionLifecycleControllerContext; reload/tree/teardown remain separate owners
 tool-runtime-controller.ts: ToolRuntimeController, ToolRuntimeBuildOptions, ToolRuntimeBuildResult, owns runtime tool source merge, extension wrapping, active tool resolution, and ToolOrchestrator registry updates
 prompt-assembly.ts: buildRuntimeSystemPrompt(), getActiveBaseToolNames(), owns runtime prompt resource assembly and base-tool filtering; Soul injection state remains in AgentSession
 export-bridge.ts: exportSessionHtml(), getLastAssistantText(), owns HTML export wiring and last assistant text extraction; Theme remains injected through AgentSessionConfig

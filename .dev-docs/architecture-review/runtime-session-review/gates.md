@@ -33,7 +33,7 @@ applies_to:
 | tool activation/wrapping/refresh | future `ToolRuntimeController` + `ToolOrchestrator` | no ad hoc tool list assembly in `AgentSession` |
 | compaction state | future real compaction controller/coordinator | no placeholder coordinator claimed as done |
 | event facade and turn lifecycle | `AgentSession`; future event bridge may map/fan out extension events only | no bridge owns persistence/retry/compaction/Soul ordering without a lifecycle finding |
-| session switch/new flow | future narrow lifecycle controller, if accepted | model/thinking restore remains model-owned; reload/tree/fork do not move unless separately accepted |
+| session identity-change flow | narrow `SessionLifecycleController` (`newSession`/`switchSession`/`fork`) | model/thinking restore remains model-owned; reload/tree/teardown do not move |
 
 ## Review Questions
 

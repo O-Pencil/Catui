@@ -47,7 +47,11 @@ This mirrors `../workflow.md`, but with smaller scope and no HTML report require
 | [AS05](./findings/AS05-tool-runtime-controller-boundary.md) | selected | Protect S1: `ToolOrchestrator` as the only tool dispatch point |
 | [AS06](./findings/AS06-agent-session-public-facade.md) | selected | Keep `AgentSession` as the stable facade while internals split |
 | [AS07](./findings/AS07-event-bridge-boundary.md) | selected | Keep event bridge narrow and protect turn lifecycle ownership |
-| [AS08](./findings/AS08-session-lifecycle-boundary.md) | proposed | Prevent session lifecycle extraction from becoming a second composition root |
+| [AS08](./findings/AS08-session-lifecycle-boundary.md) | selected | Keep session lifecycle extraction limited to identity-change choreography |
+| [AS09](./findings/AS09-reload-runtime-boundary.md) | deferred | Treat reload as runtime rebuild work, not a thin lifecycle controller |
+| [AS10](./findings/AS10-tree-navigation-boundary.md) | landed | Keep tree navigation and branch summary under a dedicated tree controller |
+| [AS11](./findings/AS11-session-fork-boundary.md) | selected via AS08 | Group fork with session identity-change lifecycle, not tree navigation |
+| [AS12](./findings/AS12-teardown-abort-boundary.md) | rejected | Keep abort/dispose teardown on `AgentSession` instead of creating a placeholder controller |
 
 ## Non-Goals
 

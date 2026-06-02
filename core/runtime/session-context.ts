@@ -1,8 +1,8 @@
 /**
- * [WHO]: Provides ScopedModel, ModelSelectPayload, ModelControllerContext, CompactionControllerContext
+ * [WHO]: Provides ScopedModel, ModelSelectPayload, and runtime controller context contracts
  * [FROM]: Depends on agent-core and ai public types, auth-storage credential type, session entry type,
  *         and the extension runner type
- * [TO]: Consumed by core/runtime/model-controller.ts, compaction-controller.ts; implemented by AgentSession
+ * [TO]: Consumed by core/runtime/*-controller.ts; implemented by AgentSession through capability adapters
  * [HERE]: core/runtime/session-context.ts - S2 seam: narrow capability contracts for runtime controllers
  *
  * Controllers depend on capability functions rather than AgentSession, Agent, SessionManager,
@@ -15,7 +15,7 @@ import type { Model } from "@pencil-agent/ai";
 import type { CompactionResult } from "../session/compaction/index.js";
 import type { ExtensionRunner } from "../extensions-host/index.js";
 import type { AuthCredential } from "../platform/config/auth-storage.js";
-import type { SessionEntry } from "../session/session-manager.js";
+import type { SessionContext, SessionEntry, SessionManager } from "../session/session-manager.js";
 
 /** Scoped model entry (from --models): a model plus its preferred thinking level. */
 export interface ScopedModel {
@@ -112,5 +112,48 @@ export interface SessionTreeControllerContext {
   branch(newLeafId: string): void;
   /** Rebuild agent messages from the (post-navigation) session context. */
   rebuildAgentMessages(): void;
+  extractUserMessageText(content: string | Array<{ type: string; text?: string }>): string;
+}
+
+/** Inputs for restoring thinking level when resuming a session (mirrors ModelController). */
+export interface ThinkingRestore {
+  hasThinkingEntry: boolean;
+  sessionThinkingLevel: ThinkingLevel;
+  defaultThinkingLevel: ThinkingLevel;
+}
+
+/**
+ * Narrow capability surface for SessionLifecycleController (new / switch / fork — identity-change
+ * choreography). The agent subscription teardown/reset, pending-queue clearing, and model/thinking
+ * restore are exposed as capabilities; restore is delegated to ModelController by the host adapter.
+ */
+export interface SessionLifecycleControllerContext {
+  getSessionFile(): string | undefined;
+  getExtensionRunner(): ExtensionRunner | undefined;
+  disconnectFromAgent(): void;
+  reconnectToAgent(): void;
+  abortAgent(): Promise<void>;
+  resetAgent(): void;
+  /** agent.sessionId = sessionManager.getSessionId() */
+  syncAgentSessionId(): void;
+  /** Clear steering / follow-up / pending-next-turn queues (session-owned). */
+  clearPendingQueues(): void;
+  /** Clear only the next-turn queue when forking; steering/follow-up queues are not part of fork behavior. */
+  clearPendingNextTurnMessages(): void;
+  sessionNewSession(parentSession: string | undefined): void;
+  sessionSetFile(path: string): void;
+  sessionCreateBranchedSession(parentId: string): void;
+  getEntry(entryId: string): SessionEntry | undefined;
+  buildSessionContext(): SessionContext;
+  replaceAgentMessages(messages: SessionContext["messages"]): void;
+  appendThinkingLevelChange(level: ThinkingLevel): void;
+  getThinkingLevel(): ThinkingLevel;
+  getBranch(): SessionEntry[];
+  /** Default thinking level with the built-in fallback already applied. */
+  getDefaultThinkingLevel(): ThinkingLevel;
+  getAvailableModels(): Model<any>[];
+  restoreModel(model: Model<any>): Promise<void>;
+  restoreThinkingLevel(opts: ThinkingRestore): void;
+  runSetup(setup: (sessionManager: SessionManager) => Promise<void>): Promise<void>;
   extractUserMessageText(content: string | Array<{ type: string; text?: string }>): string;
 }

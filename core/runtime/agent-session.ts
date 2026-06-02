@@ -52,8 +52,6 @@ import {
   type ExtensionUIContext,
   type InputSource,
   type SessionBeforeCompactResult,
-  type SessionBeforeForkResult,
-  type SessionBeforeSwitchResult,
   type ShutdownHandler,
   type ToolDefinition,
   type ToolInfo,
@@ -80,6 +78,7 @@ import { BashRunner } from "./bash-runner.js";
 import { Listeners } from "../platform/listeners.js";
 import { ModelController, type ModelCycleResult } from "./model-controller.js";
 import { CompactionController } from "./compaction-controller.js";
+import { SessionLifecycleController } from "./session-lifecycle-controller.js";
 import { SessionTreeController } from "./session-tree-controller.js";
 import { ToolRuntimeController } from "./tool-runtime-controller.js";
 import {
@@ -378,6 +377,7 @@ export class AgentSession {
   private readonly _modelController: ModelController;
   private readonly _compactionController: CompactionController;
   private readonly _sessionTreeController: SessionTreeController;
+  private readonly _lifecycleController: SessionLifecycleController;
   private readonly _toolOrchestrator: ToolOrchestrator;
   private readonly _toolRuntimeController: ToolRuntimeController;
 
@@ -492,6 +492,41 @@ export class AgentSession {
         const sessionContext = this.sessionManager.buildSessionContext();
         this.agent.replaceMessages(sessionContext.messages);
       },
+      extractUserMessageText: (content) => this._extractUserMessageText(content),
+    });
+    this._lifecycleController = new SessionLifecycleController({
+      getSessionFile: () => this.sessionManager.getSessionFile(),
+      getExtensionRunner: () => this._extensionRunner,
+      disconnectFromAgent: () => this._disconnectFromAgent(),
+      reconnectToAgent: () => this._reconnectToAgent(),
+      abortAgent: () => this.abort(),
+      resetAgent: () => this.agent.reset(),
+      syncAgentSessionId: () => {
+        this.agent.sessionId = this.sessionManager.getSessionId();
+      },
+      clearPendingQueues: () => {
+        this._steeringMessages = [];
+        this._followUpMessages = [];
+        this._pendingNextTurnMessages = [];
+      },
+      clearPendingNextTurnMessages: () => {
+        this._pendingNextTurnMessages = [];
+      },
+      sessionNewSession: (parentSession) => this.sessionManager.newSession({ parentSession }),
+      sessionSetFile: (path) => this.sessionManager.setSessionFile(path),
+      sessionCreateBranchedSession: (parentId) => this.sessionManager.createBranchedSession(parentId),
+      getEntry: (entryId) => this.sessionManager.getEntry(entryId),
+      buildSessionContext: () => this.sessionManager.buildSessionContext(),
+      replaceAgentMessages: (messages) => this.agent.replaceMessages(messages),
+      appendThinkingLevelChange: (level) => this.sessionManager.appendThinkingLevelChange(level),
+      getThinkingLevel: () => this.thinkingLevel,
+      getBranch: () => this.sessionManager.getBranch(),
+      getDefaultThinkingLevel: () =>
+        this.settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL,
+      getAvailableModels: () => this._modelRegistry.getAvailable(),
+      restoreModel: (model) => this._modelController.restoreModel(model),
+      restoreThinkingLevel: (opts) => this._modelController.restoreThinkingLevel(opts),
+      runSetup: (setup) => setup(this.sessionManager),
       extractUserMessageText: (content) => this._extractUserMessageText(content),
     });
     this.agent.setModelErrorRecovery((event) =>
@@ -1427,52 +1462,7 @@ export class AgentSession {
     parentSession?: string;
     setup?: (sessionManager: SessionManager) => Promise<void>;
   }): Promise<boolean> {
-    const previousSessionFile = this.sessionFile;
-
-    // Emit session_before_switch event with reason "new" (can be cancelled)
-    if (this._extensionRunner?.hasHandlers("session_before_switch")) {
-      const result = (await this._extensionRunner.emit({
-        type: "session_before_switch",
-        reason: "new",
-      })) as SessionBeforeSwitchResult | undefined;
-
-      if (result?.cancel) {
-        return false;
-      }
-    }
-
-    this._disconnectFromAgent();
-    await this.abort();
-    this.agent.reset();
-    this.sessionManager.newSession({ parentSession: options?.parentSession });
-    this.agent.sessionId = this.sessionManager.getSessionId();
-    this._steeringMessages = [];
-    this._followUpMessages = [];
-    this._pendingNextTurnMessages = [];
-
-    this.sessionManager.appendThinkingLevelChange(this.thinkingLevel);
-
-    // Run setup callback if provided (e.g., to append initial messages)
-    if (options?.setup) {
-      await options.setup(this.sessionManager);
-      // Sync agent state with session manager after setup
-      const sessionContext = this.sessionManager.buildSessionContext();
-      this.agent.replaceMessages(sessionContext.messages);
-    }
-
-    this._reconnectToAgent();
-
-    // Emit session_switch event with reason "new" to extensions
-    if (this._extensionRunner) {
-      await this._extensionRunner.emit({
-        type: "session_switch",
-        reason: "new",
-        previousSessionFile,
-      });
-    }
-
-    // Emit session event to custom tools
-    return true;
+    return this._lifecycleController.newSession(options);
   }
 
   // =========================================================================
@@ -2144,74 +2134,7 @@ export class AgentSession {
    * @returns true if switch completed, false if cancelled by extension
    */
   async switchSession(sessionPath: string): Promise<boolean> {
-    const previousSessionFile = this.sessionManager.getSessionFile();
-
-    // Emit session_before_switch event (can be cancelled)
-    if (this._extensionRunner?.hasHandlers("session_before_switch")) {
-      const result = (await this._extensionRunner.emit({
-        type: "session_before_switch",
-        reason: "resume",
-        targetSessionFile: sessionPath,
-      })) as SessionBeforeSwitchResult | undefined;
-
-      if (result?.cancel) {
-        return false;
-      }
-    }
-
-    this._disconnectFromAgent();
-    await this.abort();
-    this._steeringMessages = [];
-    this._followUpMessages = [];
-    this._pendingNextTurnMessages = [];
-
-    // Set new session
-    this.sessionManager.setSessionFile(sessionPath);
-    this.agent.sessionId = this.sessionManager.getSessionId();
-
-    // Reload messages
-    const sessionContext = this.sessionManager.buildSessionContext();
-
-    // Emit session_switch event to extensions
-    if (this._extensionRunner) {
-      await this._extensionRunner.emit({
-        type: "session_switch",
-        reason: "resume",
-        previousSessionFile,
-      });
-    }
-
-    // Emit session event to custom tools
-
-    this.agent.replaceMessages(sessionContext.messages);
-
-    // Restore model if saved
-    if (sessionContext.model) {
-      const availableModels = await this._modelRegistry.getAvailable();
-      const match = availableModels.find(
-        (m) =>
-          m.provider === sessionContext.model!.provider &&
-          m.id === sessionContext.model!.modelId,
-      );
-      if (match) {
-        await this._modelController.restoreModel(match);
-      }
-    }
-
-    const hasThinkingEntry = this.sessionManager
-      .getBranch()
-      .some((entry) => entry.type === "thinking_level_change");
-    const defaultThinkingLevel =
-      this.settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL;
-
-    this._modelController.restoreThinkingLevel({
-      hasThinkingEntry,
-      sessionThinkingLevel: sessionContext.thinkingLevel as ThinkingLevel,
-      defaultThinkingLevel,
-    });
-
-    this._reconnectToAgent();
-    return true;
+    return this._lifecycleController.switchSession(sessionPath);
   }
 
   /**
@@ -2233,64 +2156,7 @@ export class AgentSession {
   async fork(
     entryId: string,
   ): Promise<{ selectedText: string; cancelled: boolean }> {
-    const previousSessionFile = this.sessionFile;
-    const selectedEntry = this.sessionManager.getEntry(entryId);
-
-    if (
-      !selectedEntry ||
-      selectedEntry.type !== "message" ||
-      selectedEntry.message.role !== "user"
-    ) {
-      throw new Error("Invalid entry ID for forking");
-    }
-
-    const selectedText = this._extractUserMessageText(
-      selectedEntry.message.content,
-    );
-
-    let skipConversationRestore = false;
-
-    // Emit session_before_fork event (can be cancelled)
-    if (this._extensionRunner?.hasHandlers("session_before_fork")) {
-      const result = (await this._extensionRunner.emit({
-        type: "session_before_fork",
-        entryId,
-      })) as SessionBeforeForkResult | undefined;
-
-      if (result?.cancel) {
-        return { selectedText, cancelled: true };
-      }
-      skipConversationRestore = result?.skipConversationRestore ?? false;
-    }
-
-    // Clear pending messages (bound to old session state)
-    this._pendingNextTurnMessages = [];
-
-    if (!selectedEntry.parentId) {
-      this.sessionManager.newSession({ parentSession: previousSessionFile });
-    } else {
-      this.sessionManager.createBranchedSession(selectedEntry.parentId);
-    }
-    this.agent.sessionId = this.sessionManager.getSessionId();
-
-    // Reload messages from entries (works for both file and in-memory mode)
-    const sessionContext = this.sessionManager.buildSessionContext();
-
-    // Emit session_fork event to extensions (after fork completes)
-    if (this._extensionRunner) {
-      await this._extensionRunner.emit({
-        type: "session_fork",
-        previousSessionFile,
-      });
-    }
-
-    // Emit session event to custom tools (with reason "fork")
-
-    if (!skipConversationRestore) {
-      this.agent.replaceMessages(sessionContext.messages);
-    }
-
-    return { selectedText, cancelled: false };
+    return this._lifecycleController.fork(entryId);
   }
 
   // =========================================================================
