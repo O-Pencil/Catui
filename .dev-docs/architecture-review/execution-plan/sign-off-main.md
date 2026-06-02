@@ -24,6 +24,8 @@ merge_policy: maintainer_sign_off_required
 - [ ] **大阶段二**：P2–P6 各域过门组 B（含 P3 的 S3 依赖反转）
 - [ ] [P7](./P7-bundle-redesign.md) / [P8](./P8-sdk-narrow.md) 若跳过，须在下方 Record 显式记 `skipped`
 
+> **P4 专项评审已结案**（[runtime-session-review](../runtime-session-review/README.md)，2026-06-02）：12 卡全部终态，结构门 RS-1/2/3 已在分支上 grep 验证。本表 S-1/S-2/S-3 的 runtime 部分由该评审 [§Closeout 重型门交接表](../runtime-session-review/README.md#closeout--p4-sign-off-handoff)供给 WHY（卡片）与 owner（Capability Ownership 表）。
+
 ## 验收清单（两分支对比）
 
 | # | 维度 | 方法 | 通过 | 记录 |

@@ -4,7 +4,7 @@
 phase: P4
 macro_stage: B        # 功能级
 batch: B2
-status: pending
+status: structure_landed  # 拆分已落地 + 专项评审已结案；重型门(tsc/build/quality/wiki/characterization)待 sign-off 机器
 risk: medium
 depends_on: [P2, P0]
 blocks: [P5]
@@ -44,26 +44,30 @@ gate: gates.md#门组-b
 
 ## 检查点(逐个 tsc 验证)
 
-- [ ] **P4.0 theme-contract**(U2,最孤立)→ 见下方决策门控
-- [ ] **P4.1 bash-runner**(最内聚、状态独立,先试水)
-- [ ] **P4.2 compaction-pipeline** / **P4.3 model-cycle**
-- [ ] **P4.4 tool-dispatch**(含 **S1**:ToolOrchestrator 唯一分发点)
-- [ ] **P4.5 prompt-assembly** / **P4.6 export-bridge** / **P4.7 ui-bridge**
-- [ ] **P4.8 组合根退壳**(**S2:单一显式 config 装配**)+ F05 步骤 1-3
-- [ ] 每步:符号表 == P0 snapshot(`baseline/public-api-symbols-main.txt`)、tsc 绿
+- [x] **P4.0 theme-contract**(U2,最孤立)→ 选 A 契约 seam 的变体:class 改名 `ThemeImpl implements ThemeContract`,`export type Theme = contract` re-export,`instanceof` 收窄改 `typeof !== "string"`
+- [x] **P4.1 bash-runner**(最内聚、状态独立,先试水)
+- [x] **P4.2 compaction-pipeline** / **P4.3 model-cycle**(纯函数 `model-cycle.ts`/`thinking-levels.ts` + 有状态 `compaction-controller.ts`)
+- [x] **P4.4 tool-dispatch**(含 **S1**:ToolOrchestrator 唯一分发点 → `tool-runtime-controller.ts`)
+- [x] **P4.5 prompt-assembly** / **P4.6 export-bridge** / **P4.7 ui-bridge**(→ `event-bridge.ts`)
+- [x] **P4.8 组合根退壳**(**S2:单一显式 config 装配**)+ F05 步骤 1-3
+- [ ] 每步:符号表 == P0 snapshot(`baseline/public-api-symbols-main.txt`)、tsc 绿 — **待 sign-off 机器**(本机不跑 tsc/符号 diff)
+
+> **实际落地与计划的偏差(2026-06-02)**:计划写"7 子模块",实际在[专项评审 runtime-session-review](../runtime-session-review/README.md)指导下抽出 **10 个 owner**,统一采用**能力上下文(capability-context)模式** —— 每个控制器收一组命名能力闭包(`*ControllerContext`),绝不接收整个 `AgentSession`(避免服务定位器)。`agent-session.ts` 3550→**2375** 行,退为组合根(状态+facade+loop 续接+teardown),**不再持有任何 abort slot**。session-lifecycle 进一步细分:`session-lifecycle-controller.ts`(new/switch/fork 身份变更)与 `session-tree-controller.ts`(navigateTree 分支导航)分属两个 owner;reload([AS09](../runtime-session-review/findings/AS09-reload-runtime-boundary.md))**deferred**、teardown([AS12](../runtime-session-review/findings/AS12-teardown-abort-boundary.md))**rejected**,均留在组合根。ownership 全表见 [`core/runtime/CLAUDE.md` §Capability Ownership](../../../core/runtime/CLAUDE.md)。
 
 ## 验证门控（DoD）
 
 > 出口以 [gates.md 门组 B](./gates.md#门组-b--功能级出口大阶段二逐域草案--待你定稿) 为准。**边界守恒(GB-1)是硬门，行数是信号不是判决(GB-4)**。本域补充：
 
-| # | 检查项 | 通过标准 | 门组 B |
-|---|--------|---------|--------|
-| V4-1 | 边界守恒（硬）| runtime 子模块 import 服从白名单：禁反向依赖组合根 / 禁碰 UI（经 ui-bridge）| **GB-1** |
-| V4-2 | 公共 API | 符号表 == P0 snapshot；如有意改须声明 | GB-2 |
-| V4-3 | 行为基线 | characterization tests 全过 | GB-2 |
-| V4-4 | S2/S1 形状 | 组合根单 config 装配；ToolOrchestrator 唯一分发点，code review 确认 | GB-6 |
-| V4-5 | 单一职责 | 子模块职责单一（行数仅作复审信号，非 pass/fail）| GB-4 |
-| V4-6 | 无环 | madge 仍零循环 | GB-5 |
+| # | 检查项 | 通过标准 | 门组 B | 状态(2026-06-02) |
+|---|--------|---------|--------|-----------------|
+| V4-1 | 边界守恒（硬）| runtime 子模块 import 服从白名单：禁反向依赖组合根 / 禁碰 UI（经 ui-bridge）| **GB-1** | ✅ 已验(RS-1 grep：0 控制器 import agent-session) |
+| V4-2 | 公共 API | 符号表 == P0 snapshot；如有意改须声明 | GB-2 | ⬜ 待 sign-off 机器(符号 diff) |
+| V4-3 | 行为基线 | characterization tests 全过 | GB-2 | ⬜ 待 sign-off 机器(回放) |
+| V4-4 | S2/S1 形状 | 组合根单 config 装配；ToolOrchestrator 唯一分发点，code review 确认 | GB-6 | ✅ 已验(RS-2：4 窄 context;S1 唯一分发点经 `tool-runtime-controller`) |
+| V4-5 | 单一职责 | 子模块职责单一（行数仅作复审信号，非 pass/fail）| GB-4 | ✅ 已验(RS-3：单 owner;facade 0 abort slot) |
+| V4-6 | 无环 | madge 仍零循环 | GB-5 | ⬜ 待 sign-off 机器(verify-quality) |
+
+> **结构门(V4-1/4/5 ↔ RS-1/2/3)已在分支上以 grep 客观验证**(见 [runtime-session-review §Closeout](../runtime-session-review/README.md#closeout--p4-sign-off-handoff))。**重型门(V4-2/3/6)交 sign-off 机器**:符号 diff、characterization 回放、verify-quality/verify-dip、`wiki:all`。
 
 ## 提交建议
 
