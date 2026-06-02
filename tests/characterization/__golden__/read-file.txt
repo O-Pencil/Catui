@@ -1,0 +1,2 @@
+{"timestamp":"<TS>","level":"warn","message":"[soul] recordInteraction/updateExpertise failed","sessionId":"<UUID>","component":"agent-session","error":{"errno":-2,"code":"ENOENT","syscall":"rename","path":"/var/folders/67/d01gsnbn7ng_t8pnrzndmj0m0000gp/T/char-agentdir-p9mNEN/soul/memory.json.tmp.20296.<EPOCH>.eq0g96","dest":"/var/folders/67/d01gsnbn7ng_t8pnrzndmj0m0000gp/T/char-agentdir-p9mNEN/soul/memory.json"}}
+401 Incorrect API key provided: tp-ckgqx***************************************6ctl. You can find your API key at https://platform.openai.com/account/api-keys.
