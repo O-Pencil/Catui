@@ -94,7 +94,9 @@ harness 见到 `baseUrl` 即**直接合成 Model 对象**（`run-case.ts buildMo
 
 ### 关键：main 上是旧 harness，要叠加分支的 harness 再录
 
-main 的 `tests/characterization/` 还是旧版（无 `buildModel`、case.json 还是 gpt-4o-mini）。录制要的是 **main 的产品代码 + 分支的 harness**（test-only，不改产品行为），所以先把分支的 test 目录覆盖到 main 工作区（**不提交到 main**）：
+main 的 `tests/characterization/` 还是旧版（无 `buildModel`、case.json 还是 gpt-4o-mini）。录制要的是 **main 的产品代码 + 分支的 harness**（test-only，不改产品行为），所以先把分支的 test 目录覆盖到 main 工作区（**不提交到 main，一个 commit 都不加**）：
+
+> ✅ 已核实：分支 harness 的 3 个产品 import（`core/runtime/sdk.ts` 的 `createAgentSession`/`createCodingTools`、`core/session/session-manager.ts` 的 `SessionManager.inMemory()`、`modes/print-mode.ts` 的 `runPrintMode`）在 main 上**路径与导出完全一致**（P1 未移动这几个文件，main 自己的 `run-case.ts` import 行与分支逐字相同）。我的改动只加了 `buildModel()`/类型 import/MiMo case.json，未碰产品 import → 覆盖到 main 后能直接跑。
 
 ```bash
 # ── 1) 切到冻结 main（产品代码），装 main 的内部库 dist ──
