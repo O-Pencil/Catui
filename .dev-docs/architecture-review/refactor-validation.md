@@ -101,9 +101,10 @@ baseline_source:
 
 `llm-wiki/` 是**机器生成、按 graphHash 校验**的代码投影（8 页：architecture/modules/files/symbols/dependencies/health/retrieval/index）。当前 `generatedFromGraphHash` 仍停在 **2026-05-26（重构前）**——P1 搬迁 + runtime god 拆分（10 个 controller）后已严重过时。它同时承担两个角色：**功能不变的溯源基线**（§1）与**结构版"功能→实现清单"**（重生成后 symbols.md/modules.md 即自动覆盖）。
 
-### 何时
+### 何时（关键：一次性，不 per-phase）
+- **只在所有 phase（P2–P8）landed 之后、合 main 前跑一次**。它是全图扫描产物，任一后续 phase 改代码即作废 —— per-phase 的"功能不变"由各 Phase 的**纯文本符号 diff**（对 P0 `baseline/public-api-symbols-main.txt`）+ characterization 担保，便宜且不依赖 wiki。
 - **不在低性能机器跑**（tsx 冷启动 + 全图扫描）。
-- 在 sign-off 阶段、能跑 `npm` 的机器上执行。
+- 单 phase 出口门见各自 checklist（如 [P4-signoff-checklist.md](./execution-plan/P4-signoff-checklist.md)），wiki 不在其中。
 
 ### 怎么做（确定性四步，或一次 `wiki:all`）
 ```bash

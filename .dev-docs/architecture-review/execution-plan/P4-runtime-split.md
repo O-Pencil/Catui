@@ -67,7 +67,9 @@ gate: gates.md#门组-b
 | V4-5 | 单一职责 | 子模块职责单一（行数仅作复审信号，非 pass/fail）| GB-4 | ✅ 已验(RS-3：单 owner;facade 0 abort slot) |
 | V4-6 | 无环 | madge 仍零循环 | GB-5 | ⬜ 待 sign-off 机器(verify-quality) |
 
-> **结构门(V4-1/4/5 ↔ RS-1/2/3)已在分支上以 grep 客观验证**(见 [runtime-session-review §Closeout](../runtime-session-review/README.md#closeout--p4-sign-off-handoff))。**重型门(V4-2/3/6)交 sign-off 机器**:符号 diff、characterization 回放、verify-quality/verify-dip、`wiki:all`。
+> **结构门(V4-1/4/5 ↔ RS-1/2/3)已在分支上以 grep 客观验证**(见 [runtime-session-review §Closeout](../runtime-session-review/README.md#closeout--p4-sign-off-handoff))。**重型门(V4-2/3/6)交 sign-off 机器**,逐条命令见单文件 runbook [P4-signoff-checklist.md](./P4-signoff-checklist.md):tsc/build、**纯文本符号 diff(对 P0 snapshot,不依赖 wiki)**、characterization 回放、verify-quality/verify-dip。
+>
+> ⚠️ `wiki:all` **不是 P4 出口门** —— 它是全仓库合 main 的一次性证据(P5–P8 改码即作废),只在所有 phase landed 后跑一次,见 [sign-off-main.md](./sign-off-main.md)。
 
 ## 提交建议
 

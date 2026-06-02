@@ -90,10 +90,11 @@ This review is the detailed decision surface for [P4 runtime god split](../execu
 
 | Gate | Statement | Where verified |
 |------|-----------|----------------|
-| RS-4 | Facade behavior stable — public `AgentSession` API + mode callers unchanged | characterization replay + symbols diff vs `main` → [refactor-validation.md §2/§5](../refactor-validation.md) |
+| RS-4 | Facade behavior stable — public `AgentSession` API + mode callers unchanged | characterization replay + **plain** symbol-table diff vs P0 `main` snapshot (wiki-independent) |
 | RS-6 | DIP isomorphism (P2 member list + Capability Ownership + P3 headers ↔ code) | `npx tsx scripts/verify-dip.ts` |
 | — | No new import cycles from the split | `scripts/verify-quality.ts` (F08) |
 | — | Compiles + builds | `npm run build` (already green at `91ab9de`, re-confirm post-resolution-docs) |
-| — | Structural feature/symbol catalog refreshed | `npm run wiki:all` → [refactor-validation.md §5](../refactor-validation.md) |
 
-These five rows are the P4 entry conditions in [sign-off-main.md](../execution-plan/sign-off-main.md); this review supplies the WHY (cards) and WHO-OWNS-WHAT (Capability Ownership table) feeding them.
+Run these via the single-file runbook [P4-signoff-checklist.md](../execution-plan/P4-signoff-checklist.md). This review supplies the WHY (cards) and WHO-OWNS-WHAT (Capability Ownership table) feeding them.
+
+> **Not a P4 gate**: `npm run wiki:all` (llm-wiki regeneration) is a **whole-repo merge-to-main step run once after all phases land**, not per-phase — P5–P8 would invalidate it. Per-phase "behavior unchanged" is carried by the plain symbol diff + characterization above. See [refactor-validation.md §5](../refactor-validation.md).
