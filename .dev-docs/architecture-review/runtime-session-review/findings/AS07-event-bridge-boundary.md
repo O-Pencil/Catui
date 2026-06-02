@@ -84,6 +84,12 @@ Accept a P4.7 implementation only if:
 
 2026-06-01: introduce `ExtensionEventBridge` as a narrow internal runtime collaborator. It owns only extension-facing event mapping and extension turn indexing. `AgentSession` keeps the public event facade, listener fanout, session persistence, retry/compaction ordering after `agent_end`, Soul post-turn recording, and disconnect/reconnect lifecycle.
 
+## Resolution
+
+**Landed**: `b79b4f4` (extract extension event bridge) · 2026-06-01
+**Owner**: `core/runtime/event-bridge.ts` (`ExtensionEventBridge`)
+**Outcome**: the bridge owns extension event mapping and turn indexing only. `AgentSession` retains public `subscribe`, persistence ordering, retry/compaction ordering, and Soul post-turn recording — i.e. the bridge maps events but does not own session-event policy.
+
 ## References
 
 - Gate: `../gates.md` RS-1, RS-3, RS-4, RS-5

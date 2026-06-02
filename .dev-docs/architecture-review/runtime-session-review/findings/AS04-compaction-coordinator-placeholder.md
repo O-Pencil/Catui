@@ -56,6 +56,14 @@ GOOD
 AgentSession facade -> CompactionController -> compaction pipeline
 ```
 
+## Resolution
+
+**Landed**: `ab10c8d` (remove placeholder) → `32c1e25` (P4.x-a manual) → `ee0fcfc` + `8b468e3` (P4.x-b auto) · 2026-06-01
+**Owner**: `core/runtime/compaction-controller.ts`
+**Context**: `CompactionControllerContext`
+**Outcome**: the shallow `CompactionCoordinator` (no-op `compact`) was deleted, then replaced by a real `CompactionController` owning manual `compact()`, auto `runAuto()`, and both abort slots (`_slot`/`_autoSlot`). Lifecycle effects (disconnect/abort/reconnect) and event emission are capabilities.
+**Boundary refinement**: (1) loop-continuation after auto-compaction (retry-tail prune + `agent.continue()`) stays in `AgentSession` — it is loop control, not compaction. (2) branch-summary was **excluded** and went to `SessionTreeController` (AS10).
+
 ## References
 
 - Gate: `../gates.md` RS-5

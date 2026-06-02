@@ -75,6 +75,14 @@ ModelController -> model-cycle.ts + thinking-levels.ts
 
 - `core/runtime/AGENT.md` and `CLAUDE.md` must list `model-controller.ts` and `session-context.ts` when this lands.
 
+## Resolution
+
+**Landed**: `67edfd7` + `fd169e2` · 2026-06-01
+**Owner**: `core/runtime/model-controller.ts` (pure helpers: `model-cycle.ts`, `thinking-levels.ts`)
+**Context**: `ModelControllerContext`
+**Outcome**: `ModelController` owns model set/cycle/restore and thinking-level set/cycle/restore. The pure decisions (xhigh fallback, cyclic index, level clamping) live in `model-cycle.ts`/`thinking-levels.ts`; the apply side-effects go through context capabilities. `AgentSession` methods are thin delegators.
+**Criteria met**: single owner for model+thinking; no controller imports `agent-session.ts`.
+
 ## References
 
 - Parent finding: `../findings/F01-agent-session-god-module.md`

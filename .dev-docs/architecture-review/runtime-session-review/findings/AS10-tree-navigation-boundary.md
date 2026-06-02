@@ -54,6 +54,14 @@ The controller reads the session through a narrow `SessionTreeControllerContext`
 - branch-summary generation, target-leaf positioning, and summary-entry attachment behavior are byte-identical
 - `_branchSummarySlot` is fully owned by the controller (no residual reference in `AgentSession`)
 
+## Resolution
+
+**Landed**: `9c55d02` (extract SessionTreeController) · 2026-06-01
+**Owner**: `core/runtime/session-tree-controller.ts`
+**Context**: `SessionTreeControllerContext`
+**Outcome**: `SessionTreeController` owns `navigateTree()` + branch summarization + `abortBranchSummary()` + the branch-summary abort slot (moved off `AgentSession`).
+**Milestone**: after this slice `AgentSession` holds **no abort slots** — all three (compaction manual/auto, branch-summary) live in their owning controllers.
+
 ## References
 
 - Gate: `../gates.md` RS-1, RS-2, RS-3, RS-5

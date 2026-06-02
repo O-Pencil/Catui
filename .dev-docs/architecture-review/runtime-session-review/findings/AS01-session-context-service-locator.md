@@ -76,6 +76,13 @@ ModelController -> ModelControllerContext -> narrow model/thinking capabilities
 
 - This finding refines P4 S2. "Single config assembly" does not mean every collaborator gets the whole assembly.
 
+## Resolution
+
+**Landed**: `67edfd7` (extract model controller context) · 2026-06-01
+**Owner**: `core/runtime/session-context.ts`
+**Outcome**: established the capability-context pattern — each runtime controller receives a narrow `*ControllerContext` of named capability functions; none receives `AgentSession`, `SessionManager`, or other composition-root objects. `AgentSession` builds one closure-based adapter per controller in its constructor.
+**Boundary held**: no service locator; one-directional imports (AgentSession → controllers → session-context, never reverse). Reused by every later slice (AS02/AS04/AS05/AS07/AS08/AS10).
+
 ## References
 
 - Parent finding: `../findings/F01-agent-session-god-module.md`

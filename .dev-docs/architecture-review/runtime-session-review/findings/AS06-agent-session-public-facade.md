@@ -67,6 +67,13 @@ GOOD
 modes/* -> AgentSession facade -> internal controllers
 ```
 
+## Resolution
+
+**Landed**: `6aaaed5` (close agent session facade review) · 2026-05-31
+**Owner**: `core/runtime/agent-session.ts` (the facade itself)
+**Outcome**: all public entry stays on `AgentSession` / `createAgentSession`. Controllers are internal collaborators — not exported through `core/index.ts` or the root barrel, and not imported by any mode.
+**Verified continuously**: RS-4 checks (no mode imports a controller; no controller in public barrels) pass after every later slice.
+
 ## References
 
 - Gate: `../gates.md` RS-4

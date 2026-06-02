@@ -62,6 +62,13 @@ AFTER
 AgentSession facade -> ToolRuntimeController -> ToolOrchestrator
 ```
 
+## Resolution
+
+**Landed**: `2a28075` (consolidate tool registry) + `6f5ef64` (extract tool runtime controller) · 2026-05-31
+**Owner**: `core/runtime/tool-runtime-controller.ts`
+**Outcome**: `ToolRuntimeController` owns tool source merge, wrapping, active-name policy, and orchestrator registry updates (`replaceTools`/`setCustomTools`).
+**S1 held**: the controller only updates the `ToolOrchestrator`; it adds no parallel dispatch path. `ToolOrchestrator` remains the single tool dispatch point.
+
 ## References
 
 - Gate: `../gates.md` RS-3

@@ -73,6 +73,13 @@ switchSession()
   └─ modelController.restore...
 ```
 
+## Resolution
+
+**Landed**: `fd169e2` (move session thinking restore into model controller) · 2026-06-01
+**Owner**: `core/runtime/model-controller.ts` (`restoreModel`, `restoreThinkingLevel`)
+**Outcome**: model/thinking restoration on session resume is delegated to `ModelController`; the switch flow stays lifecycle orchestration.
+**Refinement during impl**: the same restore methods were later reused by `SessionLifecycleController` (AS08) through `SessionLifecycleControllerContext.restoreModel/restoreThinkingLevel`, which the host adapter forwards to `ModelController` — keeping restore single-owned while lifecycle orchestrates.
+
 ## References
 
 - Gate: `../gates.md` RS-3

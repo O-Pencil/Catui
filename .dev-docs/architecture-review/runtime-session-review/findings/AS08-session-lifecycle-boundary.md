@@ -104,6 +104,14 @@ Accept an implementation only if:
 
 2026-06-01: select a narrow `SessionLifecycleController` for session identity-change choreography only: `newSession()`, `switchSession()`, and `fork()`. AS09 keeps `reload()` deferred, AS10 owns `navigateTree()` and branch summary, and AS12 rejects a teardown/abort controller. The lifecycle controller must remain internal and capability-based.
 
+## Resolution
+
+**Landed**: `5768693` (extract session lifecycle identity flow) · 2026-06-01
+**Owner**: `core/runtime/session-lifecycle-controller.ts`
+**Context**: `SessionLifecycleControllerContext`
+**Outcome**: `SessionLifecycleController` owns the new/switch/fork identity-change choreography (before/after hooks, disconnect/abort/reset, queue clearing, session-manager transition, message rebuild). Model/thinking restore is delegated to `ModelController` via the context adapter (one-directional).
+**Refinement during impl**: (1) implemented **together with fork** (AS11) in one slice. (2) Two distinct clearing capabilities — `clearPendingQueues` (new/switch: steering + follow-up + next-turn) vs `clearPendingNextTurnMessages` (fork: next-turn only) — preserving the original per-method queue semantics exactly. (3) steering/follow-up queues stay session-owned (used by `clearQueue()` + steering flow).
+
 ## References
 
 - Gate: `../gates.md` RS-1, RS-2, RS-3, RS-4, RS-5

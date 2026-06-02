@@ -22,6 +22,32 @@ export-bridge.ts: exportSessionHtml(), getLastAssistantText(), owns HTML export 
 thinking-levels.ts: pure thinking-level logic extracted from AgentSession (P4.2) — THINKING_LEVELS(_WITH_XHIGH), modelSupportsThinking/Xhigh, availableThinkingLevels, clampThinkingLevel, nextThinkingLevel; no session state, reusable by rpc/print
 model-cycle.ts: pure model-cycle decisions extracted from AgentSession (P4.2) — pickThinkingLevelOnModelChange, nextCyclicIndex; side effects are owned by model-controller.ts
 
+## Capability Ownership (runtime subsystem)
+
+> The DIP fourth axis: **which concern is owned by which file, with what capability contract, and why**.
+> Member List = WHAT/WHERE (structure). This table = WHO-OWNS-WHAT + WHY. The Owner column is
+> verify-dip-checked (every owner is a real member above). WHY links to the decision record; the
+> generated `llm-wiki/` carries the symbol/dependency detail. Keep this table updated on any
+> ownership move (same covenant as the member list).
+
+| Concern | Owner | Capability contract | Why (review card) |
+|---------|-------|---------------------|-------------------|
+| model set/cycle + thinking level | `model-controller.ts` | `ModelControllerContext` | [AS02](../../.dev-docs/architecture-review/runtime-session-review/findings/AS02-model-controller-boundary.md), [AS03](../../.dev-docs/architecture-review/runtime-session-review/findings/AS03-session-switch-state-restore.md) |
+| manual + auto compaction (+ abort slots) | `compaction-controller.ts` | `CompactionControllerContext` | [AS04](../../.dev-docs/architecture-review/runtime-session-review/findings/AS04-compaction-coordinator-placeholder.md) |
+| session-tree navigation + branch summary | `session-tree-controller.ts` | `SessionTreeControllerContext` | [AS10](../../.dev-docs/architecture-review/runtime-session-review/findings/AS10-tree-navigation-boundary.md) |
+| session new/switch/fork (identity change) | `session-lifecycle-controller.ts` | `SessionLifecycleControllerContext` | [AS08](../../.dev-docs/architecture-review/runtime-session-review/findings/AS08-session-lifecycle-boundary.md), [AS11](../../.dev-docs/architecture-review/runtime-session-review/findings/AS11-session-fork-boundary.md) |
+| tool runtime merge/wrap/active/registry | `tool-runtime-controller.ts` | `ToolRuntimeBuildOptions/Result` | [AS05](../../.dev-docs/architecture-review/runtime-session-review/findings/AS05-tool-runtime-controller-boundary.md) |
+| extension event mapping + turn indexing | `event-bridge.ts` | `ExtensionEventBridgeDeps` | [AS07](../../.dev-docs/architecture-review/runtime-session-review/findings/AS07-event-bridge-boundary.md) |
+| bash execution + pending-message queue | `bash-runner.ts` | closure deps (`BashRunnerDeps`) | P4.1 |
+| runtime prompt resource assembly | `prompt-assembly.ts` | function deps | P4 |
+| HTML export + last assistant text | `export-bridge.ts` | function deps | P4 |
+| retry coordination | `retry-coordinator.ts` | `RetryCoordinatorHost` | pre-existing |
+| pure thinking-level / model-cycle logic | `thinking-levels.ts`, `model-cycle.ts` | pure functions (no session state) | P4.2 |
+| cancellation slot / listener registry (primitives) | `../platform/abort-slot.ts`, `../platform/listeners.ts` | reusable primitives | P4.2 |
+| composition root: state, facade, loop continuation, teardown | `agent-session.ts` | — (owns adapters + orchestration) | [AS06](../../.dev-docs/architecture-review/runtime-session-review/findings/AS06-agent-session-public-facade.md); reload [AS09 deferred], teardown [AS12 rejected] |
+
+**Reading order for a new maintainer**: this table → the owner file's P3 header (local contract) → the review card (why this boundary) → `llm-wiki/pages/*/symbols.md` (exported surface).
+
 Rule: Members complete, one item per line, parent links valid, precise terms first
 
-[COVENANT]: Update this file header on changes and verify against parent CLAUDE.md
+[COVENANT]: Update this file header on changes and verify against parent CLAUDE.md. The Capability Ownership table moves with the member list — any ownership change updates both.

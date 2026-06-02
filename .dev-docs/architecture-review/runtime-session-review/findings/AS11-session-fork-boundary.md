@@ -50,6 +50,13 @@ Sequencing: implement AS10 (tree) first (it owns the last abort slot and the big
 - new-file vs branched-file decision (`parentId` check) is byte-identical
 - `skipConversationRestore` behavior preserved
 
+## Resolution
+
+**Landed**: `5768693` (extract session lifecycle identity flow) · 2026-06-01
+**Owner**: `core/runtime/session-lifecycle-controller.ts` (`fork()`)
+**Outcome**: as predicted, `fork()` was grouped with the lifecycle slice (AS08), not the tree controller. The new-file vs branched-file decision (`parentId` check), `session_before_fork`/`session_fork` hook order, `skipConversationRestore`, and the **next-turn-only** queue clear are all byte-identical to the original.
+**Decision-criteria correction**: Decision Criterion "pending-queue clearing uses the same explicit capability as new/switch" was a pre-implementation assumption and is **wrong** — the original `fork()` cleared only `_pendingNextTurnMessages`, not steering/follow-up. The implementation preserved that by giving fork its own `clearPendingNextTurnMessages` capability, distinct from new/switch's `clearPendingQueues`. Trust the Resolution over that criterion.
+
 ## References
 
 - Lifecycle boundary: `./AS08-session-lifecycle-boundary.md`
