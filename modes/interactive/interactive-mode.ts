@@ -73,7 +73,6 @@ import type { CompactionResult } from "../../core/session/compaction/index.js";
 import type {
   ExtensionRunner,
   ExtensionUIContext,
-  ExtensionUIDialogOptions,
 } from "../../core/extensions-host/index.js";
 import { FooterDataProvider } from "./footer-data-provider.js";
 import { type AppAction, KeybindingsManager } from "../../core/platform/keybindings.js";
@@ -122,6 +121,7 @@ import { ImagePipelineController } from "./controllers/image-pipeline-controller
 import { SelfUpdateController } from "./controllers/self-update-controller.js";
 import { InteractiveState } from "./state/interactive-state.js";
 import { PersistentSurfaceRegistry } from "./controllers/extension-ui/persistent-surface-registry.js";
+import { PromptHost } from "./controllers/extension-ui/prompt-host.js";
 import { AssistantMessageComponent } from "./components/assistant-message.js";
 import { promptForApiKey } from "./components/apikey-input.js";
 import { BashExecutionComponent } from "./components/bash-execution.js";
@@ -135,9 +135,6 @@ import { CustomEditor } from "./components/custom-editor.js";
 import { CustomMessageComponent } from "./components/custom-message.js";
 import { DaxnutsComponent } from "./components/daxnuts.js";
 import { DynamicBorder } from "./components/dynamic-border.js";
-import { ExtensionEditorComponent } from "./components/extension-editor.js";
-import { ExtensionInputComponent } from "./components/extension-input.js";
-import { ExtensionSelectorComponent } from "./components/extension-selector.js";
 import { FooterComponent, renderContextProgressBar } from "./components/footer.js";
 import {
   appKey,
@@ -271,9 +268,6 @@ export class InteractiveMode {
   private shutdownRequested = false;
 
   // Extension UI state
-  private extensionSelector: ExtensionSelectorComponent | undefined = undefined;
-  private extensionInput: ExtensionInputComponent | undefined = undefined;
-  private extensionEditor: ExtensionEditorComponent | undefined = undefined;
   private extensionTerminalInputUnsubscribers = new Set<() => void>();
 
   private widgetContainerAbove!: Container;
@@ -293,6 +287,7 @@ export class InteractiveMode {
   private imagePipeline!: ImagePipelineController;
   private selfUpdate!: SelfUpdateController;
   private surfaces!: PersistentSurfaceRegistry;
+  private promptHost!: PromptHost;
 
   // Convenience accessors
   private get agent() {
@@ -364,7 +359,7 @@ export class InteractiveMode {
       getSkippedVersion: () => this.settingsManager.getSkippedVersion(),
       setSkippedVersion: (version) => this.settingsManager.setSkippedVersion(version),
       setAutoUpdate: (mode) => this.settingsManager.setAutoUpdate(mode),
-      showSelector: (title, options) => this.showExtensionSelector(title, options),
+      showSelector: (title, options) => this.promptHost.selector(title, options),
     });
     this.surfaces = new PersistentSurfaceRegistry({
       requestRender: () => this.ui.requestRender(),
@@ -375,6 +370,14 @@ export class InteractiveMode {
       getBuiltInHeader: () => this.builtInHeader,
       getFooter: () => this.footer,
       getFooterDataProvider: () => this.footerDataProvider,
+    });
+    this.promptHost = new PromptHost({
+      getEditorContainer: () => this.editorContainer,
+      getUi: () => this.ui,
+      getEditor: () => this.editor as Component,
+      getEditorBuddyLayout: () => this.editorBuddyLayout,
+      getKeybindings: () => this.keybindings,
+      remountEditorShell: () => this.remountEditorShell(),
     });
     this.footerDataProvider = new FooterDataProvider(session.cwd);
     this.footer = new FooterComponent(session, this.footerDataProvider, this.settingsManager.getShowTokenStats());
@@ -1483,15 +1486,7 @@ export class InteractiveMode {
   }
 
   private resetExtensionUI(): void {
-    if (this.extensionSelector) {
-      this.hideExtensionSelector();
-    }
-    if (this.extensionInput) {
-      this.hideExtensionInput();
-    }
-    if (this.extensionEditor) {
-      this.hideExtensionEditor();
-    }
+    this.promptHost.dismiss();
     this.ui.hideOverlay();
     this.clearExtensionTerminalInputListeners();
     this.surfaces.setFooter(undefined);
@@ -1602,11 +1597,11 @@ export class InteractiveMode {
   private createExtensionUIContext(): ExtensionUIContext {
     return {
       select: (title, options, opts) =>
-        this.showExtensionSelector(title, options, opts),
+        this.promptHost.selector(title, options, opts),
       confirm: (title, message, opts) =>
-        this.showExtensionConfirm(title, message, opts),
+        this.promptHost.confirm(title, message, opts),
       input: (title, placeholder, opts) =>
-        this.showExtensionInput(title, placeholder, opts),
+        this.promptHost.input(title, placeholder, opts),
       notify: (message, type) => this.showExtensionNotify(message, type),
       onTerminalInput: (handler) =>
         this.addExtensionTerminalInputListener(handler),
@@ -1630,7 +1625,7 @@ export class InteractiveMode {
         this.editor.handleInput(`\x1b[200~${text}\x1b[201~`),
       setEditorText: (text) => this.editor.setText(text),
       getEditorText: () => this.editor.getText(),
-      editor: (title, prefill) => this.showExtensionEditor(title, prefill),
+      editor: (title, prefill) => this.promptHost.editor(title, prefill),
       openExternalEditor: (filePath) => this.openExistingFileInExternalEditor(filePath),
       setEditorComponent: (factory) => this.setCustomEditorComponent(factory),
       get theme() {
@@ -1658,172 +1653,6 @@ export class InteractiveMode {
       getToolsExpanded: () => this.state.toolOutputExpanded,
       setToolsExpanded: (expanded) => this.setToolsExpanded(expanded),
     };
-  }
-
-  /**
-   * Show a selector for extensions.
-   */
-  private showExtensionSelector(
-    title: string,
-    options: string[],
-    opts?: ExtensionUIDialogOptions,
-  ): Promise<string | undefined> {
-    return new Promise((resolve) => {
-      if (opts?.signal?.aborted) {
-        resolve(undefined);
-        return;
-      }
-
-      const onAbort = () => {
-        this.hideExtensionSelector();
-        resolve(undefined);
-      };
-      opts?.signal?.addEventListener("abort", onAbort, { once: true });
-
-      this.dismissActiveExtensionPrompt(false);
-      this.extensionSelector = new ExtensionSelectorComponent(
-        title,
-        options,
-        (option) => {
-          opts?.signal?.removeEventListener("abort", onAbort);
-          this.hideExtensionSelector();
-          resolve(option);
-        },
-        () => {
-          opts?.signal?.removeEventListener("abort", onAbort);
-          this.hideExtensionSelector();
-          resolve(undefined);
-        },
-        {
-          tui: this.ui,
-          timeout: opts?.timeout,
-        },
-      );
-
-      this.editorContainer.clear();
-      this.editorContainer.addChild(this.extensionSelector);
-      this.ui.setFocus(this.extensionSelector);
-      this.ui.requestRender();
-    });
-  }
-
-  /**
-   * Hide the extension selector.
-   */
-  private hideExtensionSelector(): void {
-    this.dismissExtensionSelector();
-    this.ui.requestRender();
-  }
-
-  /**
-   * Show a confirmation dialog for extensions.
-   */
-  private async showExtensionConfirm(
-    title: string,
-    message: string,
-    opts?: ExtensionUIDialogOptions,
-  ): Promise<boolean> {
-    const result = await this.showExtensionSelector(
-      `${title}\n${message}`,
-      ["Yes", "No"],
-      opts,
-    );
-    return result === "Yes";
-  }
-
-  /**
-   * Show a text input for extensions.
-   */
-  private showExtensionInput(
-    title: string,
-    placeholder?: string,
-    opts?: ExtensionUIDialogOptions,
-  ): Promise<string | undefined> {
-    return new Promise((resolve) => {
-      if (opts?.signal?.aborted) {
-        resolve(undefined);
-        return;
-      }
-
-      const onAbort = () => {
-        this.hideExtensionInput();
-        resolve(undefined);
-      };
-      opts?.signal?.addEventListener("abort", onAbort, { once: true });
-
-      this.dismissActiveExtensionPrompt(false);
-      this.extensionInput = new ExtensionInputComponent(
-        title,
-        placeholder,
-        (value) => {
-          opts?.signal?.removeEventListener("abort", onAbort);
-          this.hideExtensionInput();
-          resolve(value);
-        },
-        () => {
-          opts?.signal?.removeEventListener("abort", onAbort);
-          this.hideExtensionInput();
-          resolve(undefined);
-        },
-        {
-          tui: this.ui,
-          timeout: opts?.timeout,
-          initialValue: opts?.initialValue,
-        },
-      );
-
-      this.editorContainer.clear();
-      this.editorContainer.addChild(this.extensionInput);
-      this.ui.setFocus(this.extensionInput);
-      this.ui.requestRender();
-    });
-  }
-
-  /**
-   * Hide the extension input.
-   */
-  private hideExtensionInput(): void {
-    this.dismissExtensionInput();
-    this.ui.requestRender();
-  }
-
-  /**
-   * Show a multi-line editor for extensions (with Ctrl+G support).
-   */
-  private showExtensionEditor(
-    title: string,
-    prefill?: string,
-  ): Promise<string | undefined> {
-    return new Promise((resolve) => {
-      this.dismissActiveExtensionPrompt(false);
-      this.extensionEditor = new ExtensionEditorComponent(
-        this.ui,
-        this.keybindings,
-        title,
-        prefill,
-        (value) => {
-          this.hideExtensionEditor();
-          resolve(value);
-        },
-        () => {
-          this.hideExtensionEditor();
-          resolve(undefined);
-        },
-      );
-
-      this.editorContainer.clear();
-      this.editorContainer.addChild(this.extensionEditor);
-      this.ui.setFocus(this.extensionEditor);
-      this.ui.requestRender();
-    });
-  }
-
-  /**
-   * Hide the extension editor.
-   */
-  private hideExtensionEditor(): void {
-    this.dismissExtensionEditor();
-    this.ui.requestRender();
   }
 
   /**
@@ -1922,99 +1751,6 @@ export class InteractiveMode {
       return this.settingsManager.getShowMemoryTrace();
     }
     return this.settingsManager.getShowWorkingTrace();
-  }
-
-  private hasActiveExtensionPrompt(): boolean {
-    return !!(
-      this.extensionSelector ||
-      this.extensionInput ||
-      this.extensionEditor
-    );
-  }
-
-  private restoreEditorFocusIfPossible(): void {
-    if (this.hasActiveExtensionPrompt()) {
-      return;
-    }
-
-    if (this.editorContainer.children.includes(this.editorBuddyLayout)) {
-      this.ui.setFocus(this.editor as Component);
-    }
-  }
-
-  private dismissActiveExtensionPrompt(restoreEditorFocus = true): void {
-    if (this.extensionSelector) {
-      this.extensionSelector.dispose();
-      this.extensionSelector = undefined;
-    }
-
-    if (this.extensionInput) {
-      this.extensionInput.dispose();
-      this.extensionInput = undefined;
-    }
-
-    if (this.extensionEditor) {
-      this.extensionEditor = undefined;
-    }
-
-    this.remountEditorShell();
-
-    if (restoreEditorFocus) {
-      this.restoreEditorFocusIfPossible();
-    }
-  }
-
-  private dismissExtensionSelector(restoreEditorFocus = true): void {
-    const selector = this.extensionSelector;
-    if (!selector) {
-      return;
-    }
-
-    this.extensionSelector = undefined;
-    selector.dispose();
-
-    if (this.editorContainer.children.includes(selector)) {
-      this.remountEditorShell();
-    }
-
-    if (restoreEditorFocus) {
-      this.restoreEditorFocusIfPossible();
-    }
-  }
-
-  private dismissExtensionInput(restoreEditorFocus = true): void {
-    const input = this.extensionInput;
-    if (!input) {
-      return;
-    }
-
-    this.extensionInput = undefined;
-    input.dispose();
-
-    if (this.editorContainer.children.includes(input)) {
-      this.remountEditorShell();
-    }
-
-    if (restoreEditorFocus) {
-      this.restoreEditorFocusIfPossible();
-    }
-  }
-
-  private dismissExtensionEditor(restoreEditorFocus = true): void {
-    const extensionEditor = this.extensionEditor;
-    if (!extensionEditor) {
-      return;
-    }
-
-    this.extensionEditor = undefined;
-
-    if (this.editorContainer.children.includes(extensionEditor)) {
-      this.remountEditorShell();
-    }
-
-    if (restoreEditorFocus) {
-      this.restoreEditorFocusIfPossible();
-    }
   }
 
   /** Show a custom component with keyboard focus. Overlay mode renders on top of existing content. */
@@ -2700,7 +2436,7 @@ export class InteractiveMode {
         }
         this.startAgentRunTimer();
         this.updateWorkingMessage({ resetStallTimer: false });
-        this.restoreEditorFocusIfPossible();
+        this.promptHost.restoreEditorFocusIfPossible();
         this.ui.requestRender();
         break;
 
@@ -2894,7 +2630,7 @@ export class InteractiveMode {
 
         await this.checkShutdownRequested();
 
-        this.restoreEditorFocusIfPossible();
+        this.promptHost.restoreEditorFocusIfPossible();
         this.ui.requestRender();
         break;
 
@@ -4276,7 +4012,7 @@ export class InteractiveMode {
   ): Promise<boolean> {
     const currentApiKey = this.getStoredApiKey(provider);
     const title = options.title ?? `Update API key for ${provider}`;
-    const apiKey = await this.showExtensionInput(title, "API key", {
+    const apiKey = await this.promptHost.input(title, "API key", {
       initialValue: currentApiKey,
     });
     if (apiKey === undefined) {
@@ -4438,7 +4174,7 @@ export class InteractiveMode {
       return true;
     }
 
-    const baseUrl = await this.showExtensionInput(
+    const baseUrl = await this.promptHost.input(
       `${definition.label} base URL`,
       definition.defaultBaseUrl,
       { initialValue: currentBaseUrl },
@@ -4453,7 +4189,7 @@ export class InteractiveMode {
       return false;
     }
 
-    const apiKeyInput = await this.showExtensionInput(
+    const apiKeyInput = await this.promptHost.input(
       `${definition.label} API key`,
       hasExistingApiKey && options.force
         ? "Leave empty to keep the current API key"
@@ -4470,7 +4206,7 @@ export class InteractiveMode {
       return false;
     }
 
-    const modelNameInput = await this.showExtensionInput(
+    const modelNameInput = await this.promptHost.input(
       `${definition.label} model name`,
       "Model name",
       { initialValue: currentModelName },
@@ -4667,7 +4403,7 @@ export class InteractiveMode {
         () => {
           void (async () => {
             done();
-            const modelId = await this.showExtensionInput(
+            const modelId = await this.promptHost.input(
               "Add OpenRouter model",
               "Model id (e.g. x-ai/grok-4.20)",
             );
@@ -4675,7 +4411,7 @@ export class InteractiveMode {
               this.showModelSelector(initialSearchInput, filterByProvider);
               return;
             }
-            const nameInput = await this.showExtensionInput(
+            const nameInput = await this.promptHost.input(
               "Display name (optional)",
               "Leave empty to use model id",
               { initialValue: modelId.trim() },
@@ -4923,7 +4659,7 @@ export class InteractiveMode {
           let customInstructions: string | undefined;
 
           while (true) {
-            const summaryChoice = await this.showExtensionSelector(
+            const summaryChoice = await this.promptHost.selector(
               "Summarize branch?",
               ["No summary", "Summarize", "Summarize with custom prompt"],
             );
@@ -4937,7 +4673,7 @@ export class InteractiveMode {
             wantsSummary = summaryChoice !== "No summary";
 
             if (summaryChoice === "Summarize with custom prompt") {
-              customInstructions = await this.showExtensionEditor(
+              customInstructions = await this.promptHost.editor(
                 "Custom summarization instructions",
               );
               if (customInstructions === undefined) {

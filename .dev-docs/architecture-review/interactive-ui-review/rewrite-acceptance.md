@@ -62,20 +62,21 @@ applies_to: 所有"重写"刀(纯搬刀只走 preserve-check,不需要本 rubric
 
 **② close 的 finding**：[extension-ui-analysis §3](./extension-ui-analysis.md)（三套并行 prompt 生命周期 = Redundancy）+ UI02 的"重复 prompt lifecycle"。
 
-**③ 尺子 before/after（待实现后填）**：
+**③ 尺子 before/after（实测，commit `<prompt-host>`）**：
 
-| 尺子 | before | after(目标) |
+| 尺子 | before | after(实测) |
 |------|--------|------------|
 | 重复 show/hide/dismiss 骨架 | **3 套逐字相同** | **0**（1 个 generic `show`）|
-| prompt 相关方法数 | **12**（show×3+hide×3+dismiss×3+3 协调）| **~6**（selector/input/editor + dismiss/hasActive/restoreFocus + 私有 show）|
-| prompt 状态字段 | **3**（extensionSelector/Input/Editor）| **1**（active 单槽）|
-| 改"挂载/焦点/abort"逻辑要动 | **3 处**（每个 show）| **1 处**（generic show）|
-| 加一个 prompt 类型成本 | **~30 行三连** | **~3 行 wrapper** |
-| `ExtensionUIContext` 契约 | （不变）| **不变**（地板）|
-| 依赖循环数 / DIP | （基线）| **不回归** |
-| 新 finding | — | **无**（单槽非泛型栈 → 不引 Premature Abstraction）|
+| 删除的 InteractiveMode prompt 方法 | **13**（show×3+hide×3+confirm+hasActive+restoreFocus+dismissActive+dismiss×3）| → PromptHost **10**（4 prompt + 3 lifecycle public + 3 private show/mount/clear）|
+| prompt 状态字段 | **3**（extensionSelector/Input/Editor）| **1**（`active` 单槽）|
+| 改"挂载/焦点/abort"逻辑要动 | **3 处**（每个 show 各一份骨架）| **1 处**（generic `show`）|
+| 加一个 prompt 类型成本 | **~47 行 show 方法** | **~12 行 wrapper** |
+| **总行数（同等行为）** | — | **mount −264 / host +215 = 净 −49**（去重使总 LOC 反降）|
+| `ExtensionUIContext` 契约 | — | **不变**（select/confirm/input/editor 形状语义同）|
+| 依赖循环数 / DIP | 基线 | **不回归**（verify-quality / verify-dip）|
+| 新 finding | — | **无**（单槽，非泛型 overlay stack → 不引 Premature Abstraction）|
 
-**判决**：瞄准的 Redundancy 指标(3→0 骨架、12→6 方法、3→1 字段)全降,契约/环数不回归,无新坏味 → **重写成立**。每个数字落到 commit。
+**判决**：瞄准的 Redundancy 全降（3→0 骨架、3→1 字段、改动 3→1 处），**总 LOC 反降 49 行**（同等行为），契约/环数不回归,无新坏味 → **重写成立**。
 
 ---
 
