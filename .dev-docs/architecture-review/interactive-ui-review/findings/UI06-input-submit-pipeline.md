@@ -38,7 +38,7 @@ status: selected
 
 ## 排序
 
-属**重写**（分派逻辑会随 slash/extension 命令统一而调整），但**优先级靠后**：先落 state 容器 + slash-dispatcher + image-pipeline，submit 管线在这些 owner 的能力稳定后再抽（否则委托目标未定）。controller 集因此为 **8 个**。
+属**重写**（分派逻辑会随 slash/extension 命令统一而调整），但**优先级靠后**：先落 state 容器 + slash-dispatcher + image-pipeline，submit 管线在这些 owner 的能力稳定后再抽（否则委托目标未定）。UI07 增补 settings-overlay 后，controller 集为 **9 个**。
 
 ## Decision Criteria
 

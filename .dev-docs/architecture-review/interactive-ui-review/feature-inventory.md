@@ -195,7 +195,7 @@ legend:
 
 - [x] **per-feature hybrid 决策**：不逐条标，**继承 owner 簇**的决策（见 [refactor-plan §纯搬 vs 重写](./refactor-plan.md)）。
 - [x] **D 渲染验收粒度**：本轮**粗粒度功能验收**；逐态精验推迟到 UI04（见 D 段说明）。
-- [x] **input-submit 单独立卡**：→ [UI06](./findings/UI06-input-submit-pipeline.md)，抽 `input-submit-controller`，controller 集 = 8。
+- [x] **input-submit 单独立卡**：→ [UI06](./findings/UI06-input-submit-pipeline.md)，抽 `input-submit-controller`；UI07 增补 `settings-overlay-controller` 后 controller 集 = 9。
 - [x] **双击 esc / esc 分派归属**：`onEscape` 是单键多目标分派 —— **mount 接线**(判状态后转发)，分支委托 owner(abort→cancellation、空闲双击→tree-overlay、queue 恢复→queue)。见 [gates.md esc 键分派行](./gates.md)。
 
 **仍需你拍板（第 4 点，给你 3 选 1）—— 扩展动态命令/键位/widget 怎么验收**：

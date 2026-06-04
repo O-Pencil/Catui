@@ -17,6 +17,8 @@ gate: gates.md#门组-b
 
 拆分 `interactive-mode.ts`（~7958 行）为 controllers + state + mount 入口；P5 **接受重写**，以功能特性清单证明功能正确，而非用 characterization 钉死实现。
 
+> **顶层校准**：P5 的终态不是"把一个大文件机械切片后继续维护同一个 mode god object"。按 [mode-architecture-calibration.md](../interactive-ui-review/mode-architecture-calibration.md) 执行：`InteractiveMode` 收敛为 **TUI adapter + composition root**；shared capability 通过 ports/services 组合，P5 默认不引 `BaseMode` 继承。
+
 ## 进入条件
 
 - [ ] [P2 DoD](./P2-cycles-gate.md#验证门控dod) 全过
@@ -25,11 +27,12 @@ gate: gates.md#门组-b
 
 ## 任务清单
 
-> 经 [interactive-ui-review](../interactive-ui-review/README.md) 摸底，controller 集从 F02 初稿的 5 个修正为 **8 个 + state 容器**（UI02/UI06）。
+> 经 [interactive-ui-review](../interactive-ui-review/README.md) 摸底，controller 集从 F02 初稿的 5 个修正为 **9 个 + state 容器**（UI02/UI06/UI07）。其中 slash-dispatcher 已完成 dispatch-table 重写，但 controller 物理抽取仍待做。
 
 - [ ] `modes/_shell/cancellation.ts` 抽出（Q7：只抽 cancellation，跨 mode；esc 分派接线留 mount）
-- [ ] `modes/interactive/controllers/`：**8 个 controller**
-  - slash-dispatcher（限内置 `/command` dispatch）/ model-overlay（只消费 provider 能力）/ auth + provider-config / tree-overlay（UI05 改名）/ image-pipeline / **extension-ui**（UI02）/ **self-update**（UI02，P5 先 interactive 内拆）/ **input-submit**（UI06，slash/image 之后抽）
+- [ ] `modes/interactive/controllers/`：**9 个 controller**
+  - slash-dispatcher（限内置 `/command` dispatch；dispatch table 已完成，controller 抽取待做）/ model-overlay（只消费 provider 能力）/ auth + provider-config / settings-overlay（UI07）/ tree-overlay（UI05 改名）/ image-pipeline / **extension-ui**（UI02）/ **self-update**（UI02，P5 先 interactive 内拆）/ **input-submit**（UI06，slash/image 之后抽）
+- [ ] 每个切片先按 [mode-architecture-calibration.md](../interactive-ui-review/mode-architecture-calibration.md) 分类：shared capability / interactive controller / interactive surface host / composition wiring / render layer
 - [ ] `modes/interactive/state/`：UI 状态合一（~80 字段）
 - [ ] `interactive-mode.ts` → mount 入口（**< 500 行为 post-UI04 + input-submit 目标**；第一轮 `handleEvent`(336) + submit handler(~246) 仍留 mount，达不到 500）
 - [ ] **F05** 步骤 4-5：扩展类型 UI / commands 部分
@@ -42,9 +45,10 @@ gate: gates.md#门组-b
 
 | 目标模块 | 方法簇（代表，行号）| 自带状态 | 对计划 |
 |---------|--------------------|---------|--------|
-| **slash-dispatcher.ts** | `executeBuiltinSlashCommand`(3021 调度表) + 各 `handle*Command`(thinking/agentLoop/export/share/copy/status/usage/name/session/changelog/hotkeys/clear/renderDebug/showResources/soul/persona/memory/mcp/language/bash/compact) + `isExtensionCommand` + 彩蛋(armin/daxnuts) | skillCommands | 计划内 |
-| **model-overlay-controller.ts** | `cycleThinkingLevel`/`cycleModel`/`handleModelCommand`/`show{Model,Models,ProviderThenModel,Settings}Selector`/`findExactModelMatch`/`getModelCandidates`；调用 auth/provider-config 能力确保选中模型可用 | — | 计划内 |
+| **slash-dispatcher.ts** | `executeBuiltinSlashCommand`(3021 调度表) + 各 `handle*Command`(thinking/agentLoop/export/share/copy/status/usage/name/session/changelog/hotkeys/clear/renderDebug/showResources/soul/persona/memory/mcp/language/bash/compact) + `isExtensionCommand` + 彩蛋(armin/daxnuts) | skillCommands | 计划内；dispatch table 已完成，controller 抽取待做 |
+| **model-overlay-controller.ts** | `cycleThinkingLevel`/`cycleModel`/`handleModelCommand`/`show{Model,Models,ProviderThenModel}Selector`/`showModelsSelector`/`findExactModelMatch`/`getModelCandidates`；调用 auth/provider-config 能力确保选中模型可用；**不含 `showSettingsSelector`** | — | 计划内 |
 | **auth-controller.ts / provider-config-controller.ts** | `handleApiKeyCommand`/`getStoredApiKey`/`promptForProviderApiKey`/`handleLoginCommand`/`handleProviderCredentialsCommand`/`showOAuthSelector`/`getLoginSelectorProviders`/`showLoginDialog` + provider 配置簇(`ensureProviderConfigured`/`configureCustomProtocolProvider`/`refreshCurrentModelForProvider`/`resolveProviderId`) | — | 计划内；provider 凭据/连接配置归此，model-overlay 只消费 |
+| **settings-overlay-controller.ts** | `showSettingsSelector` + `SettingsSelectorComponent` callbacks（theme/image/buddy/presence/editor appearance/session flags）| — | UI07 新增；不归 model-overlay |
 | **session-tree-controller.ts**(UI) | `showUserMessageSelector`/`showTreeSelector`/`showSessionSelector`/`handleResumeSession`/`addSessionNavigationBanner` | — | 计划内（注意与 P4 的 runtime `session-tree-controller` 同名不同层）|
 | **image-pipeline-controller.ts** | `handleClipboardImagePaste`/`loadClipboardImageIntoAttachments`/`updateAttachmentsBar`/`deleteAttachment`/`handleAttachmentKeyNavigation`/`processAttachmentFiles`/`extractImagesFromText`/`cleanup{Stale,}Clipboard{Files,Images}` | clipboardImageFiles/clipboardPastePromise/attachments/selectedAttachmentIndex | 计划内 |
 | **★ extension-ui-controller.ts** | ~32 方法:`initExtensions`/`setupExtensionShortcuts`/`set/clearExtensionWidget(s)`/`render{Widgets,WidgetContainer}`/`setExtension{Status,Footer,Header}`/`create ExtensionUIContext`/`show/hide/dismissExtension{Selector,Input,Editor,Confirm,Notify,Custom,Error}`/`setCustomEditorComponent`/`hasActiveExtensionPrompt`/`restoreEditorFocusIfPossible` | extensionSelector/Input/Editor + widgetsAbove/Below + terminalInputUnsubscribers | **★ 计划外** — 比多数计划 controller 还大，必须独立 owner |

@@ -16,6 +16,7 @@ applies_to:
 
 | Gate | Rule | Validation |
 |------|------|------------|
+| UI-G0 Mode architecture calibration | 每个切片必须先按 [mode-architecture-calibration.md](./mode-architecture-calibration.md) 归类为 shared capability / interactive controller / interactive surface host / composition wiring / render layer；不得用 `BaseMode` 继承替代 ports/services 组合 | review doc / PR description |
 | UI-G1 No reverse mount import | controllers/state 不得 import `./interactive-mode.ts`（mount 是组合根，单向）| `rg 'from "\.\./interactive-mode\|from "\./interactive-mode' modes/interactive/controllers modes/interactive/state` 必须为空 |
 | UI-G2 No service-locator context | controller context 暴露**命名能力**（闭包），不得整体接收 `InteractiveMode` 或 `AgentSession` | code review |
 | UI-G3 Single owner | 每个 UI 副作用/overlay（attachments、extension widget、model overlay、auth 流…）只有一个 owning controller | finding 卡 + code review |
@@ -31,6 +32,7 @@ applies_to:
 | `/command` 路由 + 各 handle*Command | `slash-dispatcher` | mount 只委托 |
 | model/thinking/provider overlay | `model-overlay-controller` | mount 只委托；provider credential/config 不归 model-overlay |
 | API key / OAuth / provider 配置 | `auth-controller` / `provider-config-controller` | provider 凭据、base URL、custom model config 不散落到 model overlay |
+| settings selector (`/settings`) | `settings-overlay-controller`（UI07）或暂留 mount | 不归 model-overlay；不得把 theme/image/buddy/presence/editor settings 混进 model owner |
 | fork/switch/tree 选择器（UI 侧）| `tree-overlay-controller`（UI05 改名）| 与 P4 runtime `session-tree-controller` 不同层 |
 | 剪贴板/附件/图像管线 | `image-pipeline-controller` | 附件状态归此 |
 | 扩展 prompt/overlay/widget surfaces | `extension-ui-controller`（UI02 新增）| mount 不直接 set/clear extension widget；persistent surfaces 不进 overlay stack |
@@ -46,11 +48,12 @@ applies_to:
 每个切片回答：
 
 1. 哪些 UI 状态/overlay 句柄移动了？
-2. 哪些 `InteractiveMode` 公共方法仍作 mount 门面保留？
-3. 哪段代码变得可不 boot 整个 7960 行就单测？
-4. `interactive-mode.ts` 少了哪些 import？是否减少了对 core 内部的泄漏（UI-G7）？
-5. 新引入哪些 import，是否服从 GB-1 / UI-G7？
-6. 行为是否仍经同一公共路径 + 同一键序 可达，且 V5-1 功能验收通过？
+2. 这个切片属于 shared capability / interactive controller / surface host / composition wiring / render layer 哪一类？
+3. 哪些 `InteractiveMode` 公共方法仍作 mount 门面保留？
+4. 哪段代码变得可不 boot 整个 7960 行就单测？
+5. `interactive-mode.ts` 少了哪些 import？是否减少了对 core 内部的泄漏（UI-G7）？
+6. 新引入哪些 import，是否服从 GB-1 / UI-G7？
+7. 行为是否仍经同一公共路径 + 同一键序 可达，且 V5-1 功能验收通过？
 
 ## Low-Performance Machine Policy
 
