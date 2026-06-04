@@ -43,6 +43,26 @@ why_needed: |
 
 ---
 
+## extension-ui 4 host（P5，2026-06-03）
+
+抽取后行为评审。契约 `ExtensionUIContext`（25 方法）= 验收基准。按 [rewrite-acceptance](./rewrite-acceptance.md) 的 **A 契约 + C 内置扩展**：
+
+| host | 性质 | C 测试路径（内置扩展/命令）| A 契约 | 状态 |
+|------|------|---------------------------|--------|------|
+| **PromptHost** | **重写** | **`interview`（select+input+confirm 一次全走）**；`/apikey`/provider 配置(input)；`/login`(selector)；`/mcp`(input)；`plan`(editor) | select/confirm/input/editor 形状不变 | ⬜ 待 maintainer 跑 |
+| PersistentSurfaceRegistry | 纯搬 | `team`/`plan`（setWidget/setStatus/setFooter/setHeader）| setWidget/Footer/Header/Status | ⬜ |
+| CustomOverlayHost | 纯搬 | **无内置扩展用 `api.ui.custom`** → 仅 A 契约（代码审已确认逐字搬）| custom（overlay/inline + onHandle）| ✅ A only |
+| EditorComponentAdapter | 纯搬 | **无内置扩展用 `setEditorComponent`** → 仅 A 契约（代码审已确认）| setEditorComponent | ✅ A only |
+
+**PromptHost 重点验收项**（重写，最敏感）：
+- [ ] 弹 selector/input/confirm/editor → 显示正常；选/输/确认 → 正确 resolve（值回到扩展）。
+- [ ] esc / cancel → resolve undefined，**编辑器焦点恢复**（restoreEditorFocusIfPossible）。
+- [ ] 弹出时编辑器位被占，关闭后**编辑器壳复原**（remountEditorShell）。
+- [ ] 连弹两个 prompt → **单活动槽**（旧的被替换，不叠加）。
+- [ ] timeout（扩展设了的话）→ 自动 dismiss。
+
+> `custom`/`setEditorComponent` 无内置消费者：按 rubric，纯搬 + 无 C 路径 → A 契约（faithful 代码审）即验收充分；后续若有 optional 扩展用到再补 C。
+
 ## 待补：P4 核心功能回溯行为评审
 
 P4 是纯搬+抽象，以下核心功能**只验过"不变"，未主动审过"对不对"**，建议逐个补行为评审（同上模式）：
