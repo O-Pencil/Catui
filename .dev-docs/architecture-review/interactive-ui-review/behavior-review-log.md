@@ -49,17 +49,17 @@ why_needed: |
 
 | host | 性质 | C 测试路径（内置扩展/命令）| A 契约 | 状态 |
 |------|------|---------------------------|--------|------|
-| **PromptHost** | **重写** | **`interview`（select+input+confirm 一次全走）**；`/apikey`/provider 配置(input)；`/login`(selector)；`/mcp`(input)；`plan`(editor) | select/confirm/input/editor 形状不变 | ⬜ 待 maintainer 跑 |
-| PersistentSurfaceRegistry | 纯搬 | `team`/`plan`（setWidget/setStatus/setFooter/setHeader）| setWidget/Footer/Header/Status | ⬜ |
+| **PromptHost** | **重写** | **`interview`（select+input+confirm 一次全走）**；`/apikey`/provider 配置(input)；`/login`(selector)；`/mcp`(input)；`plan`(editor) | select/confirm/input/editor 形状不变 | ✅ 1-3 实测（切模型/厂商/输 API key 正常 + esc 焦点恢复 + 编辑器壳复原）；4-5 A 验证 |
+| PersistentSurfaceRegistry | 纯搬 | `team`/`plan`（setWidget/setStatus/setFooter/setHeader）| setWidget/Footer/Header/Status | ✅ 实测（/plan 自定义 footer 渲染 + /new 清空生效）|
 | CustomOverlayHost | 纯搬 | **无内置扩展用 `api.ui.custom`** → 仅 A 契约（代码审已确认逐字搬）| custom（overlay/inline + onHandle）| ✅ A only |
 | EditorComponentAdapter | 纯搬 | **无内置扩展用 `setEditorComponent`** → 仅 A 契约（代码审已确认）| setEditorComponent | ✅ A only |
 
 **PromptHost 重点验收项**（重写，最敏感）：
-- [ ] 弹 selector/input/confirm/editor → 显示正常；选/输/确认 → 正确 resolve（值回到扩展）。
-- [ ] esc / cancel → resolve undefined，**编辑器焦点恢复**（restoreEditorFocusIfPossible）。
-- [ ] 弹出时编辑器位被占，关闭后**编辑器壳复原**（remountEditorShell）。
-- [ ] 连弹两个 prompt → **单活动槽**（旧的被替换，不叠加）。
-- [ ] timeout（扩展设了的话）→ 自动 dismiss。
+- [x] 弹 selector/input/confirm/editor → 显示正常；选/输/确认 → 正确 resolve（值回到扩展）。**实测**：切模型/厂商、输 API key 正常。
+- [x] esc / cancel → resolve undefined，**编辑器焦点恢复**。**实测**。
+- [x] 弹出时编辑器位被占，关闭后**编辑器壳复原**。**实测**。
+- [x] 连弹两个 prompt → **单活动槽**。**A 验证**：PromptHost 只有一个 `active` 字段，`show` 在 `mount` 前 `clear(false)` dispose 旧的 → 结构上同时只能有一个（比手测覆盖更全；常见命令 prompt 串行 await，无并发触发路径）。
+- [x] timeout → 自动 dismiss。**A 验证**：`timeout: opts?.timeout` 逐字透传给组件构造器（与原 showExtension* 一字不差）；auto-dismiss 由组件负责，PromptHost 未改。
 
 > `custom`/`setEditorComponent` 无内置消费者：按 rubric，纯搬 + 无 C 路径 → A 契约（faithful 代码审）即验收充分；后续若有 optional 扩展用到再补 C。
 
