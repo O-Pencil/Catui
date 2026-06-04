@@ -91,21 +91,30 @@ dispatcher 要分发到 **33 个 handler**（散在未来的 model-overlay / aut
 
 ---
 
-## 7. rewrite-acceptance（实测后填）
+## 7. rewrite-acceptance（实测，commit `<slash-dispatcher>`）
 
-| 尺子 | before | after(目标) |
+**决策**：① A（/export 归一化 + GB-2 声明）· ② 原地重写（表为 InteractiveMode 字段）。
+
+| 尺子 | before | after(实测) |
 |------|--------|------------|
-| `if (text===…)` 分支数 | **33** | **0**（Map 查找）|
-| dispatch 复杂度 | O(n) 线性扫描 | O(1) 查找 |
-| 加一条命令 | 插 if 块（找位置）| 加一条表项（声明式）|
-| `executeBuiltinSlashCommand` 行数 | ~190 | dispatcher ~12 + 表 ~70-90 |
-| 行为 | — | 逐条不变，唯 `/export` 按决策 1 |
-| 新 finding | — | 无（声明式表非 Premature Abstraction；不引 service-locator）|
+| `if (text===…)` 分支数 | **33**（线性扫描）| **0**（`builtinSlashCommands[cmd]` Map 查找）|
+| dispatch 复杂度 | O(n) | **O(1)** |
+| `executeBuiltinSlashCommand`（命令派发的命令式代码）| **~187 行 if-链** | **~22 行 dispatcher**（解析 token → 查表 → 调）|
+| 加一条命令 | 在 187 行 if-链里找位置插块 | **加一条声明式表项** |
+| 命令体（clear 时机 / 参数提取 / sync-async）| — | **逐条保留**（表项闭包含原 body）|
+| 行为 | — | 逐条不变，唯 **`/export` 归一化**（`/exportfoo` 不再误判，GB-2 声明）|
+| 文件总行数 | — | 6253 → 6231（−22；LOC 非本刀目标，结构是）|
+| service-locator | — | **无**（原地，表项 `this.handleX`；文件抽取延后到 handler 收编进 controller）|
+| 新 finding | — | **无**（声明式表，非 Premature Abstraction）|
+
+**判决**：瞄准的**分支爆炸**消除（33→0，O(n)→O(1)），命令体逐条保留,唯一行为变更（/export 归一化）已 GB-2 声明,未引 service-locator/新坏味 → **重写成立**。
+
+> 边界守恒：submit handler（`setupEditorSubmitHandler`）里的 5 个 `if (text === "/…")`（persona 嵌入 + /memory,/arminsayshi,/resume,/quit 死分支）**未触碰** —— 属 input-submit（UI06），本刀不越界。死分支由 UI06 清。
 
 ---
 
-## 待办
+## 待办（实施后）
 
-- [ ] 你定决策 1（/export A/B）+ 决策 2（原地 / 抽文件）。
-- [ ] 实现：建表（33 条逐条搬 body）+ 改 dispatcher。
-- [ ] 填 §7 实测 + 行为评审（A 表 33 命令抽样跑）。
+- [x] 决策 1（A）+ 决策 2（原地）已定并实现。
+- [x] 建表 33 条 + 改 dispatcher。
+- [ ] 行为评审：A 表 33 命令抽样跑（尤其带参的 /model x、/compact x、/export path、/login provider；及 /export 归一化后 /exportfoo 走普通消息）。

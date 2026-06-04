@@ -218,6 +218,12 @@ export interface InteractiveModeOptions {
   verbose?: boolean;
 }
 
+/** A built-in slash command handler. `clear` clears the editor (respecting clearEditor). */
+type SlashCommandHandler = (
+  text: string,
+  clear: () => void,
+) => void | Promise<void>;
+
 export class InteractiveMode {
   private session: AgentSession;
   private ui: TUI;
@@ -2055,6 +2061,143 @@ export class InteractiveMode {
     };
   }
 
+  private readonly builtinSlashCommands: Record<string, SlashCommandHandler> = {
+    "/settings": (_t, clear) => {
+      this.showSettingsSelector();
+      clear();
+    },
+    "/apikey": async (_t, clear) => {
+      await this.handleApiKeyCommand();
+      clear();
+    },
+    "/scoped-models": async (_t, clear) => {
+      clear();
+      await this.showModelsSelector();
+    },
+    "/model": async (t, clear) => {
+      const searchTerm = t.startsWith("/model ") ? t.slice(7).trim() : undefined;
+      clear();
+      await this.handleModelCommand(searchTerm);
+    },
+    "/thinking": (t, clear) => {
+      this.handleThinkingCommand(t);
+      clear();
+    },
+    "/agent-loop": (t, clear) => {
+      this.handleAgentLoopCommand(t);
+      clear();
+    },
+    "/mcp": async (t, clear) => {
+      await this.handleMcpCommand(t);
+      clear();
+    },
+    "/export": async (t, clear) => {
+      await this.handleExportCommand(t);
+      clear();
+    },
+    "/share": async (_t, clear) => {
+      await this.handleShareCommand();
+      clear();
+    },
+    "/copy": (_t, clear) => {
+      this.handleCopyCommand();
+      clear();
+    },
+    "/status": async (_t, clear) => {
+      await this.handleStatusCommand();
+      clear();
+    },
+    "/usage": async (_t, clear) => {
+      await this.handleUsageCommand();
+      clear();
+    },
+    "/name": (t, clear) => {
+      this.handleNameCommand(t);
+      clear();
+    },
+    "/session": (_t, clear) => {
+      this.handleSessionCommand();
+      clear();
+    },
+    "/changelog": (_t, clear) => {
+      this.handleChangelogCommand();
+      clear();
+    },
+    "/hotkeys": (_t, clear) => {
+      this.handleHotkeysCommand();
+      clear();
+    },
+    "/resources": (_t, clear) => {
+      this.handleShowResourcesCommand();
+      clear();
+    },
+    "/fork": (_t, clear) => {
+      this.showUserMessageSelector();
+      clear();
+    },
+    "/tree": (_t, clear) => {
+      this.showTreeSelector();
+      clear();
+    },
+    "/login": async (t, clear) => {
+      await this.handleLoginCommand(t);
+      clear();
+    },
+    "/logout": (_t, clear) => {
+      this.showOAuthSelector("logout");
+      clear();
+    },
+    "/new": async (_t, clear) => {
+      clear();
+      await this.handleClearCommand();
+    },
+    "/update": (_t, clear) => {
+      this.selfUpdate.handleUpdateCommand();
+      clear();
+    },
+    "/reinstall": (_t, clear) => {
+      this.selfUpdate.handleReinstallCommand();
+      clear();
+    },
+    "/compact": async (t, clear) => {
+      const customInstructions = t.startsWith("/compact ") ? t.slice(9).trim() : undefined;
+      clear();
+      await this.handleCompactCommand(customInstructions);
+    },
+    "/reload": async (_t, clear) => {
+      clear();
+      await this.handleReloadCommand();
+    },
+    "/language": async (t, clear) => {
+      await this.handleLanguageCommand(t);
+      clear();
+    },
+    "/soul": (_t, clear) => {
+      this.handleSoulCommand();
+      clear();
+    },
+    "/persona": async (t, clear) => {
+      clear();
+      await this.handlePersonaCommand(t);
+    },
+    "/memory": (_t, clear) => {
+      this.handleMemoryCommand();
+      clear();
+    },
+    "/arminsayshi": (_t, clear) => {
+      this.handleArminSaysHi();
+      clear();
+    },
+    "/resume": (_t, clear) => {
+      this.showSessionSelector();
+      clear();
+    },
+    "/quit": async (_t, clear) => {
+      clear();
+      await this.shutdown();
+    },
+  };
+
   private async executeBuiltinSlashCommand(
     text: string,
     options?: { clearEditor?: boolean },
@@ -2068,179 +2211,15 @@ export class InteractiveMode {
       }
     };
 
-    if (text === "/settings") {
-      this.showSettingsSelector();
-      clear();
-      return true;
-    }
-    if (text === "/apikey") {
-      await this.handleApiKeyCommand();
-      clear();
-      return true;
-    }
-    if (text === "/scoped-models") {
-      clear();
-      await this.showModelsSelector();
-      return true;
-    }
-    if (text === "/model" || text.startsWith("/model ")) {
-      const searchTerm = text.startsWith("/model ")
-        ? text.slice(7).trim()
-        : undefined;
-      clear();
-      await this.handleModelCommand(searchTerm);
-      return true;
-    }
-    if (text === "/thinking" || text.startsWith("/thinking ")) {
-      this.handleThinkingCommand(text);
-      clear();
-      return true;
-    }
-    if (text === "/agent-loop" || text.startsWith("/agent-loop ")) {
-      this.handleAgentLoopCommand(text);
-      clear();
-      return true;
-    }
-    if (text === "/mcp" || text.startsWith("/mcp ")) {
-      await this.handleMcpCommand(text);
-      clear();
-      return true;
-    }
-    if (text.startsWith("/export")) {
-      await this.handleExportCommand(text);
-      clear();
-      return true;
-    }
-    if (text === "/share") {
-      await this.handleShareCommand();
-      clear();
-      return true;
-    }
-    if (text === "/copy") {
-      this.handleCopyCommand();
-      clear();
-      return true;
-    }
-    if (text === "/status") {
-      await this.handleStatusCommand();
-      clear();
-      return true;
-    }
-    if (text === "/usage") {
-      await this.handleUsageCommand();
-      clear();
-      return true;
-    }
-    if (text === "/name" || text.startsWith("/name ")) {
-      this.handleNameCommand(text);
-      clear();
-      return true;
-    }
-    if (text === "/session") {
-      this.handleSessionCommand();
-      clear();
-      return true;
-    }
-    if (text === "/changelog") {
-      this.handleChangelogCommand();
-      clear();
-      return true;
-    }
-    if (text === "/hotkeys") {
-      this.handleHotkeysCommand();
-      clear();
-      return true;
-    }
-    if (text === "/resources") {
-      this.handleShowResourcesCommand();
-      clear();
-      return true;
-    }
-    if (text === "/fork") {
-      this.showUserMessageSelector();
-      clear();
-      return true;
-    }
-    if (text === "/tree") {
-      this.showTreeSelector();
-      clear();
-      return true;
-    }
-    if (text === "/login" || text.startsWith("/login ")) {
-      await this.handleLoginCommand(text);
-      clear();
-      return true;
-    }
-    if (text === "/logout") {
-      this.showOAuthSelector("logout");
-      clear();
-      return true;
-    }
-    if (text === "/new") {
-      clear();
-      await this.handleClearCommand();
-      return true;
-    }
-    if (text === "/update") {
-      this.selfUpdate.handleUpdateCommand();
-      clear();
-      return true;
-    }
-    if (text === "/reinstall") {
-      this.selfUpdate.handleReinstallCommand();
-      clear();
-      return true;
-    }
-    if (text === "/compact" || text.startsWith("/compact ")) {
-      const customInstructions = text.startsWith("/compact ")
-        ? text.slice(9).trim()
-        : undefined;
-      clear();
-      await this.handleCompactCommand(customInstructions);
-      return true;
-    }
-    if (text === "/reload") {
-      clear();
-      await this.handleReloadCommand();
-      return true;
-    }
-    if (text === "/language" || text.startsWith("/language ")) {
-      await this.handleLanguageCommand(text);
-      clear();
-      return true;
-    }
-    if (text === "/soul") {
-      this.handleSoulCommand();
-      clear();
-      return true;
-    }
-    if (text === "/persona" || text.startsWith("/persona ")) {
-      clear();
-      await this.handlePersonaCommand(text);
-      return true;
-    }
-    if (text === "/memory") {
-      this.handleMemoryCommand();
-      clear();
-      return true;
-    }
-    if (text === "/arminsayshi") {
-      this.handleArminSaysHi();
-      clear();
-      return true;
-    }
-    if (text === "/resume") {
-      this.showSessionSelector();
-      clear();
-      return true;
-    }
-    if (text === "/quit") {
-      clear();
-      await this.shutdown();
-      return true;
-    }
-
-    return false;
+    // Dispatch by command token (text up to the first space). Note: /export's bare
+    // startsWith was normalized to this token match (GB-2) — "/exportfoo" no longer
+    // counts as /export.
+    const spaceIdx = text.indexOf(" ");
+    const cmd = spaceIdx === -1 ? text : text.slice(0, spaceIdx);
+    const handler = this.builtinSlashCommands[cmd];
+    if (!handler) return false;
+    await handler(text, clear);
+    return true;
   }
 
   private subscribeToAgent(): void {
