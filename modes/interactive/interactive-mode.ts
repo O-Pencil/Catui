@@ -10,11 +10,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@pencil-agent/agent-core";
 import {
-  type AssistantMessage,
   type ImageContent,
   type Message,
-  type Model,
-  type TextContent,
 } from "@pencil-agent/ai";
 import type {
   AutocompleteItem,
@@ -104,6 +101,7 @@ import { AuthProviderConfigController } from "./controllers/auth-provider-config
 import { TreeOverlayController } from "./controllers/tree-overlay-controller.js";
 import { SettingsOverlayController } from "./controllers/settings-overlay-controller.js";
 import { SlashDispatcherController } from "./controllers/slash-dispatcher-controller.js";
+import { InputSubmitController } from "./controllers/input-submit-controller.js";
 import { AssistantMessageComponent } from "./components/assistant-message.js";
 import { BashExecutionComponent } from "./components/bash-execution.js";
 import { BorderedLoader } from "./components/bordered-loader.js";
@@ -258,6 +256,7 @@ export class InteractiveMode {
   private treeOverlay!: TreeOverlayController;
   private settingsOverlay!: SettingsOverlayController;
   private slashDispatcher!: SlashDispatcherController;
+  private inputSubmit!: InputSubmitController;
   private surfaces!: PersistentSurfaceRegistry;
   private promptHost!: PromptHost;
   private customOverlay!: CustomOverlayHost;
@@ -612,6 +611,75 @@ export class InteractiveMode {
         handleMemoryCommand: () => this.handleMemoryCommand(),
         handleArminSaysHi: () => this.handleArminSaysHi(),
         shutdown: () => this.shutdown(),
+      },
+    });
+    this.inputSubmit = new InputSubmitController({
+      editor: {
+        setText: (text) => this.editor.setText(text),
+        addToHistory: (text) => this.editor.addToHistory?.(text),
+        handleExternalInput: (text) => {
+          if (!this.onInputCallback) return false;
+          this.onInputCallback(text);
+          this.editor.addToHistory?.(text);
+          return true;
+        },
+        setBashMode: (enabled) => {
+          this.isBashMode = enabled;
+        },
+        updateBorderColor: () => this.updateEditorBorderColor(),
+      },
+      slash: {
+        execute: (text) => this.slashDispatcher.execute(text),
+      },
+      image: {
+        awaitPendingPaste: () => this.imagePipeline.awaitPendingPaste(),
+        extractImagesFromText: (text) =>
+          this.imagePipeline.extractImagesFromText(text),
+        takePendingAttachments: () => this.imagePipeline.takePendingAttachments(),
+        processAttachmentFiles: (attachments) =>
+          this.imagePipeline.processAttachmentFiles(attachments),
+        cleanupClipboardImages: () => this.imagePipeline.cleanupClipboardImages(),
+      },
+      session: {
+        isBashRunning: () => this.session.isBashRunning,
+        isCompacting: () => this.session.isCompacting,
+        isStreaming: () => this.session.isStreaming,
+        getModel: () => this.session.model,
+        getCwd: () => this.session.cwd,
+        promptAfterRender: (text, options) =>
+          this.promptAfterRender(text, options),
+        queueCompactionMessage: (text, mode) =>
+          this.queueCompactionMessage(text, mode),
+      },
+      commands: {
+        isExtensionCommand: (text) => this.isExtensionCommand(text),
+        handlePersonaCommand: (text) => this.handlePersonaCommand(text),
+        handleBashCommand: (command, excludeFromContext) =>
+          this.handleBashCommand(command, excludeFromContext),
+      },
+      render: {
+        showStatus: (message) => this.showStatus(message),
+        showWarning: (message) => this.showWarning(message),
+        showError: (message) => this.showError(message),
+        requestRender: () => this.ui.requestRender(),
+        flushPendingBashComponents: () => this.flushPendingBashComponents(),
+        updatePendingMessagesDisplay: () => this.updatePendingMessagesDisplay(),
+        addOptimisticUserMessage: (text, content) => {
+          this.state.optimisticUserMessages.push({ text });
+          this.addMessageToChat({
+            role: "user",
+            content,
+            timestamp: Date.now(),
+          } as AgentMessage);
+        },
+        rollbackFirstOptimisticUserMessageIfMatches: (text) => {
+          if (
+            this.state.optimisticUserMessages.length > 0 &&
+            this.state.optimisticUserMessages[0]?.text === text
+          ) {
+            this.state.optimisticUserMessages.shift();
+          }
+        },
       },
     });
     this.syncBuddyPet();
@@ -2038,237 +2106,7 @@ export class InteractiveMode {
 
   private setupEditorSubmitHandler(): void {
     this.defaultEditor.onSubmit = async (text: string) => {
-      text = text.trim();
-      if (!text) return;
-
-      await this.imagePipeline.awaitPendingPaste();
-
-      if (await this.slashDispatcher.execute(text)) {
-        return;
-      }
-      // Check for /persona command - support both standalone and mixed with other text
-      // e.g., "Hello /persona use coder" should still trigger persona switch
-      const personaMatch = text.match(/\s+\/persona\b/);
-      if (personaMatch) {
-        // Persona command is embedded in the message (e.g., "Hello /persona use coder")
-        // Extract the persona command part and also process the rest as user message
-        const personaCmd = text.slice(personaMatch.index! + 1);
-        const remainingText = text.slice(0, personaMatch.index!).trim();
-
-        this.editor.setText("");
-        await this.handlePersonaCommand(personaCmd);
-
-        // Also process the remaining text as user message
-        if (remainingText) {
-          await this.promptAfterRender(remainingText);
-        }
-        return;
-      }
-      if (text === "/persona" || text.startsWith("/persona ")) {
-        this.editor.setText("");
-        await this.handlePersonaCommand(text);
-        return;
-      }
-      if (text === "/memory") {
-        this.handleMemoryCommand();
-        this.editor.setText("");
-        return;
-      }
-      if (text === "/arminsayshi") {
-        this.handleArminSaysHi();
-        this.editor.setText("");
-        return;
-      }
-      if (text === "/resume") {
-        this.treeOverlay.showSessionSelector();
-        this.editor.setText("");
-        return;
-      }
-      if (text === "/quit") {
-        this.editor.setText("");
-        await this.shutdown();
-        return;
-      }
-
-      // Handle bash command (! for normal, !! for excluded from context)
-      if (text.startsWith("!")) {
-        const isExcluded = text.startsWith("!!");
-        const command = isExcluded
-          ? text.slice(2).trim()
-          : text.slice(1).trim();
-        if (command) {
-          if (this.session.isBashRunning) {
-            this.showWarning(
-              "A bash command is already running. Press Esc to cancel it first.",
-            );
-            this.editor.setText(text);
-            return;
-          }
-          this.editor.addToHistory?.(text);
-          await this.handleBashCommand(command, isExcluded);
-          this.isBashMode = false;
-          this.updateEditorBorderColor();
-          return;
-        }
-      }
-
-      // Queue input during compaction (extension commands execute immediately)
-      if (this.session.isCompacting) {
-        if (this.isExtensionCommand(text)) {
-          this.editor.addToHistory?.(text);
-          this.editor.setText("");
-          await this.promptAfterRender(text);
-        } else {
-          this.queueCompactionMessage(text, "steer");
-        }
-        return;
-      }
-
-      // If streaming, use prompt() with steer behavior
-      // This handles extension commands (execute immediately), prompt template expansion, and queueing
-      if (this.session.isStreaming) {
-        this.editor.addToHistory?.(text);
-        this.editor.setText("");
-
-        // Display user's message in chat BEFORE processing (including extension commands like /plan)
-        // This ensures users can see what they typed, even if it's a slash command
-        const displayContent: (TextContent | ImageContent)[] = [
-          { type: "text", text: text },
-        ];
-        this.state.optimisticUserMessages.push({ text: text });
-        this.addMessageToChat({
-          role: "user",
-          content: displayContent,
-          timestamp: Date.now(),
-        } as AgentMessage);
-        this.ui.requestRender();
-
-        const steerResult = await this.imagePipeline.extractImagesFromText(text);
-        const steerImages = steerResult.images;
-        let steerAttachmentPaths: string[] = [];
-        const steerPendingAttachments = this.imagePipeline.takePendingAttachments();
-        if (steerPendingAttachments.length > 0) {
-          steerAttachmentPaths = steerPendingAttachments.map((a) => a.path);
-        }
-        // Drop images if model doesn't support them
-        const steerModel = this.session.model;
-        if (
-          (steerImages.length > 0 || steerAttachmentPaths.length > 0) &&
-          steerModel &&
-          !steerModel.input.includes("image")
-        ) {
-          steerImages.length = 0;
-          steerAttachmentPaths = [];
-          // Suggest vision variant for GLM models
-          let suggestion = "";
-          if (steerModel.id === "glm-5" || steerModel.id === "glm-5-turbo") {
-            suggestion = " Try glm-5v-turbo for image support.";
-          } else if (steerModel.id === "glm-4.5" || steerModel.id === "glm-4.5-air") {
-            suggestion = " Try glm-4.5v for image support.";
-          }
-          this.showStatus(`Images dropped: ${steerModel.name} does not support images.${suggestion}`);
-          this.ui.requestRender();
-        }
-        let steerPromptText = steerResult.text;
-        if (steerAttachmentPaths.length > 0) {
-          const cwd = this.session.cwd;
-          const refs = steerAttachmentPaths
-            .map((p) => `@${path.relative(cwd, p).replace(/\\/g, "/")}`)
-            .join(" ");
-          steerPromptText = refs + "  " + steerPromptText;
-        }
-        await this.promptAfterRender(steerPromptText, {
-          streamingBehavior: "steer",
-          images: steerImages.length > 0 ? steerImages : undefined,
-        });
-        this.updatePendingMessagesDisplay();
-        this.ui.requestRender();
-        return;
-      }
-
-      // Normal message submission
-      // First, move any pending bash components to chat
-      this.flushPendingBashComponents();
-
-      if (this.onInputCallback) {
-        this.onInputCallback(text);
-        this.editor.addToHistory?.(text);
-        return;
-      }
-
-      this.editor.addToHistory?.(text);
-      this.editor.setText("");
-
-      // Extract images from clipboard-pasted file paths in the text
-      const { text: processedText, images } =
-        await this.imagePipeline.extractImagesFromText(text);
-
-      // Collect and clear pending attachments upfront (ensures cleanup even on error).
-      // Clipboard images are read as inline base64 AND saved to disk. The inline
-      // base64 is sent directly in the user message so the model sees the image
-      // regardless of whether it uses the `read` tool or not.
-      const pendingAttachments = this.imagePipeline.takePendingAttachments();
-      if (pendingAttachments.length > 0) {
-        const inlineImages = await this.imagePipeline.processAttachmentFiles(pendingAttachments);
-        images.push(...inlineImages);
-      }
-
-      // Check model image support; warn and drop images if not supported
-      if (images.length > 0) {
-        const currentModel = this.session.model;
-        if (currentModel && !currentModel.input.includes("image")) {
-          // Suggest vision variant for GLM models
-          let suggestion = "";
-          if (currentModel.id === "glm-5" || currentModel.id === "glm-5-turbo") {
-            suggestion = " Try using glm-5v-turbo for image support.";
-          } else if (currentModel.id === "glm-4.5" || currentModel.id === "glm-4.5-air") {
-            suggestion = " Try using glm-4.5v for image support.";
-          }
-          this.showWarning(
-            `Model "${currentModel.name}" does not support image input. Images have been removed from this message.${suggestion}`,
-          );
-          images.length = 0;
-        }
-      }
-
-      if (!processedText.startsWith("/")) {
-        const displayContent: (TextContent | ImageContent)[] = [
-          { type: "text", text: processedText },
-        ];
-        if (images.length > 0) {
-          displayContent.push(...images);
-        }
-        this.state.optimisticUserMessages.push({ text: processedText });
-        this.addMessageToChat({
-          role: "user",
-          content: displayContent,
-          timestamp: Date.now(),
-        } as AgentMessage);
-        this.ui.requestRender();
-      }
-      try {
-        // Clear persona switch flag - interview should now run normally for subsequent messages
-        delete process.env.NANOPENCIL_JUST_SWITCHED_PERSONA;
-        await this.promptAfterRender(processedText, {
-          images: images.length > 0 ? images : undefined,
-        });
-      } catch (error: unknown) {
-        if (
-          !text.startsWith("/") &&
-          this.state.optimisticUserMessages.length > 0 &&
-          this.state.optimisticUserMessages[0]?.text === processedText
-        ) {
-          this.state.optimisticUserMessages.shift();
-        }
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error occurred";
-        this.showError(errorMessage);
-      }
-      this.updatePendingMessagesDisplay();
-      this.ui.requestRender();
-
-      // Clean up temporary clipboard image files from project root
-      this.imagePipeline.cleanupClipboardImages();
+      await this.inputSubmit.handleSubmit(text);
     };
   }
 

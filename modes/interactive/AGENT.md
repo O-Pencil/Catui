@@ -16,6 +16,7 @@ controllers/auth-provider-config-controller.ts: AuthProviderConfigController, Au
 controllers/tree-overlay-controller.ts: TreeOverlayController, TreeOverlayContext — interactive session tree/fork/resume overlays; delegates lifecycle to AgentSession/SessionManager and owns UI selection flow for /tree, /fork, /resume, keybindings, extension switchSession (P5 UI05, 纯搬 + 改名)
 controllers/settings-overlay-controller.ts: SettingsOverlayController, SettingsOverlayContext — interactive /settings overlay; composes SettingsManager, AgentSession, theme/editor/render/buddy ports without owning reusable settings or session rules (P5 UI07, hybrid)
 controllers/slash-dispatcher-controller.ts: SlashDispatcherController, SlashDispatcherContext — built-in slash command token dispatch and clearEditor policy; delegates command bodies to owner ports and leaves input-submit pipeline outside (P5 UI02, dispatch-table rewrite)
+controllers/input-submit-controller.ts: InputSubmitController, InputSubmitContext — editor submit pipeline classifier; delegates slash/image/bash/session/render owner capabilities while preserving token-neutral prompt/image/attachment semantics (P5 UI06, rewrite)
 agent-loop-status.ts: formatAgentLoopStatusLines(), formats last agent loop result telemetry for /status
 slash-command-arguments.ts: Built-in TUI slash command argument completion helpers for model, agent-loop, thinking, MCP, language, persona, and login commands
 footer-data-provider.ts: FooterDataProvider class, supplies model/session/branch footer information for the TUI status bar
