@@ -13,7 +13,7 @@ status: active   # P5 structurally complete (2026-06-04); P6 code unblocked. EV0
 ```text
 P5 interactive entry stable
   -> EV02 mode lazy dispatch
-  -> EV03 browser opt-in (after Q2)
+  -> EV03 browser opt-in registration slice (default-load exit; Q2 physical/package still pending)
   -> EV04 provider lazy design/implementation (after provider matrix is agreed)
   -> EV05 package surface sign-off
 ```
@@ -24,8 +24,8 @@ P5 interactive entry stable
 |-------|-------|---------|-------------------|-------|
 | 0 | P6 review scaffolding | EV01-EV05 | docs only | Safe parallel work while another Agent changes P5 |
 | 1 ✅ done | mode lazy dispatch | EV02 / F06 | **landed 2026-06-04** | main.ts only: dropped the eager `modes/index.ts` barrel import; rpc/interactive/print dispatch branches now `await import(...)` the selected runner (ACP already did). modes/index.ts barrel kept as public SDK surface (root index.ts re-exports it; EV-G4 — not narrowed). Cold-start measurement pending capable machine. See EV02 §Resolution |
-| 2 | browser opt-in decision | EV03 / F07 / Q2 | docs only | Decide independent package vs lazy-extract vs status quo before moving files |
-| 3 | browser optional implementation | EV03 | no, after Q2 | Moving builtin→optional is intentional behavior change; needs fallback UX and docs |
+| 2 ✅ in progress | browser opt-in registration | EV03 / F07 / Q2 | **registration-only allowed** | Browser metadata is optional/defaultDisabled and `getBuiltinExtensionPaths()` no longer returns browser; physical dir/package files unchanged pending Q2 |
+| 3 | browser physical/package opt-in | EV03 | no, after Q2 | Moving builtin→optional or independent package is intentional behavior/package change; needs fallback UX and docs |
 | 4 | ai provider lazy design | EV04 / F07 / Q6 | docs only | Split metadata/runtime concerns before touching `@pencil-agent/ai` |
 | 5 | ai provider lazy implementation | EV04 | no, after provider matrix | Highest behavior risk: model availability, OAuth/env/custom providers, token usage |
 | 6 | package surface review | EV05 / Q3 / P8 | docs only | Do not narrow root exports in P6 unless Q3 explicitly says so |
@@ -75,3 +75,10 @@ Not safe while P5 is active:
 - Move `extensions/builtin/browser`.
 - Change package `files` or root exports.
 - Change `core/lib/ai` provider/model loading.
+
+## Validation Record
+
+| Slice | Cost moved | Files touched | Intentional behavior changes | Compatibility notes | Validation | Residual risk |
+|-------|------------|---------------|------------------------------|---------------------|------------|---------------|
+| EV02 mode lazy dispatch | Unselected mode import cost leaves startup path | `main.ts` | None intended | `modes/index.ts` remains public facade | Maintainer build pending/confirmed separately; cold-start pending capable machine | Performance claim needs measurement |
+| EV03 browser opt-in registration | Browser extension registration/resource discovery leaves default startup path | `builtin-extensions.ts`, slash catalog/dispatcher fallback, browser registry test, P1/P2/P3 docs | Full `/browser` command and browser/browser_admin tools are no longer default-loaded; lightweight `/browser` fallback explains opt-in; user must opt in via `--extension extensions/builtin/browser` or config `extensions:` | Browser source, package `files`, and vendored Python remain shipped; this is not the final F07 package-size reduction | Static diff only on low-performance machine; maintainer should run targeted registry test and build | Q2 still required for physical move/independent package |

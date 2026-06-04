@@ -9,19 +9,22 @@
 The `extensions/` module contains built-in extensions that extend nanoPencil's capabilities. Extensions can register tools, slash commands, keybindings, and hook into agent lifecycle events.
 
 **Extension Categories:**
-- `builtin/`: Auto-loaded on startup (unless disabled)
-- `optional/`: Opt-in via configuration or flags
+- `builtin/`: first-party extension source; default-enabled entries are auto-loaded on startup
+- `optional/`: opt-in via configuration or flags
 
 ---
 
 ## Member List
 
-### Default Extensions (`extensions/builtin/`)
+### Built-in Extension Source (`extensions/builtin/`)
 
-Auto-loaded extensions available to all users.
+First-party extension source. Default-enabled entries are auto-loaded by `getBuiltinExtensionPaths()`; entries marked optional in `builtInExtensions` require explicit configuration/CLI opt-in even if their source directory is still here.
 
 Current default extension directories:
-`browser/`, `btw/`, `debug/`, `diagnostics/`, `discipline/`, `grub/`, `idle-think/`, `interview/`, `link-world/`, `loop/`, `mcp/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `soul/`, `subagent/`, `team/`, `token-save/`.
+`btw/`, `debug/`, `diagnostics/`, `discipline/`, `grub/`, `idle-think/`, `interview/`, `link-world/`, `loop/`, `mcp/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `soul/`, `subagent/`, `team/`, `token-save/`.
+
+Current opt-in source still physically under `extensions/builtin/` pending Q2 physical/package decision:
+`browser/`.
 
 The complete file-level member list for defaults lives in `extensions/builtin/AGENT.md`; this parent map records category boundaries and high-level responsibilities.
 

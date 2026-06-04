@@ -40,6 +40,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "persona", descriptionKey: "slash.persona", category: "core" },
 	{ name: "memory", descriptionKey: "slash.memory", category: "memory" },
 	{ name: "dream", descriptionKey: "slash.dream", category: "memory", implementation: "extension" },
+	{ name: "browser", descriptionKey: "slash.browser", category: "tools", implementation: "extension" },
 	{ name: "export", descriptionKey: "slash.export", category: "tools" },
 	{ name: "share", descriptionKey: "slash.share", category: "tools" },
 	{ name: "copy", descriptionKey: "slash.copy", category: "core" },

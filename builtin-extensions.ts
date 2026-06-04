@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 /** Built-in extension paths */
 const BUNDLED_NANOMEM_EXTENSION_PACKAGES = join(__dirname, "packages", "mem-core", "extension.js");
 const BUNDLED_LINK_WORLD_EXTENSION = join(__dirname, "extensions", "builtin", "link-world", "index.js");
-const BUNDLED_BROWSER_EXTENSION = join(__dirname, "extensions", "builtin", "browser", "index.js");
+// Browser harness is opt-in (P6/EV03): no default-load path const; enabled via --extension/config.
 const BUNDLED_SECURITY_AUDIT_EXTENSION = join(__dirname, "extensions", "builtin", "security-audit", "index.js");
 const BUNDLED_SOUL_EXTENSION = join(__dirname, "extensions", "builtin", "soul", "index.js");
 const BUNDLED_PRESENCE_EXTENSION = join(__dirname, "extensions", "builtin", "presence", "index.js");
@@ -59,7 +59,7 @@ export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "token-save", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "nanomem", category: "package", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["packages/mem-core/test/extension-commands.test.ts"] },
 	{ id: "link-world", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, resourceDiscovery: true, testContracts: ["external-process", "resource-discovery"], testFiles: ["test/link-world-extension-registration.test.ts"] },
-	{ id: "browser", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, resourceDiscovery: true, testContracts: ["external-process", "resource-discovery"], testFiles: ["test/browser-extension-registration.test.ts"] },
+	{ id: "browser", category: "optional", defaultEnabled: false, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, resourceDiscovery: true, testContracts: ["external-process", "resource-discovery"], testFiles: ["test/browser-extension-registration.test.ts"] },
 	{ id: "security-audit", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "soul", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "presence", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: true, startsTimers: true, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/presence-opening.test.ts", "test/presence-locale.test.ts"] },
@@ -113,6 +113,8 @@ function findPackageRoot(startDir: string): string | null {
  * Optional extensions need to be enabled via configuration or --extension:
  * - Simplify (code simplification) - extensions/optional/simplify/
  * - export-html (HTML export) - extensions/optional/export-html/
+ * - Browser harness (CDP automation) - extensions/builtin/browser/ (opt-in since P6/EV03; source stays
+ *   under builtin/ until the Q2 physical/package opt-in decision moves it to extensions/optional/ or a package)
  */
 export function getBuiltinExtensionPaths(): string[] {
 	const paths: string[] = [];
@@ -181,13 +183,10 @@ export function getBuiltinExtensionPaths(): string[] {
 		if (existsSync(linkWorldTs)) paths.push(linkWorldTs);
 	}
 
-	// === Browser Harness extension (built-in CDP browser automation) ===
-	if (existsSync(BUNDLED_BROWSER_EXTENSION)) {
-		paths.push(BUNDLED_BROWSER_EXTENSION);
-	} else {
-		const browserTs = join(__dirname, "extensions", "builtin", "browser", "index.ts");
-		if (existsSync(browserTs)) paths.push(browserTs);
-	}
+	// Browser Harness is an opt-in optional capability (P6/EV03) — not loaded by default.
+	// Enable it explicitly via `--extension extensions/builtin/browser` or config `extensions:`.
+	// (Physical dir stays under builtin/ pending the Q2 physical/package opt-in decision; the
+	// P6 change here is registration-only and does not change package files.)
 
 	// === Security Audit extension (built-in source, compiled to dist/extensions/builtin/security-audit) ===
 	if (existsSync(BUNDLED_SECURITY_AUDIT_EXTENSION)) {

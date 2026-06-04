@@ -1,8 +1,8 @@
 /**
  * [WHO]: browserExtension - registers browser automation tools, /browser command, and browser skill resources
  * [FROM]: Depends on node:child_process, node:fs, node:path, node:url, @sinclair/typebox, core/extensions-host/types
- * [TO]: Auto-loaded by builtin-extensions.ts as a default extension
- * [HERE]: extensions/builtin/browser/index.ts - Browser Harness integration entry point
+ * [TO]: Loaded explicitly via extension config/CLI path; registered in builtin-extensions metadata as opt-in
+ * [HERE]: extensions/builtin/browser/index.ts - Browser Harness integration entry point kept under builtin source pending Q2 physical/package decision
  */
 
 import { spawn } from "node:child_process";

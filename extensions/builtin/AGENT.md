@@ -8,7 +8,7 @@ diagnostics/types.ts: Diagnostic event/report type contract and diagnostic:event
 diagnostics/diagnostic-buffer.ts: DiagnosticBuffer, event coercion, fingerprint dedupe, prompt gating
 diagnostics/reporter.ts: User-approved InsForge pencil_issue_events reporter, configured via NANOPENCIL_ISSUE_* env vars
 diagnostics/redaction.ts: Diagnostic message normalization and secret/path redaction helpers
-browser/index.ts: Browser Harness extension entry, registers browser/browser_admin tools, /browser command, Browser Harness resource discovery, project-local browser workspace seeding
+browser/index.ts: Browser Harness extension entry, registers browser/browser_admin tools, /browser command, Browser Harness resource discovery, project-local browser workspace seeding; opt-in since P6/EV03 despite physical source staying under builtin pending Q2 physical/package decision
 browser/browser.md: Browser Harness day-to-day skill instructions for NanoPencil tool use and workspace contribution
 browser/install.md: Browser Harness setup and troubleshooting instructions, exposed as a skill resource
 browser/src/browser_harness/: Vendored Browser Harness Python package, CDP daemon, IPC bridge, admin commands, and helper functions

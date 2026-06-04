@@ -27,6 +27,7 @@ export const slashCommands = {
 	persona: "Switch AI persona/personality pack",
 	memory: "Show project memory and knowledge (NanoMem)",
 	dream: "Refresh long-term project memory (NanoMem)",
+	browser: "Enable or inspect browser automation tools",
 	export: "Export session to HTML file",
 	share: "Share session as a secret GitHub gist",
 	copy: "Copy last agent message to clipboard",

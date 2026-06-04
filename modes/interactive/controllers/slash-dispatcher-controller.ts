@@ -37,6 +37,7 @@ export interface SlashDispatcherSelfUpdatePort {
 }
 
 export interface SlashDispatcherCommandHandlers {
+  isExtensionCommand(text: string): boolean;
   handleAgentLoopCommand(text: string): void | Promise<void>;
   handleMcpCommand(text: string): Promise<void>;
   handleExportCommand(text: string): Promise<void>;
@@ -57,6 +58,7 @@ export interface SlashDispatcherCommandHandlers {
   handlePersonaCommand(text: string): Promise<void>;
   handleMemoryCommand(): void;
   handleArminSaysHi(): void;
+  handleBrowserOptInCommand(): void;
   shutdown(): Promise<void>;
 }
 
@@ -94,6 +96,9 @@ export class SlashDispatcherController {
 
     const spaceIdx = text.indexOf(" ");
     const cmd = spaceIdx === -1 ? text : text.slice(0, spaceIdx);
+    if (cmd === "/browser" && this.ctx.commands.isExtensionCommand(text)) {
+      return false;
+    }
     const handler = this.builtinSlashCommands[cmd];
     if (!handler) return false;
     await handler(text, clear);
@@ -226,6 +231,10 @@ export class SlashDispatcherController {
       },
       "/memory": (_t, clear) => {
         this.ctx.commands.handleMemoryCommand();
+        clear();
+      },
+      "/browser": (_t, clear) => {
+        this.ctx.commands.handleBrowserOptInCommand();
         clear();
       },
       "/arminsayshi": (_t, clear) => {

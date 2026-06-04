@@ -27,6 +27,7 @@ export const slashCommands = {
 	persona: "切换 AI 人格/个性包",
 	memory: "显示项目记忆和知识（纳米记忆）",
 	dream: "刷新长期项目记忆（纳米记忆）",
+	browser: "启用或检查浏览器自动化工具",
 	export: "将会话导出为 HTML 文件",
 	share: "将会话分享为保密的 GitHub gist",
 	copy: "复制上一条 AI 消息到剪贴板",

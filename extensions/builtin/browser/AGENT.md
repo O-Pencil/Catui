@@ -3,7 +3,7 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
-index.ts: Browser Harness extension entry, registers browser/browser_admin tools, /browser command, Browser Harness resource discovery for core/interaction/domain skills, project-local browser workspace seeding
+index.ts: Browser Harness extension entry, registers browser/browser_admin tools, /browser command, Browser Harness resource discovery for core/interaction/domain skills, project-local browser workspace seeding; loaded only through explicit extension config/CLI opt-in since P6/EV03
 browser.md: Browser Harness day-to-day skill instructions for NanoPencil tool use and workspace contribution
 install.md: Browser Harness setup and troubleshooting instructions, exposed as a skill resource
 src/browser_harness/: Vendored Browser Harness Python package, CDP daemon, IPC bridge, admin commands, and helper functions

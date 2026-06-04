@@ -591,6 +591,7 @@ export class InteractiveMode {
         handleReinstallCommand: () => this.selfUpdate.handleReinstallCommand(),
       },
       commands: {
+        isExtensionCommand: (text) => this.isExtensionCommand(text),
         handleAgentLoopCommand: (text) => this.handleAgentLoopCommand(text),
         handleMcpCommand: (text) => this.handleMcpCommand(text),
         handleExportCommand: (text) => this.handleExportCommand(text),
@@ -612,6 +613,7 @@ export class InteractiveMode {
         handlePersonaCommand: (text) => this.handlePersonaCommand(text),
         handleMemoryCommand: () => this.handleMemoryCommand(),
         handleArminSaysHi: () => this.handleArminSaysHi(),
+        handleBrowserOptInCommand: () => this.handleBrowserOptInCommand(),
         shutdown: () => this.shutdown(),
       },
     });
@@ -4356,6 +4358,19 @@ export class InteractiveMode {
     this.chatContainer.addChild(new Spacer(1));
     this.chatContainer.addChild(new Text(lines.join("\n"), 1, 0));
     this.ui.requestRender();
+  }
+
+  private handleBrowserOptInCommand(): void {
+    this.showStatus(
+      [
+        "Browser automation is opt-in.",
+        "",
+        "Enable it by starting NanoPencil with:",
+        "  --extension extensions/builtin/browser",
+        "",
+        "Or add that path to your extensions config, then run /browser status.",
+      ].join("\n"),
+    );
   }
 
   private async handleMcpCommand(text: string): Promise<void> {

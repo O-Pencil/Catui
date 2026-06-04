@@ -176,7 +176,7 @@ nanoPencil/
 │   └── acp/               # ACP mode
 │
 ├── extensions/            # Built-in extensions
-│   ├── builtin/           # Auto-loaded extensions
+│   ├── builtin/           # First-party extension source (default-enabled entries auto-load)
 │   └── optional/          # Opt-in extensions
 │
 ├── packages/              # Bundled package-shaped integrations
@@ -270,7 +270,7 @@ Extensions can:
 | `grub` | `/grub` autonomous long-running task harness with feature-list validation |
 | `loop` | `/loop` session-scoped scheduled prompts |
 | `link-world` | Internet access via agent-reach |
-| `browser` | Direct browser automation via vendored Browser Harness CDP bridge |
+| `browser` | Opt-in direct browser automation via vendored Browser Harness CDP bridge |
 | `discipline` | Built-in engineering workflow skills, `skill` tool, and lightweight skill-use bootstrap |
 | `mcp` | MCP protocol support |
 | `security-audit` | Security vulnerability detection |
