@@ -35,6 +35,7 @@ applies_to:
 |---------|-------|----------------|
 | `/command` 路由 + 各 handle*Command | `slash-dispatcher` | mount 只委托 |
 | model/thinking/provider overlay | `model-overlay-controller` | mount 只委托；provider credential/config 不归 model-overlay |
+| reusable model capability | `core/runtime/model-controller` + `AgentSession` facade | `model-overlay-controller` 只能编排 interactive TUI 选择流程；任何有第二 mode/runtime consumer 的 model/thinking/API-key/default-model 规则不得下沉到 model-overlay（UI08） |
 | API key / OAuth / provider 配置 | `auth-controller` / `provider-config-controller` | provider 凭据、base URL、custom model config 不散落到 model overlay |
 | settings selector (`/settings`) | `settings-overlay-controller`（UI07）或暂留 mount | 不归 model-overlay；不得把 theme/image/buddy/presence/editor settings 混进 model owner |
 | fork/switch/tree 选择器（UI 侧）| `tree-overlay-controller`（UI05 改名）| 与 P4 runtime `session-tree-controller` 不同层 |
@@ -62,6 +63,7 @@ applies_to:
 9. 是否改变 public API、extension UI API、配置文件格式、slash/keybinding 可达性（UI-G9）？
 10. 缺省值、读取失败、取消、半写入、老数据迁移等 fallback 是否仍在原 owner 内可读且可测试（UI-G10）？
 11. controller 构造是否引入 eager heavy work；是否保持 P6 可 lazy-load 的形态（UI-G11）？
+12. 对 model-overlay：该方法是否有第二 mode/runtime consumer？若有，是否仍归 runtime/shared helper，只由 model-overlay 经 port 编排（UI08）？
 
 ## Low-Performance Machine Policy
 

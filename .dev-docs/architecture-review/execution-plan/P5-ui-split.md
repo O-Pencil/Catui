@@ -31,7 +31,7 @@ gate: gates.md#门组-b
 
 - [ ] `modes/_shell/cancellation.ts` 抽出（Q7：只抽 cancellation，跨 mode；esc 分派接线留 mount）
 - [ ] `modes/interactive/controllers/`：**9 个 controller**
-  - slash-dispatcher（限内置 `/command` dispatch；dispatch table 已完成，controller 抽取待做）/ model-overlay（只消费 provider 能力）/ auth + provider-config / settings-overlay（UI07）/ tree-overlay（UI05 改名）/ image-pipeline / **extension-ui**（UI02）/ **self-update**（UI02，P5 先 interactive 内拆）/ **input-submit**（UI06，slash/image 之后抽）
+  - slash-dispatcher（限内置 `/command` dispatch；dispatch table 已完成，controller 抽取待做）/ model-overlay（UI08：只拥有 interactive TUI model-selection workflow，可复用 model capability 继续归 runtime `model-controller` / `AgentSession`，provider 配置只经 port 消费）/ auth + provider-config / settings-overlay（UI07）/ tree-overlay（UI05 改名）/ image-pipeline / **extension-ui**（UI02）/ **self-update**（UI02，P5 先 interactive 内拆）/ **input-submit**（UI06，slash/image 之后抽）
 - [ ] 每个切片先按 [mode-architecture-calibration.md](../interactive-ui-review/mode-architecture-calibration.md) 分类：shared capability / interactive controller / interactive surface host / composition wiring / render layer
 - [ ] `modes/interactive/state/`：UI 状态合一（~80 字段）
 - [ ] `interactive-mode.ts` → mount 入口（**< 500 行为 post-UI04 + input-submit 目标**；第一轮 `handleEvent`(336) + submit handler(~246) 仍留 mount，达不到 500）
@@ -46,7 +46,7 @@ gate: gates.md#门组-b
 | 目标模块 | 方法簇（代表，行号）| 自带状态 | 对计划 |
 |---------|--------------------|---------|--------|
 | **slash-dispatcher.ts** | `executeBuiltinSlashCommand`(3021 调度表) + 各 `handle*Command`(thinking/agentLoop/export/share/copy/status/usage/name/session/changelog/hotkeys/clear/renderDebug/showResources/soul/persona/memory/mcp/language/bash/compact) + `isExtensionCommand` + 彩蛋(armin/daxnuts) | skillCommands | 计划内；dispatch table 已完成，controller 抽取待做 |
-| **model-overlay-controller.ts** | `cycleThinkingLevel`/`cycleModel`/`handleModelCommand`/`show{Model,Models,ProviderThenModel}Selector`/`showModelsSelector`/`findExactModelMatch`/`getModelCandidates`；调用 auth/provider-config 能力确保选中模型可用；**不含 `showSettingsSelector`** | — | 计划内 |
+| **model-overlay-controller.ts** | interactive TUI model-selection workflow：`cycleThinkingLevel`/`cycleModel`/`handleModelCommand`/`show{Model,Models,ProviderThenModel}Selector`/`showModelsSelector`/`findExactModelMatch`/`getModelCandidates`；实际 model/thinking mutation 继续委托 `AgentSession`/runtime `model-controller`；调用 auth/provider-config 能力确保选中模型可用；**不含 `showSettingsSelector`** | — | 计划内；UI08 约束：第二消费者能力不归 model-overlay |
 | **auth-controller.ts / provider-config-controller.ts** | `handleApiKeyCommand`/`getStoredApiKey`/`promptForProviderApiKey`/`handleLoginCommand`/`handleProviderCredentialsCommand`/`showOAuthSelector`/`getLoginSelectorProviders`/`showLoginDialog` + provider 配置簇(`ensureProviderConfigured`/`configureCustomProtocolProvider`/`refreshCurrentModelForProvider`/`resolveProviderId`) | — | 计划内；provider 凭据/连接配置归此，model-overlay 只消费 |
 | **settings-overlay-controller.ts** | `showSettingsSelector` + `SettingsSelectorComponent` callbacks（theme/image/buddy/presence/editor appearance/session flags）| — | UI07 新增；不归 model-overlay |
 | **session-tree-controller.ts**(UI) | `showUserMessageSelector`/`showTreeSelector`/`showSessionSelector`/`handleResumeSession`/`addSessionNavigationBanner` | — | 计划内（注意与 P4 的 runtime `session-tree-controller` 同名不同层）|
@@ -69,7 +69,7 @@ gate: gates.md#门组-b
 
 ### 下一步（开拆前置）
 
-1. ✅ **已建 [`interactive-ui-review/`](../interactive-ui-review/README.md)**（镜像 runtime-session-review）：5 个发现立成卡 [UI01–UI05](../interactive-ui-review/README.md#current-finding-set)，门组 [UI-G1…UI-G7](../interactive-ui-review/gates.md) 定稿，抽取顺序见 [refactor-plan.md](../interactive-ui-review/refactor-plan.md)。
+1. ✅ **已建 [`interactive-ui-review/`](../interactive-ui-review/README.md)**（镜像 runtime-session-review）：发现卡 [UI01–UI08](../interactive-ui-review/README.md#current-finding-set) 已登记，门组 [UI-G0…UI-G11](../interactive-ui-review/gates.md) 定稿，抽取顺序见 [refactor-plan.md](../interactive-ui-review/refactor-plan.md)。
 2. **校全 [feature-inventory.md](../interactive-ui-review/feature-inventory.md)**（[UI01](../interactive-ui-review/findings/UI01-tui-characterization-baseline.md)，命门）：v0 已起草(33 命令+22 键位+overlay+渲染特性)，maintainer 校到 v1。P5 **接受重写** → 验收"功能正确"而非字节级 characterization；安全网 = 清单完整度。
 3. 评审定稿后按 controller 分批抽：一簇一簇定 **纯搬(preserve-check) vs 重写(功能验收)**，逐 tsc + 逐条功能验收。
 
