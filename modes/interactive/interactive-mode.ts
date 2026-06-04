@@ -103,6 +103,7 @@ import { ModelOverlayController } from "./controllers/model-overlay-controller.j
 import { AuthProviderConfigController } from "./controllers/auth-provider-config-controller.js";
 import { TreeOverlayController } from "./controllers/tree-overlay-controller.js";
 import { SettingsOverlayController } from "./controllers/settings-overlay-controller.js";
+import { SlashDispatcherController } from "./controllers/slash-dispatcher-controller.js";
 import { AssistantMessageComponent } from "./components/assistant-message.js";
 import { BashExecutionComponent } from "./components/bash-execution.js";
 import { BorderedLoader } from "./components/bordered-loader.js";
@@ -186,12 +187,6 @@ export interface InteractiveModeOptions {
   verbose?: boolean;
 }
 
-/** A built-in slash command handler. `clear` clears the editor (respecting clearEditor). */
-type SlashCommandHandler = (
-  text: string,
-  clear: () => void,
-) => void | Promise<void>;
-
 export class InteractiveMode {
   private session: AgentSession;
   private ui: TUI;
@@ -262,6 +257,7 @@ export class InteractiveMode {
   private modelOverlay!: ModelOverlayController;
   private treeOverlay!: TreeOverlayController;
   private settingsOverlay!: SettingsOverlayController;
+  private slashDispatcher!: SlashDispatcherController;
   private surfaces!: PersistentSurfaceRegistry;
   private promptHost!: PromptHost;
   private customOverlay!: CustomOverlayHost;
@@ -565,6 +561,59 @@ export class InteractiveMode {
       rebuildAutocomplete: () => this.setupAutocomplete(this.fdPath),
       syncBuddyPet: () => this.syncBuddyPet(),
     });
+    this.slashDispatcher = new SlashDispatcherController({
+      clearEditor: () => this.editor.setText(""),
+      settings: {
+        showSettingsSelector: () => this.settingsOverlay.showSettingsSelector(),
+      },
+      model: {
+        showScopedModelsSelector: () => this.modelOverlay.showModelsSelector(),
+        handleModelCommand: (searchTerm) =>
+          this.modelOverlay.handleModelCommand(searchTerm),
+        handleThinkingCommand: (text) =>
+          this.modelOverlay.handleThinkingCommand(text),
+      },
+      auth: {
+        handleApiKeyCommand: () => this.authProviderConfig.handleApiKeyCommand(),
+        handleLoginCommand: (text) =>
+          this.authProviderConfig.handleLoginCommand(text),
+        showLogoutSelector: () =>
+          this.authProviderConfig.showOAuthSelector("logout"),
+      },
+      tree: {
+        showForkSelector: () => this.treeOverlay.showForkSelector(),
+        showTreeSelector: () => this.treeOverlay.showTreeSelector(),
+        showSessionSelector: () => this.treeOverlay.showSessionSelector(),
+      },
+      selfUpdate: {
+        handleUpdateCommand: () => this.selfUpdate.handleUpdateCommand(),
+        handleReinstallCommand: () => this.selfUpdate.handleReinstallCommand(),
+      },
+      commands: {
+        handleAgentLoopCommand: (text) => this.handleAgentLoopCommand(text),
+        handleMcpCommand: (text) => this.handleMcpCommand(text),
+        handleExportCommand: (text) => this.handleExportCommand(text),
+        handleShareCommand: () => this.handleShareCommand(),
+        handleCopyCommand: () => this.handleCopyCommand(),
+        handleStatusCommand: () => this.handleStatusCommand(),
+        handleUsageCommand: () => this.handleUsageCommand(),
+        handleNameCommand: (text) => this.handleNameCommand(text),
+        handleSessionCommand: () => this.handleSessionCommand(),
+        handleChangelogCommand: () => this.handleChangelogCommand(),
+        handleHotkeysCommand: () => this.handleHotkeysCommand(),
+        handleShowResourcesCommand: () => this.handleShowResourcesCommand(),
+        handleClearCommand: () => this.handleClearCommand(),
+        handleCompactCommand: (customInstructions) =>
+          this.handleCompactCommand(customInstructions),
+        handleReloadCommand: () => this.handleReloadCommand(),
+        handleLanguageCommand: (text) => this.handleLanguageCommand(text),
+        handleSoulCommand: () => this.handleSoulCommand(),
+        handlePersonaCommand: (text) => this.handlePersonaCommand(text),
+        handleMemoryCommand: () => this.handleMemoryCommand(),
+        handleArminSaysHi: () => this.handleArminSaysHi(),
+        shutdown: () => this.shutdown(),
+      },
+    });
     this.syncBuddyPet();
 
     // Load hide thinking block setting
@@ -574,7 +623,7 @@ export class InteractiveMode {
     setRegisteredThemes(this.session.resourceLoader.getThemes().themes);
     initTheme(this.settingsManager.getTheme(), true);
     this.session.setSlashCommandExecutor((text) =>
-      this.executeBuiltinSlashCommand(text, { clearEditor: false }),
+      this.slashDispatcher.execute(text, { clearEditor: false }),
     );
   }
 
@@ -1994,7 +2043,7 @@ export class InteractiveMode {
 
       await this.imagePipeline.awaitPendingPaste();
 
-      if (await this.executeBuiltinSlashCommand(text)) {
+      if (await this.slashDispatcher.execute(text)) {
         return;
       }
       // Check for /persona command - support both standalone and mixed with other text
@@ -2221,167 +2270,6 @@ export class InteractiveMode {
       // Clean up temporary clipboard image files from project root
       this.imagePipeline.cleanupClipboardImages();
     };
-  }
-
-  private readonly builtinSlashCommands: Record<string, SlashCommandHandler> = {
-    "/settings": (_t, clear) => {
-      this.settingsOverlay.showSettingsSelector();
-      clear();
-    },
-    "/apikey": async (_t, clear) => {
-      await this.authProviderConfig.handleApiKeyCommand();
-      clear();
-    },
-    "/scoped-models": async (_t, clear) => {
-      clear();
-      await this.modelOverlay.showModelsSelector();
-    },
-    "/model": async (t, clear) => {
-      const searchTerm = t.startsWith("/model ") ? t.slice(7).trim() : undefined;
-      clear();
-      await this.modelOverlay.handleModelCommand(searchTerm);
-    },
-    "/thinking": (t, clear) => {
-      this.modelOverlay.handleThinkingCommand(t);
-      clear();
-    },
-    "/agent-loop": (t, clear) => {
-      this.handleAgentLoopCommand(t);
-      clear();
-    },
-    "/mcp": async (t, clear) => {
-      await this.handleMcpCommand(t);
-      clear();
-    },
-    "/export": async (t, clear) => {
-      await this.handleExportCommand(t);
-      clear();
-    },
-    "/share": async (_t, clear) => {
-      await this.handleShareCommand();
-      clear();
-    },
-    "/copy": (_t, clear) => {
-      this.handleCopyCommand();
-      clear();
-    },
-    "/status": async (_t, clear) => {
-      await this.handleStatusCommand();
-      clear();
-    },
-    "/usage": async (_t, clear) => {
-      await this.handleUsageCommand();
-      clear();
-    },
-    "/name": (t, clear) => {
-      this.handleNameCommand(t);
-      clear();
-    },
-    "/session": (_t, clear) => {
-      this.handleSessionCommand();
-      clear();
-    },
-    "/changelog": (_t, clear) => {
-      this.handleChangelogCommand();
-      clear();
-    },
-    "/hotkeys": (_t, clear) => {
-      this.handleHotkeysCommand();
-      clear();
-    },
-    "/resources": (_t, clear) => {
-      this.handleShowResourcesCommand();
-      clear();
-    },
-    "/fork": (_t, clear) => {
-      this.treeOverlay.showForkSelector();
-      clear();
-    },
-    "/tree": (_t, clear) => {
-      this.treeOverlay.showTreeSelector();
-      clear();
-    },
-    "/login": async (t, clear) => {
-      await this.authProviderConfig.handleLoginCommand(t);
-      clear();
-    },
-    "/logout": (_t, clear) => {
-      this.authProviderConfig.showOAuthSelector("logout");
-      clear();
-    },
-    "/new": async (_t, clear) => {
-      clear();
-      await this.handleClearCommand();
-    },
-    "/update": (_t, clear) => {
-      this.selfUpdate.handleUpdateCommand();
-      clear();
-    },
-    "/reinstall": (_t, clear) => {
-      this.selfUpdate.handleReinstallCommand();
-      clear();
-    },
-    "/compact": async (t, clear) => {
-      const customInstructions = t.startsWith("/compact ") ? t.slice(9).trim() : undefined;
-      clear();
-      await this.handleCompactCommand(customInstructions);
-    },
-    "/reload": async (_t, clear) => {
-      clear();
-      await this.handleReloadCommand();
-    },
-    "/language": async (t, clear) => {
-      await this.handleLanguageCommand(t);
-      clear();
-    },
-    "/soul": (_t, clear) => {
-      this.handleSoulCommand();
-      clear();
-    },
-    "/persona": async (t, clear) => {
-      clear();
-      await this.handlePersonaCommand(t);
-    },
-    "/memory": (_t, clear) => {
-      this.handleMemoryCommand();
-      clear();
-    },
-    "/arminsayshi": (_t, clear) => {
-      this.handleArminSaysHi();
-      clear();
-    },
-    "/resume": (_t, clear) => {
-      this.treeOverlay.showSessionSelector();
-      clear();
-    },
-    "/quit": async (_t, clear) => {
-      clear();
-      await this.shutdown();
-    },
-  };
-
-  private async executeBuiltinSlashCommand(
-    text: string,
-    options?: { clearEditor?: boolean },
-  ): Promise<boolean> {
-    if (!text.startsWith("/")) return false;
-
-    const clearEditor = options?.clearEditor ?? true;
-    const clear = () => {
-      if (clearEditor) {
-        this.editor.setText("");
-      }
-    };
-
-    // Dispatch by command token (text up to the first space). Note: /export's bare
-    // startsWith was normalized to this token match (GB-2) — "/exportfoo" no longer
-    // counts as /export.
-    const spaceIdx = text.indexOf(" ");
-    const cmd = spaceIdx === -1 ? text : text.slice(0, spaceIdx);
-    const handler = this.builtinSlashCommands[cmd];
-    if (!handler) return false;
-    await handler(text, clear);
-    return true;
   }
 
   private subscribeToAgent(): void {
