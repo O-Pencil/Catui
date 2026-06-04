@@ -6,7 +6,7 @@ phase: P5
 finding: #8（interactive-mode.ts → mount，post-UI04 目标 <500 行）
 status: review
 source: modes/interactive/interactive-mode.ts（UI04 后 4510 行 / ~100 方法）
-decision: SELECTED C（宣告 P5 结构完成；#8 目标修正为组合根+port 面地板 ~1500-1700；resources/slash → P6 可选）— 2026-06-04
+decision: SELECTED C（宣告 P5 结构完成；#8 目标修正为组合根+port 面地板 ~1500-1700；resources/slash → interactive 域内可选清理，非 phase P6=入口体积）— 2026-06-04
 ```
 
 ## 0. 前提
@@ -46,7 +46,7 @@ P5 的架构目标是**消除 god-file 的危险耦合**，让其可分解、可
 
 | 选项 | 做什么 | mount 行数 | 评估 |
 |------|--------|-----------|------|
-| **C 宣告 P5 结构完成（建议）** | 不再机械搬扁平 handler；把 #8 目标从 `<500` 修正为诚实的"composition-root + port 面"地板（~1500-1700）；resources-display / slash-handlers 标为 P6 可选清理；进入 S-1..S-6 sign-off | ~4510（不变）| 解耦目标已达；停在收益递减点；最低风险 |
+| **C 宣告 P5 结构完成（建议）** | 不再机械搬扁平 handler；把 #8 目标从 `<500` 修正为诚实的"composition-root + port 面"地板（~1500-1700）；resources-display / slash-handlers 标为 **interactive 域内 post-P5 可选清理**（注意：**不是** 正式 phase P6——P6 是入口体积 lazy 化，另一条线）；P5 结构封口后正式主线接 **phase P6（入口体积）** | ~4510（不变）| 解耦目标已达；停在收益递减点；最低风险 |
 | **B 定向抽 2 个最干净大簇** | 抽 resources/diagnostics display（481，零耦合）+ slash-command-handlers（981，扁平）→ 各成 helper/controller；其余留组合根 | ~3050 | 2-3 刀，可观瘦身且风险低（纯格式化 + 独立 handler）；完成 slash-dispatcher"分派/体分离"的意图 |
 | **A 逼近低地板** | 再抽 resources + slash + render-context + compaction + persona + bash + working（~2624，7-8 刀）| ~1700 | 工作量最大；多为低耦合搬运，回归面广，架构边际价值低 |
 
@@ -73,10 +73,10 @@ P5 的架构目标是**消除 god-file 的危险耦合**，让其可分解、可
 
 - **目标修正**：`<500` 作废（不可达且失真）；mount 终态 = 组合根 + ~12 controller 的 port 能力面，地板 ~1500-1700。当前 4510 行不阻塞 sign-off——S-3"无冗余"的判据是**god 文件已拆 + verify-quality 行数/目录规则 PASS（或白名单带 deadline）**，而非单文件 <500。
 - **解耦已达**：render loop / submit / overlay escape seam / model / auth / tree / settings / slash dispatch / extension-ui / image / self-update / state 合一 + interrupt + stream-render——危险耦合全部出 mount，mount 不再含跨 concern 牵连的 god 逻辑。
-- **P6 可选 backlog**（非阻塞，收益递减）：
+- **interactive 域内 post-P5 可选清理**（非阻塞，收益递减；**与正式 phase P6=入口体积 无关**）：
   1. `resources-display`（481，零耦合纯格式化）→ controller/util。
   2. `slash-command-handlers`（981，扁平独立体）→ 按子簇 controller，完成 slash-dispatcher 分派/体分离。
   3. （更次）compaction/queue、bash、persona、working-status、external-editor。
   - 触发条件：任一簇再被改动、或第二 mode 复用、或 verify-quality 行数白名单到期。
 
-**接 sign-off**：进入 [execution-plan/sign-off-main.md](../../execution-plan/sign-off-main.md) S-1..S-6（跨所有 phase、跨分支、需 llm-wiki 重生成 + characterization + 性能基线 + maintainer 签字，于有算力机器执行）。P5 侧已为 S-2（verify-quality 零环全绿）、S-3（god 已拆）就绪。
+**正式主线（Stage B 剩余）**：P5 结构封口 → **phase P6（入口体积：lazy 入口 / browser→optional / ai lazy provider，见 [execution-plan/P6-entry-volume.md](../../execution-plan/P6-entry-volume.md) + [entry-volume-review](../../entry-volume-review/README.md)，依赖 P5，现已解锁）** → （可选 P7/P8）→ 全 phase landed 后才进 [sign-off-main.md](../../execution-plan/sign-off-main.md) S-1..S-6（跨分支 llm-wiki 重生成 + characterization + 性能基线 + maintainer 签字，有算力机器执行）。P5 侧已为 S-2（verify-quality 零环全绿）、S-3（god 已拆）就绪。

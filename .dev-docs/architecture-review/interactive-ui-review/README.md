@@ -10,7 +10,7 @@ closed_at: 2026-06-04
 sibling: ./../runtime-session-review/   # P4 的同型评审，门组与模式沿用
 ```
 
-> **结构完成（2026-06-04）**：12 个 UI 切片全部落地（image/self-update/extension-ui×4 host/state/model-overlay/auth-provider-config/tree-overlay/settings-overlay/slash-dispatcher/input-submit/interrupt/stream-render）。render loop、submit pipeline、overlay escape seam、model/auth/tree/settings/slash dispatch 等**危险耦合全部出 mount**。#8 退壳评估结案（[mount-shell-evaluation.md](./mount-shell-evaluation.md) scope C）：`<500` 目标作废（不可达且失真），残留为扁平低耦合 handler（resources-display/slash-handlers 等列 P6 可选 backlog）。接 [sign-off-main.md](../execution-plan/sign-off-main.md) S-1..S-6。
+> **结构完成（2026-06-04）**：12 个 UI 切片全部落地（image/self-update/extension-ui×4 host/state/model-overlay/auth-provider-config/tree-overlay/settings-overlay/slash-dispatcher/input-submit/interrupt/stream-render）。render loop、submit pipeline、overlay escape seam、model/auth/tree/settings/slash dispatch 等**危险耦合全部出 mount**。#8 退壳评估结案（[mount-shell-evaluation.md](./mount-shell-evaluation.md) scope C）：`<500` 目标作废（不可达且失真），残留为扁平低耦合 handler（resources-display/slash-handlers 等列 **interactive 域内 post-P5 可选清理**，非正式 phase P6）。**正式主线**：P5 封口 → phase **P6 入口体积**（依赖 P5，现已解锁）→ 全 phase landed 后才进 [sign-off-main.md](../execution-plan/sign-off-main.md) S-1..S-6。
 
 ## Purpose
 
