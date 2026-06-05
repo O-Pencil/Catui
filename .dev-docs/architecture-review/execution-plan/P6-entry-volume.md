@@ -29,7 +29,9 @@ lazy 入口分派、browser opt-in、ai lazy provider；改善冷启动与安装
 - [ ] **F06**：`modes/index.ts` → facade（< 50 行）；`main.ts` → dynamic dispatch
 - [x] **F07 短期 / EV03 registration slice**：browser 退出默认加载（metadata optional + `getBuiltinExtensionPaths()` 不返回 browser）；行为变更按 GB-2 记录
 - [ ] **F07 短期 / EV03 physical/package slice**：browser `extensions/builtin/` → `extensions/optional/` 或独立包/lazy-extract（✦**Q2** opt-in 形态）
-- [ ] **F07 短期**：ai provider lazy import（按 `models.json` 配置）
+- [x] **EV04 review**：provider lazy matrix 完成；runtime lazy 与 metadata chunking 分离
+- [ ] **F07 短期 / EV04 runtime slice**：provider runtime lazy resolver（按 `model.api` 首次使用加载 provider implementation）
+- [ ] **F07 短期 / EV04 metadata slice**：`models.generated.ts` provider 分片（generator-backed，后续单独切片）
 - [ ] 触碰 SOP §3.3 的变更走 REVIEW（package `files` / 公共 exports）
 
 ## 验证门控（DoD）
@@ -42,7 +44,8 @@ lazy 入口分派、browser opt-in、ai lazy provider；改善冷启动与安装
 | V6-2 | 体积 | dist 体积 ≤ P0 基线 | GB-2 |
 | V6-3 | 功能 | 全 mode smoke（interactive/print/rpc/acp）通过 | GB-2 |
 | V6-4 | browser | registration slice：默认启动不加载完整 browser；轻量 `/browser` fallback 提示 opt-in；显式 `--extension extensions/builtin/browser` 或配置路径仍可加载完整 browser。physical/package slice：按 Q2 决议验证 opt-in 路径可用（注：builtin→optional 改变自动加载，属有意行为变更，按 GB-2 声明）| GB-2 |
-| V6-5 | P5 boundary | P6 code does not touch P5-active interactive files before P5 entry stability is confirmed | GB-1 |
+| V6-5 | provider lazy | runtime slice：`stream()` 保持同步返回 EventStream；`getModel/getModels/ModelRegistry` 保持同步；provider smoke matrix 覆盖 OpenAI-compatible、OpenAI Responses、Anthropic、Google、Gemini CLI、Bedrock、OAuth/custom provider | GB-2 |
+| V6-6 | P5 boundary | P6 code does not touch P5-active interactive files before P5 entry stability is confirmed | GB-1 |
 
 ## 提交建议
 

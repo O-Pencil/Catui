@@ -2,7 +2,7 @@
 
 ```yaml
 id: EV04
-status: selected
+status: selected-runtime-first
 severity: high
 scope:
   - core/lib/ai/src/models.generated.ts
@@ -45,9 +45,22 @@ Recommended direction:
 
 Do not create a broad provider service that changes model selection semantics.
 
+## Resolution Slice — Runtime First
+
+Provider lazy loading is split into two separate slices:
+
+1. **Runtime lazy resolver**: lazy-load provider implementation modules from `stream()/complete()` by `model.api`, while keeping the public `stream()` return shape synchronous.
+2. **Metadata chunking**: split `models.generated.ts` by provider through `scripts/generate-models.ts`, while preserving `getModel()`, `getModels()`, and `getProviders()` compatibility.
+
+The first implementation slice should be runtime lazy only. `getModel()` / `getModels()` / `ModelRegistry` must remain synchronous in P6.
+
+Detailed matrix: [provider-lazy-matrix.md](../provider-lazy-matrix.md)
+
 ## Boundary Rules
 
 - `ModelRegistry` remains the compatibility surface for modes/runtime.
+- `getModel()`, `getModels()`, and `getProviders()` remain synchronous in P6.
+- `stream()` must continue returning an event stream synchronously; async import must be bridged internally.
 - Lazy loading must not change token usage accounting or request payloads.
 - Custom providers and extension-registered providers must keep their registration path.
 - Missing provider modules must produce actionable errors, not silent disappearance.
