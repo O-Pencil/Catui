@@ -6,7 +6,7 @@
  */
 import type { Model } from "@pencil-agent/ai/types";
 import type { ThinkingLevel } from "@pencil-agent/agent-core";
-import { modelsAreEqual } from "@pencil-agent/ai";
+import { modelsAreEqual } from "@pencil-agent/ai/models";
 
 export interface ModelCycleResult {
 	model: Model<any>;

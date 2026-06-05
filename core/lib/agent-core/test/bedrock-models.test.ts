@@ -22,7 +22,7 @@
  */
 
 import type { AssistantMessage } from "@pencil-agent/ai/types";
-import { getModels } from "@pencil-agent/ai";
+import { getModels } from "@pencil-agent/ai/models";
 import { describe, expect, it } from "vitest";
 import { Agent } from "../src/index.js";
 import { hasBedrockCredentials } from "./bedrock-utils.js";

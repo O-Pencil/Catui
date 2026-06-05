@@ -15,7 +15,7 @@
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getModel } from "@pencil-agent/ai";
+import { getModel } from "@pencil-agent/ai/models";
 import type { Api, Model } from "@pencil-agent/ai/types";
 import { createAgentSession, createCodingTools } from "../../../core/runtime/sdk.js";
 import { SessionManager } from "../../../core/session/session-manager.js";

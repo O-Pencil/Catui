@@ -8,8 +8,6 @@ import {
 	type Api,
 	type AssistantMessageEventStream,
 	type Context,
-	getModels,
-	getProviders,
 	type KnownProvider,
 	type Model,
 	type OAuthProviderInterface,
@@ -19,6 +17,7 @@ import {
 	registerOAuthProvider,
 	type SimpleStreamOptions,
 } from "@pencil-agent/ai";
+import { getModels, getProviders } from "@pencil-agent/ai/models";
 import { type Static, Type } from "@sinclair/typebox";
 import AjvModule from "ajv";
 import { existsSync, readFileSync, writeFileSync } from "fs";

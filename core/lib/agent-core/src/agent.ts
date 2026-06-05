@@ -11,7 +11,6 @@
 
 
 import {
-	getModel,
 	type ImageContent,
 	type Message,
 	type Model,
@@ -20,6 +19,7 @@ import {
 	type ThinkingBudgets,
 	type Transport,
 } from "@pencil-agent/ai";
+import { getModel } from "@pencil-agent/ai/models";
 import { agentLoop, agentLoopContinue } from "./agent-loop.js";
 import { structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue } from "./structured-adaptive-agent-loop.js";
 import { normalizeAgentLoopFramework } from "./types.js";

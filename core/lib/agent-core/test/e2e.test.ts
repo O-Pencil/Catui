@@ -1,5 +1,5 @@
 import type { AssistantMessage, Model, ToolResultMessage, UserMessage } from "@pencil-agent/ai/types";
-import { getModel } from "@pencil-agent/ai";
+import { getModel } from "@pencil-agent/ai/models";
 import { describe, expect, it } from "vitest";
 import { Agent } from "../src/index.js";
 import { hasBedrockCredentials } from "./bedrock-utils.js";

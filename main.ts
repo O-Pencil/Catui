@@ -5,7 +5,8 @@
  * [HERE]: CLI layer; parses args → CreateAgentSessionOptions → mode selection
  */
 
-import { type ImageContent, modelsAreEqual, supportsXhigh } from "@pencil-agent/ai";
+import type { ImageContent } from "@pencil-agent/ai/types";
+import { modelsAreEqual, supportsXhigh } from "@pencil-agent/ai/models";
 import chalk from "chalk";
 import { join, resolve } from "path";
 import { homedir } from "node:os";

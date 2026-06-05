@@ -7,7 +7,8 @@
  * [HERE]: modes/interactive/components/model-selector.ts — presentation component for model selection
  */
 
-import { type Model, modelsAreEqual } from "@pencil-agent/ai";
+import type { Model } from "@pencil-agent/ai/types";
+import { modelsAreEqual } from "@pencil-agent/ai/models";
 import {
 	Container,
 	type Focusable,

@@ -9,7 +9,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { getModel, type Model } from "@pencil-agent/ai";
+import type { Model } from "@pencil-agent/ai/types";
+import { getModel } from "@pencil-agent/ai/models";
 import { SettingsManager } from "../core/platform/config/settings-manager.js";
 import { createAgentSession } from "../core/runtime/sdk.js";
 

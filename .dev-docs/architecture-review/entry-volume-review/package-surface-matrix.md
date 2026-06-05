@@ -135,4 +135,4 @@ After code:
 
 ## Implementation Result
 
-Additive `@pencil-agent/ai/*` subpaths have been added while preserving the root entry. Maintainer confirmed build/quality validation passed. Internal import migration has started with type-only imports.
+Additive `@pencil-agent/ai/*` subpaths have been added while preserving the root entry. Maintainer confirmed build/quality validation passed. Internal import migration started with type-only imports and is continuing by capability group; the next code slice moves model catalog/helper imports to `@pencil-agent/ai/models`.

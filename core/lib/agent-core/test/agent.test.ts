@@ -1,4 +1,6 @@
-import { type AssistantMessage, type AssistantMessageEvent, EventStream, getModel, type Model } from "@pencil-agent/ai";
+import type { AssistantMessage, AssistantMessageEvent, Model } from "@pencil-agent/ai/types";
+import { EventStream } from "@pencil-agent/ai/events";
+import { getModel } from "@pencil-agent/ai/models";
 import { Type } from "@sinclair/typebox";
 import { describe, expect, it } from "vitest";
 import { Agent, type AgentMessage, type AgentTool } from "../src/index.js";

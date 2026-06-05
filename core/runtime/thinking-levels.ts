@@ -12,7 +12,8 @@
  * delegate here; the side-effects (agent.setThinkingLevel, persistence) stay in the session.
  */
 
-import { type Model, supportsXhigh } from "@pencil-agent/ai";
+import type { Model } from "@pencil-agent/ai/types";
+import { supportsXhigh } from "@pencil-agent/ai/models";
 import type { ThinkingLevel } from "@pencil-agent/agent-core";
 
 export const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high"];

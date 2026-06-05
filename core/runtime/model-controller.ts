@@ -10,7 +10,8 @@
  */
 
 import type { AgentLoopFrameworkInput, AgentLoopPolicyOptions, ThinkingLevel } from "@pencil-agent/agent-core";
-import { type Model, modelsAreEqual } from "@pencil-agent/ai";
+import type { Model } from "@pencil-agent/ai/types";
+import { modelsAreEqual } from "@pencil-agent/ai/models";
 import { nextCyclicIndex, pickThinkingLevelOnModelChange } from "./model-cycle.js";
 import type { ModelControllerContext } from "./session-context.js";
 import {

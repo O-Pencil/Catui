@@ -5,7 +5,8 @@
  * [HERE]: core/model-resolver.ts - model resolution, scoping, and initial selection
  */
 import type { ThinkingLevel } from "@pencil-agent/agent-core";
-import { type Api, type KnownProvider, type Model, modelsAreEqual } from "@pencil-agent/ai";
+import type { Api, KnownProvider, Model } from "@pencil-agent/ai/types";
+import { modelsAreEqual } from "@pencil-agent/ai/models";
 import chalk from "chalk";
 import { minimatch } from "minimatch";
 import { isValidThinkingLevel } from "../cli/args.js";
