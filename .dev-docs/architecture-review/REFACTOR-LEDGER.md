@@ -109,30 +109,26 @@ P6 的 lazy 改动（EV02/04/05）对 dist **基本中性**（lazy 改的是"何
 
 冷启动 = 进程启动到"选定 mode 就绪"的耗时；EV02/EV04 把**未选中 mode + 未使用 provider** 的 import 推迟，应体现在此。
 
+> ⚠️ **别用 `--version` / `--help`**：`cli.ts` 对这俩做了 fast-path，在 `await import("./main.js")` **之前**就退出（注释自述 <200ms vs 9-15s 全量 boot）——它们**根本不加载 main.js**，测不到 EV02/EV04。
+>
+> 正确指标 = **`--list-models`**：加载 main.js 全图 + 建 model registry 后 `process.exit(0)`（main.ts:870-873），**不触发 LLM / 不进 TUI / 不联网**。EV02 删的是 main.ts **顶层** `import {…} from modes/index`，任何加载 main.js 的命令都受影响 → `--list-models` 能干净测到。
+
 ```bash
-# 准备:装 hyperfine(更可靠的重复测量);没有就用 `time` 跑 5 次取最小
-brew install hyperfine    # 可选
+brew install hyperfine    # 可选;没有就用下面的 time fallback
 
-# (1) 纯 boot 成本(顶层 import 体量,EV02/EV04 直接影响):
-hyperfine -w 3 -r 10 'node dist/cli.js --version'
-
-# (2) P6 前后对比(隔离 P6 的冷启动收益):
+# A/B 对比(隔离 EV02/EV04 的冷启动收益,这是 V6-1 判据):
 git checkout 1b2da59 && npm run build
-hyperfine -w 3 -r 10 'node dist/cli.js --version'        # P5 收尾点
+hyperfine -w3 -r10 'node dist/cli.js --list-models'      # P5 收尾点(pre-EV02:顶层 eager 拉 interactive)
 git checkout refactor/arch-candidate-d && npm run build
-hyperfine -w 3 -r 10 'node dist/cli.js --version'        # HEAD;应 ≤ 前者
+hyperfine -w3 -r10 'node dist/cli.js --list-models'      # HEAD(interactive 不再加载)→ 应 ≤ 前者
 
-# (3) 按 mode(验 EV02:--print/--rpc 不再背 interactive):
-#    用不触发 LLM 的路径。--print 空输入或 --help 经 boot 后即退。
-hyperfine -w 3 -r 10 'node dist/cli.js --help'
-
-# 没有 hyperfine 时:
-for i in $(seq 5); do /usr/bin/time -p node dist/cli.js --version 2>&1 | grep real; done
+# 没 hyperfine —— bash 内建 time,读 real 行,跑 5 次取最小:
+for i in 1 2 3 4 5; do time node dist/cli.js --list-models >/dev/null; done
 ```
 
 **判读**：
-- (2) HEAD ≤ P5 收尾 → EV02/EV04 冷启动收益成立 → **V6-1 拿到，P6 核心 DoD 达成**。
-- `--version` 走的是共享 boot 路径；若想看 EV02 的 per-mode 差异，比较 `--help`(boot) 与进 interactive 的差（interactive 仍要加载 TUI）。
+- HEAD `--list-models` ≤ P5 收尾 → EV02/EV04 冷启动收益成立 → **V6-1 拿到，P6 核心 DoD 达成**。
+- 想看 EV02 的 per-mode 差异：比 `--list-models`(不进 mode 分派) 与真进 interactive 的差（interactive 仍要加载 TUI）。
 - 数字贴回 §6 度量表 + execution-plan/P6-entry-volume.md V6-1。
 
 ---
