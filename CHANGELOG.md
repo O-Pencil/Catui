@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0-beta.0] - 2026-06-05
+
+> **Beta of a large internal architecture refactor.** This release decomposes the two biggest
+> "god files" (the runtime session manager and the interactive TUI) into focused, single-owner
+> modules, and makes startup pay only for what you use. Public SDK API is unchanged; one user-facing
+> default changes (browser is now opt-in — see Changed). **Behavior parity has not yet been formally
+> validated end-to-end** — please report any regression. Installed only via `npm i nanopencil@beta`.
+
+### Changed
+- **Browser automation is now opt-in (behavior change).** The browser harness no longer auto-loads
+  by default. A lightweight `/browser` command remains and explains how to enable it. Re-enable the
+  full extension with `--extension extensions/builtin/browser` or by adding it to your config
+  `extensions:` list. (Privacy/terminal-first charter intact; browser stays a user-initiated capability.)
+- refactor(runtime): split the AgentSession god file into model / tool-runtime / session-tree
+  controllers behind a stable `AgentSession` facade (public API unchanged).
+- refactor(interactive): split `interactive-mode.ts` into 12 single-owner controllers
+  (image pipeline, self-update, extension UI hosts, model/auth/tree/settings overlays, slash
+  dispatcher, input submit, interrupt, stream render) + a consolidated UI state holder.
+
+### Performance
+- perf(startup): CLI cold start is substantially faster — only the selected mode and the
+  first-used provider load at boot (interactive TUI and unused provider runtimes are no longer
+  eagerly imported on `--print`/`--rpc`/`--list-models`). Measured ~60–75% faster boot on
+  `--list-models` versus the pre-refactor entry path.
+- perf(ai): provider runtimes load lazily on first use by `model.api`; `stream()` stays a
+  synchronous EventStream return and token accounting/model availability are unchanged.
+
+### Added
+- feat(ai): explicit `@pencil-agent/ai/*` subpath exports (`/types`, `/schema`, `/events`,
+  `/models`, `/registry`, `/stream`, `/oauth`) alongside the unchanged root export, for lighter
+  type-only and capability-scoped imports.
+
+### Fixed
+- fix(packaging): built-in extension runtime assets (including the ~1.6 MB browser harness
+  workspace) are now correctly copied into `dist/` and published. A path-alignment regression had
+  been silently skipping them, so prior packages could ship an incomplete browser harness.
+
+### Documentation
+- docs(arch-review): add `REFACTOR-LEDGER.md` — a living summary of what was designed, solved,
+  found, and still open across the refactor.
+
+### Known limitations (beta)
+- Full provider behavior smoke matrix, all-mode end-to-end validation, and the cross-branch
+  sign-off (functional-parity diff, user-state compatibility) are still pending. Treat this build
+  as a functional-test beta, not a stability release.
+- Install/package size has not decreased in this beta (browser assets still ship); a follow-up
+  slice may move browser to a separate optional package.
+
+
 ## [1.14.6] - 2026-05-28
 
 ### Fixed
