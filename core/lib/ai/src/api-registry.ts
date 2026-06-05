@@ -46,6 +46,9 @@ export type ApiProviderLoader<TApi extends Api = Api, TOptions extends StreamOpt
 	ApiProvider<TApi, TOptions>
 >;
 
+type ErasedApiProvider = ApiProvider<any, any>;
+type ErasedApiProviderLoader = () => Promise<ErasedApiProvider>;
+
 type RegisteredApiProvider = {
 	provider: ApiProviderInternal;
 	sourceId?: string;
@@ -53,7 +56,7 @@ type RegisteredApiProvider = {
 };
 
 type RegisteredApiProviderLoader = {
-	loader: ApiProviderLoader<Api, StreamOptions>;
+	loader: ErasedApiProviderLoader;
 	sourceId?: string;
 	pending?: Promise<ApiProviderInternal | undefined>;
 };
@@ -188,7 +191,7 @@ export function registerApiProviderLoader<TApi extends Api, TOptions extends Str
 	loader: ApiProviderLoader<TApi, TOptions>,
 	sourceId?: string,
 ): void {
-	apiProviderLoaders.set(api, { loader: loader as ApiProviderLoader<Api, StreamOptions>, sourceId });
+	apiProviderLoaders.set(api, { loader, sourceId });
 	apiProviderRegistry.set(api, {
 		provider: createLazyProvider(api),
 		sourceId,
