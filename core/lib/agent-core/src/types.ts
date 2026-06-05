@@ -11,12 +11,12 @@ import type {
 	Message,
 	Model,
 	SimpleStreamOptions,
-	streamSimple,
 	TextContent,
 	Tool,
 	ToolResultMessage,
 	Usage,
 } from "@pencil-agent/ai/types";
+import type { streamSimple } from "@pencil-agent/ai/stream";
 import type { Static, TSchema } from "@sinclair/typebox";
 
 /** Stream function - can return sync or Promise for async config lookup */
