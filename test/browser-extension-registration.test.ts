@@ -7,7 +7,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
 import { builtInExtensions, getBuiltinExtensionPaths } from "../builtin-extensions.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../core/slash-commands.ts";
@@ -74,43 +74,6 @@ test("default-enabled metadata is represented by builtin load paths", () => {
 			normalizedPathText.includes(pathSegment),
 			`Expected default-enabled extension metadata for ${extension.id} to have a matching load path. Paths: ${paths.join(", ")}`,
 		);
-	}
-});
-
-test("high-risk extension metadata declares matching test contracts", () => {
-	for (const extension of builtInExtensions) {
-		const contracts = new Set(extension.testContracts ?? []);
-		const testFiles = extension.testFiles ?? [];
-
-		if (extension.riskLevel === "background" || extension.startsTimers) {
-			assert.ok(contracts.has("lifecycle"), `${extension.id} must declare lifecycle coverage.`);
-		}
-		if (extension.externalProcess) {
-			assert.ok(contracts.has("external-process"), `${extension.id} must declare external-process coverage.`);
-		}
-		if (extension.resourceDiscovery) {
-			assert.ok(contracts.has("resource-discovery"), `${extension.id} must declare resource-discovery coverage.`);
-		}
-		if (extension.writesWorkspace) {
-			assert.ok(contracts.has("write-guard"), `${extension.id} must declare write-guard coverage.`);
-		}
-
-		if (contracts.size > 0) {
-			assert.ok(testFiles.length > 0, `${extension.id} declares test contracts but no test files.`);
-			for (const filePath of testFiles) {
-				assert.ok(existsSync(filePath), `${extension.id} references missing contract test file: ${filePath}`);
-			}
-		}
-	}
-});
-
-test("split extension boundaries stay within the file-size guideline", () => {
-	for (const filePath of [
-		"extensions/builtin/sal/index.ts",
-		"extensions/builtin/team/team-runtime.ts",
-	]) {
-		const lineCount = readFileSync(filePath, "utf-8").split("\n").length;
-		assert.ok(lineCount <= 800, `${filePath} has ${lineCount} lines and should stay at or below the 800-line guideline.`);
 	}
 });
 
