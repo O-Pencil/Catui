@@ -60,7 +60,7 @@ updated_at: 2026-06-05
 | D2 | **browser 资产从未进 dist**：因 D1，`copy-assets` 复制死路径 `defaults/`（no-op），browser 的 1.6M `agent-workspace` **从未被打包** → 发布的包里 browser harness 资产缺失（latent packaging bug）| 高 | ✅ 随 D1 修复（dist 因此 +1.6M，是"终于正确装上"，非回归）| 见 §6 |
 | D3 | **custom-overlay-host 漏提交**：P5 切片中新文件未 `git add`，导致 maintainer checkout 编译失败 | 中 | ✅ 已修 | — |
 | D4 | **mount `<500` 不可达**：god 拆完后 mount 仍是组合根 + port 面，地板 ~1500-1700 | 中 | ✅ 目标已修正（scope C）| mount-shell-evaluation.md |
-| D5 | **beta install 404**：重构把内部 workspace 包 `@pencil-agent/extension-sdk`（host 仅 `import type` 用，运行时擦除，从未发布 npm）错列进 `dependencies`，`npm i` 去 registry 找它 → 404。main(1.14.6) 不含此 dep，属重构引入 | 高 | ✅ 已修（`25563e0`，2.0.0-beta.1：移到 devDependencies）。beta 暴露真实 packaging bug，验证 beta 策略 | — |
+| D5 | **beta install 404**：重构新增的 first-party workspace 包 `@pencil-agent/extension-sdk` + `@pencil-agent/soul-core` 被列进 host `dependencies` 但**从未发布到 npm**，`npm i` 去 registry 找它们 → 404（mem-core@1.1.0 已发布故无此问题）。main(1.14.6) 不含这些 dep，属重构引入 | 高 | ✅ 已修（beta.2 `c15bc57`）：**发布这两个包**（它们无 first-party 传递依赖、有 build/files，是干净的独立包，与已发布的 mem-core 一致），恢复三者为 host `dependencies`（不改引用）。soul 运行时可选（找不到降级 null），404 纯安装期。⚠️ 维护代价：first-party 包改动需协调 version bump + 重发 | — |
 
 ---
 
