@@ -39,7 +39,7 @@ P6 code landing is still blocked by P5 DoD. This review can run in parallel with
 | [EV02](./findings/EV02-mode-lazy-dispatch-boundary.md) | selected | `main.ts` should select one mode by dynamic import; `modes/index.ts` must not eager-load heavy modes |
 | [EV03](./findings/EV03-browser-opt-in-boundary.md) | selected | Browser automation is an optional capability; moving it out of builtin default load is an intentional behavior change requiring Q2 |
 | [EV04](./findings/EV04-ai-provider-lazy-boundary.md) | selected-runtime-first | Provider metadata/runtime loading split is defined; first code slice is runtime lazy resolver, metadata chunking is deferred |
-| [EV05](./findings/EV05-package-surface-stability.md) | selected | P6 touches package `files`, root exports, and subpath shape; compatibility changes require explicit REVIEW |
+| [EV05](./findings/EV05-package-surface-stability.md) | selected-compatible-subpaths | Package surface reviewed; Q3 selects additive subpaths plus internal migration, root narrowing deferred |
 
 ## Workflow
 
