@@ -10,9 +10,9 @@ import type {
 	SimpleStreamOptions,
 	TextContent,
 	ToolCall,
-	TSchema,
 	Usage,
 } from "@pencil-agent/ai/types";
+import type { TSchema } from "@pencil-agent/ai/schema";
 import { completeSimple } from "@pencil-agent/ai";
 import type { ThinkingLevel } from "@pencil-agent/agent-core";
 import type { SettingsManager } from "../platform/config/settings-manager.js";
