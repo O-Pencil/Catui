@@ -11,6 +11,9 @@ stream.ts: stream, streamSimple, streaming entry functions, lazily resolves regi
 types.ts: ThinkingBudgets, StreamOptions, SimpleStreamOptions, TextContent, ThinkingContent, core AI types, foundational for all modules
 api-registry.ts: ApiProvider, registerApiProvider, registerApiProviderLoader, ensureApiProvider, API endpoint registry for provider dispatch
 index.ts: ai barrel exports, entry point for package, exports all providers, models, types, utilities
+schema.ts: TypeBox re-exports, StringEnum, validation helpers, subpath entry for @pencil-agent/ai/schema
+events.ts: EventStream, AssistantMessageEventStream, AsyncEventStream type export, subpath entry for @pencil-agent/ai/events
+registry.ts: api-registry and built-in provider loader exports, subpath entry for @pencil-agent/ai/registry
 models.ts: getModel, getProviders, getModels, calculateCost, supportsXhigh, model registry and lookup functions
 models.generated.ts: MODELS, auto-generated model definitions from scripts/generate-models.ts
 providers/simple-options.ts: buildBaseOptions, clampReasoning, adjustMaxTokensForThinking, common options builder

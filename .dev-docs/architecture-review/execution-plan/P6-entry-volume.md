@@ -33,7 +33,7 @@ lazy 入口分派、browser opt-in、ai lazy provider；改善冷启动与安装
 - [x] **F07 短期 / EV04 runtime slice**：provider runtime lazy resolver（按 `model.api` 首次使用加载 provider implementation；maintainer 验证通过）
 - [x] **EV05 / Q3 review**：package surface 决策完成；P6 不收窄 root exports，选择 additive subpaths + internal migration
 - [x] **AI package layer review**：确认 `@pencil-agent/ai` 的分层归属；AI 包保留为 LLM boundary kit，不吸收 runtime/TUI/mem/soul
-- [ ] **EV05 / Q3 implementation**：新增 `@pencil-agent/ai/*` explicit subpaths（保持 root legacy-compatible）
+- [x] **EV05 / Q3 implementation**：新增 `@pencil-agent/ai/*` explicit subpaths（保持 root legacy-compatible；验证待 capable machine）
 - [ ] **EV05 / Q3 internal migration**：按 capability group 迁移内部 `@pencil-agent/ai` root imports
 - [ ] **F07 短期 / EV04 metadata slice**：`models.generated.ts` provider 分片（generator-backed，后续单独切片）
 - [ ] 触碰 SOP §3.3 的变更走 REVIEW（package `files` / 公共 exports）

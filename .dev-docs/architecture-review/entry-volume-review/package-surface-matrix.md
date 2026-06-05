@@ -4,7 +4,7 @@
 review_id: entry-volume-review
 finding: EV05
 classification: package surface
-status: reviewed-compatible-subpaths
+status: subpaths-implemented-validation-pending
 created_at: 2026-06-04
 decision: Q3
 ```
@@ -132,3 +132,7 @@ After code:
 - Adding subpath exports may affect Node package resolution for consumers that rely on undocumented deep imports.
 - Internal import migration can be noisy; it should be split into small commits by capability group.
 - Metadata cost from `models.generated.ts` remains EV04 metadata-slice work, not EV05 package-surface work.
+
+## Implementation Result
+
+Additive `@pencil-agent/ai/*` subpaths have been added while preserving the root entry. Validation is pending a capable-machine build and quality check.

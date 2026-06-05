@@ -4,7 +4,7 @@
 review_id: ai-package-layer-review
 parent: ../README.md
 phase: P6
-status: reviewed
+status: subpaths-implemented-validation-pending
 created_at: 2026-06-04
 scope:
   - core/lib/ai
@@ -214,6 +214,23 @@ Do not expose `debug-logger`, `config-path`, or `env-api-keys` as independent pu
 - No code outside AI imports undocumented `@pencil-agent/ai/dist/*` paths.
 - Build and `verify:quality` pass on a capable machine.
 
+## Implementation Result
+
+Additive subpath exports have been implemented for:
+
+```text
+@pencil-agent/ai/types
+@pencil-agent/ai/schema
+@pencil-agent/ai/events
+@pencil-agent/ai/models
+@pencil-agent/ai/registry
+@pencil-agent/ai/stream
+@pencil-agent/ai/oauth
+@pencil-agent/ai/providers/*
+```
+
+Root `@pencil-agent/ai` remains legacy-compatible.
+
 ## Next Step
 
-Create the additive subpath exports first. Do not start internal import migration until those subpaths exist and build output is verified.
+Validate build output on a capable machine, then start internal import migration by capability group. The first migration slice should be type-only imports.
