@@ -12,11 +12,11 @@ import {
 	type Model,
 	type OpenAICompletionsCompat,
 	type OpenAIResponsesCompat,
-	registerApiProvider,
 	type SimpleStreamOptions,
 } from "@pencil-agent/ai";
 import { getModels, getProviders } from "@pencil-agent/ai/models";
 import { registerOAuthProvider, type OAuthProviderInterface } from "@pencil-agent/ai/oauth";
+import { registerApiProvider } from "@pencil-agent/ai/registry";
 import { type Static, Type } from "@sinclair/typebox";
 import AjvModule from "ajv";
 import { existsSync, readFileSync, writeFileSync } from "fs";

@@ -25,10 +25,8 @@ import type {
   Model,
   TextContent,
 } from "@pencil-agent/ai/types";
-import {
-  isContextOverflow,
-  resetApiProviders,
-} from "@pencil-agent/ai";
+import { isContextOverflow } from "@pencil-agent/ai";
+import { resetApiProviders } from "@pencil-agent/ai/registry";
 import { getDocsPath } from "../../config.js";
 import type { Theme as ThemeContract } from "../theme-contract.js";
 import { stripFrontmatter } from "../../utils/frontmatter.js";
