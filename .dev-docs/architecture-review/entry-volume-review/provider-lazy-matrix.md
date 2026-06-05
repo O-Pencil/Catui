@@ -4,7 +4,7 @@
 review_id: entry-volume-review
 finding: EV04
 classification: provider loading
-status: runtime-slice-implemented
+status: runtime-slice-validated
 created_at: 2026-06-04
 ```
 
@@ -12,10 +12,10 @@ created_at: 2026-06-04
 
 EV04 reviews AI provider lazy loading from the top-level entry/volume perspective. The first runtime slice now changes code only at the provider resolver boundary; metadata chunking and public export narrowing remain deferred.
 
-The current implementation has two eager costs:
+Before EV04 runtime lazy, the implementation had two eager costs:
 
 - **Model metadata**: `core/lib/ai/src/models.ts` imports the 14k-line `models.generated.ts` and synchronously fills `modelRegistry` at module load.
-- **Provider runtime**: `core/lib/ai/src/stream.ts` imports `providers/register-builtins.ts`; that file imports every built-in provider implementation and registers them through top-level side effects.
+- **Provider runtime**: `core/lib/ai/src/stream.ts` imported `providers/register-builtins.ts`; that file imported every built-in provider implementation and registered them through top-level side effects.
 
 Those are different costs and must not be collapsed into one "provider service".
 
@@ -184,6 +184,11 @@ stream.ts
 Compatibility constraint still open:
 
 - `@pencil-agent/ai/index.ts` still re-exports provider modules. P6 intentionally does not narrow public exports, so root-barrel import cost must be handled by EV05/Q3 before claiming full package-entry lazy loading.
+
+Validation:
+
+- Maintainer confirmed `npm run build` passed after `fix(p6): erase lazy provider loader storage type`.
+- Maintainer confirmed quality/provider checks passed for the EV04 runtime slice.
 
 ## Review Verdict
 
