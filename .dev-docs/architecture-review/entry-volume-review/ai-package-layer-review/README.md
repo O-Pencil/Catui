@@ -174,9 +174,12 @@ Implement additive subpaths in this order:
 | 5 | `@pencil-agent/ai/stream` | `dist/stream.js` | Unified invocation path; now provider-runtime lazy |
 | 6 | `@pencil-agent/ai/oauth` | `dist/utils/oauth/index.js` | Login/discovery path, intentionally separate from provider stream runtime |
 | 7 | `@pencil-agent/ai/registry` | `dist/api-registry.js`, optionally `dist/providers/register-builtins.js` | Extension/custom provider seam |
-| 8 | `@pencil-agent/ai/providers/*` | `dist/providers/*.js` | Advanced direct-provider access; not for ordinary runtime imports |
+| 8 | `@pencil-agent/ai/env` | `dist/env-api-keys.js` via thin entry | Environment API-key lookup used by host auth storage |
+| 9 | `@pencil-agent/ai/overflow` | `dist/utils/overflow.js` via thin entry | Context-window overflow detection used by runtime retry/session logic |
+| 10 | `@pencil-agent/ai/json` | `dist/utils/json-parse.js` via thin entry | Streaming JSON parser used by proxy/provider helpers |
+| 11 | `@pencil-agent/ai/providers/*` | `dist/providers/*.js` | Advanced direct-provider access; not for ordinary runtime imports |
 
-Do not expose `debug-logger`, `config-path`, or `env-api-keys` as independent public subpaths in the first pass. Keep `getEnvApiKey` reachable through `stream`/root until a concrete external need appears.
+Do not expose `debug-logger` or `config-path` as independent public subpaths in the first pass. `env`, `overflow`, and `json` are exposed only as thin helper subpaths because internal root-import migration needs explicit boundaries for existing public root helpers.
 
 ## Internal Migration Order
 
@@ -226,6 +229,9 @@ Additive subpath exports have been implemented for:
 @pencil-agent/ai/registry
 @pencil-agent/ai/stream
 @pencil-agent/ai/oauth
+@pencil-agent/ai/env
+@pencil-agent/ai/overflow
+@pencil-agent/ai/json
 @pencil-agent/ai/providers/*
 ```
 

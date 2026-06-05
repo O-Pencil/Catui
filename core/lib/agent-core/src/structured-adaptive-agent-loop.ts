@@ -13,12 +13,12 @@
 import {
 	type AssistantMessage,
 	type Context,
-	isContextOverflow,
-	streamSimple,
 	type ToolResultMessage,
 	type Usage,
-} from "@pencil-agent/ai";
+} from "@pencil-agent/ai/types";
 import { EventStream } from "@pencil-agent/ai/events";
+import { isContextOverflow } from "@pencil-agent/ai/overflow";
+import { streamSimple } from "@pencil-agent/ai/stream";
 import type {
 	AgentContext,
 	AgentEvent,

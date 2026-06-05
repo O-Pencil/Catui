@@ -5,7 +5,7 @@
  * [HERE]: core/runtime/retry-coordinator.ts - retry orchestration extracted from AgentSession
  */
 import type { AssistantMessage } from "@pencil-agent/ai/types";
-import { isContextOverflow } from "@pencil-agent/ai";
+import { isContextOverflow } from "@pencil-agent/ai/overflow";
 import { sleep } from "../platform/utils/sleep.js";
 
 /** Retry settings from SettingsManager */

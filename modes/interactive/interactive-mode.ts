@@ -9,10 +9,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@pencil-agent/agent-core";
-import {
-  type ImageContent,
-  type Message,
-} from "@pencil-agent/ai";
+import type {
+  ImageContent,
+  Message,
+} from "@pencil-agent/ai/types";
 import type {
   AutocompleteItem,
   EditorAction,

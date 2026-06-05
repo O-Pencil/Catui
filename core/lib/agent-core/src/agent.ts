@@ -14,12 +14,12 @@ import {
 	type ImageContent,
 	type Message,
 	type Model,
-	streamSimple,
 	type TextContent,
 	type ThinkingBudgets,
 	type Transport,
-} from "@pencil-agent/ai";
+} from "@pencil-agent/ai/types";
 import { getModel } from "@pencil-agent/ai/models";
+import { streamSimple } from "@pencil-agent/ai/stream";
 import { agentLoop, agentLoopContinue } from "./agent-loop.js";
 import { structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue } from "./structured-adaptive-agent-loop.js";
 import { normalizeAgentLoopFramework } from "./types.js";

@@ -6,7 +6,7 @@
  */
 import type { AgentMessage } from "@pencil-agent/agent-core";
 import type { AssistantMessage, Model, Usage } from "@pencil-agent/ai/types";
-import { completeSimple } from "@pencil-agent/ai";
+import { completeSimple } from "@pencil-agent/ai/stream";
 import {
 	convertToLlm,
 	createBranchSummaryMessage,

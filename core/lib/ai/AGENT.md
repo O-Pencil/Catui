@@ -14,6 +14,9 @@ index.ts: ai barrel exports, entry point for package, exports all providers, mod
 schema.ts: TypeBox re-exports, StringEnum, validation helpers, subpath entry for @pencil-agent/ai/schema
 events.ts: EventStream, AssistantMessageEventStream, AsyncEventStream type export, subpath entry for @pencil-agent/ai/events
 registry.ts: api-registry and built-in provider loader exports, subpath entry for @pencil-agent/ai/registry
+env.ts: getEnvApiKey, environment API key helper subpath entry for @pencil-agent/ai/env
+overflow.ts: isContextOverflow, context overflow helper subpath entry for @pencil-agent/ai/overflow
+json.ts: parseStreamingJson, streaming JSON helper subpath entry for @pencil-agent/ai/json
 models.ts: getModel, getProviders, getModels, calculateCost, supportsXhigh, model registry and lookup functions
 models.generated.ts: MODELS, auto-generated model definitions from scripts/generate-models.ts
 providers/simple-options.ts: buildBaseOptions, clampReasoning, adjustMaxTokensForThinking, common options builder

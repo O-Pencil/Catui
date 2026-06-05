@@ -16,12 +16,12 @@ import {
 	type AssistantMessageEvent,
 	type Context,
 	type Model,
-	parseStreamingJson,
 	type SimpleStreamOptions,
 	type StopReason,
 	type ToolCall,
-} from "@pencil-agent/ai";
+} from "@pencil-agent/ai/types";
 import { EventStream } from "@pencil-agent/ai/events";
+import { parseStreamingJson } from "@pencil-agent/ai/json";
 
 // Create stream class matching ProxyMessageEventStream
 class ProxyMessageEventStream extends EventStream<AssistantMessageEvent, AssistantMessage> {

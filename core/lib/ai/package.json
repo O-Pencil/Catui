@@ -35,6 +35,18 @@
 			"import": "./dist/stream.js",
 			"types": "./dist/stream.d.ts"
 		},
+		"./env": {
+			"import": "./dist/env.js",
+			"types": "./dist/env.d.ts"
+		},
+		"./overflow": {
+			"import": "./dist/overflow.js",
+			"types": "./dist/overflow.d.ts"
+		},
+		"./json": {
+			"import": "./dist/json.js",
+			"types": "./dist/json.d.ts"
+		},
 		"./oauth": {
 			"import": "./dist/utils/oauth/index.js",
 			"types": "./dist/utils/oauth/index.d.ts"

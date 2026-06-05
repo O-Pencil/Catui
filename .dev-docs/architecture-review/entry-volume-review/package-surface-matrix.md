@@ -87,6 +87,9 @@ Candidate subpath groups:
 @pencil-agent/ai/oauth
 @pencil-agent/ai/events
 @pencil-agent/ai/registry
+@pencil-agent/ai/env
+@pencil-agent/ai/overflow
+@pencil-agent/ai/json
 @pencil-agent/ai/providers/anthropic
 @pencil-agent/ai/providers/openai-completions
 @pencil-agent/ai/providers/openai-responses
@@ -135,4 +138,4 @@ After code:
 
 ## Implementation Result
 
-Additive `@pencil-agent/ai/*` subpaths have been added while preserving the root entry. Maintainer confirmed build/quality validation passed. Internal import migration started with type-only imports and is continuing by capability group. Type-only, models, OAuth, and registry slices have passed maintainer build/quality validation; the current code slice moves events/schema imports to `@pencil-agent/ai/events` and `@pencil-agent/ai/schema`.
+Additive `@pencil-agent/ai/*` subpaths have been added while preserving the root entry. Maintainer confirmed build/quality validation passed. Internal import migration started with type-only imports and is continuing by capability group. Type-only, models, OAuth, registry, events, and schema slices have passed maintainer build/quality validation; the current code slice adds `env`, `overflow`, and `json` helper subpaths and moves the remaining internal runtime helper imports off the root barrel.

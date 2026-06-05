@@ -12,7 +12,7 @@
  */
 
 
-import { complete } from "@pencil-agent/ai";
+import { complete } from "@pencil-agent/ai/stream";
 import { getModel } from "@pencil-agent/ai/models";
 import { Container, Markdown, matchesKey, Text } from "@pencil-agent/tui";
 import { execFileSync } from "child_process";

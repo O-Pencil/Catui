@@ -4,7 +4,7 @@
  * [TO]: Consumed by index.ts, main.ts, nanopencil-defaults.ts, core/runtime/sdk.ts, core/model-registry.ts, core/mcp/mcp-client.ts, extensions/builtin/mcp/index.ts, and test files
  * [HERE]: core/platform/config/auth-storage.ts - credential storage for API keys and OAuth
  */
-import { getEnvApiKey } from "@pencil-agent/ai";
+import { getEnvApiKey } from "@pencil-agent/ai/env";
 import {
 	getOAuthApiKey,
 	getOAuthProvider,

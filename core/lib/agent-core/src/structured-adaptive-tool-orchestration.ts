@@ -14,7 +14,7 @@ import {
 	type AssistantMessage,
 	type TextContent,
 	type ToolResultMessage,
-} from "@pencil-agent/ai";
+} from "@pencil-agent/ai/types";
 import { EventStream } from "@pencil-agent/ai/events";
 import { validateToolArguments } from "@pencil-agent/ai/schema";
 import { ToolNotFoundError } from "./errors.js";
