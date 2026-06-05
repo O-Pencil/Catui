@@ -58,9 +58,9 @@ Validation:
 - mode smoke:
 - browser fallback:
 - provider matrix:
-- cold start:
-- dist size:
-Residual risk:
+- cold start: 待测（方法见 ../REFACTOR-LEDGER.md §7；EV02/EV04 的真收益在此）
+- dist size: HEAD `du` 6.8M vs P5 收尾 5.2M = +1.6M，**已定位非回归**：`06f54fb`(P1 D2 修复)让 copy-assets 终于正确打包 browser 1.6M agent-workspace（之前漏装）。P6 lazy 改动对 dist 中性。详见 ../REFACTOR-LEDGER.md §6/§5。dist 收缩需 EV04 metadata chunking / EV03 独立包（已知 trade-off，GB-2 接受）
+Residual risk: dist 体积目标按 GB-2 重设（不再"≤ main 3.61"）；冷启动数字待算力机回填
 ```
 
 ## Near-Term Parallel Work

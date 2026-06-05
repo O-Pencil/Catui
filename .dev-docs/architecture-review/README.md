@@ -44,6 +44,7 @@ This is a one-shot exercise. After the maintainer has acted on the Arch Agent's 
 ```
 architecture-review/
 │  ── 重构组 ──
+├── REFACTOR-LEDGER.md              ★ 活文档总清单：设计/已解决/已发现/未解决（持续更新，sign-off 已知问题索引）
 ├── top-level-structure-review.md   决策依据（为什么候选 D）
 ├── target-architecture.md          架构改造结论（端态目录 + 功能域映射）
 ├── refactor-plan.md                架构改造计划（批次 + 单一 ADR 状态表 + S1/S2/S3 接缝验收）
