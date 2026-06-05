@@ -333,7 +333,7 @@ nanoPencil/
   "version": "1.15.0",                          // ★ 顶层重构建议 minor bump
   "dependencies": {
     "@pencil-agent/extension-sdk": "^0.1.0",       // ★ 真依赖，npm 可解析
-    "@pencil-agent/mem-core": "^1.1.1",            // ★ 真依赖，npm 可解析
+    "@pencil-agent/mem-core": "^1.1.2",            // ★ 真依赖，npm 可解析
     "@pencil-agent/soul-core": "^0.1.0",           // ★ 真依赖，npm 可解析
     // ... 其他第三方
   },

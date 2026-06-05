@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0-beta.6] - 2026-06-05
+
+### Fixed
+- fix(packaging): `mem-core` publish builds could fail before publish when the local workspace link
+  for `@pencil-agent/extension-sdk` was absent. `mem-core` now carries a type-only build shim for the
+  SDK contract while still declaring `extension-sdk` as its peer dependency; publish `mem-core@1.1.2`
+  before this host beta.
+
 ## [2.0.0-beta.5] - 2026-06-05
 
 ### Fixed

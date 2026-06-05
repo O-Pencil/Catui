@@ -95,7 +95,7 @@ rpc/acp 是服务模式，真正消费者是 IDE/编辑器；冒烟只需"启动
 
 ```bash
 npm view @pencil-agent/extension-sdk@0.1.0 version
-npm view @pencil-agent/mem-core@1.1.1 version
+npm view @pencil-agent/mem-core@1.1.2 version
 npm view @pencil-agent/soul-core@0.1.0 version
 npm run build                          # 必须：dist 反映新版本号
 npm publish --tag beta --dry-run       # 看 files/version/tag

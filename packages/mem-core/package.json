@@ -1,6 +1,6 @@
 {
   "name": "@pencil-agent/mem-core",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Persistent memory engine for AI coding agents with consolidation, scoring, and insights",
   "type": "module",
   "main": "./dist/index.js",
