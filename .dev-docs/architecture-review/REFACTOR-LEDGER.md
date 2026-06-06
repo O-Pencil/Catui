@@ -25,7 +25,7 @@ updated_at: 2026-06-05
 | P4 runtime 拆 | `agent-session.ts` 拆 7 子模块 + S2 | ✅ done | runtime-session-review（AS01–AS12）|
 | P5 UI 拆 | `interactive-mode.ts` 拆 controllers/state/mount | ✅ 结构完成（scope C）| interactive-ui-review（F02 + UI01–UI08）|
 | P6 入口体积 | lazy 入口 / browser opt-in / ai lazy provider | 🟡 代码大半 landed；DoD 测量 + 收缩刀未完 | entry-volume-review（EV01–EV05）|
-| P7 体积重设计 | esbuild / models.generated 拆分 | ⬜ 可选，未启 | — |
+| P7 体积重设计 | 发布边界硬化 / browser optional / model metadata chunking / esbuild deferred | 🟡 评审已启，代码未启 | bundle-redesign-review（BR01–BR04）|
 | P8 SDK 收窄 | index.ts 收窄 | ⬜ 可选，未启 | — |
 | Sign-off | S-1..S-6 跨分支验收 + 签字 | ⬜ 待全 phase landed | execution-plan/sign-off-main.md |
 
@@ -74,7 +74,7 @@ updated_at: 2026-06-05
 | O4 | **EV03 browser 物理迁移**：`builtin/`→`optional/` 或独立包（Q2 当前选 scope A = 暂不移）| 代码（暂停）| — |
 | O5 | **interactive 域内 post-P5 清理**：resources-display(481) / slash-handlers(981) 等扁平 handler（**非** phase P6）| 代码（可选 backlog）| — |
 | O6 | **sign-off S-1..S-6**：llm-wiki 重生成 + symbols diff + characterization + 性能基线 + 接缝 review + 用户态 smoke + 签字 | 验证 | 合 main |
-| O7 | **P7/P8（可选）**：bundle 重设计 / SDK 收窄 | 代码（可选）| — |
+| O7 | **P7/P8（可选）**：P7 已先转专项评审；第一刀建议 BR01 发布边界硬化，非 esbuild | 代码（可选）| — |
 
 ---
 
