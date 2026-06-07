@@ -4,7 +4,7 @@
 phase: P7
 macro_stage: B        # 功能级（可选）
 batch: B5
-status: optional
+status: closed-as-gated
 risk: high
 depends_on: [P6]
 blocks: []
@@ -28,10 +28,18 @@ P7 原始目标是引入 esbuild 分片构建、拆分 `models.generated.ts`（1
 ## 任务清单
 
 - [x] 建立 [bundle-redesign-review/](../bundle-redesign-review/README.md) 专项评审（BR01-BR04）
-- [ ] **BR01**：发布边界硬化（public packages vs host-embedded private libs；`verify:package-boundary`/dist smoke；publish order）
-- [ ] **BR02**：browser extension packaging（UX-first；Browser Harness 属于 Browser extension 能力，不先拆 raw asset package）
-- [ ] **BR03**：`core/lib/ai/models.generated.ts` 按 provider 拆分（metrics-gated；保留同步 catalog API；不因 14k 行数直接拆）
-- [ ] **BR04**：esbuild 构建管线（reviewed-deferred；收益主要是 build speed/file count/minify，P7 不直接 bundle）
+- [x] **BR01**：发布边界硬化（public packages vs host-embedded private libs；`verify:package-boundary`/dist smoke；publish order）
+- [x] **BR02**：browser extension packaging 评审（UX-first；Browser Harness 属于 Browser extension 能力，不先拆 raw asset package）
+- [x] **BR03**：`core/lib/ai/models.generated.ts` 评审（metrics-gated；保留同步 catalog API；不因 14k 行数直接拆）
+- [x] **BR04**：esbuild 构建管线评审（reviewed-deferred；收益主要是 build speed/file count/minify，P7 不直接 bundle）
+
+## 收口结论
+
+P7 当前关闭为 **closed-as-gated**：
+
+- 已落地 BR01 发布边界守卫。
+- BR02-BR04 不进入当前代码实现。
+- 后续若重开，必须按 [bundle-redesign-review/closure.md](../bundle-redesign-review/closure.md) 的 reopen matrix 提供 metrics / UX / 验收依据。
 
 ## 验证门控（DoD）
 
@@ -66,3 +74,4 @@ P7 原始目标是引入 esbuild 分片构建、拆分 `models.generated.ts`（1
 
 - Finding：`../findings/F07-dist-bundle-composition.md`
 - Review：`../bundle-redesign-review/README.md`
+- Closure：`../bundle-redesign-review/closure.md`

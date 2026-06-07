@@ -12,8 +12,9 @@ scope:
   - core/lib/{ai,agent-core,tui}
   - packages/{extension-sdk,mem-core,soul-core}
   - extensions/builtin/browser
-status: review-open
+status: closed-as-gated
 created_at: 2026-06-06
+closed_at: 2026-06-07
 ```
 
 ## Purpose
@@ -64,6 +65,12 @@ The `dist/node_modules/@pencil-agent/*` embedding is not a regression to old `bu
 | [BR02](./findings/BR02-browser-asset-optionalization.md) | recalibrated-ux-first | Browser packaging must preserve extension UX before chasing install-size reduction |
 | [BR03](./findings/BR03-model-metadata-chunking.md) | reviewed-metrics-gated | Split `models.generated.ts` only if startup/import or churn metrics justify it |
 | [BR04](./findings/BR04-esbuild-risk-deferral.md) | reviewed-deferred | Esbuild can help build speed/file count, but bundling risks package and extension boundaries |
+
+## Closure
+
+See [closure.md](./closure.md).
+
+P7 closes as a gated review plus BR01 package-boundary hardening. It does not continue into browser package moves, model metadata chunking, or esbuild bundling without new metrics and a separate accepted slice.
 
 ## Non-Goals
 
