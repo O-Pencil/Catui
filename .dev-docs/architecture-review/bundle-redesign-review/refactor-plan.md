@@ -14,7 +14,7 @@ created_at: 2026-06-06
 | 0 | Review/postmortem | BR01-BR04 | docs only | This document set |
 | 1 | Package boundary hardening | BR01 | yes | Add manifest/dist guards and formalize public packages vs embedded private libs |
 | 2 | Browser extension packaging | BR02 | after maintainer accepts UX-first recommendation | Keep Browser as one extension capability; do not split raw harness assets first |
-| 3 | Model metadata chunking | BR03 | after size/startup metrics | Generator-backed only; preserve synchronous catalog APIs unless explicitly changed |
+| 3 | Model metadata chunking | BR03 | after startup/import/churn metrics | Generator-backed only; preserve synchronous catalog APIs unless explicitly changed |
 | 4 | esbuild/chunked build pipeline | BR04 | deferred | Do not start until package boundaries are stable and prior slices are measured |
 
 ## Recommended First Implementation Slice
@@ -54,6 +54,24 @@ interactive /browser fallback   # host-owned discovery / enable guidance
 ```
 
 The previous "asset package first" idea is rejected for now: it reduces initial install size but worsens first-use flow and splits one extension capability across two concepts. If Browser leaves the host tarball later, move/package the whole Browser extension behind a first-class install/enable UX.
+
+## Third Slice Gate
+
+BR03 should not proceed because `models.generated.ts` is 14k lines by itself. The compressed built output is only about 26K, so install-size savings are likely small. Only implement generated provider chunks if one of these is true:
+
+- startup/import metrics show the eager catalog is meaningfully expensive.
+- maintainers accept the complexity specifically to reduce provider metadata churn.
+
+If implemented, keep the current sync facade:
+
+```text
+getModel()
+getModels()
+getProviders()
+ModelRegistry.loadBuiltInModels()
+```
+
+No async catalog migration belongs in P7.
 
 ## Exit Criteria For P7 Review
 

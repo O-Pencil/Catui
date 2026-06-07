@@ -30,7 +30,7 @@ P7 原始目标是引入 esbuild 分片构建、拆分 `models.generated.ts`（1
 - [x] 建立 [bundle-redesign-review/](../bundle-redesign-review/README.md) 专项评审（BR01-BR04）
 - [ ] **BR01**：发布边界硬化（public packages vs host-embedded private libs；`verify:package-boundary`/dist smoke；publish order）
 - [ ] **BR02**：browser extension packaging（UX-first；Browser Harness 属于 Browser extension 能力，不先拆 raw asset package）
-- [ ] **BR03**：`core/lib/ai/models.generated.ts` 按 provider 拆分（仅在 metrics 证明收益后）
+- [ ] **BR03**：`core/lib/ai/models.generated.ts` 按 provider 拆分（metrics-gated；保留同步 catalog API；不因 14k 行数直接拆）
 - [ ] **BR04**：esbuild 构建管线（deferred；仅在 BR01-BR03 后仍有明确收益时重开）
 
 ## 验证门控（DoD）
@@ -45,6 +45,7 @@ P7 原始目标是引入 esbuild 分片构建、拆分 `models.generated.ts`（1
 | V7-2b | Browser 显式启用 | 显式 opt-in 后 `/browser status` 可运行；用户不需要理解内部 harness/package 拆分 |
 | V7-3 | 构建等价 | 产物功能与 P6 等价 |
 | V7-4 | 体积 | 若声明 size win，提供 tarball/unpacked before-after 数据 |
+| V7-4a | Model metadata | 若拆 `models.generated.ts`，提供 startup/import/churn 指标，并证明 `getModel/getModels/getProviders` 行为不变 |
 | V7-5 | 测试 | 全量测试 + provider 切换 smoke |
 
 ## 提交建议

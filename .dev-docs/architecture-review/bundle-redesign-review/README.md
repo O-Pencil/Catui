@@ -62,7 +62,7 @@ The `dist/node_modules/@pencil-agent/*` embedding is not a regression to old `bu
 |---------|--------|---------|
 | [BR01](./findings/BR01-package-boundary-hardening.md) | selected-first | Make package boundary/package smoke the first P7 slice |
 | [BR02](./findings/BR02-browser-asset-optionalization.md) | recalibrated-ux-first | Browser packaging must preserve extension UX before chasing install-size reduction |
-| [BR03](./findings/BR03-model-metadata-chunking.md) | selected-after-measurement | Split `models.generated.ts` only if metrics show meaningful benefit |
+| [BR03](./findings/BR03-model-metadata-chunking.md) | reviewed-metrics-gated | Split `models.generated.ts` only if startup/import or churn metrics justify it |
 | [BR04](./findings/BR04-esbuild-risk-deferral.md) | deferred | Defer esbuild until boundaries and asset strategy are stable |
 
 ## Non-Goals
@@ -92,3 +92,5 @@ BR04 esbuild last, if still needed
 ```
 
 BR02 should treat Browser as one pluggable extension capability. A raw `browser-harness` asset package is not recommended as the first slice because it optimizes initial install size while worsening first-use flow. If Browser leaves the host tarball later, package the whole Browser extension behind a first-class install/enable UX. Do not add any browser package to host dependencies or optionalDependencies, because npm installs optional dependencies by default.
+
+BR03 is not a package-boundary emergency. The generated model catalog is large in lines but small when compressed. Treat it as a metrics-gated startup/churn problem, not as an automatic size win.
