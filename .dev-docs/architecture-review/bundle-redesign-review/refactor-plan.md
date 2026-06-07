@@ -15,7 +15,7 @@ created_at: 2026-06-06
 | 1 | Package boundary hardening | BR01 | yes | Add manifest/dist guards and formalize public packages vs embedded private libs |
 | 2 | Browser extension packaging | BR02 | after maintainer accepts UX-first recommendation | Keep Browser as one extension capability; do not split raw harness assets first |
 | 3 | Model metadata chunking | BR03 | after startup/import/churn metrics | Generator-backed only; preserve synchronous catalog APIs unless explicitly changed |
-| 4 | esbuild/chunked build pipeline | BR04 | deferred | Do not start until package boundaries are stable and prior slices are measured |
+| 4 | esbuild/chunked build pipeline | BR04 | deferred | Reopen only for measured build/startup/size target; transpile-only before bundling |
 
 ## Recommended First Implementation Slice
 
@@ -72,6 +72,26 @@ ModelRegistry.loadBuiltInModels()
 ```
 
 No async catalog migration belongs in P7.
+
+## Fourth Slice Gate
+
+BR04 should not start as a bundling rewrite. Esbuild has plausible benefits:
+
+- faster JS emission during release builds.
+- fewer runtime files if a later bundle design is accepted.
+- smaller unpacked JS if minification is accepted.
+
+But the current runtime depends on package-shaped internal libs, extension loader aliases, dynamic imports, and sibling asset paths. Therefore the only acceptable first esbuild slice is:
+
+```text
+typecheck/declarations by TypeScript
+JS transpilation by esbuild
+no bundling
+no minification
+same dist file topology
+```
+
+Bundling is a separate future review, not a P7 default.
 
 ## Exit Criteria For P7 Review
 
