@@ -37,15 +37,16 @@ merge_policy: maintainer_sign_off_required
 | S-5 | **接缝** | S1/S2/S3 code review（`../evolution/PARP.md` §5）| ⬜ | |
 | S-6 | **用户态** | `~/.pencils/agents/` 结构向后兼容 smoke | ⬜ | |
 
-详细方法见 `../refactor-validation.md`。
+详细方法见 `../refactor-validation.md`；本轮可执行命令清单见 [sign-off-readiness.md](./sign-off-readiness.md)。
 
 ## 合 main 流程
 
 1. 在 `refactor/arch-candidate-d` 重生成 `llm-wiki/`，与 main 基线 diff
-2. 填完上表 S-1 – S-6
-3. maintainer 签字（下方 Sign-off Record）
-4. 开 PR：`refactor/arch-candidate-d` → `main`
-5. PR 通过 + merge（**仅此一次**允许重构进 main）
+2. 按 [sign-off-readiness.md](./sign-off-readiness.md) 跑完高性能机器验收并记录结果
+3. 填完上表 S-1 – S-6
+4. maintainer 签字（下方 Sign-off Record）
+5. 开 PR：`refactor/arch-candidate-d` → `main`
+6. PR 通过 + merge（**仅此一次**允许重构进 main）
 
 ## Sign-off Record
 
