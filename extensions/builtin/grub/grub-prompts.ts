@@ -48,6 +48,13 @@ Required outputs this turn:
    - Append an Initialization section summarizing intent and harness
      decisions.
 
+Graduation: as soon as you emit a structurally valid list (15-40 features,
+real kebab-case ids, placeholder replaced) the harness AUTOMATICALLY advances
+to the execution phase on the next turn. Do NOT mark any feature passing now
+and do NOT touch the goal text; if you accidentally do, the harness silently
+sanitimizes them (goal restored, passes reset to false) instead of failing —
+but keep the list clean so nothing is lost.
+
 Rules for later coding agents (document them in progress-log.md):
 - Coding agents may ONLY flip "passes" and set "evidence" on features.
 - Never remove tests. Treat existing tests as ground truth.
@@ -135,6 +142,9 @@ export function buildGrubTaskPrompt(task: GrubTaskState): string {
 			task.locale === "zh"
 				? "5. 除非目标已经完成或阻塞，否则本轮以 loop-state status=continue 结束。"
 				: "5. End this turn with loop-state status=continue unless the goal is already complete/blocked.",
+			task.locale === "zh"
+				? "6. 本阶段不要标记任何 feature 通过，也不要改动 goal——清单结构合格后，系统会自动进入执行阶段，届时再逐个标记 passes。"
+				: "6. Do not mark any feature as passing or change the goal in this phase—once the list is structurally valid the harness auto-advances to execution, where you mark passes one by one.",
 		);
 	} else {
 		sections.push(

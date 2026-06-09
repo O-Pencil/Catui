@@ -64,6 +64,7 @@ function isGrubTaskState(value: unknown): value is GrubTaskState {
 	if (typeof task.awaitingTurn !== "boolean") return false;
 	if (!isNonNegativeInteger(task.consecutiveFailures)) return false;
 	if (!isPositiveInteger(task.maxIterations) || !isPositiveInteger(task.maxConsecutiveFailures)) return false;
+	if (task.maxInitializerFailures !== undefined && !isPositiveInteger(task.maxInitializerFailures)) return false;
 	if (!isNonEmptyString(task.harnessDirectory)) return false;
 	if (!isNonEmptyString(task.featureChecklistPath)) return false;
 	if (!isNonEmptyString(task.featureListPath)) return false;

@@ -67,7 +67,7 @@ test("grub controller starts with initializer phase and harness paths", () => {
 		const task = controller.start("Ship one safe incremental feature", cwd);
 
 		assert.equal(task.phase, "initializer");
-		assert.match(task.harnessDirectory, /\/\.grub\//);
+		assert.match(task.harnessDirectory, /[\\/]\.grub[\\/]/);
 		assert.match(task.featureListPath, /feature-list\.json$/);
 		assert.match(task.progressLogPath, /progress-log\.md$/);
 		assert.match(task.initScriptPath, /init\.sh$/);
@@ -382,6 +382,65 @@ test("grub controller rejects weak initializer feature-list", () => {
 		if (!result.ok) {
 			assert.match(result.message, /15-40/);
 		}
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("initializer auto-sanitizes pre-marked passes and stray evidence instead of failing", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		const task = controller.start("Sanitize pre-marked passes", cwd);
+		const dirty = featureList(task.goal);
+		dirty.features[0] = { ...dirty.features[0], passes: true, evidence: "should be dropped" };
+		writeFeatureList(task.featureListPath, dirty);
+
+		const result = controller.validateFeatureListAfterTurn();
+		assert.equal(result.ok, true);
+		const baseline = controller.getActiveTask()?.featureListBaseline;
+		assert.ok(baseline);
+		assert.equal(baseline.features.every((feature) => !feature.passes), true);
+
+		const onDisk = JSON.parse(readFileSync(task.featureListPath, "utf-8"));
+		assert.equal(onDisk.features[0].passes, false);
+		assert.equal(onDisk.features[0].evidence, undefined);
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("initializer auto-restores a mismatched goal instead of failing", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		const task = controller.start("Authoritative goal text", cwd);
+		writeFeatureList(task.featureListPath, featureList("a totally different goal"));
+
+		const result = controller.validateFeatureListAfterTurn();
+		assert.equal(result.ok, true);
+		assert.equal(controller.getActiveTask()?.featureListBaseline?.goal, task.goal);
+
+		const onDisk = JSON.parse(readFileSync(task.featureListPath, "utf-8"));
+		assert.equal(onDisk.goal, task.goal);
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("initializer phase tolerates more consecutive failures than execution", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		controller.start("Forgiving initializer budget", cwd, { maxConsecutiveFailures: 3, maxIterations: 50 });
+		for (let i = 0; i < 4; i += 1) {
+			controller.markDispatched();
+			assert.equal(controller.recordFailure("structural problem").action, "continue");
+		}
+		controller.markDispatched();
+		const stopped = controller.recordFailure("structural problem");
+		assert.equal(stopped.action, "stop");
+		assert.equal(stopped.snapshot?.status, "failed");
 	} finally {
 		cleanup(cwd);
 	}

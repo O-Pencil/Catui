@@ -1,5 +1,5 @@
 /**
- * [WHO]: Provides readFeatureList, writeFeatureList, isFeatureList, validateFeatureListDiff, countPassing, allPassing, firstPending, createInitialFeatureList, migrateChecklistToFeatureList, FeatureListDiffError
+ * [WHO]: Provides readFeatureList, writeFeatureList, isFeatureList, validateFeatureListDiff, sanitizeInitializerFeatureList, InitializerSanitizeResult, countPassing, allPassing, firstPending, createInitialFeatureList, migrateChecklistToFeatureList, FeatureListDiffError
  * [FROM]: Depends on node:fs, node:path, ./grub-types
  * [TO]: Consumed by ./grub-controller.ts, ./index.ts for structured feature tracking
  * [HERE]: extensions/builtin/grub/grub-feature-list.ts - JSON feature list IO with diff validation that limits agent mutations to passes/evidence fields
@@ -115,6 +115,51 @@ export function validateFeatureListDiff(before: FeatureList, after: FeatureList)
 		}
 	}
 	return after;
+}
+
+export interface InitializerSanitizeResult {
+	list: FeatureList;
+	/** Human-readable tags describing what was auto-corrected, e.g. ["goal", "passes×6"]. */
+	fixes: string[];
+}
+
+/**
+ * Bring an initializer-produced feature list into a clean, executable baseline.
+ *
+ * The initializer's sole job is to stand up a harness; the `goal`, `passes`,
+ * and `evidence` fields are either authoritative-from-elsewhere or
+ * not-yet-earned. Rather than failing the whole turn over these recoverable
+ * hygiene issues (which would also block the initializer→execution phase
+ * transition), we auto-correct them: overwrite `goal` with the authoritative
+ * task goal, force every `passes` to false, and drop stray `evidence`. Returns
+ * the sanitized list plus a list of what was corrected so callers can surface
+ * a friendly note instead of a hard error.
+ */
+export function sanitizeInitializerFeatureList(list: FeatureList, authoritativeGoal: string): InitializerSanitizeResult {
+	const fixes: string[] = [];
+	if (list.goal !== authoritativeGoal) {
+		fixes.push("goal");
+	}
+	let prelistedPasses = 0;
+	let strayEvidence = 0;
+	const features = list.features.map((feature) => {
+		const next: FeatureItem = { ...feature, steps: [...feature.steps] };
+		if (next.passes) {
+			next.passes = false;
+			prelistedPasses += 1;
+		}
+		if (next.evidence !== undefined) {
+			delete next.evidence;
+			strayEvidence += 1;
+		}
+		return next;
+	});
+	if (prelistedPasses > 0) fixes.push(`passes×${prelistedPasses}`);
+	if (strayEvidence > 0) fixes.push(`evidence×${strayEvidence}`);
+	return {
+		list: { version: list.version, goal: authoritativeGoal, features },
+		fixes,
+	};
 }
 
 export function countPassing(list: FeatureList): number {

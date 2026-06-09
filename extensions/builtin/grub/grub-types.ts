@@ -29,6 +29,8 @@ export interface GrubTaskState {
 	consecutiveFailures: number;
 	maxIterations: number;
 	maxConsecutiveFailures: number;
+	/** Failure budget during the initializer phase; falls back to a default when absent (older saved tasks). */
+	maxInitializerFailures?: number;
 	harnessDirectory: string;
 	featureChecklistPath: string;
 	featureListPath: string;

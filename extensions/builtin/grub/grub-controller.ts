@@ -7,7 +7,7 @@
 
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import { allPassing, firstPending, readFeatureList, validateFeatureListDiff } from "./grub-feature-list.js";
+import { allPassing, firstPending, readFeatureList, sanitizeInitializerFeatureList, validateFeatureListDiff, writeFeatureList } from "./grub-feature-list.js";
 import { type GrubLocale } from "./grub-i18n.js";
 import { persistState, stateFilePathFor } from "./grub-persistence.js";
 import { buildGrubTaskPrompt, getPromptPrefix } from "./grub-prompts.js";
@@ -21,12 +21,17 @@ import type {
 
 const DEFAULT_MAX_ITERATIONS = 25;
 const DEFAULT_MAX_CONSECUTIVE_FAILURES = 3;
+// The initializer often needs a couple of tries to produce a structurally
+// complete feature list. Give it a more forgiving budget than execution so a
+// few setup hiccups don't burn the whole task before any real work begins.
+const DEFAULT_MAX_INITIALIZER_FAILURES = 5;
 const INITIALIZER_MIN_FEATURES = 15;
 const INITIALIZER_MAX_FEATURES = 40;
 
 export interface GrubStartOptions {
 	maxIterations?: number;
 	maxConsecutiveFailures?: number;
+	maxInitializerFailures?: number;
 	locale?: GrubLocale;
 }
 
@@ -74,6 +79,7 @@ export class GrubController {
 			consecutiveFailures: 0,
 			maxIterations: options.maxIterations ?? DEFAULT_MAX_ITERATIONS,
 			maxConsecutiveFailures: options.maxConsecutiveFailures ?? DEFAULT_MAX_CONSECUTIVE_FAILURES,
+			maxInitializerFailures: options.maxInitializerFailures ?? DEFAULT_MAX_INITIALIZER_FAILURES,
 			harnessDirectory,
 			featureChecklistPath: join(harnessDirectory, "feature-checklist.md"),
 			featureListPath: join(harnessDirectory, "feature-list.json"),
@@ -179,11 +185,24 @@ export class GrubController {
 		}
 
 		if (task.phase === "initializer") {
-			const initializerError = this.validateInitializerFeatureList(list);
-			if (initializerError) {
-				return { ok: false, message: initializerError };
+			// Only genuinely unfixable structural problems should fail the turn
+			// and force a retry. Recoverable hygiene issues (wrong goal,
+			// pre-marked passes, stray evidence) are auto-corrected below so a
+			// first-time mistake never strands the task in the initializer phase.
+			const structuralError = this.validateInitializerStructure(list);
+			if (structuralError) {
+				return { ok: false, message: structuralError };
 			}
-			task.featureListBaseline = this.cloneFeatureList(list);
+			const { list: sanitized, fixes } = sanitizeInitializerFeatureList(list, task.goal);
+			if (fixes.length > 0) {
+				try {
+					writeFeatureList(task.featureListPath, sanitized);
+				} catch {
+					// Best effort: even if the rewrite fails, we adopt the
+					// sanitized shape as the baseline so execution starts clean.
+				}
+			}
+			task.featureListBaseline = this.cloneFeatureList(sanitized);
 			this.safePersist(task);
 			return { ok: true };
 		}
@@ -319,7 +338,14 @@ export class GrubController {
 		task.lastError = message;
 		task.updatedAt = Date.now();
 
-		if (task.consecutiveFailures >= task.maxConsecutiveFailures) {
+		// The initializer gets a more forgiving budget: setting up a valid
+		// harness is a distinct, retry-friendly activity from execution work.
+		const failureLimit =
+			task.phase === "initializer"
+				? task.maxInitializerFailures ?? DEFAULT_MAX_INITIALIZER_FAILURES
+				: task.maxConsecutiveFailures;
+
+		if (task.consecutiveFailures >= failureLimit) {
 			return {
 				action: "stop",
 				snapshot: this.stop(
@@ -352,21 +378,24 @@ export class GrubController {
 		return randomBytes(4).toString("hex").slice(0, 8);
 	}
 
-	private validateInitializerFeatureList(list: FeatureList): string | undefined {
+	private validateInitializerStructure(list: FeatureList): string | undefined {
 		const task = this.activeTask;
 		const locale = task?.locale ?? "en";
-		if (task && list.goal !== task.goal) {
-			return locale === "zh" ? "任务清单里的目标必须保持用户原始目标。" : "The checklist goal must stay the same as the original task.";
-		}
+		const graduationHint =
+			locale === "zh"
+				? "（产出一份干净的清单后，系统会自动从初始化阶段进入执行阶段，届时才逐个标记 passes。）"
+				: " (Once the list is structurally clean, the harness automatically moves from the initializer to the execution phase, where you mark passes one by one.)";
 		if (list.features.length < INITIALIZER_MIN_FEATURES || list.features.length > INITIALIZER_MAX_FEATURES) {
 			return locale === "zh"
-				? `初始化阶段必须生成 ${INITIALIZER_MIN_FEATURES}-${INITIALIZER_MAX_FEATURES} 个 feature。`
-				: `Initializer must produce ${INITIALIZER_MIN_FEATURES}-${INITIALIZER_MAX_FEATURES} features.`;
+				? `初始化阶段必须生成 ${INITIALIZER_MIN_FEATURES}-${INITIALIZER_MAX_FEATURES} 个 feature。${graduationHint}`
+				: `Initializer must produce ${INITIALIZER_MIN_FEATURES}-${INITIALIZER_MAX_FEATURES} features.${graduationHint}`;
 		}
 		const seen = new Set<string>();
 		for (const feature of list.features) {
 			if (feature.id === "placeholder-expand-features") {
-				return locale === "zh" ? "初始化阶段必须替换 placeholder feature。" : "Initializer must replace the placeholder feature.";
+				return locale === "zh"
+					? `初始化阶段必须替换 placeholder feature。${graduationHint}`
+					: `Initializer must replace the placeholder feature.${graduationHint}`;
 			}
 			if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(feature.id)) {
 				return locale === "zh" ? `feature id 必须是 kebab-case：${feature.id}` : `feature id must be kebab-case: ${feature.id}`;
@@ -375,11 +404,6 @@ export class GrubController {
 				return locale === "zh" ? `feature id 重复：${feature.id}` : `duplicate feature id: ${feature.id}`;
 			}
 			seen.add(feature.id);
-			if (feature.passes) {
-				return locale === "zh"
-					? `初始化阶段不能预设已通过 feature：${feature.id}`
-					: `Initializer must not pre-mark features as passing: ${feature.id}`;
-			}
 		}
 		return undefined;
 	}
