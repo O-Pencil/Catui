@@ -35,12 +35,62 @@ supersedes: REFACTOR-LEDGER §1c（已毕业到本文）
 
 | Step | 问题 | 必看材料 | 输出 |
 |------|------|----------|------|
-| **1. Feature intake** | 要改变什么能力？落在哪一层（core/mode/extension/package/platform/build）？ | [`target-architecture.md`](./architecture-review/target-architecture.md)、相关模块的 P2 `AGENT.md` | 一句话意图 + 影响面清单 |
+| **1. Feature intake** | 要改变什么能力？落在哪一层？ | **§2b 层级归属决策**（核心）、[`target-architecture.md`](./architecture-review/target-architecture.md)、相关模块的 P2 `AGENT.md` | 一句话意图 + 影响面清单 + **目录落点** |
 | **2. Feasibility & boundary** | 当前架构是否已有 owner？会不会跨层 / 反向 import / 重复规则？ | 相关 P2/P3、[`evolution/dev-conventions.md`](./architecture-review/evolution/dev-conventions.md)、历史 review/finding | 落点判断：**纯搬 / 局部改 / hybrid / 需专项评审**（§3）|
 | **3. Architecture-fit design** | 如何在现有分层里实现，而不是新增耦合？ | §4 的实现原则 | 设计草案：owner、ports、依赖方向、兼容性、token/perf 影响 |
 | **4. Acceptance review** | 功能对不对？文档同步没？守门绿没？ | §5 验收门 | 验收结论：**通过 / 需补测 / 需 ADR 接受 trade-off** |
 
 > Step 1–2 通常几分钟；只有 Step 2 判定"需专项评审"时才走 §3 的重流程。**大多数小改动止于这张表。**
+
+---
+
+## 2b. 层级归属决策（Step 1 的核心：这个功能放哪一层）
+
+> 这是最容易做错、且影响最深的一步。先记住一句话：**有两个正交的轴，别混。**
+
+### 两个正交的轴
+
+| 轴 | 是什么 | 取值 | 回答 |
+|----|--------|------|------|
+| **概念轴**（产品认知）| 这是**什么**能力 | 🧠 Cognition（认知）· 🔧 Tool（工具）· 🎨 Interface（界面）| 帮你想清依赖与表面 |
+| **结构轴**（代码归属）| 代码**住哪** + 依赖规则 | `packages/` · `core/`（含 `lib/` `platform/`）· `modes/` · `extensions/` | **决定文件落点** |
+
+> ⚠️ **两轴完全正交**（顶层评审 candidate D 的结论）：一个功能同时有概念层**和**目录家，二者**不 1:1 映射**。
+> 例：`teach` 概念上是 🧠 Cognition，但结构上住 `extensions/`。**别因为它"是认知能力"就想往 core 塞。**
+
+### 结构轴决策树（决定文件落点）
+
+按顺序问，第一个"是"就是落点：
+
+1. 是**独立可发布的库**（有自己 version、有 host 之外的消费者、npm semver 可解析）？→ **`packages/`**
+2. 是**零业务的横切原语**（config / i18n / telemetry / exec / utils，不含任何业务知识）？→ **`core/platform/`**
+3. 是**被多个 mode/extension 复用的运行时原语**（session / tools / model / mcp / prompt / runtime）？→ **`core/`** 对应子域
+4. 是**一种新的 I/O 范式**（像 interactive / print / rpc / acp），或某 mode 专属适配/渲染？→ **`modes/`**
+5. 是**用户可感知的能力 / 行为**（slash 命令 + 工具 + 行为 hook + renderer）？→ **`extensions/`**（默认走这里）
+
+> **默认判据**：**新的用户可感知功能，默认进 `extensions/`。** 只有它确实是"被多 mode/extension 复用的运行时原语"才进 `core/`；确实是"独立可发布库"才进 `packages/`；确实是"新 I/O 范式"才进 `modes/`。
+
+### 每层的约束（MUST / CAN / MUST-NOT）
+
+| 层 | MUST | CAN | MUST-NOT |
+|----|------|-----|----------|
+| **`packages/`** | 独立 version+files；npm semver 可解析；无 host 反向依赖 | 稳定协议（extension-sdk）、可复用领域引擎（mem-core/soul-core）| ❌ 放 app feature；❌ 放只有 host 用的东西（那是 `core/lib/`）；❌ 依赖 host 内部符号 |
+| **`core/`** | 是被多 mode/extension 复用的运行时原语，有明确 owner | 新增一个清晰的 runtime 子域 | ❌ 放单个 feature 的业务；❌ 放 UI；❌ 放只服务一个 extension 的逻辑 |
+| **`core/lib/`** | 仅 ai / agent-core / tui 三个 fork 内部库 | — | ❌ 放非 fork 的新代码；❌ 去掉 `private:true` / publish |
+| **`core/platform/`** | 零业务知识的横切原语 | config/i18n/telemetry/exec/utils | ❌ 任何业务知识；❌ 反向依赖业务层 |
+| **`modes/`** | 一种新 I/O 范式，或某 mode 专属适配/渲染 | mode 内 controller（capability-context）| ❌ 放跨 mode 的功能（→core/extension）；❌ 放业务能力 |
+| **`extensions/`** | 经 `ExtensionContext` / extension-sdk 协议消费 core；`builtin/`=默认加载、`optional/`=opt-in | 注册 tool / slash / 键位 / 生命周期 hook / 消息 renderer | ❌ 直接 import host 内部符号；❌ 跨 extension 依赖；❌ 默认加载却不走 GB-2 声明 |
+
+### 走一遍：`teach`（用户用它学代码等）
+
+| 步骤 | 判断 |
+|------|------|
+| 概念轴 | 主要 🧠 Cognition（学习/认知）+ 🎨 Interface 表面（`/teach` UX）+ 可能 🔧 Tool（读代码/跑例子）|
+| 结构轴决策树 | ①独立可发布库?否 ②零业务原语?否 ③多 mode/extension 复用的运行时原语?**否**（是一个具体功能）④新 I/O 范式?否 ⑤用户可感知能力?**是** → **`extensions/builtin/teach/`**（若不想默认启用则 `optional/`）|
+| 落点 | `extensions/builtin/teach/index.ts`：注册 `/teach` 命令 + teaching 状态机 + renderer；经 `ExtensionContext` 复用 core 的 session/tools/model；要新工具就用 extension tool 注册；UX 经当前 mode 自然渲染 |
+| 约束自检 | ✅ MUST：补 P3 头、登记 `extensions/AGENT.md` P2；✅ MUST-NOT：不反向 import host 内部、**不在 `core/` 塞 teach 业务**、不跨 extension 依赖；⚠️ 若默认加载 → 属"默认启用 extension"= 用户可感知变更，**必须按 GB-2 声明**（参考 browser opt-in 的 EV03）|
+
+> **反面教材**：把 `teach` 的逻辑写进 `core/runtime/` 或新建 `core/teach/`——这违反 `core/` 的 MUST-NOT（放单个 feature 业务），会让 runtime 重新长出 god 耦合。概念上是认知层 ≠ 结构上进 core。
 
 ---
 
