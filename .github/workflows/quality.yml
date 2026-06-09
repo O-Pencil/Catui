@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - refactor/arch-candidate-d
+      - main
 
 jobs:
   architecture-boundaries:
@@ -17,3 +17,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify:quality
+      - run: npm run verify:package-boundary   # BR01 package-boundary guard (static)

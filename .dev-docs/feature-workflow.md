@@ -140,12 +140,12 @@ supersedes: REFACTOR-LEDGER §1c（已毕业到本文）
 | **DIP** | map-terrain 同构 | `npm run verify:dip` | ✅ `ci.yml` |
 | **Quality** | 无循环 + 边界不污染 | `npm run verify:quality` | ✅ `quality.yml` |
 | **Build/Type** | 可编译 | `npm run build && npx tsc --noEmit` | ✅ `ci.yml` |
-| **Package boundary** | public 包 vs 内部库边界（BR01）| `npm run verify:package-boundary`（`:dist` 验内嵌库可解析）| ⚠️ **未接 CI（手动）** — 待接进 `quality.yml` |
+| **Package boundary** | public 包 vs 内部库边界（BR01）| `npm run verify:package-boundary`（`:dist` 验内嵌库可解析）| ✅ static→`quality.yml`；`:dist`→`ci.yml`（build 后）|
 | **Public API** | 兼容性显式 | 符号 diff 对 `architecture-review/baseline/public-api-symbols-main.txt` | 手动；**默认不破，破必须先声明 intentional API diff（major 窗口）** |
 | **Token/perf** | 不隐性涨成本 | 人工 review：LLM 调用链 / provider lazy / prompt 注入是否中性 | 人工 |
 | **UX smoke** | 用户路径可用 | 按 [`beta-smoke-checklist.md`](./architecture-review/beta-smoke-checklist.md) | 人工，重点走默认路径 + 错误兜底 |
 
-> **唯一已知缺口**：`verify:package-boundary` 还没接进 CI（BR01 guard 目前只手动）。把它加进 `quality.yml` 是关闭 workflow 自动化的最后一步。
+> **5 道自动门全部已接 CI**（DIP/quality/build/tsc/package-boundary）。人工门（public API diff / token-perf / UX smoke）按需在 PR 评审与 smoke 清单里走。
 
 ---
 
