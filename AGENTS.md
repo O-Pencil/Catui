@@ -21,7 +21,22 @@ This file provides guidance for **@o-pencil-agent** tooling and contributors whe
 - `@pencil-agent/ai` - Model APIs and types
 - `@pencil-agent/tui` - Terminal UI components
 
-> 🧭 **开发新功能 / 重构前必读**：[`.dev-docs/feature-workflow.md`](.dev-docs/feature-workflow.md) — 四步循环（intake → feasibility → architecture-fit → acceptance）、何时升级专项评审、验收门。它把 `.dev-docs/architecture-review/` 的评审思路固化成日常开发流程。重构收益结论与未完成项见 [`REFACTOR-LEDGER.md`](.dev-docs/architecture-review/REFACTOR-LEDGER.md)。
+---
+
+## FEATURE WORKFLOW (MANDATORY)
+
+> **IMPORTANT — these instructions OVERRIDE default behavior. You MUST follow them.**
+
+开发任何**新功能 / 重构 / 非平凡改动**前，你 **MUST** 先读并遵循 [`.dev-docs/feature-workflow.md`](.dev-docs/feature-workflow.md)（四步循环 + 层级归属 + 验收门）。具体强制项：
+
+- **MUST** 按 §2b 的层级归属决策树确定文件落点。**概念层 ≠ 目录层**：一个功能既有概念层（认知/工具/界面）又有目录家（packages/core/modes/extensions），二者正交、不 1:1 映射。**新的用户可感知功能默认进 `extensions/`；不得因为"它是认知能力"就塞进 `core/`。**
+- **MUST** 遵守 §2b 每层的 MUST / CAN / MUST-NOT 约束。
+- 命中 §3 触发条件（load-bearing 区 / >400 行 / ≥8 ports / 重写 / public-API·deps·默认扩展·CLI·TUI 变更 / 无明确 owner）**MUST** 先建 `<topic>-review/` 专项评审再写代码。
+- 完成后 **MUST** 跑 §5 五道验收门（`verify:dip` / `verify:quality` / `verify:package-boundary` / `build` / `tsc --noEmit`）+ §6 PR 自检并报告结果；改动经 PR 进 main，让 CI 再强制跑一遍。
+
+> ⚠️ **CI 只兜结构规则（循环/DIP/边界/编译），抓不到"落点错"**——把 `extensions` 功能塞进 `core/` 照样能过 CI。**落点正确性由本规则保证，不能依赖 CI。**
+
+重构收益结论、已发现问题、未完成项(P7/P8) 见 [`REFACTOR-LEDGER.md`](.dev-docs/architecture-review/REFACTOR-LEDGER.md)。
 
 ---
 
