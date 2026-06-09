@@ -39,6 +39,77 @@ updated_at: 2026-06-09
 
 ---
 
+## 1b. 收尾收益结论（当前口径）
+
+本次重构的已完成收益不是"换目录名"，而是把长期维护成本最高的几个耦合中心拆成有 owner、有 port、有守门规则的结构。可以对外表述为：
+
+> **P0-P6 已完成行为不变结构重构**：目录分层、runtime/UI god 文件拆解、扩展包边界、入口 lazy、DIP/quality 守门已落地；public API 保持 296=296；冷启动相对旧 main 明显下降。  
+> **P7/P8 未完成**：包体积/构建方式优化与 SDK 面收窄仍是后续重构任务，不能宣称已经拿到。
+
+| 已拿到 | 证据 | 意义 |
+|--------|------|------|
+| god 文件拆解 | `agent-session.ts` → 7 runtime 子模块；`interactive-mode.ts` → 12 controller/state/mount 切片 | 降低单文件理解成本；形成单 owner 和 capability-context 组合根 |
+| 0 循环依赖 | `verify-quality` SCC = 0 | 依赖方向从"能跑"变成可守门的结构约束 |
+| public API 不变 | public symbols 296=296 | P0-P6 是行为不变结构重构，不强迫外部消费者迁移 |
+| 冷启动下降 | §6 cold-start：HEAD vs main 显著下降 | P6 lazy import/provider lazy 拿到用户可感知收益 |
+| DIP 同构强制 | P2/P3 + `verify-dip` | 新文件/新模块不再只靠口头约定表达架构 |
+| packaging bug 暴露并修复 | D1/D2/D5 | 重构过程找出隐藏发布问题，提升 release 可验证性 |
+
+| 未拿到 | 原因 | 后续入口 |
+|--------|------|----------|
+| dist 体积下降 | D2 修复把原本漏装的 browser 资产正确打入包；P7 收缩刀 deferred | O8/O3，bundle-redesign-review closure |
+| 构建方式优化 | esbuild/metadata chunking 未执行，仍是 tsc 全量构建 | O8 / P7 BR03-BR04 |
+| root SDK 面收窄 | 会破坏 296=296 public API 不变量，需要 major API 窗口 | O9 / P8 sdk-surface-review |
+
+**一致性结论**：当前目录结构与 `target-architecture.md` 的 P0-P6 端态基本一致；不一致项主要集中在 P7/P8 deferred：构建/出包流仍未重构，root barrel 仍未收窄。因此本次 sign-off 的准确边界是：**结构分层与行为不变完成；构建体积线和 SDK 收口线未完成**。
+
+---
+
+## 1c. 评审认知更新：从一次性架构评审到日常功能 workflow
+
+`.dev-docs/architecture-review/` 最初是一次性 Arch Agent handbook：Explore → Report → Grilling → 形成重构计划。重构收尾后，它不能继续只作为历史评审目录存在；需要沉淀成后续开发功能的架构质量 workflow。
+
+### 新功能 / 重构必须走的四步
+
+| Step | 问题 | 必看材料 | 输出 |
+|------|------|----------|------|
+| 1. Feature intake | 这个需求要改变什么能力？是 core、mode、extension、package、platform 还是 build/release？ | `target-architecture.md`、相关 P2 `AGENT.md` | 一句话意图 + 影响面列表 |
+| 2. Feasibility & boundary review | 当前架构是否已有 owner？是否会跨层、反向 import、重复规则？ | 相关 P2/P3、`evolution/dev-conventions.md`、历史 finding/review | 落点判断：纯搬 / 局部改 / hybrid / 需要专项评审 |
+| 3. Architecture-fit design | 如何在现有分层里实现，而不是新增耦合？ | capability-context、single owner、DIP P2/P3、package boundary | 设计草案：owner、ports、依赖方向、兼容性、token/perf 影响 |
+| 4. Acceptance review | 功能是否不变或按预期变化？架构文档是否同步？守门是否自动化？ | `verify-dip`、`verify-quality`、package/public API 检查、人工 smoke 清单 | 验收结论：通过 / 需补测 / 需 ADR 接受 trade-off |
+
+### 是否需要专项评审的触发条件
+
+满足任一条件，就不要直接开写，应先在 `.dev-docs/architecture-review/<topic>-review/` 建专项评审：
+
+- 修改 runtime/session、interactive mode、extension host、package/public API、build/release 这类 load-bearing 区域。
+- 单文件预计超过 400 行，或新增 controller/context 需要 8 个以上能力 port。
+- 需要重写而不是纯搬，或存在 token 消耗、兼容性、性能、发布体积影响。
+- 会改变 public API、npm package dependencies、默认启用 extension、CLI/TUI 用户路径。
+- 找不到明确 owner，或者同一规则需要在两个模块重复实现。
+
+专项评审最小产物：
+
+```text
+<topic>-review/
+  README.md        # scope / status / decision / acceptance
+  findings/*.md    # 必要时，按 one card per finding
+```
+
+### 未来开发的验收门
+
+| 门 | 目的 | 说明 |
+|----|------|------|
+| DIP 门 | 保证 map-terrain 同构 | 新文件补 P3；新目录/模块补 P2；删除/移动文件同步 P2 |
+| Quality 门 | 保证无循环和边界污染 | `verify-quality` / SCC / package boundary |
+| Public API 门 | 保证兼容性显式 | P0-P6 默认不破；P8 类任务必须先声明 intentional API diff |
+| Token/perf 门 | 保证重构不隐性涨成本 | LLM 调用链、provider lazy、prompt/context 注入必须说明是否 token 中性 |
+| UX smoke 门 | 保证用户路径可用 | TUI/CLI/extension 功能按清单主观验收，重点走默认路径和错误兜底 |
+
+**认知更新**：架构评审不是"写代码前多写文档"，而是把每次功能开发都纳入同一套判断：**需求是否有明确 owner，改动是否符合现有分层，收益是否超过引入的新抽象，验收是否能自动或人工复现**。
+
+---
+
 ## 2. 设计了什么 / 解决了什么问题
 
 ### P4 runtime 拆（agent-session god）
