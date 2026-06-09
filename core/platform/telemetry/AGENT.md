@@ -1,6 +1,6 @@
 # core/platform/telemetry/
 
-> P2 | Parent: ../CLAUDE.md
+> P2 | Parent: ../AGENT.md
 
 Member List
 types.ts: TelemetryDiagnostic event shape (mirrors SAL onDiagnostic), DiagnosticHandler callback type, InsforgeHttpResult, PostJsonOptions — foundational telemetry types
@@ -14,4 +14,4 @@ index.ts: Barrel — the only entry point external callers should import from
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
 
-[COVENANT]: Update this file header on changes and verify against parent CLAUDE.md
+[COVENANT]: Update this file header on changes and verify against parent AGENT.md

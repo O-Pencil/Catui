@@ -1,6 +1,6 @@
 # extensions/builtin/recap/
 
-> P2 | Parent: ../CLAUDE.md
+> P2 | Parent: ../AGENT.md
 
 Member List
 index.ts: recapExtension entry — registers /recap command (Free deterministic by default; --smart opts into LLM-polished synthesis) and ※ recap message renderer; on-demand only, no auto trigger
@@ -12,4 +12,4 @@ recap-renderer.ts: createRecapRenderer() — italic dim ※ recap with `{in} in 
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
 
-[COVENANT]: Update this file header on changes and verify against parent CLAUDE.md
+[COVENANT]: Update this file header on changes and verify against parent AGENT.md
