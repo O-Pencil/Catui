@@ -21,6 +21,7 @@ const BUNDLED_SECURITY_AUDIT_EXTENSION = join(__dirname, "extensions", "builtin"
 const BUNDLED_SOUL_EXTENSION = join(__dirname, "extensions", "builtin", "soul", "index.js");
 const BUNDLED_PRESENCE_EXTENSION = join(__dirname, "extensions", "builtin", "presence", "index.js");
 const BUNDLED_INTERVIEW_EXTENSION = join(__dirname, "extensions", "builtin", "interview", "index.js");
+const BUNDLED_TEACH_EXTENSION = join(__dirname, "extensions", "builtin", "teach", "index.js");
 const BUNDLED_LOOP_EXTENSION = join(__dirname, "extensions", "builtin", "loop", "index.js");
 const BUNDLED_PLAN_EXTENSION = join(__dirname, "extensions", "builtin", "plan", "index.js");
 const BUNDLED_DISCIPLINE_EXTENSION = join(__dirname, "extensions", "builtin", "discipline", "index.js");
@@ -64,6 +65,7 @@ export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "soul", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "presence", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: true, startsTimers: true, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/presence-opening.test.ts", "test/presence-locale.test.ts"] },
 	{ id: "interview", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "teach", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false },
 	{ id: "grub", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, testContracts: ["lifecycle", "external-process"], testFiles: ["test/grub-controller.test.ts"] },
 	{ id: "loop", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: true, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/loop-lifecycle.test.ts"] },
 	{ id: "plan", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
@@ -218,6 +220,14 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const interviewTs = join(__dirname, "extensions", "builtin", "interview", "index.ts");
 		if (existsSync(interviewTs)) paths.push(interviewTs);
+	}
+
+	// === Teach extension (guided knowledge teaching) ===
+	if (existsSync(BUNDLED_TEACH_EXTENSION)) {
+		paths.push(BUNDLED_TEACH_EXTENSION);
+	} else {
+		const teachTs = join(__dirname, "extensions", "builtin", "teach", "index.ts");
+		if (existsSync(teachTs)) paths.push(teachTs);
 	}
 
 	// === Grub extension (/grub autonomous iterative task) ===

@@ -108,6 +108,41 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 - `interview` tool: Agent-triggered clarification via tool_call
 - `before_agent_start` hook: Lightweight synchronous check only
 
+#### teach/ — Guided Knowledge Teaching
+
+**P3 Contract:**
+`index.ts`: - [WHO]: Extension with /teach command, teach tool, teach renderer
+    - [FROM]: core/extensions-host/types, teach-runtime.ts, teach-format.ts, teach-i18n.ts
+    - [HERE]: teach extension entry
+
+`teach-runtime.ts`: TeachRuntime - core teaching state machine, mission discovery, learning style selection, progressive teaching, progress tracking
+
+`teach-prompts.ts`: Prompt templates for each teaching level (hook, L1, L2, L3, bridge, takeaways)
+
+`teach-format.ts`: Output formatting utilities for teach results
+
+`teach-types.ts`: TypeScript type definitions for teach extension
+
+`teach-i18n.ts`: Internationalization (en/zh) for teach extension
+
+`teach-persistence.ts`: Learning record and mission persistence to .nanopencil/teach/
+
+`references/`: Curated analogies, teaching templates, learning paths, source verification rules
+
+**Design Principle:**
+- Progressive teaching: Hook → Level 1 → Level 2 → Level 3 → Bridge → Takeaways
+- Source verification: Every factual claim must have a verifiable source with confidence level
+- Learner level detection: Adapts to L0-L3 levels automatically
+- Session memory: Tracks glossary, depth, coverage, and questions
+
+**Features:**
+- `/teach` command: Start guided learning on any topic
+- `teach` tool: Agent-triggered teaching with start/respond/status actions
+- Teach renderer: Custom message display for teach content
+- Learning record persistence: Saves progress to .nanopencil/teach/records/
+- Mission persistence: Saves learning goals to .nanopencil/teach/missions/
+- Source verification: Integrated source citation with confidence levels
+
 #### grub/ — Autonomous Iterative Task Runner
 
 **P3 Contract:**
