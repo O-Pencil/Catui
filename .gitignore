@@ -67,3 +67,6 @@ agent-workspace/
 .benchmarks/
 .history/
 .npmrc
+
+# collect-baseline.ts transient output (canonical snapshot lives in .dev-docs/architecture-review/baseline/)
+.baseline-out/

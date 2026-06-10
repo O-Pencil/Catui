@@ -1104,6 +1104,12 @@ export class InteractiveMode {
     await this.modelOverlay.updateAvailableProviderCount();
     time("interactive.firstInput.ready");
     printTimings();
+
+    // Warm MCP tools in the background now that the prompt is usable. MCP server
+    // spawn/handshake can take many seconds (the npx-based default servers
+    // measure ~20s); blocking the UI on it used to make startup feel frozen.
+    // Tools merge into the live runtime when ready (sdk:mcp_ready → showStatus).
+    void this.session.warmupMcpTools();
   }
 
   /**
@@ -2198,6 +2204,13 @@ export class InteractiveMode {
   }
 
   private async handleEvent(event: AgentSessionEvent): Promise<void> {
+    if (event.type === "sdk:mcp_ready") {
+      // Deferred MCP loading finished in the background; surface a quiet status.
+      if (event.toolCount > 0) {
+        this.showStatus(`MCP: ${event.toolCount} tool(s) ready`);
+      }
+      return;
+    }
     await this.streamRender.handle(event);
   }
 

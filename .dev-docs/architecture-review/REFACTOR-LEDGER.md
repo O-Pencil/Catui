@@ -33,7 +33,8 @@ updated_at: 2026-06-09
 | P4 runtime 拆 | `agent-session.ts` 拆 7 子模块 + S2 | ✅ done | runtime-session-review（AS01–AS12）|
 | P5 UI 拆 | `interactive-mode.ts` 拆 controllers/state/mount | ✅ 结构完成（scope C）| interactive-ui-review（F02 + UI01–UI08）|
 | P6 入口体积 | lazy 入口 / browser opt-in / ai lazy provider | ✅ done（EV02/03-reg/04/05 landed；DoD 已测，冷启动 −49% vs main）| entry-volume-review（EV01–EV05）|
-| P7 体积重设计 | 发布边界硬化 / browser 包 / metadata chunking / esbuild | ⚠️ **评审完成、代码未执行**：仅 BR01 guard landed；**BR02/BR03/BR04 全 deferred（包体积+构建方式未改）** | bundle-redesign-review（BR01–BR04 + closure）|
+| P7 启动+构建线 | MCP 异步非阻塞启动 / build:deps 并行+incremental | ✅ **已执行（2026-06-10）**：启动关键路径 MCP init 移出（默认配置 ~56s→1.9s）；no-op build:deps 109s→41.7s（−62%）| startup-async-review |
+| P7 体积线 | browser 包 / metadata chunking / esbuild | ⚠️ **仍 deferred（gated）**：BR01 guard landed；**BR02/BR03/BR04 包体积未改**（需 metrics / install UX）| bundle-redesign-review（BR01–BR04 + closure）|
 | P8 SDK 收窄 | root barrel → 稳定 SDK 面 | ⚠️ **仅评审（docs-only），未实现**：收窄会破 public API 不变量，推迟到未来 major 窗口 | sdk-surface-review（SK01–SK03）|
 | Sign-off | S-1..S-6 + 签字 | ✅ **已签**（2026-06-09，scope = 行为不变结构重构；P7/P8 显式 deferred）| execution-plan/sign-off-main.md |
 
@@ -105,6 +106,7 @@ updated_at: 2026-06-09
 | D3 | **custom-overlay-host 漏提交**：P5 切片中新文件未 `git add`，导致 maintainer checkout 编译失败 | 中 | ✅ 已修 | — |
 | D4 | **mount `<500` 不可达**：god 拆完后 mount 仍是组合根 + port 面，地板 ~1500-1700 | 中 | ✅ 目标已修正（scope C）| mount-shell-evaluation.md |
 | D5 | **beta install 404**：重构新增的 first-party workspace 包 `@pencil-agent/extension-sdk` + `@pencil-agent/soul-core` 被列进 host `dependencies` 但**从未发布到 npm**，`npm i` 去 registry 找它们 → 404（mem-core@1.1.0 已发布故无此问题）。main(1.14.6) 不含这些 dep，属重构引入 | 高 | ✅ 已修（beta.2 `c15bc57`）：**发布这两个包**（它们无 first-party 传递依赖、有 build/files，是干净的独立包，与已发布的 mem-core 一致），恢复三者为 host `dependencies`（不改引用）。soul 运行时可选（找不到降级 null），404 纯安装期。⚠️ 维护代价：first-party 包改动需协调 version bump + 重发 | — |
+| D6 | **陈旧 workspace symlink（clone 未同步，O10① 现实化）**：cutover 前安装的 clone 里 `node_modules/@pencil-agent/{ai,agent-core}` 仍指向旧路径 `packages/ai`（已不存在）→ `@pencil-agent/ai/types` 等子路径解析失败 → `build:deps` 编译报 TS2307 一片。属环境/clone 不同步，非代码缺陷 | 中 | ✅ 已修：`npm install` 重新 link 到 `core/lib/*`。**教训**：cutover/大搬迁后所有 clone 必须 `npm install` 重链（不只 `git pull`）| — |
 
 ---
 
@@ -115,7 +117,8 @@ updated_at: 2026-06-09
 
 | # | 待办 | 类型 | 性质 |
 |---|------|------|------|
-| **O8** | **P7 体积/构建未执行（重构未完成）**：BR03 `models.generated.ts`(14505 行) per-provider chunking + BR04 esbuild 构建管线 —— **包体积 + 构建方式至今没改，仍是重构前的 tsc 全量**。closure 已给 reopen 条件（要 metrics + 先 transpile-only）| **代码（重构遗留）** | bundle-redesign-review/closure.md Reopen Matrix |
+| **O8a** | ✅ **P7 启动+构建线已执行（2026-06-10）**：MCP 异步非阻塞（默认配置启动 ~56s→1.9s）；`build:deps` 并行+incremental（no-op 109s→41.7s）。详见 `startup-async-review.md` | 代码（已完成）| startup-async-review |
+| **O8b** | **P7 体积线仍未执行（gated）**：BR03 `models.generated.ts`(14505 行/492K) per-provider chunking + BR04 esbuild + BR02 browser 1.6M 独立包 —— **包体积至今没改**。closure 已给 reopen 条件（要 metrics + 先 transpile-only）| 代码（重构遗留，gated）| bundle-redesign-review/closure.md Reopen Matrix |
 | **O9** | **P8 SDK 收窄未执行（重构未完成）**：root barrel → 稳定 SDK 面（SK01-03）。会破 public API 296 不变量 → **需 maintainer 开 major 版本窗口**才能做 | **代码（重构遗留，需 major）** | sdk-surface-review |
 | O3 | **EV03 browser 独立包**（Q2①，砍 1.6M 安装体积）：UX-first，要先有 install/enable UX（与 O8 同属 P7 体积线）| 代码（可选）| BR02 reopen 条件 |
 | O5 | interactive 域内 post-P5 清理：resources-display(481) / slash-handlers(981) 扁平 handler | 代码（可选 backlog）| — |
@@ -143,6 +146,9 @@ updated_at: 2026-06-09
 | cold-start `--list-models` | **mean 4.136s / min 2.757s**（2026-06-05 补采）| mean 2.772s / min 2.149s | **mean 1.028s / min 0.508s** | ✅ **V6-1 通过 + S-4 强数据**：vs P5 mean −63%/min −76%；**vs main mean −75%/min −82%**（hyperfine -w3 -r10）。EV02+EV04 显著；重构拆文件的 boot 代价被 lazy 反超。min 最可信(P6 σ 大含系统 outlier) |
 | provider smoke(EV04)| — | — | **openai-completions(MiMo)✅ 真流式 `ok`** | EV04 lazy 端到端证实可用；anthropic/google/bedrock 等其余 api 未逐一 smoke（beta notes 已标 pending）|
 | cycle(verify-quality SCC) | — | 0 | 0 | ✅ 无环 |
+| **MCP 启动阻塞（关键路径）** | — | — | **默认配置 ~56s→1.9s；2 mock ~3.3s→0.6s** | ✅ P7 startup：MCP init 移出关键路径（`createAgentSession` 返回时间，deferMcpInit）。默认 3×npx server warm ~20s/cold 24-34s 全部转后台 warmup。print/acp/rpc 保持同步（一次性 turn 需工具）|
+| **build:deps no-op 重建** | — | — | **109s→41.7s（−62%）** | ✅ P7 build：并行（agent-core 依赖 ai 串后）+ tsc incremental。改文件时只重建受影响包 |
+| **public 符号（startup 改后复核）** | 296 | — | **296** | ✅ 顶层导出不变；新增 `warmupMcpTools()`/`deferMcpInit`/`sdk:mcp_ready` 均成员级 additive（GB-2 声明，非破坏）|
 
 **dist 增长结论（已接受，记录原因）**：HEAD dist > main 基线，原因有二且**均非性能回归**：
 1. **D2 修复**：browser 1.6M 资产从"漏装"变"正确装"（本就该在包里）；

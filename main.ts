@@ -954,6 +954,11 @@ export async function main(args: string[]) {
 	// NanoPencil enables MCP by default; disabled in offline mode or with --no-mcp flag
 	sessionOptions.agentDir = agentDir;
 	sessionOptions.enableMCP = APP_NAME === "nanopencil" && !offlineMode && !parsed.noMcp;
+	// Interactive mode warms MCP in the background after the UI is ready so the
+	// prompt is usable immediately instead of blocking on MCP server spawn (the
+	// npx-based default servers measure ~20s). One-shot modes (print/acp/rpc)
+	// keep synchronous MCP load so tools are present before their first turn.
+	sessionOptions.deferMcpInit = isInteractive && !parsed.acp;
 	sessionOptions.cwd = parsedCwd;
 	sessionOptions.authStorage = authStorage;
 	sessionOptions.modelRegistry = modelRegistry;

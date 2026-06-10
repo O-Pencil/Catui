@@ -207,6 +207,13 @@ export type AgentSessionEvent =
       type: "sdk:error";
       source: "soul" | "mcp" | "eventbus";
       error: unknown;
+    }
+  | {
+      // Emitted when deferred (non-blocking) MCP tool loading finishes and the
+      // tools have been merged into the active runtime. Lets the UI surface a
+      // "MCP ready" status without blocking startup. See warmupMcpTools().
+      type: "sdk:mcp_ready";
+      toolCount: number;
     };
 
 /** Listener function for agent session events */
@@ -1961,6 +1968,59 @@ export class AgentSession {
     this.agent.setSystemPrompt(this._baseSystemPrompt);
   }
 
+  /**
+   * Run the MCP tools factory and merge the result into `_customTools`.
+   * Shared by reload() and warmupMcpTools(). Does NOT rebuild the runtime —
+   * the caller decides when to call _buildRuntime() (reload batches it with the
+   * soul refresh; warmup rebuilds on its own).
+   * @returns number of MCP tools now loaded.
+   */
+  private async _refreshMcpTools(): Promise<number> {
+    if (!this._mcpToolsFactory) return 0;
+    try {
+      const nextMcpTools = await this._mcpToolsFactory();
+      this._customTools = [...this._staticCustomTools, ...nextMcpTools];
+      return nextMcpTools.length;
+    } catch (error) {
+      this._emit({ type: "sdk:error", source: "mcp", error });
+      // Keep previously-loaded MCP tools on failure.
+      const previousMcpTools = this._customTools.filter((t) =>
+        // Heuristic: MCP tools are prefixed with mcp_ in current codebase.
+        t.name.startsWith("mcp_"),
+      );
+      this._customTools = [...this._staticCustomTools, ...previousMcpTools];
+      return previousMcpTools.length;
+    }
+  }
+
+  /**
+   * Load MCP tools and merge them into the live runtime WITHOUT a full reload.
+   *
+   * Startup no longer blocks on MCP server spawn/handshake (which can take many
+   * seconds — npx-based default servers measured ~20s). Interactive mode calls
+   * this fire-and-forget once the UI is ready; one-shot modes (print/acp/rpc)
+   * await it before their first turn (createAgentSession does this internally
+   * unless `deferMcpInit` is set). No-op when MCP is disabled.
+   *
+   * Emits `sdk:mcp_ready` so the UI can surface a status line.
+   */
+  async warmupMcpTools(): Promise<void> {
+    if (!this._mcpToolsFactory) return;
+    try {
+      const toolCount = await this._refreshMcpTools();
+      this._buildRuntime({
+        activeToolNames: this.getActiveToolNames(),
+        flagValues: this._extensionRunner?.getFlagValues(),
+        includeAllExtensionTools: true,
+      });
+      this._emit({ type: "sdk:mcp_ready", toolCount });
+    } catch (error) {
+      // MCP problems must never crash startup (background warmup is
+      // fire-and-forget; one-shot modes await but should still boot).
+      this._emit({ type: "sdk:error", source: "mcp", error });
+    }
+  }
+
   async reload(): Promise<void> {
     const previousFlagValues = this._extensionRunner?.getFlagValues();
     await this._extensionRunner?.emit({ type: "session_shutdown" });
@@ -1970,19 +2030,7 @@ export class AgentSession {
 
     // Refresh dynamic managers/tools using updated env (e.g. persona switch).
     // This enables runtime tool changes without restarting the whole process.
-    if (this._mcpToolsFactory) {
-      try {
-        const nextMcpTools = await this._mcpToolsFactory();
-        this._customTools = [...this._staticCustomTools, ...nextMcpTools];
-      } catch (error) {
-        this._emit({ type: "sdk:error", source: "mcp", error });
-        // Keep previous tools on failure.
-        this._customTools = [...this._staticCustomTools, ...this._customTools.filter((t) =>
-          // Heuristic: MCP tools are prefixed with mcp_ in current codebase.
-          t.name.startsWith("mcp_"),
-        )];
-      }
-    }
+    await this._refreshMcpTools();
 
     if (this._soulManagerFactory) {
       try {

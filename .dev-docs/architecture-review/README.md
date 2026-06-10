@@ -53,7 +53,8 @@ This is a one-shot exercise. After the maintainer has acted on the Arch Agent's 
 - `runtime-session-review/` — P4 AgentSession 拆（AS01–12，closed）
 - `interactive-ui-review/` — P5 InteractiveMode 拆（UI01–08，structurally-complete）
 - `entry-volume-review/` — P6 入口/lazy/包表面（EV01–05，closed）
-- `bundle-redesign-review/` — P7 体积/构建（BR01–04，closed-as-gated；BR02-04 代码未执行）
+- `startup-async-review.md` — P7 启动线（MCP 异步非阻塞 + build:deps 并行/incremental，**已实现 2026-06-10**；启动默认 ~56s→1.9s）
+- `bundle-redesign-review/` — P7 体积线（BR01–04，closed-as-gated；BR02-04 体积代码未执行）
 - `sdk-surface-review/` — P8 SDK 收窄（SK01–03，**review-open = 未实现，deferred 到 major 窗口**）
 - `findings/` F01–F08 — 微观判断（决策起点）
 - `top-level-structure-review.md` — 为什么选候选 D

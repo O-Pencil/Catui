@@ -154,6 +154,14 @@ export interface CreateAgentSessionOptions extends SoulOptionsContract {
   customTools?: ToolDefinition[];
   /** Enable MCP (Model Context Protocol) tools. Default: false */
   enableMCP?: boolean;
+  /**
+   * Defer MCP tool loading off the startup critical path. When true,
+   * createAgentSession does NOT block on MCP server spawn/handshake; the caller
+   * must call `session.warmupMcpTools()` (interactive mode does this in the
+   * background once the UI is ready). When false/omitted, MCP is loaded
+   * synchronously before returning (one-shot modes: print/acp/rpc). Default: false
+   */
+  deferMcpInit?: boolean;
   /** Resource loader. When omitted, DefaultResourceLoader is used. */
   resourceLoader?: ResourceLoader;
 
@@ -542,18 +550,35 @@ export async function createAgentSession(
     sessionManager.appendThinkingLevelChange(thinkingLevel);
   }
 
-  // Initialize MCP if enabled (before creating AgentSession)
+  time("agent.construct");
+
+  // MCP tool loading is deferred off the startup critical path.
+  //
+  // MCP server spawn + handshake is slow (the npx-based default servers measure
+  // ~20s warm), and it used to be awaited here BEFORE the session/UI existed.
+  // Now `mcpToolsFactory` (the same path reload() already used) runs after the
+  // session is built: interactive mode warms it in the background once the UI is
+  // ready; one-shot modes (print/acp/rpc) await it just below before returning,
+  // preserving their "tools ready before first turn" contract.
   let currentMcpManager: MCPManager | undefined;
-  let initialMcpTools: ToolDefinition[] = [];
+  const initialMcpTools: ToolDefinition[] = [];
   const staticCustomTools = options.customTools ?? [];
   let mcpToolsFactory: (() => Promise<ToolDefinition[]>) | undefined;
   if (options.enableMCP) {
-    try {
+    process.once("exit", () => currentMcpManager?.dispose());
+
+    mcpToolsFactory = async () => {
+      try {
+        // Stop old MCP servers before re-initializing with updated env/config.
+        currentMcpManager?.dispose();
+      } catch {
+        // ignore
+      }
       currentMcpManager = new MCPManager();
       currentMcpManager.setWorkingDir(cwd);
       await currentMcpManager.initialize();
-      initialMcpTools = [...currentMcpManager.getTools()];
       time("mcp.initialize");
+
       const mcpStatus = currentMcpManager.getStatus();
       if (isProductionLike) {
         // Production mode: concise summary
@@ -584,22 +609,7 @@ export async function createAgentSession(
           }
         }
       }
-      process.once("exit", () => currentMcpManager?.dispose());
-    } catch (error) {
-      logger.warn(`Failed to initialize MCP: ${error}`);
-    }
 
-    mcpToolsFactory = async () => {
-      try {
-        // Stop old MCP servers before re-initializing with updated env/config.
-        currentMcpManager?.dispose();
-      } catch {
-        // ignore
-      }
-      currentMcpManager = new MCPManager();
-      currentMcpManager.setWorkingDir(cwd);
-      await currentMcpManager.initialize();
-      time("mcp.initialize");
       return currentMcpManager.getTools();
     };
   }
@@ -657,6 +667,16 @@ export async function createAgentSession(
     signal: options.signal,
     theme: options.theme,
   });
+
+  time("session.construct");
+
+  // Non-interactive / one-shot modes (print, acp, rpc) keep the original
+  // contract: MCP tools must be present before the first turn runs, so load
+  // them synchronously here. Interactive mode sets `deferMcpInit` and warms MCP
+  // in the background after the UI is ready (see InteractiveMode.init).
+  if (options.enableMCP && !options.deferMcpInit) {
+    await session.warmupMcpTools();
+  }
 
   const extensionsResult = resourceLoader.getExtensions();
 

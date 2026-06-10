@@ -29,7 +29,7 @@
     "build": "npm run clean:dist && npm run build:deps && tsc -p tsconfig.build.json && npm run copy:internal-libs && npm run copy:theme:json && npm run copy:assets && npm run build:meta",
     "build:meta": "node scripts/generate-build-meta.js",
     "build:release": "npm run generate-models --prefix core/lib/ai && npm run build",
-    "build:deps": "npm run build --prefix packages/extension-sdk && npm run build --prefix core/lib/ai && npm run build --prefix core/lib/agent-core && npm run build --prefix core/lib/tui",
+    "build:deps": "node scripts/build-deps.js",
     "clean:dist": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "copy:theme:json": "node -e \"const fs=require('fs');const p=require('path');const d='dist/modes/interactive/theme';if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});fs.readdirSync('modes/interactive/theme').forEach(f=>{if(f.endsWith('.json'))fs.copyFileSync(p.join('modes/interactive/theme',f),p.join(d,f))})\"",
     "copy:internal-libs": "node scripts/copy-internal-libs.js",
