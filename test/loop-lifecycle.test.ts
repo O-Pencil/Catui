@@ -62,7 +62,8 @@ test("loop clears owned scheduler timers on session shutdown", async () => {
 		assert.ok(shutdown, "Expected loop to register session_shutdown.");
 
 		await start({ type: "session_start" }, {});
-		await new Promise((resolve) => setImmediate(resolve));
+		// Wait for async enable() to complete (dynamic import of chokidar + lock acquisition)
+		await new Promise((resolve) => setTimeout(resolve, 500));
 		assert.ok(handles.length >= 1, "Expected loop session_start to create at least one timer.");
 
 		await shutdown({ type: "session_shutdown" }, {});

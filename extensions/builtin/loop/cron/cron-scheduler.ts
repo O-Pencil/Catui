@@ -1,403 +1,453 @@
 /**
- * [WHO]: createCronScheduler - independent cron task scheduler
- * [FROM]: Depends on proper-lockfile, ./cron-types, ./cron-parser, ./cron-tasks
- * [TO]: Consumed by loop extension index.ts, REPL integration
- * [HERE]: extensions/builtin/loop/cron/cron-scheduler.ts - non-React scheduler core matching the refactoring plan
- */
-
-import lockfile from "proper-lockfile";
-import { jitteredNextCronRunMs, oneShotJitteredNextCronRunMs, nextCronRunMs } from "./cron-parser.js";
-import { readCronTasks, writeCronTasks, getSessionCronTasks, updateSessionCronTask, markCronTasksFired } from "./cron-tasks.js";
-import type { CronTask } from "./cron-types.js";
-import { DEFAULT_RECURRING_MAX_AGE_MS } from "./cron-types.js";
-
-/**
- * Options for creating a cron scheduler.
- */
-export interface CronSchedulerOptions {
-	/** Called when a task fires with its prompt. Should enqueue the prompt for execution. */
-	onFire: (prompt: string, task: CronTask) => void;
-	/** Called when a task is settled (completed/error) */
-	onSettle?: (taskId: string, error?: string, outputSnippet?: string) => void;
-	/** Returns true if the app is currently loading (scheduler should wait). */
-	isLoading?: () => boolean;
-	/** If true, skip isLoading gate. */
-	assistantMode?: boolean;
-	/** Project root directory. If provided, enables durable task watching. */
-	dir?: string;
-		/** Legacy cwd for migrating tasks from old {cwd}/.nanopencil/ location. */
-		legacyCwd?: string;
-	/** If true, scheduler stops checking. */
-	isKilled?: () => boolean;
-	/** Jitter config: max jitter in milliseconds. Default: 60000 (1 minute). */
-	jitterMs?: number;
-}
-
-/**
- * Cron scheduler instance.
- */
-export interface CronScheduler {
-	/** Start the scheduler. Begins polling for enabled state. */
-	start(): void;
-	/** Stop the scheduler immediately. */
-	stop(): void;
-	/** Get the next fire time across all tasks, or null if none. */
-	getNextFireTime(): number | null;
-	/** Mark a task as settled (after agent_end). */
-	markSettled(id: string, error?: string, outputSnippet?: string): void;
-	/** Force a task to be due immediately. */
-	forceDue(id: string): boolean;
-	/** Get task by ID from scheduler's loaded state. */
-	getTask(id: string): CronTask | undefined;
-}
-
-const TICK_MS = 1000;
-const LOCK_FILE = ".nanopencil/cron-scheduler.lock";
-const WATCH_INTERVAL_MS = 3000;
-
-/**
- * Create a cron scheduler instance.
- * Follows the lifecycle from the refactoring plan:
+ * Non-React scheduler core for .claude/scheduled_tasks.json.
  *
- * poll enabled until true
- *   -> load tasks
- *   -> watch cron file
- *   -> start 1s check timer
- *   -> on fire, call onFire(prompt, task)
+ * 1:1 port of Claude Code src/utils/cronScheduler.ts
+ *
+ * Lifecycle: poll scheduledTasksEnabled until true (flag flips when
+ * CronCreate runs) → load tasks + watch the file + start a 1s check
+ * timer → on fire, call onFire(prompt). stop() tears everything down.
  */
-export function createCronScheduler(options: CronSchedulerOptions): CronScheduler {
-	let intervalId: ReturnType<typeof setInterval> | null = null;
-	let watchIntervalId: ReturnType<typeof setInterval> | null = null;
-	let lockRelease: (() => Promise<void>) | null = null;
-	let isLockOwner = false;
-	let enabled = false;
-	const nextFireAt = new Map<string, number>();
-	const inFlight = new Set<string>();
-	const settledTasks = new Map<string, { error?: string; outputSnippet?: string }>();
-	let killed = false;
 
+import type { FSWatcher } from "chokidar";
+import { cronToHuman } from "./cron-parser.js";
+import {
+	type CronJitterConfig,
+	type CronTask,
+	DEFAULT_CRON_JITTER_CONFIG,
+	findMissedTasks,
+	getCronFilePath,
+	hasCronTasksSync,
+	jitteredNextCronRunMs,
+	markCronTasksFired,
+	oneShotJitteredNextCronRunMs,
+	readCronTasks,
+	removeCronTasks,
+	getSessionCronTasks,
+	removeSessionCronTasks,
+} from "./cron-tasks.js";
+import {
+	releaseSchedulerLock,
+	tryAcquireSchedulerLock,
+} from "./cron-tasks-lock.js";
+
+const CHECK_INTERVAL_MS = 1000;
+const FILE_STABILITY_MS = 300;
+// How often a non-owning session re-probes the scheduler lock. Coarse
+// because takeover only matters when the owning session has crashed.
+const LOCK_PROBE_INTERVAL_MS = 5000;
+
+/**
+ * True when a recurring task was created more than `maxAgeMs` ago and should
+ * be deleted on its next fire. Permanent tasks never age. `maxAgeMs === 0`
+ * means unlimited (never ages out).
+ */
+export function isRecurringTaskAged(
+	t: CronTask,
+	nowMs: number,
+	maxAgeMs: number,
+): boolean {
+	if (maxAgeMs === 0) return false;
+	return Boolean(t.recurring && !t.permanent && nowMs - t.createdAt >= maxAgeMs);
+}
+
+type CronSchedulerOptions = {
+	/** Called when a task fires (regular or missed-on-startup). */
+	onFire: (prompt: string) => void;
+	/** While true, firing is deferred to the next tick. */
+	isLoading: () => boolean;
+	/**
+	 * When true, bypasses the isLoading gate in check() and auto-enables the
+	 * scheduler without waiting for setScheduledTasksEnabled().
+	 */
+	assistantMode?: boolean;
+	/**
+	 * When provided, receives the full CronTask on normal fires (and onFire is
+	 * NOT called for that fire). Lets callers see the task id/cron/etc
+	 * instead of just the prompt string.
+	 */
+	onFireTask?: (task: CronTask) => void;
+	/**
+	 * When provided, receives the missed one-shot tasks on initial load (and
+	 * onFire is NOT called with the pre-formatted notification).
+	 */
+	onMissed?: (tasks: CronTask[]) => void;
+	/**
+	 * Directory containing .claude/scheduled_tasks.json. Required for durable tasks.
+	 */
+	dir?: string;
+	/**
+	 * Owner key written into the lock file. Defaults to a generated UUID.
+	 * PID remains the liveness probe regardless.
+	 */
+	lockIdentity?: string;
+	/**
+	 * Returns the cron jitter config to use for this tick. Called once per
+	 * check() cycle.
+	 */
+	getJitterConfig?: () => CronJitterConfig;
+	/**
+	 * Killswitch: polled once per check() tick. When true, check() bails
+	 * before firing anything.
+	 */
+	isKilled?: () => boolean;
+	/**
+	 * Per-task gate applied before any side effect. Tasks returning false are
+	 * invisible to this scheduler.
+	 */
+	filter?: (t: CronTask) => boolean;
+};
+
+export type CronScheduler = {
+	start: () => void;
+	stop: () => void;
+	/**
+	 * Epoch ms of the soonest scheduled fire across all loaded tasks, or null
+	 * if nothing is scheduled.
+	 */
+	getNextFireTime: () => number | null;
+};
+
+/**
+ * Build the missed-task notification text. Guidance precedes the task list
+ * and the list is wrapped in a code fence so a multi-line imperative prompt
+ * is not interpreted as immediate instructions to avoid self-inflicted
+ * prompt injection.
+ */
+export function buildMissedTaskNotification(missed: CronTask[]): string {
+	const plural = missed.length > 1;
+	const header =
+		`The following one-shot scheduled task${plural ? "s were" : " was"} missed while Claude was not running. ` +
+		`${plural ? "They have" : "It has"} already been removed from .claude/scheduled_tasks.json.\n\n` +
+		`Do NOT execute ${plural ? "these prompts" : "this prompt"} yet. ` +
+		`First use the AskUserQuestion tool to ask whether to run ${plural ? "each one" : "it"} now. ` +
+		`Only execute if the user confirms.`;
+
+	const blocks = missed.map((t) => {
+		const meta = `[${cronToHuman(t.cron)}, created ${new Date(t.createdAt).toLocaleString()}]`;
+		// Use a fence one longer than any backtick run in the prompt so a
+		// prompt containing ``` cannot close the fence early and un-wrap the
+		// trailing text (CommonMark fence-matching rule).
+		const longestRun = (t.prompt.match(/`+/g) ?? []).reduce(
+			(max, run) => Math.max(max, run.length),
+			0,
+		);
+		const fence = "`".repeat(Math.max(3, longestRun + 1));
+		return `${meta}\n${fence}\n${t.prompt}\n${fence}`;
+	});
+
+	return `${header}\n\n${blocks.join("\n\n")}`;
+}
+
+export function createCronScheduler(
+	options: CronSchedulerOptions,
+): CronScheduler {
 	const {
 		onFire,
-		onSettle,
-		isLoading: isLoadingFn = () => false,
+		isLoading,
 		assistantMode = false,
+		onFireTask,
+		onMissed,
 		dir,
-		isKilled = () => killed,
-		legacyCwd,
-		jitterMs = 60_000,
+		lockIdentity,
+		getJitterConfig,
+		isKilled,
+		filter,
 	} = options;
+	const lockOpts = dir || lockIdentity ? { dir, lockIdentity } : undefined;
 
-	// Durable tasks loaded from disk
-	let fileTasks = new Map<string, CronTask>();
+	// File-backed tasks only. Session tasks (durable: false) are NOT loaded
+	// here — they can be added/removed mid-session with no file event, so
+	// check() reads them fresh on every tick instead.
+	let tasks: CronTask[] = [];
+	// Per-task next-fire times (epoch ms).
+	const nextFireAt = new Map<string, number>();
+	// Ids we've already enqueued a "missed task" prompt for — prevents
+	// re-asking on every file change before the user answers.
+	const missedAsked = new Set<string>();
+	// Tasks currently enqueued but not yet removed from the file. Prevents
+	// double-fire if the interval ticks again before removeCronTasks lands.
+	const inFlight = new Set<string>();
 
-	/**
-	 * Core check function called every second.
-	 * Processes both file-backed and session-only tasks.
-	 */
-	function check(): void {
-		if (isKilled()) return;
-		if (isLoadingFn() && !assistantMode) return;
+	let enablePoll: ReturnType<typeof setInterval> | null = null;
+	let checkTimer: ReturnType<typeof setInterval> | null = null;
+	let lockProbeTimer: ReturnType<typeof setInterval> | null = null;
+	let watcher: FSWatcher | null = null;
+	let stopped = false;
+	let isOwner = false;
+	let scheduledTasksEnabled = false;
+
+	// Generate a stable session identity for the lock
+	const sessionId = lockIdentity ?? `session-${process.pid}-${Date.now()}`;
+
+	async function load(initial: boolean) {
+		if (!dir) return;
+		const next = await readCronTasks(dir);
+		if (stopped) return;
+		tasks = next;
+
+		// Only surface missed tasks on initial load. Chokidar-triggered
+		// reloads leave overdue tasks to check() (which anchors from createdAt
+		// and fires immediately). This avoids a misleading "missed while Claude
+		// was not running" prompt for tasks that became overdue mid-session.
+		if (!initial) return;
 
 		const now = Date.now();
-
-		// Process file-backed tasks (only if we own the lock)
-		if (isLockOwner) {
-			for (const task of fileTasks.values()) {
-				processTask(task, false, now);
+		const missed = findMissedTasks(next, now).filter(
+			(t) => !t.recurring && !missedAsked.has(t.id) && (!filter || filter(t)),
+		);
+		if (missed.length > 0) {
+			for (const t of missed) {
+				missedAsked.add(t.id);
+				// Prevent check() from re-firing the raw prompt while the async
+				// removeCronTasks + chokidar reload chain is in progress.
+				nextFireAt.set(t.id, Infinity);
 			}
-		}
-
-		// Process session-only tasks
-		const sessionTasks = getSessionCronTasks();
-		for (const task of sessionTasks) {
-			processTask(task, true, now);
-		}
-	}
-
-	/**
-	 * Process a single task: check expiry, calculate next fire, fire if due.
-	 */
-	function processTask(task: CronTask, isSession: boolean, now: number): void {
-		// Skip if in flight
-		if (inFlight.has(task.id)) return;
-
-		// Skip if paused
-		if (task.paused) return;
-
-		// Must have createdAt
-		if (task.createdAt === undefined) return;
-
-		// Check if recurring task has expired (7 days)
-		if (task.recurring && !task.permanent && now - task.createdAt >= DEFAULT_RECURRING_MAX_AGE_MS) {
-			console.log(`[Cron-Scheduler] Task ${task.id} expired after 7 days, removing`);
-			// Fire one last time then remove
-			fireTask(task);
-			removeTask(task.id, isSession);
-			nextFireAt.delete(task.id);
-			return;
-		}
-
-		let next = nextFireAt.get(task.id);
-
-		if (next === undefined) {
-			// Calculate first fire time
-			const baseTime = task.lastFiredAt ?? task.createdAt;
-			let calculated: number | null;
-			if (task.recurring) {
-				calculated = jitteredNextCronRunMs(task.cron, baseTime, task.id, jitterMs);
+			if (onMissed) {
+				onMissed(missed);
 			} else {
-				calculated = oneShotJitteredNextCronRunMs(task.cron, task.createdAt, task.id, jitterMs);
+				onFire(buildMissedTaskNotification(missed));
 			}
-			if (calculated !== null) {
-				nextFireAt.set(task.id, calculated);
+			void removeCronTasks(
+				missed.map((t) => t.id),
+				dir,
+			).catch(() => {});
+		}
+	}
+
+	function check() {
+		if (isKilled?.()) return;
+		if (isLoading() && !assistantMode) return;
+		const now = Date.now();
+		const seen = new Set<string>();
+		// File-backed recurring tasks that fired this tick. Batched into one
+		// markCronTasksFired call after the loop so N fires = one write. Session
+		// tasks excluded — they die with the process, no point persisting.
+		const firedFileRecurring: string[] = [];
+		// Read once per tick.
+		const jitterCfg = getJitterConfig?.() ?? DEFAULT_CRON_JITTER_CONFIG;
+
+		// Shared loop body. `isSession` routes the one-shot cleanup path:
+		// session tasks are removed synchronously from memory, file tasks go
+		// through the async removeCronTasks + chokidar reload.
+		function process(t: CronTask, isSession: boolean) {
+			if (filter && !filter(t)) return;
+			seen.add(t.id);
+			if (inFlight.has(t.id)) return;
+
+			let next = nextFireAt.get(t.id);
+			if (next === undefined) {
+				// First sight — anchor from lastFiredAt (recurring) or createdAt.
+				next = t.recurring
+					? (jitteredNextCronRunMs(
+							t.cron,
+							t.lastFiredAt ?? t.createdAt,
+							t.id,
+							jitterCfg,
+						) ?? Infinity)
+					: (oneShotJitteredNextCronRunMs(
+							t.cron,
+							t.createdAt,
+							t.id,
+							jitterCfg,
+						) ?? Infinity);
+				nextFireAt.set(t.id, next);
+			}
+
+			if (now < next) return;
+
+			if (onFireTask) {
+				onFireTask(t);
+			} else {
+				onFire(t.prompt);
+			}
+
+			// Aged-out recurring tasks fall through to the one-shot delete paths
+			// below. Fires one last time, then is removed.
+			const aged = isRecurringTaskAged(t, now, jitterCfg.recurringMaxAgeMs);
+
+			if (t.recurring && !aged) {
+				// Recurring: reschedule from now (not from next) to avoid rapid
+				// catch-up if the session was blocked.
+				const newNext =
+					jitteredNextCronRunMs(t.cron, now, t.id, jitterCfg) ?? Infinity;
+				nextFireAt.set(t.id, newNext);
+				// Persist lastFiredAt=now so next process spawn reconstructs this
+				// same newNext on first-sight. Session tasks skip — process-local.
+				if (!isSession) firedFileRecurring.push(t.id);
+			} else if (isSession) {
+				// One-shot (or aged-out recurring) session task: synchronous memory
+				// removal.
+				removeSessionCronTasks([t.id]);
+				nextFireAt.delete(t.id);
+			} else {
+				// One-shot (or aged-out recurring) file task: delete from disk.
+				// inFlight guards against double-fire during the async
+				// removeCronTasks + chokidar reload.
+				inFlight.add(t.id);
+				void removeCronTasks([t.id], dir)
+					.catch(() => {})
+					.finally(() => inFlight.delete(t.id));
+				nextFireAt.delete(t.id);
+			}
+		}
+
+		// File-backed tasks: only when we own the scheduler lock. The lock
+		// exists to stop two Claude sessions in the same cwd from double-firing
+		// the same on-disk task.
+		if (isOwner) {
+			for (const t of tasks) process(t, false);
+			// Batched lastFiredAt write.
+			if (firedFileRecurring.length > 0) {
+				for (const id of firedFileRecurring) inFlight.add(id);
+				void markCronTasksFired(firedFileRecurring, now, dir)
+					.catch(() => {})
+					.finally(() => {
+						for (const id of firedFileRecurring) inFlight.delete(id);
+					});
+			}
+		}
+		// Session-only tasks: process-private, the lock does not apply — the
+		// other session cannot see them and there is no double-fire risk.
+		for (const t of getSessionCronTasks()) process(t, true);
+
+		if (seen.size === 0) {
+			// No live tasks this tick — clear the whole schedule so
+			// getNextFireTime() returns null.
+			nextFireAt.clear();
+			return;
+		}
+		// Evict schedule entries for tasks no longer present.
+		for (const id of nextFireAt.keys()) {
+			if (!seen.has(id)) nextFireAt.delete(id);
+		}
+	}
+
+	async function enable() {
+		if (stopped) return;
+		if (enablePoll) {
+			clearInterval(enablePoll);
+			enablePoll = null;
+		}
+
+		const { default: chokidar } = await import("chokidar");
+		if (stopped) return;
+
+		// Acquire the per-project scheduler lock. Only the owning session runs
+		// check(). Other sessions probe periodically to take over if the owner
+		// dies.
+		if (lockOpts) {
+			isOwner = await tryAcquireSchedulerLock(lockOpts, sessionId).catch(
+				() => false,
+			);
+		}
+		if (stopped) {
+			if (isOwner && lockOpts) {
+				isOwner = false;
+				void releaseSchedulerLock(lockOpts, sessionId);
 			}
 			return;
 		}
-
-		// Not yet time
-		if (now < next) return;
-
-		// Fire!
-		inFlight.add(task.id);
-		task.runCount = (task.runCount ?? 0) + 1;
-		fireTask(task);
-
-		// Schedule next or remove
-		if (task.recurring && !isExpired(task, now)) {
-			// Use NOW as base time to prevent catch-up after sleep/pause
-			const nextNext = jitteredNextCronRunMs(task.cron, now, task.id, jitterMs);
-			if (nextNext !== null) {
-				nextFireAt.set(task.id, nextNext);
-			}
-			// Update lastFiredAt for durable tasks
-			if (!isSession && dir) {
-				void markFired(task.id, now);
-			}
-			// Update session mirror
-			if (!isSession) {
-				task.lastFiredAt = now;
-				updateSessionCronTask(task);
-			}
-		} else {
-			// One-shot or expired: remove after fire
-			nextFireAt.delete(task.id);
-			// Remove one-shot task after firing
-			setTimeout(() => removeTask(task.id, isSession), 200);
+		if (!isOwner && lockOpts) {
+			lockProbeTimer = setInterval(() => {
+				void tryAcquireSchedulerLock(lockOpts, sessionId)
+					.then((owned) => {
+						if (stopped) {
+							if (owned) void releaseSchedulerLock(lockOpts!, sessionId);
+							return;
+						}
+						if (owned) {
+							isOwner = true;
+							if (lockProbeTimer) {
+								clearInterval(lockProbeTimer);
+								lockProbeTimer = null;
+							}
+						}
+					})
+					.catch(() => {});
+			}, LOCK_PROBE_INTERVAL_MS);
+			lockProbeTimer?.unref?.();
 		}
 
-		setTimeout(() => inFlight.delete(task.id), 100);
-	}
-
-	function isExpired(task: CronTask, now: number): boolean {
-		if (task.permanent) return false;
-		return now - task.createdAt >= DEFAULT_RECURRING_MAX_AGE_MS;
-	}
-
-	function fireTask(task: CronTask): void {
-		// Check for missed one-shot tasks: ask user before executing
-		if (!task.recurring && task.createdAt) {
-			const expectedFire = nextCronRunMs(task.cron, task.createdAt);
-			if (expectedFire && Date.now() - expectedFire > 5 * 60 * 1000) {
-				// Missed by more than 5 minutes, should ask user
-				// For now, we fire but could be enhanced to prompt
-				console.log(`[Cron-Scheduler] One-shot task ${task.id} was missed, executing now`);
-			}
-		}
-
-		onFire(task.prompt, task);
-	}
-
-	async function removeTask(id: string, isSession: boolean): Promise<void> {
-		if (isSession) {
-			const { removeSessionCronTasks } = await import("./cron-tasks.js");
-			removeSessionCronTasks([id]);
-		} else {
-			fileTasks.delete(id);
-			// Persist deletion to disk for durable tasks
-			if (dir) {
-				await writeCronTasks(dir, [...fileTasks.values()]);
-			}
-		}
-	}
-
-	async function markFired(id: string, firedAt: number): Promise<void> {
-		if (!dir) return;
-		try {
-			await markCronTasksFired(dir, [id], firedAt);
-		} catch (error) {
-			console.error("[Cron-Scheduler] Error marking task fired:", error);
-		}
-	}
-
-	async function loadTasks(): Promise<void> {
-		if (!dir) {
-			fileTasks = new Map();
-			return;
-		}
-
-		try {
-			const tasks = await readCronTasks(dir, legacyCwd);
-			fileTasks = new Map();
-			for (const task of tasks) {
-				fileTasks.set(task.id, task);
-			}
-		} catch (error) {
-			console.error("[Cron-Scheduler] Error loading tasks:", error);
-			fileTasks = new Map();
-		}
-	}
-
-	async function acquireLock(): Promise<boolean> {
-		if (!dir) return false;
-
-		try {
-			const lockPath = `${dir}/${LOCK_FILE}`;
-			lockRelease = await lockfile.lock(lockPath, {
-				retries: { retries: 3, minTimeout: 100, maxTimeout: 500 },
-			});
-			isLockOwner = true;
-			console.log("[Cron-Scheduler] Acquired scheduler lock");
-			return true;
-		} catch {
-			console.log("[Cron-Scheduler] Could not acquire lock (another instance running)");
-			isLockOwner = false;
-			return false;
-		}
-	}
-
-	async function releaseLock(): Promise<void> {
-		if (lockRelease) {
-			try {
-				await lockRelease();
-				console.log("[Cron-Scheduler] Released scheduler lock");
-			} catch (error) {
-				console.error("[Cron-Scheduler] Error releasing lock:", error);
-			}
-			lockRelease = null;
-			isLockOwner = false;
-		}
-	}
-
-	function startWatching(): void {
-		if (!dir) return;
-
-		// Periodic reload as a practical alternative to chokidar
-		watchIntervalId = setInterval(async () => {
-			if (isLockOwner) {
-				const oldFileTasks = fileTasks;
-				await loadTasks();
-
-				// Merge nextFireAt for tasks that still exist
-				for (const [id, next] of nextFireAt) {
-					if (!fileTasks.has(id)) {
-						// Task was deleted from file, remove from scheduler
-						nextFireAt.delete(id);
-					}
-				}
-			}
-		}, WATCH_INTERVAL_MS);
-	}
-
-	async function enable(): Promise<void> {
-		if (isKilled()) return;
-		enabled = true;
+		void load(true);
 
 		if (dir) {
-			await acquireLock();
-			if (isKilled()) {
-				await releaseLock();
-				return;
-			}
-			await loadTasks();
-			if (isKilled()) {
-				await releaseLock();
-				return;
-			}
-			startWatching();
+			const path = getCronFilePath(dir);
+			watcher = chokidar.watch(path, {
+				persistent: false,
+				ignoreInitial: true,
+				awaitWriteFinish: { stabilityThreshold: FILE_STABILITY_MS },
+				ignorePermissionErrors: true,
+			});
+			watcher.on("add", () => void load(false));
+			watcher.on("change", () => void load(false));
+			watcher.on("unlink", () => {
+				if (!stopped) {
+					tasks = [];
+					nextFireAt.clear();
+				}
+			});
 		}
 
-		if (isKilled()) {
-			if (watchIntervalId) {
-				clearInterval(watchIntervalId);
-				watchIntervalId = null;
-			}
-			await releaseLock();
-			return;
-		}
-		intervalId = setInterval(check, TICK_MS);
-		console.log("[Cron-Scheduler] Scheduler enabled and ticking");
-	}
-
-	async function pollForEnabled(): Promise<void> {
-		if (dir !== undefined) {
-			await enable();
-			return;
-		}
-
-		const poll = setInterval(async () => {
-			if (enabled) {
-				clearInterval(poll);
-				await enable();
-			}
-		}, 1000);
-
-		setTimeout(async () => {
-			if (!enabled) {
-				clearInterval(poll);
-				await enable();
-			}
-		}, 5000);
+		checkTimer = setInterval(check, CHECK_INTERVAL_MS);
+		// Don't keep the process alive for the scheduler alone.
+		checkTimer?.unref?.();
 	}
 
 	return {
-		start(): void {
-			void pollForEnabled();
-		},
-
-		stop(): void {
-			killed = true;
-			enabled = false;
-			if (intervalId) {
-				clearInterval(intervalId);
-				intervalId = null;
+		start() {
+			stopped = false;
+			// If dir is provided, don't poll — enable immediately.
+			if (dir !== undefined) {
+				void enable();
+				return;
 			}
-			if (watchIntervalId) {
-				clearInterval(watchIntervalId);
-				watchIntervalId = null;
+			// Auto-enable when scheduled_tasks.json has entries.
+			if (dir && !scheduledTasksEnabled && (assistantMode || hasCronTasksSync(dir))) {
+				scheduledTasksEnabled = true;
 			}
-			void releaseLock();
-			nextFireAt.clear();
-			inFlight.clear();
-			settledTasks.clear();
-			console.log("[Cron-Scheduler] Stopped");
-		},
-
-		getNextFireTime(): number | null {
-			let earliest: number | null = null;
-			for (const time of nextFireAt.values()) {
-				if (earliest === null || time < earliest) earliest = time;
+			if (scheduledTasksEnabled) {
+				void enable();
+				return;
 			}
-			return earliest;
+			enablePoll = setInterval(
+				(en) => {
+					if (scheduledTasksEnabled) void en();
+				},
+				CHECK_INTERVAL_MS,
+				enable,
+			);
+			enablePoll?.unref?.();
 		},
-
-		markSettled(id: string, error?: string, outputSnippet?: string): void {
-			inFlight.delete(id);
-			settledTasks.set(id, { error, outputSnippet });
-			if (onSettle) onSettle(id, error, outputSnippet);
+		stop() {
+			stopped = true;
+			if (enablePoll) {
+				clearInterval(enablePoll);
+				enablePoll = null;
+			}
+			if (checkTimer) {
+				clearInterval(checkTimer);
+				checkTimer = null;
+			}
+			if (lockProbeTimer) {
+				clearInterval(lockProbeTimer);
+				lockProbeTimer = null;
+			}
+			void watcher?.close();
+			watcher = null;
+			if (isOwner && lockOpts) {
+				isOwner = false;
+				void releaseSchedulerLock(lockOpts, sessionId);
+			}
 		},
-
-		forceDue(id: string): boolean {
-			// Find task in either store
-			const task = fileTasks.get(id) || getSessionCronTasks().find((t) => t.id === id);
-			if (!task) return false;
-
-			nextFireAt.set(id, 0);
-			task.paused = false;
-			return true;
-		},
-
-		getTask(id: string): CronTask | undefined {
-			return fileTasks.get(id) || getSessionCronTasks().find((t) => t.id === id);
+		getNextFireTime() {
+			// nextFireAt uses Infinity for "never" (in-flight one-shots, bad cron
+			// strings). Filter those out so callers can distinguish "soon" from
+			// "nothing pending".
+			let min = Infinity;
+			for (const t of nextFireAt.values()) {
+				if (t < min) min = t;
+			}
+			return min === Infinity ? null : min;
 		},
 	};
 }

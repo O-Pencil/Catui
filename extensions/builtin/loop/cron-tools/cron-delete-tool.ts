@@ -1,19 +1,24 @@
 /**
- * [WHO]: CronDelete tool - deletes a scheduled cron task
- * [FROM]: Depends on @sinclair/typebox, ../cron, ../../types
- * [TO]: Consumed by loop extension via registerTool()
- * [HERE]: extensions/builtin/loop/cron-tools/cron-delete-tool.ts - CronDelete tool per refactoring plan
+ * CronDelete tool — deletes a scheduled cron task.
+ *
+ * 1:1 port of Claude Code src/tools/ScheduleCronTool/CronDeleteTool.ts
  */
 
 import { Type } from "@sinclair/typebox";
 import type { Static } from "@sinclair/typebox";
 import type { AgentToolResult } from "@pencil-agent/agent-core";
 import type { ExtensionContext } from "../../../../core/extensions-host/types.js";
-import { deleteCronTask } from "../cron/index.js";
+import { listAllCronTasks, removeCronTasks } from "../cron/index.js";
+import {
+	buildCronDeletePrompt,
+	CRON_DELETE_DESCRIPTION,
+	CRON_DELETE_TOOL_NAME,
+	isDurableCronEnabled,
+} from "./prompt.js";
 
 const cronDeleteSchema = Type.Object({
 	id: Type.String({
-		description: "The ID of the scheduled task to delete",
+		description: "Job ID returned by CronCreate.",
 	}),
 });
 
@@ -21,13 +26,13 @@ export type CronDeleteInput = Static<typeof cronDeleteSchema>;
 
 export function createCronDeleteTool() {
 	return {
-		name: "CronDelete",
+		name: CRON_DELETE_TOOL_NAME,
 		label: "Delete Scheduled Task",
-		description: "Delete a scheduled task by its ID. The task will no longer execute.",
+		searchHint: "cancel a scheduled cron job",
+		description: CRON_DELETE_DESCRIPTION,
 		parameters: cronDeleteSchema,
 
-		guidance:
-			"Use CronDelete to cancel a scheduled task. Provide the task ID returned by CronCreate or listed by CronList.",
+		guidance: buildCronDeletePrompt(isDurableCronEnabled()),
 
 		async execute(
 			_toolCallId: string,
@@ -36,34 +41,41 @@ export function createCronDeleteTool() {
 			_onUpdate: undefined,
 			ctx: ExtensionContext,
 		): Promise<AgentToolResult<unknown>> {
-			try {
-				const deleted = await deleteCronTask(ctx.agentDir, params.id);
+			// Validate task exists
+			const tasks = await listAllCronTasks(ctx.agentDir);
+			const task = tasks.find((t) => t.id === params.id);
+			if (!task) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `No scheduled job with id '${params.id}'`,
+						},
+					],
+					details: { error: "not_found" },
+				};
+			}
 
-				if (deleted) {
-					return {
-						content: [
-							{
-								type: "text",
-								text: `Deleted scheduled task ${params.id}. It will no longer execute.`,
-							},
-						],
-						details: { deleted: true, id: params.id },
-					};
-				} else {
-					return {
-						content: [
-							{
-								type: "text",
-								text: `Error: No scheduled task found with ID: ${params.id}`,
-							},
-						],
-						details: { deleted: false, id: params.id },
-					};
-				}
+			try {
+				await removeCronTasks([params.id], ctx.agentDir);
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Cancelled job ${params.id}.`,
+						},
+					],
+					details: { id: params.id },
+				};
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				return {
-					content: [{ type: "text", text: `Error: Failed to delete scheduled task: ${message}` }],
+					content: [
+						{
+							type: "text",
+							text: `Error: Failed to delete scheduled task: ${message}`,
+						},
+					],
 					details: { error: message },
 				};
 			}

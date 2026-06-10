@@ -1,28 +1,42 @@
 /**
- * [WHO]: CronList tool - lists all scheduled cron tasks
- * [FROM]: Depends on @sinclair/typebox, ../cron, ../../types
- * [TO]: Consumed by loop extension via registerTool()
- * [HERE]: extensions/builtin/loop/cron-tools/cron-list-tool.ts - CronList tool per refactoring plan
+ * CronList tool — lists all scheduled cron tasks.
+ *
+ * 1:1 port of Claude Code src/tools/ScheduleCronTool/CronListTool.ts
  */
 
 import { Type } from "@sinclair/typebox";
 import type { Static } from "@sinclair/typebox";
 import type { AgentToolResult } from "@pencil-agent/agent-core";
 import type { ExtensionContext } from "../../../../core/extensions-host/types.js";
-import { listCronTasks, nextCronRunMs } from "../cron/index.js";
+import { cronToHuman, listAllCronTasks } from "../cron/index.js";
+import {
+	buildCronListPrompt,
+	CRON_LIST_DESCRIPTION,
+	CRON_LIST_TOOL_NAME,
+	isDurableCronEnabled,
+} from "./prompt.js";
 
 const cronListSchema = Type.Object({});
 export type CronListInput = Static<typeof cronListSchema>;
 
+/**
+ * Truncate a string to `maxLen` characters, appending "…" if truncated.
+ * Matches CC's truncate utility.
+ */
+function truncate(str: string, maxLen: number, _ellipsis?: boolean): string {
+	if (str.length <= maxLen) return str;
+	return str.slice(0, maxLen - 1) + "…";
+}
+
 export function createCronListTool() {
 	return {
-		name: "CronList",
+		name: CRON_LIST_TOOL_NAME,
 		label: "List Scheduled Tasks",
-		description: "List all active scheduled tasks (session-only and durable).",
+		searchHint: "list active cron jobs",
+		description: CRON_LIST_DESCRIPTION,
 		parameters: cronListSchema,
 
-		guidance:
-			"Use CronList to see all currently scheduled tasks, their cron expressions, prompts, and next fire times.",
+		guidance: buildCronListPrompt(isDurableCronEnabled()),
 
 		async execute(
 			_toolCallId: string,
@@ -32,64 +46,47 @@ export function createCronListTool() {
 			ctx: ExtensionContext,
 		): Promise<AgentToolResult<unknown>> {
 			try {
-				const tasks = await listCronTasks(ctx.agentDir);
+				const allTasks = await listAllCronTasks(ctx.agentDir);
 
-				if (tasks.length === 0) {
+				if (allTasks.length === 0) {
 					return {
-						content: [
-							{
-								type: "text",
-								text: "No scheduled tasks are active.",
-							},
-						],
-						details: { tasks: [] },
+						content: [{ type: "text", text: "No scheduled jobs." }],
+						details: { jobs: [] },
 					};
 				}
 
-				const now = Date.now();
-				const lines = [`Scheduled tasks (${tasks.length}):`, ""];
+				const jobs = allTasks.map((t) => ({
+					id: t.id,
+					cron: t.cron,
+					humanSchedule: cronToHuman(t.cron),
+					prompt: t.prompt,
+					...(t.recurring ? { recurring: true } : {}),
+					...(t.durable === false ? { durable: false } : {}),
+				}));
 
-				for (const task of tasks) {
-					const nextRun = nextCronRunMs(task.cron, task.lastFiredAt ?? task.createdAt);
-					const nextRunStr = nextRun ? formatRelativeTime(nextRun - now) : "unknown";
-
-					const status = task.paused ? " (paused)" : task.pending ? " (running)" : "";
-					lines.push(`ID: ${task.id}${status}`);
-					lines.push(`  Schedule: ${task.cron} (${task.recurring ? "recurring" : "one-shot"})`);
-					lines.push(`  Prompt: "${task.prompt}"`);
-					lines.push(`  Next run: ${nextRunStr}`);
-					lines.push(`  Durable: ${task.durable ?? false}`);
-					lines.push(`  Run count: ${task.maxRuns ? task.runCount + "/" + task.maxRuns : task.runCount}`);
-					if (task.name) lines.push(`  Name: ${task.name}`);
-					lines.push("");
-				}
+				const text = jobs
+					.map(
+						(j) =>
+							`${j.id} — ${j.humanSchedule}${j.recurring ? " (recurring)" : " (one-shot)"}${j.durable === false ? " [session-only]" : ""}: ${truncate(j.prompt, 80, true)}`,
+					)
+					.join("\n");
 
 				return {
-					content: [{ type: "text", text: lines.join("\n") }],
-					details: { tasks },
+					content: [{ type: "text", text }],
+					details: { jobs },
 				};
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				return {
-					content: [{ type: "text", text: `Error: Failed to list scheduled tasks: ${message}` }],
+					content: [
+						{
+							type: "text",
+							text: `Error: Failed to list scheduled tasks: ${message}`,
+						},
+					],
 					details: { error: message },
 				};
 			}
 		},
 	};
-}
-
-function formatRelativeTime(ms: number): string {
-	if (ms <= 0) return "now";
-	const sec = Math.round(ms / 1000);
-	if (sec < 60) return `${sec}s`;
-	const min = Math.floor(sec / 60);
-	const remSec = sec % 60;
-	if (min < 60) return remSec ? `${min}m ${remSec}s` : `${min}m`;
-	const hr = Math.floor(min / 60);
-	const remMin = min % 60;
-	if (hr < 24) return remMin ? `${hr}h ${remMin}m` : `${hr}h`;
-	const day = Math.floor(hr / 24);
-	const remHr = hr % 24;
-	return remHr ? `${day}d ${remHr}h` : `${day}d`;
 }
