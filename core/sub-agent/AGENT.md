@@ -19,6 +19,7 @@ agent-output-persistence.ts: getOutputFilePath, writeAgentOutputFile, readAgentO
 agent-prompt-builder.ts: buildNotesSystemPrompt, buildWorktreeNotes — system prompt "Notes:" section injection listing additional working directories; per CC §X (Z18)
 agent-definition-loader.ts: loadAgentDefinitionsFromDirectory, parseMarkdownAgentDefinition, parseJsonAgentDefinition — custom agent definition loader from .nanopencil/agents/ markdown/JSON files; per CC §XV (mM4/uM4)
 agent-tool.ts: createAgentTool, createTaskToolAlias — the "Agent"/"Task" tool for LLM invocation, full CC §VI spawn flow: resolve definition → filter tools → build prompt → create worktree → create session → iterate stream → extract result → handoff check → cleanup; includes telemetry (CC §XVI), auto-background conversion via Promise.race (CC §XIII), progress event forwarding via onSubAgentEvent callback (CC §XV)
+send-message-tool.ts: createSendMessageTool — the "SendMessage" tool for addressing named running agents (inter-agent messaging, CC §XI); consumed by agent-session.ts alongside Agent/Task tools
 agent-telemetry.ts: emitAgentSelected, emitAgentCompleted, emitAgentAutoModeDecision, emitAgentMemoryLoaded — structured telemetry events for the Agent tool; maps to CC §XVI tengu_* events; EventBus bridge via setAgentTelemetryEventBus; logger-only by default
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
