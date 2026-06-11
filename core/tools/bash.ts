@@ -23,9 +23,27 @@ function getTempFilePath(): string {
 	return join(tmpdir(), `nanopencil-bash-${id}.log`);
 }
 
+const DEFAULT_TIMEOUT = 120;
+
+interface BackgroundTask {
+	id: string;
+	outputPath: string;
+	status: "running" | "completed" | "failed";
+	exitCode: number | null;
+	startTime: number;
+	endTime?: number;
+	pid?: number;
+}
+
+/** Module-level registry of background tasks */
+const backgroundTasks = new Map<string, BackgroundTask>();
+
 const bashSchema = Type.Object({
-	command: Type.String({ description: "Bash command to execute" }),
-	timeout: Type.Optional(Type.Number({ exclusiveMinimum: 0, description: "Timeout in seconds (optional, no default timeout)" })),
+	command: Type.Optional(Type.String({ description: "Bash command to execute" })),
+	timeout: Type.Optional(Type.Number({ exclusiveMinimum: 0, description: "Timeout in seconds (default: 120)" })),
+	description: Type.Optional(Type.String({ description: "Clear, concise description of what this command does" })),
+	run_in_background: Type.Optional(Type.Boolean({ description: "Run command in background, return immediately with task ID (default: false)" })),
+	task_id: Type.Optional(Type.String({ description: "Task ID to check status/get output for a background command" })),
 });
 
 export type BashToolInput = Static<typeof bashSchema>;
@@ -178,16 +196,114 @@ export function createBashTool(cwd: string, options?: BashToolOptions): AgentToo
 	return {
 		name: "bash",
 		label: "bash",
-		description: `Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.`,
+		description: `Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Default timeout: ${DEFAULT_TIMEOUT}s. Supports run_in_background for long-running commands.`,
 		parameters: bashSchema,
 		execute: async (
 			_toolCallId: string,
-			{ command, timeout }: { command: string; timeout?: number },
+			{ command, timeout, description: _description, run_in_background, task_id }: {
+				command?: string;
+				timeout?: number;
+				description?: string;
+				run_in_background?: boolean;
+				task_id?: string;
+			},
 			signal?: AbortSignal,
 			onUpdate?,
 		) => {
 			validatePositiveNumberOption("timeout", timeout);
 
+			// Handle task_id: check status of a background task
+			if (task_id) {
+				const task = backgroundTasks.get(task_id);
+				if (!task) {
+					throw new Error(`Background task not found: ${task_id}`);
+				}
+
+				if (task.status === "running") {
+					return {
+						content: [{ type: "text", text: `Task ${task_id} is still running.` }],
+						details: undefined,
+					};
+				}
+
+				// Task finished - read output
+				let output = "";
+				try {
+					const { readFileSync } = await import("node:fs");
+					output = readFileSync(task.outputPath, "utf-8");
+				} catch {
+					output = "(output unavailable)";
+				}
+
+				const truncation = truncateTail(output);
+				let outputText = truncation.content || "(no output)";
+				if (task.exitCode !== 0 && task.exitCode !== null) {
+					outputText += `\n\nCommand exited with code ${task.exitCode}`;
+				}
+
+				// Clean up
+				backgroundTasks.delete(task_id);
+
+				const details: BashToolDetails | undefined = truncation.truncated ? { truncation } : undefined;
+				if (task.exitCode !== 0 && task.exitCode !== null) {
+					throw new Error(outputText);
+				}
+				return { content: [{ type: "text", text: outputText }], details };
+			}
+
+			if (!command) {
+				throw new Error("command is required (or provide task_id to check a background task)");
+			}
+
+			const effectiveTimeout = timeout ?? DEFAULT_TIMEOUT;
+
+			// Handle run_in_background: start command and return immediately
+			if (run_in_background) {
+				const taskId = randomBytes(4).toString("hex");
+				const outputPath = getTempFilePath();
+				const backgroundTask: BackgroundTask = {
+					id: taskId,
+					outputPath,
+					status: "running",
+					exitCode: null,
+					startTime: Date.now(),
+				};
+				backgroundTasks.set(taskId, backgroundTask);
+
+				// Apply command prefix if configured
+				const resolvedCommand = commandPrefix ? `${commandPrefix}\n${command}` : command;
+				const spawnContext = resolveSpawnContext(resolvedCommand, cwd, spawnHook);
+
+				// Start the command asynchronously (fire-and-forget)
+				const fileStream = createWriteStream(outputPath);
+				ops.exec(spawnContext.command, spawnContext.cwd, {
+					onData: (data) => fileStream.write(data),
+					timeout: effectiveTimeout,
+					env: spawnContext.env,
+				})
+					.then(({ exitCode }) => {
+						fileStream.end();
+						backgroundTask.status = exitCode === 0 ? "completed" : "failed";
+						backgroundTask.exitCode = exitCode;
+						backgroundTask.endTime = Date.now();
+					})
+					.catch(() => {
+						fileStream.end();
+						backgroundTask.status = "failed";
+						backgroundTask.exitCode = -1;
+						backgroundTask.endTime = Date.now();
+					});
+
+				return {
+					content: [{
+						type: "text",
+						text: `Background task started: ${taskId}\nOutput will be written to: ${outputPath}\nUse task_id="${taskId}" to check status and retrieve output.`,
+					}],
+					details: undefined,
+				};
+			}
+
+			// Normal foreground execution
 			// Apply command prefix if configured (e.g., "shopt -s expand_aliases" for alias support)
 			const resolvedCommand = commandPrefix ? `${commandPrefix}\n${command}` : command;
 			const spawnContext = resolveSpawnContext(resolvedCommand, cwd, spawnHook);
@@ -250,7 +366,7 @@ export function createBashTool(cwd: string, options?: BashToolOptions): AgentToo
 				ops.exec(spawnContext.command, spawnContext.cwd, {
 					onData: handleData,
 					signal,
-					timeout,
+					timeout: effectiveTimeout,
 					env: spawnContext.env,
 				})
 					.then(({ exitCode }) => {
