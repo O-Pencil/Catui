@@ -189,6 +189,11 @@ export interface InteractiveModeOptions {
   verbose?: boolean;
 }
 
+const _dbgLogPath = path.join(os.homedir(), ".nanopencil", "agent", "nanopencil-debug.log");
+function _dbg(msg: string): void {
+	fs.appendFileSync(_dbgLogPath, `[${new Date().toISOString()}] [imode] ${msg}\n`);
+}
+
 export class InteractiveMode {
   private session: AgentSession;
   private ui: TUI;
@@ -210,7 +215,24 @@ export class InteractiveMode {
   private version: string;
   private isInitialized = false;
   private onInputCallback?: (text: string) => void;
-  private readonly defaultWorkingMessage = "Working...";
+  private readonly catWorkingMessages = [
+    "Chasing laser pointers...",
+    "Knocking things off tables...",
+    "Plotting world domination...",
+    "Taking a catnap...",
+    "Shredding important documents...",
+    "Judging you silently...",
+    "Pushing your code off the desk...",
+    "Sniffing the keyboard...",
+    "Hiding in a cardboard box...",
+    "Purring on your lap...",
+    "Staring at the wall...",
+    "Making biscuits on the mouse...",
+    "Watching birds through the window...",
+    "Stealing your chair...",
+    "Zooming at 3am...",
+  ];
+  private catMessageIndex = Math.floor(Math.random() * 15);
 
   /** Consolidated render/turn UI state (streaming, tools, loaders, run timers, status, queues). */
   private readonly state = new InteractiveState();
@@ -447,6 +469,8 @@ export class InteractiveMode {
           this.authProviderConfig.ensureProviderConfiguredForSelection(model),
         handleProviderSelectionFromSelector: (provider, done) =>
           this.authProviderConfig.handleProviderSelectionFromSelector(provider, done),
+        promptForProviderApiKey: (provider, options) =>
+          this.authProviderConfig.promptForProviderApiKey(provider, options),
       },
       surface: {
         showSelector: (create) => this.showSelector(create),
@@ -745,7 +769,7 @@ export class InteractiveMode {
       },
       loaders: {
         getSessionId: () => this.sessionManager.getSessionId(),
-        getDefaultWorkingMessage: () => this.defaultWorkingMessage,
+        getDefaultWorkingMessage: () => this.getNextCatMessage(),
         getInterruptKeyHint: () => appKey(this.keybindings, "interrupt"),
         setBuddyPetState: (state, speech, options) =>
           this.setBuddyPetState(state, speech, options),
@@ -753,6 +777,7 @@ export class InteractiveMode {
         stopAgentRunTimer: () => this.stopAgentRunTimer(),
         updateWorkingMessage: (options) => this.updateWorkingMessage(options),
         formatElapsedSeconds: (ms) => this.formatElapsedSeconds(ms),
+        isInPlanMode: () => this.footerDataProvider.getExtensionStatuses().has("plan"),
       },
       toolTrace: {
         shouldRenderToolTrace: (toolName) => this.shouldRenderToolTrace(toolName),
@@ -1221,9 +1246,12 @@ export class InteractiveMode {
     // Main interactive loop
     while (true) {
       const userInput = await this.getUserInput();
+      _dbg(`main loop: got input "${userInput.slice(0, 80)}"`);
       try {
         await this.session.prompt(userInput);
+        _dbg("main loop: prompt returned normally");
       } catch (error: unknown) {
+        _dbg(`main loop: prompt threw: ${error}`);
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error occurred";
         this.showError(errorMessage);
@@ -1866,8 +1894,14 @@ export class InteractiveMode {
     return `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
   }
 
+  private getNextCatMessage(): string {
+    const msg = this.catWorkingMessages[this.catMessageIndex % this.catWorkingMessages.length]!;
+    this.catMessageIndex++;
+    return msg;
+  }
+
   private buildWorkingMessage(): string {
-    const baseMessage = this.state.workingMessageOverride || this.defaultWorkingMessage;
+    const baseMessage = this.state.workingMessageOverride || this.getNextCatMessage();
     const interruptHint = `${appKey(this.keybindings, "interrupt")} to interrupt`;
     const elapsed =
       this.state.agentRunStartMs !== undefined
@@ -2226,6 +2260,7 @@ export class InteractiveMode {
   }
 
   private async handleEvent(event: AgentSessionEvent): Promise<void> {
+    _dbg(`handleEvent: ${event.type}`);
     if (event.type === "sdk:mcp_ready") {
       // Deferred MCP loading finished in the background; surface a quiet status.
       if (event.toolCount > 0) {
