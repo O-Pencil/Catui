@@ -20,6 +20,7 @@ file-state-cache.ts: FileStateCache, FileState, fileStateCache singleton, LRU ca
 edit-diff.ts: detectLineEnding(), fuzzyFindText(), generateDiffString(), normalizeToLF(), restoreLineEndings(), shared diff computation for edit tool
 truncate.ts: TruncationResult, truncateHead(), truncateTail(), formatSize(), shared truncation utilities for tool outputs, constants: DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES, GREP_MAX_LINE_LENGTH
 time.ts: TimeTool, timeTool, createTimeTool, current time tool with timezone/locale formatting, consumed by orchestrator
+pdf-extract.ts: extractPdfText(), extractPdfPages(), PDF text extraction utility using pdfjs-dist, consumed by read tool
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
 
