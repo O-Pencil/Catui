@@ -21,6 +21,7 @@ import { GoalStore } from "./goal-store.js";
 import { buildBudgetLimitPrompt, buildContinuationPrompt, buildObjectiveUpdatedPrompt } from "./goal-prompts.js";
 
 const CONSECUTIVE_BLOCKED_THRESHOLD = 3;
+const CONSECUTIVE_CONTINUATION_THRESHOLD = 5;
 
 interface GoalDispatchOutcome {
 	dispatched: boolean;
@@ -30,8 +31,10 @@ interface GoalDispatchOutcome {
 		| "plan_mode"
 		| "already_dispatched"
 		| "no_pending_messages"
+		| "continuation_limit_reached"
 		| "completed";
 	goal?: ThreadGoal;
+	consecutiveContinuations?: number;
 }
 
 export class GoalController {
@@ -39,8 +42,10 @@ export class GoalController {
 	private readonly state: GoalControllerState = {
 		currentTurn: null,
 		consecutiveBlocked: 0,
+		consecutiveIdleContinuations: 0,
 		budgetLimitReportedGoalId: null,
 		idleContinuationDispatched: false,
+		pendingContinuationDispatch: false,
 	};
 	private mutex: Promise<void> = Promise.resolve();
 
@@ -99,13 +104,17 @@ export class GoalController {
 				if (existing && existing.status !== "complete") {
 					return { kind: "confirm_required" as const, goal: existing, replaced: false };
 				}
-				const created = this.store.replace_goal(objective, "active", options.tokenBudget ?? null);
+			const created = this.store.replace_goal(objective, "active", options.tokenBudget ?? null);
 				this.state.idleContinuationDispatched = false;
+				this.state.pendingContinuationDispatch = false;
+				this.state.consecutiveIdleContinuations = 0;
 				return { kind: "ok" as const, goal: created, replaced: existing !== null };
 			}
 			if (mode === "ReplaceExisting") {
 				const replaced = this.store.replace_goal(objective, "active", options.tokenBudget ?? null);
 				this.state.idleContinuationDispatched = false;
+				this.state.pendingContinuationDispatch = false;
+				this.state.consecutiveIdleContinuations = 0;
 				return { kind: "ok" as const, goal: replaced, replaced: true };
 			}
 			const next = this.store.update_goal({
@@ -117,6 +126,8 @@ export class GoalController {
 				return { kind: "blocked_existing" as const, goal: null, replaced: false };
 			}
 			this.state.idleContinuationDispatched = false;
+			this.state.pendingContinuationDispatch = false;
+			this.state.consecutiveIdleContinuations = 0;
 			return { kind: "ok" as const, goal: next, replaced: false };
 		});
 	}
@@ -128,13 +139,23 @@ export class GoalController {
 			this.state.currentTurn = null;
 			this.state.budgetLimitReportedGoalId = null;
 			this.state.idleContinuationDispatched = false;
+			this.state.pendingContinuationDispatch = false;
+			this.state.consecutiveIdleContinuations = 0;
 			return ok;
 		});
 	}
 
 	/** Public API: pause / resume. */
 	async set_status(status: ThreadGoalStatus): Promise<ThreadGoal | null> {
-		return this.withLock(() => this.store.set_status(status));
+		return this.withLock(() => {
+			const result = this.store.set_status(status);
+			if (result && status === "active") {
+				this.state.consecutiveIdleContinuations = 0;
+				this.state.idleContinuationDispatched = false;
+				this.state.pendingContinuationDispatch = false;
+			}
+			return result;
+		});
 	}
 
 	/** Public API: insert a new goal only if the existing one is complete. */
@@ -143,6 +164,8 @@ export class GoalController {
 			const created = this.store.insert_goal(objective, "active", tokenBudget);
 			if (created) {
 				this.state.idleContinuationDispatched = false;
+				this.state.pendingContinuationDispatch = false;
+				this.state.consecutiveIdleContinuations = 0;
 				this.state.budgetLimitReportedGoalId = null;
 			}
 			return created;
@@ -169,10 +192,21 @@ export class GoalController {
 	}
 
 	/** Hook: turn_start. Marks the current turn as goal-active if goal is active.
-	 *  Also resets the idle-continuation flag so each turn can dispatch a fresh
-	 *  continuation when it ends with an active goal. */
+	 *  Uses pendingContinuationDispatch to distinguish user-initiated turns from
+	 *  continuation-triggered turns. User turns reset the consecutive continuation
+	 *  counter; continuation turns increment it. */
 	on_turn_start(turnId: string, runKind: GoalRunKind, totalTokensAtStart: number): void {
+		// Distinguish user turns from continuation turns
+		const isContinuationTurn = this.state.pendingContinuationDispatch;
+		this.state.pendingContinuationDispatch = false;
 		this.state.idleContinuationDispatched = false;
+		if (isContinuationTurn) {
+			// This turn was triggered by a goal continuation dispatch
+			// (counter was already incremented at dispatch time in on_turn_end)
+		} else {
+			// User-initiated turn — reset consecutive continuation counter
+			this.state.consecutiveIdleContinuations = 0;
+		}
 		const goal = this.store.get_goal();
 		const isPlan = runKind === "plan";
 		const isReview = runKind === "review";
@@ -260,11 +294,15 @@ export class GoalController {
 		const goal = this.store.get_goal();
 		this.clearActiveTurn();
 
-		if (!goal) return { dispatched: false, reason: "no_active_goal" };
+		if (!goal) {
+			this.state.consecutiveIdleContinuations = 0;
+			return { dispatched: false, reason: "no_active_goal" };
+		}
 		if (!isActiveStatus(goal.status)) {
 			if (isStoppedStatus(goal.status)) {
 				this.state.consecutiveBlocked = 0;
 			}
+			this.state.consecutiveIdleContinuations = 0;
 			return { dispatched: false, reason: "not_active_status", goal };
 		}
 		// Active goal on successful turn — reset blocked counter
@@ -273,13 +311,25 @@ export class GoalController {
 			return { dispatched: false, reason: "already_dispatched", goal };
 		}
 
+		// Guard: too many consecutive idle continuations → pause goal to break the loop
+		if (this.state.consecutiveIdleContinuations >= CONSECUTIVE_CONTINUATION_THRESHOLD) {
+			this.store.set_status("paused");
+			const count = this.state.consecutiveIdleContinuations;
+			this.state.consecutiveIdleContinuations = 0;
+			this.state.pendingContinuationDispatch = false;
+			return { dispatched: false, reason: "continuation_limit_reached", goal, consecutiveContinuations: count };
+		}
+
 		const prompt = buildContinuationPrompt(goal);
 		try {
+			this.state.pendingContinuationDispatch = true;
 			this.api.sendUserMessage(prompt, { deliverAs: "followUp" });
 			this.state.idleContinuationDispatched = true;
+			this.state.consecutiveIdleContinuations += 1;
 			return { dispatched: true, reason: "completed", goal };
 		} catch {
 			// Dispatch failed — keep flag false so next attempt can retry
+			this.state.pendingContinuationDispatch = false;
 			return { dispatched: false, reason: "no_pending_messages", goal };
 		}
 	}
@@ -347,10 +397,31 @@ export class GoalController {
 		if (!goal) return false;
 		const prompt = buildObjectiveUpdatedPrompt(goal);
 		try {
+			this.state.pendingContinuationDispatch = true;
 			this.api.sendUserMessage(prompt, { deliverAs: "followUp" });
 			this.state.idleContinuationDispatched = true;
 			return true;
 		} catch {
+			this.state.pendingContinuationDispatch = false;
+			return false;
+		}
+	}
+
+	/** Kick off agent work immediately after /goal set.
+	 *  Sends a continuation prompt so the agent starts pursuing the goal
+	 *  without waiting for the user to send a follow-up message. */
+	kickOffContinuation(): boolean {
+		const goal = this.store.get_goal();
+		if (!goal || !isActiveStatus(goal.status)) return false;
+		if (this.state.idleContinuationDispatched) return false;
+		const prompt = buildContinuationPrompt(goal);
+		try {
+			this.state.pendingContinuationDispatch = true;
+			this.api.sendUserMessage(prompt, { deliverAs: "followUp" });
+			this.state.idleContinuationDispatched = true;
+			return true;
+		} catch {
+			this.state.pendingContinuationDispatch = false;
 			return false;
 		}
 	}
@@ -366,9 +437,24 @@ export class GoalController {
 		this.state.currentTurn = null;
 	}
 
+	/** Send a persistent goal feedback message to the TUI chat stream. */
+	sendGoalFeedback(content: string, details?: Record<string, unknown>): void {
+		try {
+			this.api.sendMessage({
+				customType: "goal",
+				content,
+				display: true,
+				details,
+			});
+		} catch {
+			// Non-critical; UI feedback should not break the flow
+		}
+	}
+
 	/** Used by session_start to reset the idempotency flag. */
 	resetIdleContinuationFlag(): void {
 		this.state.idleContinuationDispatched = false;
+		this.state.pendingContinuationDispatch = false;
 	}
 
 	/** Snapshot the bookkeeping turn for testing / display. */

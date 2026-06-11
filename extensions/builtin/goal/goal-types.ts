@@ -91,8 +91,10 @@ export interface GoalTurnAccounting {
 export interface GoalControllerState {
 	currentTurn: GoalTurnAccounting | null;
 	consecutiveBlocked: number;
+	consecutiveIdleContinuations: number;
 	budgetLimitReportedGoalId: string | null;
 	idleContinuationDispatched: boolean;
+	pendingContinuationDispatch: boolean;
 }
 
 export interface CreateGoalArgs {

@@ -13,9 +13,10 @@ import {
 } from "./goal-types.js";
 
 export function formatGoalElapsedSeconds(seconds: number): string {
-	const safe = Math.max(0, Math.floor(seconds));
-	if (safe < 60) return `${safe}s`;
-	const minutes = Math.floor(safe / 60);
+	const safe = Math.max(0, seconds);
+	if (safe < 60) return `${safe.toFixed(1)}s`;
+	const whole = Math.floor(safe);
+	const minutes = Math.floor(whole / 60);
 	if (minutes < 60) return `${minutes}m`;
 	const hours = Math.floor(minutes / 60);
 	const remainingMinutes = minutes % 60;
@@ -119,9 +120,10 @@ export function goalStatusIndicator(goal: ThreadGoal, activeTurnStartedAt: numbe
 				const activeSeconds = Math.max(0, (Date.now() - baseline) / 1000);
 				displaySeconds += activeSeconds;
 			}
+			const elapsed = formatGoalElapsedSeconds(displaySeconds);
 			const usage = goal.token_budget !== null
-				? `${summary.tokensUsed} / ${summary.tokensBudget}`
-				: formatGoalElapsedSeconds(displaySeconds);
+				? `${elapsed}, ${summary.tokensUsed}/${summary.tokensBudget}`
+				: `${elapsed}, ${summary.tokensUsed}`;
 			return { type: "Active", usage };
 		}
 		case "paused":

@@ -84,7 +84,7 @@ async function clearGoal(controller: GoalController, ctx: ExtensionCommandContex
 	}
 	const ok = await controller.clear();
 	if (ok) {
-		ctx.ui.notify("Goal cleared.", "info");
+		controller.sendGoalFeedback("Goal cleared.", { kind: "clear" });
 	} else {
 		ctx.ui.notify("Goal was already cleared.", "info");
 	}
@@ -113,7 +113,7 @@ async function editGoal(controller: GoalController, ctx: ExtensionCommandContext
 		return;
 	}
 		controller.inject_objective_updated_steering();
-	ctx.ui.notify(`Goal updated.\n${summarizeGoal(result.goal)}`, "info");
+	controller.sendGoalFeedback(`Goal updated.\n${summarizeGoal(result.goal)}`, { kind: "edit", goal: result.goal });
 }
 
 async function setStatus(
@@ -168,7 +168,8 @@ async function setObjective(
 			ctx.ui.notify("Goal replace failed.", "error");
 			return;
 		}
-		ctx.ui.notify(`Goal replaced.\n${summarizeGoal(result.goal)}`, "info");
+		controller.sendGoalFeedback(`Goal replaced.\n${summarizeGoal(result.goal)}`, { kind: "set", goal: result.goal });
+		controller.kickOffContinuation();
 		return;
 	}
 
@@ -184,7 +185,9 @@ async function setObjective(
 		ctx.ui.notify("Goal set failed.", "error");
 		return;
 	}
-	ctx.ui.notify(`Goal active.\n${summarizeGoal(result.goal)}`, "info");
+	controller.sendGoalFeedback(`Goal active.\n${summarizeGoal(result.goal)}`, { kind: "set", goal: result.goal });
+	// Kick off agent to start pursuing the goal immediately
+	controller.kickOffContinuation();
 }
 
 function summarizeGoal(goal: ThreadGoal): string {

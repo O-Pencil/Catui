@@ -5,9 +5,13 @@
  * [HERE]: extensions/builtin/goal/index.ts - extension entry; owns the per-thread controller and the controller host singleton
  */
 
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { AgentMessage } from "@pencil-agent/agent-core";
 import { Box, Container, Spacer, Text } from "@pencil-agent/tui";
 import type {
+	AgentAbortEvent,
 	AgentResultEvent,
 	ExtensionAPI,
 	ExtensionCommandContext,
@@ -35,6 +39,11 @@ import { isActiveStatus, type GoalRunKind, type ThreadGoal } from "./goal-types.
 const GOAL_MESSAGE_TYPE = "goal";
 const PLAN_LOOP_FRAMEWORK = "weak-model-compatible" as const;
 
+const debugLogPath = path.join(os.homedir(), ".nanopencil", "agent", "nanopencil-debug.log");
+function dbg(msg: string): void {
+	fs.appendFileSync(debugLogPath, `[${new Date().toISOString()}] [goal] ${msg}\n`);
+}
+
 /**
  * The GoalController is per-thread. We key it by `ExtensionAPI` (the runner's bus)
  * so that switching sessions rebuilds cleanly. The agent exposes the active api in
@@ -43,6 +52,10 @@ const PLAN_LOOP_FRAMEWORK = "weak-model-compatible" as const;
 const controllersByBus = new Map<string, GoalController>();
 let currentKey: string | null = null;
 let activeController: GoalController | null = null;
+/** Guard: tracks the goal ID whose terminal state has already been reported,
+ *  preventing the onTurnEnd handler from re-sending "Goal complete/budget_limited"
+ *  messages on every subsequent turn (which would cause an infinite loop). */
+let reportedTerminalGoalId: string | null = null;
 
 function resolveController(api: unknown, ctx: ExtensionContext | ExtensionCommandContext): GoalController | null {
 	const sessionId = ctx.sessionManager.getSessionId();
@@ -138,16 +151,22 @@ export default async function goalExtension(api: ExtensionAPI): Promise<void> {
 		description: "Set, show, edit, pause, resume, or clear the thread goal.",
 		getArgumentCompletions: getGoalArgumentCompletions,
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
+			dbg(`/goal command invoked: args="${args}"`);
 			const controller = ensureController(ctx);
 			await runGoalCommand(args, ctx, controller);
+			// Reset terminal-state guard so a newly set goal's completion can be reported
+			reportedTerminalGoalId = null;
+			dbg(`/goal command done, reportedTerminalGoalId reset`);
 		},
 	});
 
 	// ── Session lifecycle ─────────────────────────────────────────────
 
 	api.on("session_start", (_event, ctx) => {
+		dbg("session_start");
 		const controller = ensureController(ctx);
 		controller?.resetIdleContinuationFlag();
+		reportedTerminalGoalId = null;
 	});
 
 	api.on("session_shutdown", () => {
@@ -159,6 +178,7 @@ export default async function goalExtension(api: ExtensionAPI): Promise<void> {
 	// ── Turn lifecycle ───────────────────────────────────────────────
 
 	const onTurnStart: ExtensionHandler<TurnStartEvent> = (event, ctx) => {
+		dbg(`turn_start index=${event.turnIndex}`);
 		const controller = ensureController(ctx);
 		if (!controller) return;
 		const runKind: GoalRunKind = isPlanMode(ctx) ? "plan" : "normal";
@@ -207,17 +227,36 @@ export default async function goalExtension(api: ExtensionAPI): Promise<void> {
 		const controller = ensureController(ctx);
 		if (!controller) return;
 		const outcome = await controller.on_turn_end();
+		dbg(`turn_end: dispatched=${outcome.dispatched} reason=${outcome.reason} goalId=${outcome.goal?.goal_id} goalStatus=${outcome.goal?.status} reportedTerminalGoalId=${reportedTerminalGoalId}`);
 		if (outcome.dispatched) {
+			dbg("turn_end → sending continuation message");
 			api.sendMessage({
 				customType: GOAL_MESSAGE_TYPE,
 				content: `Goal continuation dispatched.\n${summarizeGoalStatus(outcome.goal)}`,
 				display: true,
 				details: { kind: "continuation", goal: outcome.goal },
 			});
+		} else if (outcome.goal && outcome.reason === "continuation_limit_reached") {
+			dbg(`turn_end → continuation limit reached, goal paused: ${outcome.goal.goal_id}`);
+			reportedTerminalGoalId = outcome.goal.goal_id;
+			api.sendMessage({
+				customType: GOAL_MESSAGE_TYPE,
+				content: `Goal paused — no progress after ${outcome.consecutiveContinuations ?? "?"} continuation attempts.\n${summarizeGoalStatus(outcome.goal)}`,
+				display: true,
+				details: { kind: "continuation_limit", goal: outcome.goal },
+			});
 		} else if (outcome.goal && outcome.reason === "not_active_status") {
-			// Surface terminal states for visibility.
+			// Surface terminal states for visibility — but only once per goal.
+			// Without this guard, every subsequent turn_end re-sends the message,
+			// causing an infinite loop of "Goal complete" notifications.
+			if (reportedTerminalGoalId === outcome.goal.goal_id) {
+				dbg(`turn_end → BLOCKED by guard (already reported goal ${outcome.goal.goal_id})`);
+				return;
+			}
 			const indicator = goalStatusIndicator(outcome.goal, null);
 			if (indicator.type === "Complete" || indicator.type === "BudgetLimited") {
+				reportedTerminalGoalId = outcome.goal.goal_id;
+				dbg(`turn_end → sending terminal message: ${indicator.type} for goal ${outcome.goal.goal_id}`);
 				api.sendMessage({
 					customType: GOAL_MESSAGE_TYPE,
 					content: `Goal ${indicator.type === "Complete" ? "complete" : "budget_limited"}.\n${summarizeGoalStatus(outcome.goal)}`,
@@ -252,6 +291,22 @@ export default async function goalExtension(api: ExtensionAPI): Promise<void> {
 		// turnIndexFromMessages removed; loop framework not wired yet
 	};
 	api.on("agent_result", onAgentResult);
+
+	// ── Abort handling: pause goal on Esc ────────────────────────────
+
+	const onAgentAbort: ExtensionHandler<AgentAbortEvent> = async (_event, ctx) => {
+		const controller = ensureController(ctx);
+		if (!controller) return;
+		const goal = await controller.get_goal();
+		if (!goal || !isActiveStatus(goal.status)) return;
+		dbg(`agent_abort → pausing goal ${goal.goal_id}`);
+		await controller.set_status("paused");
+		reportedTerminalGoalId = null;
+		if (ctx.hasUI) {
+			ctx.ui.notify("Goal paused (agent aborted).", "info");
+		}
+	};
+	api.on("agent_abort", onAgentAbort);
 
 	// ── Status footer indicator ──────────────────────────────────────
 
