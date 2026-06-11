@@ -34,66 +34,109 @@ interface ExtractedModel {
 	cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
 }
 
+/**
+ * Extract model entries by finding `"id": {` blocks terminated by `} satisfies Model<`.
+ * Uses brace counting to handle nested objects (cost, compat).
+ */
 function extractModels(source: string): ExtractedModel[] {
 	const models: ExtractedModel[] = [];
 	const seen = new Set<string>();
 
-	// Match each model entry: "model-id": { ... } satisfies Model<...>
-	// We extract key fields from each model block
-	const modelBlockRe = /"([^"]+)":\s*\{([^}]*?)\}\s*satisfies\s*Model<[^>]+>/gs;
-	let match: RegExpExecArray | null;
+	// Find all model key positions: "model-id": {
+	const keyRe = /^\t\t"([^"]+)":\s*\{/gm;
+	let keyMatch: RegExpExecArray | null;
 
-	while ((match = modelBlockRe.exec(source)) !== null) {
-		const id = match[1];
-		if (!id || seen.has(id)) continue;
+	while ((keyMatch = keyRe.exec(source)) !== null) {
+		const id = keyMatch[1];
+		if (!id) continue;
+
+		// Find the matching closing brace for this model object
+		const blockStart = keyMatch.index + keyMatch[0].length;
+		const block = extractBlock(source, blockStart);
+		if (!block) continue;
+
+		// Verify it ends with `satisfies Model<`
+		const afterBlock = source.slice(blockStart + block.length, blockStart + block.length + 30);
+		if (!afterBlock.includes("satisfies Model<")) continue;
+
+		if (seen.has(id)) continue;
 		seen.add(id);
 
-		const block = match[2];
-
-		// Extract fields from the block
-		const getField = (field: string): string | undefined => {
-			const re = new RegExp(`${field}:\\s*([^,\\n}]+)`);
-			const m = re.exec(block);
-			return m?.[1]?.trim();
-		};
-
-		const name = getField("name")?.replace(/^"(.*)"$/, "$1") ?? id;
-		const api = getField("api")?.replace(/^"(.*)"$/, "$1") ?? "openai-completions";
-		const reasoning = getField("reasoning") === "true";
-		const contextWindow = parseInt(getField("contextWindow") ?? "128000", 10);
-		const maxTokens = parseInt(getField("maxTokens") ?? "16384", 10);
-
-		// Extract input array
-		const inputMatch = /input:\s*\[([^\]]*)\]/.exec(block);
-		const input: string[] = inputMatch
-			? inputMatch[1]
-					.split(",")
-					.map((s) => s.trim().replace(/^"(.*)"$/, "$1"))
-					.filter(Boolean)
-			: ["text"];
-
-		// Extract cost object
-		const costMatch = /cost:\s*\{([^}]*)\}/.exec(block);
-		const cost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-		if (costMatch) {
-			const costBlock = costMatch[1];
-			const getCostField = (field: string): number => {
-				const re = new RegExp(`${field}:\\s*([\\d.]+)`);
-				const m = re.exec(costBlock);
-				return m ? parseFloat(m[1]) : 0;
-			};
-			cost.input = getCostField("input");
-			cost.output = getCostField("output");
-			cost.cacheRead = getCostField("cacheRead");
-			cost.cacheWrite = getCostField("cacheWrite");
-		}
-
-		if (Number.isNaN(contextWindow) || Number.isNaN(maxTokens)) continue;
-
-		models.push({ id, name, api, contextWindow, maxTokens, reasoning, input, cost });
+		const model = parseModelBlock(id, block);
+		if (model) models.push(model);
 	}
 
 	return models;
+}
+
+/**
+ * Extract a brace-delimited block starting after the opening brace.
+ * Returns the content between the braces (not including them).
+ */
+function extractBlock(source: string, start: number): string | null {
+	let depth = 1;
+	let i = start;
+	while (i < source.length && depth > 0) {
+		const ch = source[i];
+		if (ch === "{") depth++;
+		else if (ch === "}") depth--;
+		if (depth === 0) return source.slice(start, i);
+		i++;
+	}
+	return null;
+}
+
+function parseModelBlock(id: string, block: string): ExtractedModel | null {
+	const getField = (field: string): string | undefined => {
+		// Match `field: value` where value doesn't start with { or [
+		const re = new RegExp(`^\\s*${field}:\\s*(.+?),?\\s*$`, "m");
+		const m = re.exec(block);
+		return m?.[1]?.trim().replace(/,$/, "").trim();
+	};
+
+	const name = getField("name")?.replace(/^"(.*)"$/, "$1") ?? id;
+	const api = getField("api")?.replace(/^"(.*)"$/, "$1") ?? "openai-completions";
+	const reasoning = getField("reasoning") === "true";
+
+	const ctxStr = getField("contextWindow");
+	const maxStr = getField("maxTokens");
+	const contextWindow = ctxStr ? parseInt(ctxStr, 10) : 128000;
+	const maxTokens = maxStr ? parseInt(maxStr, 10) : 16384;
+
+	if (Number.isNaN(contextWindow) || Number.isNaN(maxTokens)) return null;
+
+	// Extract input array: input: ["text", "image"]
+	const inputMatch = /input:\s*\[([^\]]*)\]/.exec(block);
+	const input: string[] = inputMatch
+		? inputMatch[1]
+				.split(",")
+				.map((s) => s.trim().replace(/^"(.*)"$/, "$1"))
+				.filter(Boolean)
+		: ["text"];
+
+	// Extract cost object (multi-line):
+	// cost: {
+	//   input: 0,
+	//   output: 0,
+	//   cacheRead: 0,
+	//   cacheWrite: 0,
+	// },
+	const cost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+	const costBlockMatch = /cost:\s*\{([^}]*)\}/.exec(block);
+	if (costBlockMatch) {
+		const costBlock = costBlockMatch[1];
+		const getCostField = (field: string): number => {
+			const re = new RegExp(`${field}:\\s*([\\d.eE+-]+)`);
+			const m = re.exec(costBlock);
+			return m ? parseFloat(m[1]) : 0;
+		};
+		cost.input = getCostField("input");
+		cost.output = getCostField("output");
+		cost.cacheRead = getCostField("cacheRead");
+		cost.cacheWrite = getCostField("cacheWrite");
+	}
+
+	return { id, name, api, contextWindow, maxTokens, reasoning, input, cost };
 }
 
 function generateOutput(models: ExtractedModel[]): string {
