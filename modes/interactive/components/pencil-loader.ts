@@ -82,7 +82,7 @@ export class PencilLoader extends Container {
 		// Show first tip after a short delay (only if still loading)
 		setTimeout(() => {
 			if (!this.isStopped) {
-				this.tipComponent.setText(this.theme.fg("dim", `  tip: ${this.getRandomTip()}`));
+				this.tipComponent.setText(this.theme.fg("dim", `  ╙ tip: ${this.getRandomTip()}`));
 				this.tui.requestRender();
 			}
 		}, 2000);
@@ -90,7 +90,7 @@ export class PencilLoader extends Container {
 		// Rotate tips every 6 seconds
 		this.tipInterval = setInterval(() => {
 			if (this.isStopped) return;
-			this.tipComponent.setText(this.theme.fg("dim", `  tip: ${this.getRandomTip()}`));
+			this.tipComponent.setText(this.theme.fg("dim", `  ╙ tip: ${this.getRandomTip()}`));
 			this.tui.requestRender();
 		}, 6000);
 	}
@@ -103,8 +103,8 @@ export class PencilLoader extends Container {
 			const diamondColor = this.getSpinnerColor();
 			const diamond = diamondColor(frameChar);
 
-			// Build display: spinner + message
-			const display = `${diamond} ${this.message}`;
+			// Build display: spinner + highlighted message
+			const display = `${diamond} ${this.theme.fg("accent", this.message)}`;
 
 			this.textComponent.setText(display);
 			this.tui.requestRender();
@@ -165,7 +165,7 @@ export class PencilLoader extends Container {
 		const frameChar = this.frames[this.currentFrame];
 		const diamondColor = this.getSpinnerColor();
 		const diamond = diamondColor(frameChar);
-		this.textComponent.setText(`${diamond} ${this.message}`);
+		this.textComponent.setText(`${diamond} ${this.theme.fg("accent", this.message)}`);
 		this.tui.requestRender();
 	}
 

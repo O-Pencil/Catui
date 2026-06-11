@@ -8,12 +8,19 @@
  * session prompt/steer, and rendering details are delegated through ports.
  */
 
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { ImageContent, Model, TextContent } from "@pencil-agent/ai/types";
 import type { PromptOptions } from "../../../core/runtime/agent-session.js";
 import type { Attachment } from "./image-pipeline-controller.js";
 
 type AnyModel = Model<any>;
+
+const debugLogPath = path.join(os.homedir(), ".nanopencil", "agent", "nanopencil-debug.log");
+function dbg(msg: string): void {
+	fs.appendFileSync(debugLogPath, `[${new Date().toISOString()}] [submit] ${msg}\n`);
+}
 
 export interface InputSubmitEditorPort {
   setText(text: string): void;
@@ -84,10 +91,12 @@ export class InputSubmitController {
   async handleSubmit(rawText: string): Promise<void> {
     const text = rawText.trim();
     if (!text) return;
+    dbg(`handleSubmit: "${text.slice(0, 80)}"`);
 
     await this.ctx.image.awaitPendingPaste();
 
     if (await this.ctx.slash.execute(text)) {
+      dbg(`handleSubmit → built-in slash handled`);
       return;
     }
 
@@ -193,11 +202,8 @@ export class InputSubmitController {
   }
 
   private async handleIdleSubmit(text: string): Promise<void> {
+    dbg(`handleIdleSubmit: "${text.slice(0, 80)}"`);
     this.ctx.render.flushPendingBashComponents();
-
-    if (this.ctx.editor.handleExternalInput(text)) {
-      return;
-    }
 
     this.ctx.editor.addToHistory(text);
     this.ctx.editor.setText("");
@@ -222,7 +228,13 @@ export class InputSubmitController {
       }
     }
 
-    if (!processedText.startsWith("/")) {
+    // Show the user's input in the chat immediately (optimistic echo).
+    // Built-in slash commands never reach here (handled by slash.execute above),
+    // so this only applies to extension commands and regular messages.
+    // Skip optimistic message for extension commands — they handle their own
+    // UI and may internally call sendUserMessage, which would cause double display.
+    const isExtensionCmd = this.ctx.commands.isExtensionCommand(processedText);
+    if (!isExtensionCmd) {
       const displayContent: Array<TextContent | ImageContent> = [
         { type: "text", text: processedText },
       ];
@@ -231,6 +243,18 @@ export class InputSubmitController {
       }
       this.ctx.render.addOptimisticUserMessage(processedText, displayContent);
       this.ctx.render.requestRender();
+      dbg("handleIdleSubmit → optimistic message added");
+    } else {
+      dbg("handleIdleSubmit → skipping optimistic message for extension command");
+    }
+
+    // If the main interactive loop is waiting for input (getUserInput),
+    // hand off the text to it — the loop will call session.prompt() directly.
+    // We still return here because promptAfterRender would deadlock (it waits
+    // for a render that the main loop's session.prompt will trigger).
+    if (this.ctx.editor.handleExternalInput(text)) {
+      dbg("handleIdleSubmit → handed off to main loop via handleExternalInput");
+      return;
     }
 
     try {
@@ -238,12 +262,12 @@ export class InputSubmitController {
       await this.ctx.session.promptAfterRender(processedText, {
         images: images.length > 0 ? images : undefined,
       });
+      dbg("handleIdleSubmit → promptAfterRender returned normally");
     } catch (error: unknown) {
-      if (!text.startsWith("/")) {
-        this.ctx.render.rollbackFirstOptimisticUserMessageIfMatches(
-          processedText,
-        );
-      }
+      dbg(`handleIdleSubmit → promptAfterRender threw: ${error}`);
+      this.ctx.render.rollbackFirstOptimisticUserMessageIfMatches(
+        processedText,
+      );
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
       this.ctx.render.showError(errorMessage);

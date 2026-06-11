@@ -257,6 +257,12 @@ export class TUI extends Container {
 		hidden: boolean;
 	}[] = [];
 
+	private debugLog(msg: string): void {
+		if (process.env.NANOPENCIL_DEBUG_RENDER !== "1") return;
+		const logPath = path.join(os.homedir(), ".nanopencil", "agent", "nanopencil-debug.log");
+		fs.appendFileSync(logPath, `[${new Date().toISOString()}] [tui] ${msg}\n`);
+	}
+
 	constructor(terminal: Terminal, showHardwareCursor?: boolean) {
 		super();
 		this.terminal = terminal;
@@ -469,6 +475,7 @@ export class TUI extends Container {
 		}
 		if (this.renderRequested) return;
 		this.renderRequested = true;
+		this.debugLog(`requestRender (force=${force})`);
 		process.nextTick(() => {
 			const waiters = this.renderWaiters.splice(0);
 			this.renderRequested = false;
@@ -902,6 +909,7 @@ export class TUI extends Container {
 		if (this.stopped) return;
 		const width = this.terminal.columns;
 		const height = this.terminal.rows;
+		this.debugLog(`doRender: width=${width} height=${height} stopped=${this.stopped} children=${this.children.length}`);
 		let viewportTop = Math.max(0, this.maxLinesRendered - height);
 		let prevViewportTop = this.previousViewportTop;
 		let hardwareCursorRow = this.hardwareCursorRow;
