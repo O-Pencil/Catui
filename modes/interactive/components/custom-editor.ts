@@ -66,6 +66,8 @@ export class CustomEditor extends Editor {
 	public onExtensionShortcut?: (data: string) => boolean;
 	/** Handler for attachment navigation (arrow keys, delete). Returns true if handled. */
 	public onAttachmentKey?: (data: string) => boolean;
+	/** Slash command highlight function for input text. */
+	public highlightInput?: (text: string) => string;
 
 	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, options?: EditorOptions) {
 		super(tui, theme, options);
