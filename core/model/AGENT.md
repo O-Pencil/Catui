@@ -10,6 +10,8 @@ discovery.ts: discoverModels(), discoverOpenAIModels(), getDiscoveryProtocol(), 
 discovery.test.ts: Tests for discoverModels(), discoverOpenAIModels(), getDiscoveryProtocol()
 known-models.ts: KNOWN_MODEL_METADATA, lookupKnownModel(), UNKNOWN_MODEL_DEFAULTS, KnownModelMetadata, known model metadata for discovery fallback
 known-models.generated.ts: Auto-generated known model metadata lookup table from models.generated.ts
+discovery-cache.ts: DiscoveryCache, read/write/clear cached discovery results with TTL expiration
+discovery-cache.test.ts: Tests for DiscoveryCache read/write/clear
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
 
