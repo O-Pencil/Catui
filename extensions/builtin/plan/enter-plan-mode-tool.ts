@@ -7,6 +7,9 @@
 
 import { Type, type Static } from "@sinclair/typebox";
 import type { ExtensionAPI, ToolDefinition } from "../../../core/extensions-host/types.js";
+import { Container, Text, type Component } from "@pencil-agent/tui";
+import type { Theme } from "../../../core/theme-contract.js";
+import type { AgentToolResult } from "@pencil-agent/agent-core";
 import { PLAN_CUSTOM_TYPE, type PlanSessionState } from "./types.js";
 import { handlePlanModeTransition } from "./plan-permissions.js";
 import { getEnterPlanModeToolResult } from "./plan-workflow-prompt.js";
@@ -21,19 +24,50 @@ const EnterPlanModeInputSchema = Type.Object({}, { additionalProperties: false }
 type EnterPlanModeInput = Static<typeof EnterPlanModeInputSchema>;
 
 // ============================================================================
-// Tool creation
+// renderCall / renderResult (rich TUI display in message flow)
 // ============================================================================
+
+function renderCallForEnterPlanMode(_args: unknown, theme: Theme): Component {
+	const container = new Container();
+	container.addChild(
+		new Text(theme.fg("toolTitle", theme.bold("EnterPlanMode")), 0, 0),
+	);
+	container.addChild(
+		new Text(theme.fg("muted", "  Switching to plan mode (read-only except plan file)"), 0, 0),
+	);
+	return container;
+}
+
+function renderResultForEnterPlanMode(
+	result: AgentToolResult<unknown>,
+	_options: { expanded: boolean; isPartial: boolean },
+	theme: Theme,
+): Component {
+	const container = new Container();
+	const textOut = result.content
+		?.filter((c) => c.type === "text")
+		.map((c) => c.type === "text" ? c.text : "")
+		.join("\n");
+	if (textOut) {
+		container.addChild(new Text(theme.fg("success", "Plan mode active"), 0, 0));
+		container.addChild(new Text(theme.fg("toolOutput", textOut), 0, 0));
+	}
+	return container;
+}
 
 export function createEnterPlanModeTool(
 	api: ExtensionAPI,
 	getSessionState: () => PlanSessionState,
 	isChannelsEnabled: () => boolean,
-): ToolDefinition {
+): ToolDefinition<typeof EnterPlanModeInputSchema, null> {
 	return {
 		name: "EnterPlanMode",
 		label: "Enter Plan Mode",
 		description: "Switch to plan mode to design an approach before coding. Use this when the task is complex and requires planning before implementation.",
 		parameters: EnterPlanModeInputSchema,
+
+		renderCall: renderCallForEnterPlanMode,
+		renderResult: renderResultForEnterPlanMode,
 
 		execute: async (
 			_toolCallId: string,

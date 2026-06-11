@@ -7,6 +7,9 @@
 
 import { Type, type Static } from "@sinclair/typebox";
 import type { ExtensionAPI, ToolDefinition } from "../../../core/extensions-host/types.js";
+import { Container, Text, type Component } from "@pencil-agent/tui";
+import type { Theme } from "../../../core/theme-contract.js";
+import type { AgentToolResult } from "@pencil-agent/agent-core";
 import { PLAN_CUSTOM_TYPE, type PlanSessionState } from "./types.js";
 import { handlePlanModeExit } from "./plan-permissions.js";
 import {
@@ -50,19 +53,84 @@ const ExitPlanModeInputSchema = Type.Object({
 type ExitPlanModeInput = Static<typeof ExitPlanModeInputSchema>;
 
 // ============================================================================
-// Tool creation
+// renderCall / renderResult (rich TUI display in message flow)
 // ============================================================================
+
+function renderCallForExitPlanMode(args: unknown, theme: Theme): Component {
+	const container = new Container();
+	container.addChild(
+		new Text(theme.fg("toolTitle", theme.bold("ExitPlanMode")), 0, 0),
+	);
+
+	const a = args as ExitPlanModeInput;
+	const plan = "plan" in a && typeof a.plan === "string" ? a.plan : undefined;
+	if (plan) {
+		container.addChild(new Text("", 0, 0));
+		container.addChild(
+			new Text(theme.fg("accent", "Plan preview:") + (plan.length > 1200 ? theme.fg("muted", " (truncated)") : ""), 0, 0),
+		);
+		const preview = plan.slice(0, 1200);
+		// Render plan content as readable text lines
+		for (const line of preview.split("\n")) {
+			container.addChild(new Text(theme.fg("text", `  ${line}`), 0, 0));
+		}
+	} else {
+		container.addChild(
+			new Text(theme.fg("muted", "  Requesting plan approval..."), 0, 0),
+		);
+	}
+
+	const allowedPrompts = "allowedPrompts" in a && Array.isArray(a.allowedPrompts)
+		? a.allowedPrompts as Array<{ tool: string; prompt: string }>
+		: undefined;
+	if (allowedPrompts && allowedPrompts.length > 0) {
+		container.addChild(new Text("", 0, 0));
+		container.addChild(new Text(theme.fg("accent", "Requested permissions:"), 0, 0));
+		for (const p of allowedPrompts) {
+			container.addChild(new Text(theme.fg("toolOutput", `  - ${p.tool}: ${p.prompt}`), 0, 0));
+		}
+	}
+
+	return container;
+}
+
+function renderResultForExitPlanMode(
+	result: AgentToolResult<unknown>,
+	_options: { expanded: boolean; isPartial: boolean },
+	theme: Theme,
+): Component {
+	const container = new Container();
+	const isError = (result as any).isError === true;
+	const textOut = result.content
+		?.filter((c) => c.type === "text")
+		.map((c) => c.type === "text" ? c.text : "")
+		.join("\n");
+	if (textOut) {
+		if (isError) {
+			container.addChild(new Text(theme.fg("error", textOut), 0, 0));
+		} else {
+			container.addChild(new Text(theme.fg("success", "Plan approved"), 0, 0));
+			// Show truncated result text
+			const preview = textOut.length > 300 ? textOut.slice(0, 300) + "..." : textOut;
+			container.addChild(new Text(theme.fg("toolOutput", preview), 0, 0));
+		}
+	}
+	return container;
+}
 
 export function createExitPlanModeTool(
 	api: ExtensionAPI,
 	getSessionState: () => PlanSessionState,
 	hasAgentTool: () => boolean,
-): ToolDefinition {
+): ToolDefinition<typeof ExitPlanModeInputSchema, null> {
 	return {
 		name: "ExitPlanMode",
 		label: "Exit Plan Mode",
 		description: "Present your plan for approval and start coding. Only usable in plan mode after writing a plan.",
 		parameters: ExitPlanModeInputSchema,
+
+		renderCall: renderCallForExitPlanMode,
+		renderResult: renderResultForExitPlanMode,
 
 		execute: async (
 			_toolCallId: string,

@@ -9,6 +9,8 @@ import { Type } from "@sinclair/typebox";
 import type { Static } from "@sinclair/typebox";
 import type { AgentToolResult } from "@pencil-agent/agent-core";
 import type { ExtensionContext } from "../../../../core/extensions-host/types.js";
+import { Container, Text, type Component } from "@pencil-agent/tui";
+import type { Theme } from "../../../../core/theme-contract.js";
 import { listTasks } from "../task-store.js";
 import { DEFAULT_TASK_LIST_ID } from "../task-types.js";
 
@@ -21,6 +23,34 @@ export function createTaskListTool() {
 		label: "List Tasks",
 		description: "List all tasks in the task list with their status and dependencies.",
 		parameters: taskListSchema,
+
+		renderCall: (_args: unknown, theme: Theme): Component => {
+			const container = new Container();
+			container.addChild(new Text(theme.fg("toolTitle", theme.bold("TaskList")), 0, 0));
+			container.addChild(new Text(theme.fg("muted", "  Retrieving all tasks..."), 0, 0));
+			return container;
+		},
+
+		renderResult: (result: AgentToolResult<unknown>, _opts: { expanded: boolean; isPartial: boolean }, theme: Theme): Component => {
+			const container = new Container();
+			const details = result.details as { tasks?: Array<{ id: string; subject: string; status: string; owner?: string; blockedBy: string[] }>; error?: string } | undefined;
+			if (details?.error) {
+				container.addChild(new Text(theme.fg("error", "  " + details.error), 0, 0));
+			} else if (details?.tasks && details.tasks.length > 0) {
+				container.addChild(new Text(theme.fg("success", `  ${details.tasks.length} task(s):`), 0, 0));
+				for (const task of details.tasks) {
+					const statusColor = task.status === "completed" ? "success" : task.status === "in_progress" ? "accent" : "muted";
+					const statusText = theme.fg(statusColor, task.status);
+					const ownerText = task.owner ? theme.fg("muted", ` (${task.owner})`) : "";
+					const blockedText = task.blockedBy.length > 0 ? theme.fg("warning", ` [blocked by ${task.blockedBy.map(id => `#${id}`).join(", ")}]`) : "";
+					container.addChild(new Text(`  #${task.id} ${statusText} ${theme.fg("text", task.subject)}${ownerText}${blockedText}`, 0, 0));
+				}
+			} else {
+				const textOut = result.content?.filter((c) => c.type === "text").map((c) => c.type === "text" ? c.text : "").join("\n");
+				if (textOut) container.addChild(new Text(theme.fg("toolOutput", textOut), 0, 0));
+			}
+			return container;
+		},
 
 		guidance: `Use this tool to list all tasks in the task list.
 

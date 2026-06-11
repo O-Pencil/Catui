@@ -9,6 +9,8 @@ import { Type } from "@sinclair/typebox";
 import type { Static } from "@sinclair/typebox";
 import type { AgentToolResult } from "@pencil-agent/agent-core";
 import type { ExtensionContext } from "../../../../core/extensions-host/types.js";
+import { Container, Text, type Component } from "@pencil-agent/tui";
+import type { Theme } from "../../../../core/theme-contract.js";
 import { createTask } from "../task-store.js";
 import { DEFAULT_TASK_LIST_ID } from "../task-types.js";
 
@@ -36,6 +38,34 @@ export function createTaskCreateTool() {
 		label: "Create Task",
 		description: "Create a new task in the task list.",
 		parameters: taskCreateSchema,
+
+		renderCall: (args: unknown, theme: Theme): Component => {
+			const a = args as TaskCreateInput;
+			const container = new Container();
+			container.addChild(new Text(theme.fg("toolTitle", theme.bold("TaskCreate")), 0, 0));
+			container.addChild(new Text(theme.fg("muted", "  Subject: ") + theme.fg("text", a.subject ?? ""), 0, 0));
+			if (a.description) {
+				const desc = a.description.length > 200 ? a.description.slice(0, 200) + "..." : a.description;
+				container.addChild(new Text(theme.fg("muted", "  ") + theme.fg("toolOutput", desc), 0, 0));
+			}
+			return container;
+		},
+
+		renderResult: (result: AgentToolResult<unknown>, _opts: { expanded: boolean; isPartial: boolean }, theme: Theme): Component => {
+			const container = new Container();
+			const details = result.details as { task?: { id: string; subject: string }; error?: string } | undefined;
+			if (details?.error) {
+				container.addChild(new Text(theme.fg("error", "  " + details.error), 0, 0));
+			} else if (details?.task) {
+				container.addChild(
+					new Text(theme.fg("success", `  Task #${details.task.id} created`) + theme.fg("muted", " — ") + theme.fg("text", details.task.subject), 0, 0),
+				);
+			} else {
+				const textOut = result.content?.filter((c) => c.type === "text").map((c) => c.type === "text" ? c.text : "").join("\n");
+				if (textOut) container.addChild(new Text(theme.fg("toolOutput", textOut), 0, 0));
+			}
+			return container;
+		},
 
 		guidance: `Use this tool to create a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.
 It also helps the user understand the progress of the task and overall progress of their requests.

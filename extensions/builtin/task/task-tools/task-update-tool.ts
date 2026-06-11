@@ -9,6 +9,8 @@ import { Type } from "@sinclair/typebox";
 import type { Static } from "@sinclair/typebox";
 import type { AgentToolResult } from "@pencil-agent/agent-core";
 import type { ExtensionContext } from "../../../../core/extensions-host/types.js";
+import { Container, Text, type Component } from "@pencil-agent/tui";
+import type { Theme } from "../../../../core/theme-contract.js";
 import { blockTask, deleteTask, getTask, updateTask, listTasks } from "../task-store.js";
 import { DEFAULT_TASK_LIST_ID, TaskStatusValues } from "../task-types.js";
 import type { TaskStatus, TaskUpdateStatus } from "../task-types.js";
@@ -52,6 +54,39 @@ export function createTaskUpdateTool() {
 		description:
 			"Update a task's fields, status, metadata, and block relationships. Use status='deleted' to remove a task.",
 		parameters: taskUpdateSchema,
+
+		renderCall: (args: unknown, theme: Theme): Component => {
+			const a = args as TaskUpdateInput;
+			const container = new Container();
+			container.addChild(new Text(theme.fg("toolTitle", theme.bold("TaskUpdate")), 0, 0));
+			container.addChild(new Text(theme.fg("muted", "  Task #") + theme.fg("text", a.taskId ?? "?"), 0, 0));
+			if (a.status) {
+				const color = a.status === "completed" ? "success" : a.status === "deleted" ? "error" : "accent";
+				container.addChild(new Text(theme.fg("muted", "  Status → ") + theme.fg(color, a.status), 0, 0));
+			}
+			if (a.subject) {
+				container.addChild(new Text(theme.fg("muted", "  Subject: ") + theme.fg("text", a.subject), 0, 0));
+			}
+			return container;
+		},
+
+		renderResult: (result: AgentToolResult<unknown>, _opts: { expanded: boolean; isPartial: boolean }, theme: Theme): Component => {
+			const container = new Container();
+			const details = result.details as { task?: { id: string; subject: string; status: string }; error?: string; deleted?: boolean } | undefined;
+			if (details?.error) {
+				container.addChild(new Text(theme.fg("error", "  " + details.error), 0, 0));
+			} else if (details?.deleted) {
+				container.addChild(new Text(theme.fg("success", "  Task deleted"), 0, 0));
+			} else if (details?.task) {
+				container.addChild(
+					new Text(theme.fg("success", `  Task #${details.task.id} updated`) + theme.fg("muted", " — ") + theme.fg("text", details.task.subject), 0, 0),
+				);
+			} else {
+				const textOut = result.content?.filter((c) => c.type === "text").map((c) => c.type === "text" ? c.text : "").join("\n");
+				if (textOut) container.addChild(new Text(theme.fg("toolOutput", textOut), 0, 0));
+			}
+			return container;
+		},
 
 		guidance: `Use this tool to update a task in the task list.
 

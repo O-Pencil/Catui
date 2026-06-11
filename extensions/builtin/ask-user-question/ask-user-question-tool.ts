@@ -6,6 +6,9 @@
  */
 
 import type { ExtensionContext, ToolDefinition } from "../../../core/extensions-host/types.js";
+import { Container, Text, type Component } from "@pencil-agent/tui";
+import type { Theme } from "../../../core/theme-contract.js";
+import type { AgentToolResult } from "@pencil-agent/agent-core";
 import {
 	ASK_USER_QUESTION_TOOL_CHIP_WIDTH,
 	ASK_USER_QUESTION_TOOL_PROMPT,
@@ -78,7 +81,9 @@ async function askSingleSelect(
 	ctx: ExtensionContext,
 	question: Question,
 ): Promise<string> {
-	const title = buildQuestionTitle(question);
+	// Simplified title: just the question text (options render as label — description below)
+	const header = `[${question.header.slice(0, ASK_USER_QUESTION_TOOL_CHIP_WIDTH)}]`;
+	const title = `${header} ${question.question}`;
 	const optionLabels = question.options.map((o) => buildOptionDisplayLabel(o.label, o.description));
 	optionLabels.push("Other (custom answer)");
 
@@ -131,10 +136,80 @@ async function askMultiSelect(
 }
 
 // ============================================================================
+// renderCall / renderResult (rich TUI display in message flow)
+// ============================================================================
+
+function renderCallForAskUserQuestion(args: AskUserQuestionInput, theme: Theme): Component {
+	const container = new Container();
+	const questions = args.questions ?? [];
+
+	container.addChild(
+		new Text(theme.fg("toolTitle", theme.bold("AskUserQuestion")), 0, 0),
+	);
+
+	if (questions.length === 0) {
+		container.addChild(new Text(theme.fg("toolOutput", "  (no questions)"), 0, 0));
+		return container;
+	}
+
+	for (const q of questions) {
+		container.addChild(new Text("", 0, 0)); // spacer line
+		const header = `[${q.header.slice(0, ASK_USER_QUESTION_TOOL_CHIP_WIDTH)}]`;
+		container.addChild(
+			new Text(theme.fg("accent", theme.bold(header)) + " " + theme.fg("text", q.question), 0, 0),
+		);
+
+		for (const opt of q.options) {
+			const label = theme.fg("accent", `  ${opt.label}`);
+			const desc = theme.fg("muted", ` — ${opt.description}`);
+			container.addChild(new Text(label + desc, 0, 0));
+		}
+
+		if (q.multiSelect) {
+			container.addChild(new Text(theme.fg("muted", "  (multiple selections allowed)"), 0, 0));
+		}
+	}
+
+	return container;
+}
+
+function renderResultForAskUserQuestion(
+	result: AgentToolResult<AskUserQuestionOutput | undefined>,
+	_options: { expanded: boolean; isPartial: boolean },
+	theme: Theme,
+): Component {
+	const container = new Container();
+	const details = result.details;
+	const detailsTyped = details;
+
+	if (!detailsTyped) {
+		const textOut = result.content
+			?.filter((c) => c.type === "text")
+			.map((c: any) => c.text)
+			.join("\n");
+		if (textOut) {
+			container.addChild(new Text(theme.fg("toolOutput", textOut), 0, 0));
+		}
+		return container;
+	}
+
+	const { answers } = detailsTyped;
+	for (const [question, answer] of Object.entries(answers)) {
+		const qLine = theme.fg("muted", "Q: ") + theme.fg("text", question);
+		container.addChild(new Text(qLine, 0, 0));
+		const aLine = theme.fg("muted", "A: ") + theme.fg("success", answer);
+		container.addChild(new Text(aLine, 0, 0));
+		container.addChild(new Text("", 0, 0)); // spacer
+	}
+
+	return container;
+}
+
+// ============================================================================
 // Tool definition
 // ============================================================================
 
-export function createAskUserQuestionTool(): ToolDefinition<typeof AskUserQuestionInputSchema> {
+export function createAskUserQuestionTool(): ToolDefinition<typeof AskUserQuestionInputSchema, AskUserQuestionOutput> {
 	return {
 		name: "AskUserQuestion",
 		label: "AskUserQuestion",
@@ -147,6 +222,9 @@ export function createAskUserQuestionTool(): ToolDefinition<typeof AskUserQuesti
 			const error = validateUniqueness(params.questions);
 			if (error) return error;
 		},
+
+		renderCall: renderCallForAskUserQuestion,
+		renderResult: renderResultForAskUserQuestion,
 
 		async execute(
 			_toolCallId: string,

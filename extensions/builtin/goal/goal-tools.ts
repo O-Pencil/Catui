@@ -11,6 +11,8 @@ import type {
 	ExtensionContext,
 	ToolDefinition,
 } from "../../../core/extensions-host/types.js";
+import { Container, Text, type Component } from "@pencil-agent/tui";
+import type { Theme } from "../../../core/theme-contract.js";
 import type { GoalController } from "./goal-controller.js";
 import type { ThreadGoal } from "./goal-types.js";
 import {
@@ -57,6 +59,79 @@ function renderGoalResponse(
 	return lines.join("\n");
 }
 
+// ============================================================================
+// renderCall / renderResult helpers
+// ============================================================================
+
+function goalStatusColor(status: string, theme: Theme): string {
+	switch (status) {
+		case "active": return theme.fg("accent", status);
+		case "complete": return theme.fg("success", status);
+		case "blocked": return theme.fg("error", status);
+		case "paused": return theme.fg("warning", status);
+		case "usage_limited":
+		case "budget_limited": return theme.fg("warning", status);
+		default: return theme.fg("text", status);
+	}
+}
+
+function renderGoalDetails(goal: ThreadGoal, container: Container, theme: Theme): void {
+	const summary = goalUsageSummary(goal);
+	container.addChild(
+		new Text(theme.fg("muted", "  Status: ") + goalStatusColor(goal.status, theme), 0, 0),
+	);
+	container.addChild(
+		new Text(theme.fg("muted", "  Objective: ") + theme.fg("text", goal.objective), 0, 0),
+	);
+	container.addChild(
+		new Text(theme.fg("muted", "  Time: ") + theme.fg("text", summary.elapsed) +
+			theme.fg("muted", "  Tokens: ") + theme.fg("text", summary.tokensLabel), 0, 0),
+	);
+}
+
+function renderGoalCall(toolName: string, extra: string | undefined, theme: Theme): Component {
+	const container = new Container();
+	container.addChild(new Text(theme.fg("toolTitle", theme.bold(toolName)), 0, 0));
+	if (extra) {
+		container.addChild(new Text(theme.fg("muted", "  " + extra), 0, 0));
+	}
+	return container;
+}
+
+function renderGoalResult(
+	result: AgentToolResult<unknown>,
+	theme: Theme,
+	fallbackLabel: string,
+): Component {
+	const container = new Container();
+	const details = result.details as { goal?: ThreadGoal; error?: string; hasGoal?: boolean } | undefined;
+
+	if (details?.error) {
+		container.addChild(new Text(theme.fg("error", "  " + details.error), 0, 0));
+		return container;
+	}
+
+	if (details?.hasGoal === false) {
+		container.addChild(new Text(theme.fg("muted", "  No goal is currently set."), 0, 0));
+		return container;
+	}
+
+	if (details?.goal) {
+		renderGoalDetails(details.goal, container, theme);
+	} else {
+		const textOut = result.content
+			?.filter((c) => c.type === "text")
+			.map((c) => c.type === "text" ? c.text : "")
+			.join("\n");
+		if (textOut) {
+			container.addChild(new Text(theme.fg("toolOutput", textOut), 0, 0));
+		}
+	}
+	return container;
+}
+
+// ============================================================================
+
 export function createGetGoalTool(): ToolDefinition {
 	return {
 		name: "get_goal",
@@ -68,6 +143,8 @@ export function createGetGoalTool(): ToolDefinition {
 		guidance:
 			"Call get_goal before deciding whether the user wants a new goal or to continue the existing one. " +
 			"Use the returned objective verbatim when judging whether the work is done.",
+		renderCall: (_args, theme) => renderGoalCall("get_goal", undefined, theme),
+		renderResult: (result, _opts, theme) => renderGoalResult(result, theme, "Get Goal"),
 		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
 			const controller = getControllerFromContext(ctx);
 			if (!controller) {
@@ -96,6 +173,13 @@ export function createCreateGoalTool(): ToolDefinition {
 		guidance:
 			"Prefer /goal <objective> from the user. Tool is reserved for cases where the user " +
 			"asked for a goal in natural language and the assistant has to set it on their behalf.",
+		renderCall: (args, theme) => {
+			const a = args as { objective?: string; token_budget?: number };
+			const parts = [a.objective ? `"${a.objective}"` : "(objective)"];
+			if (a.token_budget) parts.push(`budget: ${a.token_budget}`);
+			return renderGoalCall("create_goal", parts.join(" | "), theme);
+		},
+		renderResult: (result, _opts, theme) => renderGoalResult(result, theme, "Create Goal"),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const controller = getControllerFromContext(ctx);
 			if (!controller) {
@@ -138,6 +222,11 @@ export function createUpdateGoalTool(): ToolDefinition {
 		guidance:
 			"Do not call update_goal with pause/resume/budget_limited/usage_limited \u2014 those are user-driven and happen via /goal. " +
 			"Do not call update_goal during plan mode.",
+		renderCall: (args, theme) => {
+			const a = args as { status?: string };
+			return renderGoalCall("update_goal", `status -> ${a.status ?? "?"}`, theme);
+		},
+		renderResult: (result, _opts, theme) => renderGoalResult(result, theme, "Update Goal"),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
 			const controller = getControllerFromContext(ctx);
 			if (!controller) {
