@@ -1899,7 +1899,7 @@ export class InteractiveMode {
 
   private getNextCatMessage(): string {
     const now = Date.now();
-    if (now - this.catMessageLastSwitch >= 1000) {
+    if (now - this.catMessageLastSwitch >= 3000) {
       this.catMessageIndex++;
       this.catMessageLastSwitch = now;
     }
