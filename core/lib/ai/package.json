@@ -9,50 +9,62 @@
 	"exports": {
 		".": {
 			"import": "./dist/index.js",
+			"default": "./dist/index.js",
 			"types": "./dist/index.d.ts"
 		},
 		"./types": {
 			"import": "./dist/types.js",
+			"default": "./dist/types.js",
 			"types": "./dist/types.d.ts"
 		},
 		"./schema": {
 			"import": "./dist/schema.js",
+			"default": "./dist/schema.js",
 			"types": "./dist/schema.d.ts"
 		},
 		"./events": {
 			"import": "./dist/events.js",
+			"default": "./dist/events.js",
 			"types": "./dist/events.d.ts"
 		},
 		"./models": {
 			"import": "./dist/models.js",
+			"default": "./dist/models.js",
 			"types": "./dist/models.d.ts"
 		},
 		"./registry": {
 			"import": "./dist/registry.js",
+			"default": "./dist/registry.js",
 			"types": "./dist/registry.d.ts"
 		},
 		"./stream": {
 			"import": "./dist/stream.js",
+			"default": "./dist/stream.js",
 			"types": "./dist/stream.d.ts"
 		},
 		"./env": {
 			"import": "./dist/env.js",
+			"default": "./dist/env.js",
 			"types": "./dist/env.d.ts"
 		},
 		"./overflow": {
 			"import": "./dist/overflow.js",
+			"default": "./dist/overflow.js",
 			"types": "./dist/overflow.d.ts"
 		},
 		"./json": {
 			"import": "./dist/json.js",
+			"default": "./dist/json.js",
 			"types": "./dist/json.d.ts"
 		},
 		"./oauth": {
 			"import": "./dist/utils/oauth/index.js",
+			"default": "./dist/utils/oauth/index.js",
 			"types": "./dist/utils/oauth/index.d.ts"
 		},
 		"./providers/*": {
 			"import": "./dist/providers/*.js",
+			"default": "./dist/providers/*.js",
 			"types": "./dist/providers/*.d.ts"
 		},
 		"./package.json": "./package.json"

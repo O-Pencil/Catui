@@ -141,6 +141,11 @@ Single responses must complete the "evidence -> conclusion -> actionable next st
 |  | - Loader          |  | - Client          |  | - Global+Loc|
 |  | - Runner          |  | - Config          |  |             |
 |  |-------------------|  |-------------------|  |-------------|
+|  |-------------------|  |-------------------|  |-------------|
+|  | SubAgent System   |  | Workspace         |  | Prompt      |
+|  | - Agent Tool      |  | - Worktree Mgr    |  | - Builder   |
+|  | - Registry        |  | - Git Isolation    |  | - Inject    |
+|  |-------------------|  |-------------------|  |-------------|
 |---------------------------------------------------------------|
                               |
                               v
@@ -184,6 +189,7 @@ nanoPencil/
 │   ├── model/             # Model management
 │   ├── prompt/            # Prompt engineering
 │   ├── export-html/       # HTML export
+│   ├── sub-agent/         # CC-style Agent tool, registry, worktree isolation
 │   └── workspace/         # Workspace/worktree management
 │
 ├── modes/                 # Run modes
@@ -552,6 +558,7 @@ P3 headers serve as **context budget gatekeepers**:
 ### P2 - Module Maps
 
 - [P2: core/](./core/AGENT.md) - Core functionality, runtime, tools
+- [P2: core/sub-agent/](./core/sub-agent/AGENT.md) - CC-style Agent tool, registry, worktree isolation
 - [P2: modes/](./modes/AGENT.md) - Interactive, print, RPC modes
 - [P2: extensions/](./extensions/AGENT.md) - Built-in extensions
 - [P2: packages/](./packages/AGENT.md) - Bundled npm packages

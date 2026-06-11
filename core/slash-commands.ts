@@ -86,8 +86,6 @@ export function inferSlashCommandCategory(name: string, source?: SlashCommandSou
 		name.startsWith("plan:") ||
 		name === "recap" ||
 		name === "btw" ||
-		name === "interview" ||
-		name === "grill-me" ||
 		name === "simplify"
 	) {
 		return "workflow";

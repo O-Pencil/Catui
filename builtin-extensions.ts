@@ -20,7 +20,7 @@ const BUNDLED_LINK_WORLD_EXTENSION = join(__dirname, "extensions", "builtin", "l
 const BUNDLED_SECURITY_AUDIT_EXTENSION = join(__dirname, "extensions", "builtin", "security-audit", "index.js");
 const BUNDLED_SOUL_EXTENSION = join(__dirname, "extensions", "builtin", "soul", "index.js");
 const BUNDLED_PRESENCE_EXTENSION = join(__dirname, "extensions", "builtin", "presence", "index.js");
-const BUNDLED_INTERVIEW_EXTENSION = join(__dirname, "extensions", "builtin", "interview", "index.js");
+const BUNDLED_ASK_USER_QUESTION_EXTENSION = join(__dirname, "extensions", "builtin", "ask-user-question", "index.js");
 const BUNDLED_TEACH_EXTENSION = join(__dirname, "extensions", "builtin", "teach", "index.js");
 const BUNDLED_LOOP_EXTENSION = join(__dirname, "extensions", "builtin", "loop", "index.js");
 const BUNDLED_PLAN_EXTENSION = join(__dirname, "extensions", "builtin", "plan", "index.js");
@@ -29,6 +29,7 @@ const BUNDLED_DIAGNOSTICS_EXTENSION = join(__dirname, "extensions", "builtin", "
 const BUNDLED_SAL_EXTENSION = join(__dirname, "extensions", "builtin", "sal", "index.js");
 const BUNDLED_TOKEN_SAVE_EXTENSION = join(__dirname, "extensions", "builtin", "token-save", "index.js");
 const BUNDLED_GRUB_EXTENSION = join(__dirname, "extensions", "builtin", "grub", "index.js");
+const BUNDLED_GOAL_EXTENSION = join(__dirname, "extensions", "builtin", "goal", "index.js");
 const BUNDLED_SUBAGENT_EXTENSION = join(__dirname, "extensions", "builtin", "subagent", "index.js");
 const BUNDLED_TEAM_EXTENSION = join(__dirname, "extensions", "builtin", "team", "index.js");
 const BUNDLED_IDLE_THINK_EXTENSION = join(__dirname, "extensions", "builtin", "idle-think", "index.js");
@@ -36,6 +37,9 @@ const BUNDLED_BTW_EXTENSION = join(__dirname, "extensions", "builtin", "btw", "i
 const BUNDLED_RECAP_EXTENSION = join(__dirname, "extensions", "builtin", "recap", "index.js");
 const BUNDLED_DEBUG_EXTENSION = join(__dirname, "extensions", "builtin", "debug", "index.js");
 const BUNDLED_MCP_EXTENSION = join(__dirname, "extensions", "builtin", "mcp", "index.js");
+const BUNDLED_TASK_EXTENSION = join(__dirname, "extensions", "builtin", "task", "index.js");
+const BUNDLED_LSP_EXTENSION = join(__dirname, "extensions", "builtin", "lsp", "index.js");
+const BUNDLED_INSIGHTS_EXTENSION = join(__dirname, "extensions", "builtin", "insights", "index.js");
 
 export type BuiltinExtensionRiskLevel = "passive" | "command" | "tool" | "background" | "write-capable";
 export type BuiltinExtensionTestContract = "lifecycle" | "external-process" | "resource-discovery" | "write-guard";
@@ -64,9 +68,10 @@ export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "security-audit", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "soul", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "presence", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: true, startsTimers: true, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/presence-opening.test.ts", "test/presence-locale.test.ts"] },
-	{ id: "interview", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
+	{ id: "ask-user-question", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: true, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "teach", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false },
 	{ id: "grub", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, testContracts: ["lifecycle", "external-process"], testFiles: ["test/grub-controller.test.ts"] },
+	{ id: "goal", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/goal-controller.test.ts"] },
 	{ id: "loop", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: true, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/loop-lifecycle.test.ts"] },
 	{ id: "plan", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "discipline", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, resourceDiscovery: true, testContracts: ["resource-discovery"], testFiles: ["test/discipline-extension.test.ts", "test/extension-smoke.test.ts"] },
@@ -77,6 +82,9 @@ export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "recap", category: "default", defaultEnabled: true, riskLevel: "command", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "debug", category: "default", defaultEnabled: true, riskLevel: "command", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "mcp", category: "default", defaultEnabled: true, riskLevel: "command", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, resourceDiscovery: true, testContracts: ["external-process", "resource-discovery"], testFiles: ["test/resource-discovery-contract.test.ts"] },
+	{ id: "task", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false },
+	{ id: "lsp", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true },
+	{ id: "insights", category: "default", defaultEnabled: true, riskLevel: "command", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false },
 	{ id: "simplify", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: true, testContracts: ["external-process", "write-guard"], testFiles: ["test/simplify-extension.test.ts"] },
 	{ id: "export-html", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false, testContracts: ["write-guard"], testFiles: ["test/extension-smoke.test.ts", "test/export-html-branch-navigation.test.ts"] },
 ];
@@ -213,13 +221,13 @@ export function getBuiltinExtensionPaths(): string[] {
 		if (existsSync(presenceTs)) paths.push(presenceTs);
 	}
 
-	// === Interview extension (requirement clarification) ===
-	// Placed after Soul to ensure Interview probe sees both Mem + Soul style/systemPrompt injections.
-	if (existsSync(BUNDLED_INTERVIEW_EXTENSION)) {
-		paths.push(BUNDLED_INTERVIEW_EXTENSION);
+	// === AskUserQuestion extension (structured multiple-choice questions) ===
+	// 1:1 port of Claude Code AskUserQuestion tool, replaces interview extension.
+	if (existsSync(BUNDLED_ASK_USER_QUESTION_EXTENSION)) {
+		paths.push(BUNDLED_ASK_USER_QUESTION_EXTENSION);
 	} else {
-		const interviewTs = join(__dirname, "extensions", "builtin", "interview", "index.ts");
-		if (existsSync(interviewTs)) paths.push(interviewTs);
+		const askUserQuestionTs = join(__dirname, "extensions", "builtin", "ask-user-question", "index.ts");
+		if (existsSync(askUserQuestionTs)) paths.push(askUserQuestionTs);
 	}
 
 	// === Teach extension (guided knowledge teaching) ===
@@ -236,6 +244,14 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const grubTs = join(__dirname, "extensions", "builtin", "grub", "index.ts");
 		if (existsSync(grubTs)) paths.push(grubTs);
+	}
+
+	// === Goal extension (/goal long-running task with idle continuation) ===
+	if (existsSync(BUNDLED_GOAL_EXTENSION)) {
+		paths.push(BUNDLED_GOAL_EXTENSION);
+	} else {
+		const goalTs = join(__dirname, "extensions", "builtin", "goal", "index.ts");
+		if (existsSync(goalTs)) paths.push(goalTs);
 	}
 
 	// === Loop extension (/loop recurring scheduler) ===
@@ -316,6 +332,30 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const mcpTs = join(__dirname, "extensions", "builtin", "mcp", "index.ts");
 		if (existsSync(mcpTs)) paths.push(mcpTs);
+	}
+
+	// === Task extension (task management + tool discovery) ===
+	if (existsSync(BUNDLED_TASK_EXTENSION)) {
+		paths.push(BUNDLED_TASK_EXTENSION);
+	} else {
+		const taskTs = join(__dirname, "extensions", "builtin", "task", "index.ts");
+		if (existsSync(taskTs)) paths.push(taskTs);
+	}
+
+	// === LSP extension (Language Server Protocol code intelligence) ===
+	if (existsSync(BUNDLED_LSP_EXTENSION)) {
+		paths.push(BUNDLED_LSP_EXTENSION);
+	} else {
+		const lspTs = join(__dirname, "extensions", "builtin", "lsp", "index.ts");
+		if (existsSync(lspTs)) paths.push(lspTs);
+	}
+
+	// === Insights extension (/insights usage report) ===
+	if (existsSync(BUNDLED_INSIGHTS_EXTENSION)) {
+		paths.push(BUNDLED_INSIGHTS_EXTENSION);
+	} else {
+		const insightsTs = join(__dirname, "extensions", "builtin", "insights", "index.ts");
+		if (existsSync(insightsTs)) paths.push(insightsTs);
 	}
 
 	return paths;
