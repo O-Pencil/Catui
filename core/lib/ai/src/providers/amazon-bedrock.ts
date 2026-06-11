@@ -584,7 +584,9 @@ function convertMessages(
 						content: m.content.map((c) =>
 							c.type === "image"
 								? { image: createImageBlock(c.mimeType, c.data) }
-								: { text: sanitizeSurrogates(c.text) },
+								: c.type === "document"
+									? { text: "[PDF document - content not available in Bedrock format]" }
+									: { text: sanitizeSurrogates(c.text) },
 						),
 						status: m.isError ? ToolResultStatus.ERROR : ToolResultStatus.SUCCESS,
 					},
@@ -600,7 +602,9 @@ function convertMessages(
 							content: nextMsg.content.map((c) =>
 								c.type === "image"
 									? { image: createImageBlock(c.mimeType, c.data) }
-									: { text: sanitizeSurrogates(c.text) },
+									: c.type === "document"
+										? { text: "[PDF document - content not available in Bedrock format]" }
+										: { text: sanitizeSurrogates(c.text) },
 							),
 							status: nextMsg.isError ? ToolResultStatus.ERROR : ToolResultStatus.SUCCESS,
 						},

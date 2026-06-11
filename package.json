@@ -122,6 +122,8 @@
     "minimatch": "^10.1.1",
     "openai": "6.10.0",
     "partial-json": "^0.1.7",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.0.379",
     "proper-lockfile": "^4.1.2",
     "proxy-agent": "^6.5.0",
     "undici": "^7.19.1",

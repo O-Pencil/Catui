@@ -16,6 +16,7 @@ import type {
 	Api,
 	AssistantMessageEvent,
 	Context,
+	DocumentContent,
 	ImageContent,
 	Model,
 	SimpleStreamOptions,
@@ -574,6 +575,11 @@ export interface AgentResultEvent extends AgentRunResult {
 	type: "agent_result";
 }
 
+/** Fired when the agent loop is aborted (e.g. user presses Esc) */
+export interface AgentAbortEvent {
+	type: "agent_abort";
+}
+
 /** Fired at the start of each turn */
 export interface TurnStartEvent {
 	type: "turn_start";
@@ -751,7 +757,7 @@ interface ToolResultEventBase {
 	type: "tool_result";
 	toolCallId: string;
 	input: Record<string, unknown>;
-	content: (TextContent | ImageContent)[];
+	content: (TextContent | ImageContent | DocumentContent)[];
 	isError: boolean;
 }
 
@@ -873,6 +879,7 @@ export type ExtensionEvent =
 	| AgentStartEvent
 	| AgentEndEvent
 	| AgentResultEvent
+	| AgentAbortEvent
 	| TurnStartEvent
 	| TurnEndEvent
 	| MessageStartEvent
@@ -911,7 +918,7 @@ export interface UserBashEventResult {
 }
 
 export interface ToolResultEventResult {
-	content?: (TextContent | ImageContent)[];
+	content?: (TextContent | ImageContent | DocumentContent)[];
 	details?: unknown;
 	isError?: boolean;
 }
@@ -1032,6 +1039,7 @@ export interface ExtensionAPI {
 	on(event: "before_agent_start", handler: ExtensionHandler<BeforeAgentStartEvent, BeforeAgentStartEventResult>): void;
 	on(event: "agent_start", handler: ExtensionHandler<AgentStartEvent>): void;
 	on(event: "agent_result", handler: ExtensionHandler<AgentResultEvent>): void;
+	on(event: "agent_abort", handler: ExtensionHandler<AgentAbortEvent>): void;
 	on(event: "agent_end", handler: ExtensionHandler<AgentEndEvent>): void;
 	on(event: "turn_start", handler: ExtensionHandler<TurnStartEvent>): void;
 	on(event: "turn_end", handler: ExtensionHandler<TurnEndEvent>): void;
@@ -1105,7 +1113,7 @@ export interface ExtensionAPI {
 	 * When the agent is streaming, use deliverAs to specify how to queue the message.
 	 */
 	sendUserMessage(
-		content: string | (TextContent | ImageContent)[],
+		content: string | (TextContent | ImageContent | DocumentContent)[],
 		options?: { deliverAs?: "steer" | "followUp" },
 	): void;
 
@@ -1313,7 +1321,7 @@ export type SendMessageHandler = <T = unknown>(
 ) => void;
 
 export type SendUserMessageHandler = (
-	content: string | (TextContent | ImageContent)[],
+	content: string | (TextContent | ImageContent | DocumentContent)[],
 	options?: { deliverAs?: "steer" | "followUp" },
 ) => void;
 

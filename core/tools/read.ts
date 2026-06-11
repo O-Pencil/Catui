@@ -5,7 +5,7 @@
  * [HERE]: core/tools/read.ts - filesystem read boundary; consumed by orchestrator
  */
 import type { AgentTool } from "@pencil-agent/agent-core";
-import type { ImageContent, TextContent } from "@pencil-agent/ai/types";
+import type { DocumentContent, ImageContent, TextContent } from "@pencil-agent/ai/types";
 import { type Static, Type } from "@sinclair/typebox";
 import { constants } from "fs";
 import { access as fsAccess, readFile as fsReadFile, stat as fsStat } from "fs/promises";
@@ -20,6 +20,7 @@ const readSchema = Type.Object({
 	path: Type.String({ description: "Path to the file to read (relative or absolute)" }),
 	offset: Type.Optional(Type.Integer({ minimum: 1, description: "Line number to start reading from (1-indexed)" })),
 	limit: Type.Optional(Type.Integer({ minimum: 1, description: "Maximum number of lines to read" })),
+	pages: Type.Optional(Type.String({ description: "Page range for PDF files, e.g. '1-5', '3', '10-20'. Max 20 pages per request." })),
 });
 
 export type ReadToolInput = Static<typeof readSchema>;
@@ -61,12 +62,12 @@ export function createReadTool(cwd: string, options?: ReadToolOptions): AgentToo
 	return {
 		name: "read",
 		label: "read",
-		description: `Read the contents of a file. Supports text files and images (jpg, png, gif, webp). Images are sent as attachments. For text files, output is truncated to ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.`,
+		description: `Read the contents of a file. Supports text files, images (jpg, png, gif, webp), and PDFs. Images are sent as attachments. PDFs are sent as document content blocks (max 100 pages). For text files, output is truncated to ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Use offset/limit for large files. Use pages param for PDF page ranges.`,
 		parameters: readSchema,
 		isConcurrencySafe: true,
 		execute: async (
 			_toolCallId: string,
-			{ path, offset, limit }: { path: string; offset?: number; limit?: number },
+			{ path, offset, limit, pages }: { path: string; offset?: number; limit?: number; pages?: string },
 			signal?: AbortSignal,
 		) => {
 			validateIntegerWindowOption({ name: "offset", value: offset, minimum: 1 });
@@ -74,7 +75,7 @@ export function createReadTool(cwd: string, options?: ReadToolOptions): AgentToo
 
 			const absolutePath = resolveReadPath(path, cwd);
 
-			return new Promise<{ content: (TextContent | ImageContent)[]; details: ReadToolDetails | undefined }>(
+			return new Promise<{ content: (TextContent | ImageContent | DocumentContent)[]; details: ReadToolDetails | undefined }>(
 				(resolve, reject) => {
 					// Check if already aborted
 					if (signal?.aborted) {
@@ -108,7 +109,7 @@ export function createReadTool(cwd: string, options?: ReadToolOptions): AgentToo
 							const mimeType = ops.detectImageMimeType ? await ops.detectImageMimeType(absolutePath) : undefined;
 
 							// Read the file based on type
-							let content: (TextContent | ImageContent)[];
+							let content: (TextContent | ImageContent | DocumentContent)[];
 							let details: ReadToolDetails | undefined;
 
 							if (mimeType) {
@@ -135,6 +136,37 @@ export function createReadTool(cwd: string, options?: ReadToolOptions): AgentToo
 									content = [
 										{ type: "text", text: textNote },
 										{ type: "image", data: base64, mimeType },
+									];
+								}
+							} else if (absolutePath.toLowerCase().endsWith(".pdf")) {
+								// Read as PDF document
+								const buffer = await ops.readFile(absolutePath);
+								const base64 = buffer.toString("base64");
+
+								if (pages) {
+									// Page selection requested - use pdfjs-dist to extract pages
+									try {
+										const { extractPdfPages } = await import("./pdf-extract.js");
+										const extracted = await extractPdfPages(buffer, pages);
+										const textNote = `Read PDF pages ${pages} [application/pdf]`;
+										content = [
+											{ type: "text", text: textNote },
+											{ type: "document", source: { type: "base64", media_type: "application/pdf", data: extracted } },
+										];
+									} catch {
+										// Fallback: return full PDF if page extraction fails
+										const textNote = `Read PDF file [application/pdf] (page extraction unavailable, returning full document)`;
+										content = [
+											{ type: "text", text: textNote },
+											{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
+										];
+									}
+								} else {
+									// Return full PDF as document content block
+									const textNote = `Read PDF file [application/pdf]`;
+									content = [
+										{ type: "text", text: textNote },
+										{ type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
 									];
 								}
 							} else {

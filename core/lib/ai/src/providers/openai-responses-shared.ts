@@ -128,6 +128,13 @@ export function convertResponsesMessages<TApi extends Api>(
 							text: sanitizeSurrogates(item.text),
 						} satisfies ResponseInputText;
 					}
+					if (item.type === "document") {
+						// OpenAI doesn't support document content blocks natively
+						return {
+							type: "input_text",
+							text: `[PDF document - content not available in OpenAI format]`,
+						} satisfies ResponseInputText;
+					}
 					return {
 						type: "input_image",
 						detail: "auto",

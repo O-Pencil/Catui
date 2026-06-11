@@ -95,14 +95,17 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 				const parts: Part[] = msg.content.map((item) => {
 					if (item.type === "text") {
 						return { text: sanitizeSurrogates(item.text) };
-					} else {
-						return {
-							inlineData: {
-								mimeType: item.mimeType,
-								data: item.data,
-							},
-						};
 					}
+					if (item.type === "document") {
+						// Google doesn't support document content blocks natively
+						return { text: `[PDF document - content not available in Google format]` };
+					}
+					return {
+						inlineData: {
+							mimeType: item.mimeType,
+							data: item.data,
+						},
+					};
 				});
 				const filteredParts = !model.input.includes("image") ? parts.filter((p) => p.text !== undefined) : parts;
 				if (filteredParts.length === 0) continue;

@@ -18,6 +18,7 @@ import type {
 	AssistantMessage,
 	CacheRetention,
 	Context,
+	DocumentContent,
 	ImageContent,
 	Message,
 	Model,
@@ -110,7 +111,7 @@ const fromClaudeCodeName = (name: string, tools?: Tool[]) => {
 /**
  * Convert content blocks to Anthropic API format
  */
-function convertContentBlocks(content: (TextContent | ImageContent)[]):
+function convertContentBlocks(content: (TextContent | ImageContent | DocumentContent)[]):
 	| string
 	| Array<
 			| { type: "text"; text: string }
@@ -122,19 +123,37 @@ function convertContentBlocks(content: (TextContent | ImageContent)[]):
 						data: string;
 					};
 			  }
+			| {
+					type: "document";
+					source: {
+						type: "base64";
+						media_type: "application/pdf";
+						data: string;
+					};
+			  }
 	  > {
 	// If only text blocks, return as concatenated string for simplicity
-	const hasImages = content.some((c) => c.type === "image");
-	if (!hasImages) {
+	const hasNonText = content.some((c) => c.type !== "text");
+	if (!hasNonText) {
 		return sanitizeSurrogates(content.map((c) => (c as TextContent).text).join("\n"));
 	}
 
-	// If we have images, convert to content block array
+	// Convert to content block array
 	const blocks = content.map((block) => {
 		if (block.type === "text") {
 			return {
 				type: "text" as const,
 				text: sanitizeSurrogates(block.text),
+			};
+		}
+		if (block.type === "document") {
+			return {
+				type: "document" as const,
+				source: {
+					type: "base64" as const,
+					media_type: "application/pdf" as const,
+					data: block.source.data,
+				},
 			};
 		}
 		return {
@@ -147,12 +166,12 @@ function convertContentBlocks(content: (TextContent | ImageContent)[]):
 		};
 	});
 
-	// If only images (no text), add placeholder text block
+	// If only images/documents (no text), add placeholder text block
 	const hasText = blocks.some((b) => b.type === "text");
 	if (!hasText) {
 		blocks.unshift({
 			type: "text" as const,
-			text: "(see attached image)",
+			text: "(see attached document)",
 		});
 	}
 
@@ -713,16 +732,25 @@ function convertMessages(
 							type: "text",
 							text: sanitizeSurrogates(item.text),
 						};
-					} else {
+					}
+					if (item.type === "document") {
 						return {
-							type: "image",
+							type: "document",
 							source: {
 								type: "base64",
-								media_type: item.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-								data: item.data,
+								media_type: "application/pdf",
+								data: item.source.data,
 							},
 						};
 					}
+					return {
+						type: "image",
+						source: {
+							type: "base64",
+							media_type: item.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+							data: item.data,
+						},
+					};
 				});
 				let filteredBlocks = !model?.input.includes("image") ? blocks.filter((b) => b.type !== "image") : blocks;
 				filteredBlocks = filteredBlocks.filter((b) => {

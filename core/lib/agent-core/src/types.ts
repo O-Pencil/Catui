@@ -7,6 +7,7 @@
 
 import type {
 	AssistantMessageEvent,
+	DocumentContent,
 	ImageContent,
 	Message,
 	Model,
@@ -367,8 +368,8 @@ export interface AgentState {
 }
 
 export interface AgentToolResult<T> {
-	// Content blocks supporting text and images
-	content: (TextContent | ImageContent)[];
+	// Content blocks supporting text, images, and documents (PDFs)
+	content: (TextContent | ImageContent | DocumentContent)[];
 	// Details to be displayed in a UI or logged
 	details: T;
 	/**

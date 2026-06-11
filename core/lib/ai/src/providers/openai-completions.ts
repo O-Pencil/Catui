@@ -697,14 +697,19 @@ export function convertMessages(
 							type: "text",
 							text: sanitizeSurrogates(item.text),
 						} satisfies ChatCompletionContentPartText;
-					} else {
-						return {
-							type: "image_url",
-							image_url: {
-								url: `data:${item.mimeType};base64,${item.data}`,
-							},
-						} satisfies ChatCompletionContentPartImage;
 					}
+					if (item.type === "document") {
+						return {
+							type: "text",
+							text: `[PDF document - content not available in OpenAI format]`,
+						} satisfies ChatCompletionContentPartText;
+					}
+					return {
+						type: "image_url",
+						image_url: {
+							url: `data:${item.mimeType};base64,${item.data}`,
+						},
+					} satisfies ChatCompletionContentPartImage;
 				});
 				const filteredContent = !model.input.includes("image")
 					? content.filter((c) => c.type !== "image_url")
