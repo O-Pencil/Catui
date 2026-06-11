@@ -5,6 +5,7 @@
  * [HERE]: Tool system public API; consumed by SDK and orchestrator
  */
 
+export { fileStateCache, type FileState } from "./file-state-cache.js";
 export {
 	type BashOperations,
 	type BashSandboxOptions,

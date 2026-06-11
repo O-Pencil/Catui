@@ -8,7 +8,8 @@ import type { AgentTool } from "@pencil-agent/agent-core";
 import type { ImageContent, TextContent } from "@pencil-agent/ai/types";
 import { type Static, Type } from "@sinclair/typebox";
 import { constants } from "fs";
-import { access as fsAccess, readFile as fsReadFile } from "fs/promises";
+import { access as fsAccess, readFile as fsReadFile, stat as fsStat } from "fs/promises";
+import { fileStateCache } from "./file-state-cache.js";
 import { formatDimensionNote, resizeImage } from "../../modes/utils/image-resize.js";
 import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime.js";
 import { validateIntegerWindowOption } from "./input-validation.js";
@@ -138,6 +139,7 @@ export function createReadTool(cwd: string, options?: ReadToolOptions): AgentToo
 								}
 							} else {
 								// Read as text
+								const fileStat = await fsStat(absolutePath);
 								const buffer = await ops.readFile(absolutePath);
 								const textContent = buffer.toString("utf-8");
 								const allLines = textContent.split("\n");
@@ -199,6 +201,14 @@ export function createReadTool(cwd: string, options?: ReadToolOptions): AgentToo
 								}
 
 								content = [{ type: "text", text: outputText }];
+
+								// Populate staleness cache for edit/write protection
+								fileStateCache.set(absolutePath, {
+									content: textContent,
+									timestamp: Math.floor(fileStat.mtimeMs),
+									offset,
+									limit,
+								});
 							}
 
 							// Check if aborted after reading

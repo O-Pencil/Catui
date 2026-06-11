@@ -6,8 +6,10 @@
  */
 import type { AgentTool } from "@pencil-agent/agent-core";
 import { type Static, Type } from "@sinclair/typebox";
-import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
+import { existsSync } from "fs";
+import { mkdir as fsMkdir, stat as fsStat, writeFile as fsWriteFile } from "fs/promises";
 import { dirname } from "path";
+import { fileStateCache } from "./file-state-cache.js";
 import { resolveToCwd } from "./path-utils.js";
 
 const writeSchema = Type.Object({
@@ -81,6 +83,22 @@ export function createWriteTool(cwd: string, options?: WriteToolOptions): AgentT
 					// Perform the write operation
 					(async () => {
 						try {
+							// Staleness check: if file exists and was previously read, verify mtime
+							if (existsSync(absolutePath)) {
+								const cachedState = fileStateCache.get(absolutePath);
+								if (cachedState) {
+									const currentStat = await fsStat(absolutePath);
+									if (Math.floor(currentStat.mtimeMs) > cachedState.timestamp) {
+										fileStateCache.delete(absolutePath);
+										if (signal) {
+											signal.removeEventListener("abort", onAbort);
+										}
+										reject(new Error(`Cannot write ${path}: file has been modified since it was last read. Use the read tool to re-read the file before writing.`));
+										return;
+									}
+								}
+							}
+
 							// Create parent directories if needed
 							await ops.mkdir(dir);
 
@@ -91,6 +109,14 @@ export function createWriteTool(cwd: string, options?: WriteToolOptions): AgentT
 
 							// Write the file
 							await ops.writeFile(absolutePath, content);
+
+							// Update staleness cache
+							fileStateCache.set(absolutePath, {
+								content,
+								timestamp: Math.floor(Date.now()),
+								offset: undefined,
+								limit: undefined,
+							});
 
 							// Check if aborted after writing
 							if (aborted) {

@@ -7,7 +7,8 @@
 import type { AgentTool } from "@pencil-agent/agent-core";
 import { type Static, Type } from "@sinclair/typebox";
 import { constants } from "fs";
-import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } from "fs/promises";
+import { access as fsAccess, readFile as fsReadFile, stat as fsStat, writeFile as fsWriteFile } from "fs/promises";
+import { fileStateCache } from "./file-state-cache.js";
 import {
 	detectLineEnding,
 	fuzzyFindText,
@@ -69,6 +70,12 @@ export function createEditTool(cwd: string, options?: EditToolOptions): AgentToo
 		description:
 			"Edit a file by replacing exact text. The oldText must match exactly (including whitespace). Use this for precise, surgical edits.",
 		parameters: editSchema,
+		validateInput: ({ path }: { path: string }) => {
+			const absolutePath = resolveToCwd(path, cwd);
+			if (!fileStateCache.has(absolutePath)) {
+				return `Cannot edit ${path}: file has not been read yet. Use the read tool first.`;
+			}
+		},
 		execute: async (
 			_toolCallId: string,
 			{ path, oldText, newText }: { path: string; oldText: string; newText: string },
@@ -111,6 +118,20 @@ export function createEditTool(cwd: string, options?: EditToolOptions): AgentToo
 							}
 							reject(new Error(`File not found: ${path}`));
 							return;
+						}
+
+						// Staleness check: detect external modifications (cache existence checked in validateInput)
+						const cachedState = fileStateCache.get(absolutePath);
+						if (cachedState) {
+							const currentStat = await fsStat(absolutePath);
+							if (Math.floor(currentStat.mtimeMs) > cachedState.timestamp) {
+								fileStateCache.delete(absolutePath);
+								if (signal) {
+									signal.removeEventListener("abort", onAbort);
+								}
+								reject(new Error(`Cannot edit ${path}: file has been modified since it was last read. Use the read tool to re-read the file before editing.`));
+								return;
+							}
 						}
 
 						// Check if aborted before reading
@@ -195,6 +216,15 @@ export function createEditTool(cwd: string, options?: EditToolOptions): AgentToo
 
 						const finalContent = bom + restoreLineEndings(newContent, originalEnding);
 						await ops.writeFile(absolutePath, finalContent);
+
+						// Update staleness cache with new content
+						const postWriteStat = await fsStat(absolutePath);
+						fileStateCache.set(absolutePath, {
+							content: finalContent,
+							timestamp: Math.floor(postWriteStat.mtimeMs),
+							offset: undefined,
+							limit: undefined,
+						});
 
 						// Check if aborted after writing
 						if (aborted) {
