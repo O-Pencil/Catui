@@ -4309,18 +4309,25 @@ export class InteractiveMode {
     const personaEntries = entries.filter(
       (e: any) => e.type === "custom" && e.customType === "persona",
     );
-    if (personaEntries.length === 0) return;
 
-    const last = personaEntries[personaEntries.length - 1] as any;
-    const personaId: unknown = last?.data?.personaId ?? last?.data?.id;
-    if (typeof personaId !== "string" || !personaId.trim()) return;
+    // Resolve persona id: from session tag, or fall back to active persona (default: vex)
+    let personaId: string | undefined;
+    if (personaEntries.length > 0) {
+      const last = personaEntries[personaEntries.length - 1] as any;
+      const raw: unknown = last?.data?.personaId ?? last?.data?.id;
+      if (typeof raw === "string" && raw.trim()) personaId = raw;
+    }
+    personaId = personaId ?? getActivePersonaId();
+    if (!personaId) return;
 
     const currentActive = getActivePersonaId();
-    if (currentActive === personaId) {
+    if (currentActive === personaId && personaEntries.length === 0) {
+      // No session tag and persona already active — just ensure env vars are set
+      process.env.NANO_PERSONA_DIR ??= toAbsolutePath(getPersonaDir(personaId));
       return;
     }
 
-    setActivePersonaId(personaId);
+    if (personaEntries.length > 0) setActivePersonaId(personaId);
     process.env.NANOMEM_MEMORY_DIR = toAbsolutePath(
       getPersonaMemoryDir(personaId),
     );
@@ -4330,7 +4337,7 @@ export class InteractiveMode {
     );
     process.env.NANO_PERSONA_DIR = toAbsolutePath(getPersonaDir(personaId));
 
-    if (!this.session.isStreaming && !this.session.isCompacting) {
+    if (personaEntries.length > 0 && !this.session.isStreaming && !this.session.isCompacting) {
       await this.session.reload();
     }
   }
