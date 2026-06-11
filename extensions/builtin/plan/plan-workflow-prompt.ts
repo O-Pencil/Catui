@@ -127,6 +127,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 export function getPlanModeExitInstructions(
 	planFilePath: string,
 	planExists: boolean,
+	allowedPrompts?: Array<{ tool: string; prompt: string }>,
 ): string {
 	const sections: string[] = [
 		"## Exited Plan Mode",
@@ -138,6 +139,14 @@ export function getPlanModeExitInstructions(
 		sections.push(`The plan file is located at ${planFilePath} if you need to reference it.`);
 	} else {
 		sections.push("No plan was written during plan mode.");
+	}
+
+	if (allowedPrompts && allowedPrompts.length > 0) {
+		sections.push("");
+		sections.push("The following tool permissions were pre-approved by the user during plan approval:");
+		for (const p of allowedPrompts) {
+			sections.push(`- ${p.tool}: ${p.prompt}`);
+		}
 	}
 
 	return sections.join("\n");
@@ -192,6 +201,7 @@ export function getExitPlanModeApprovedResult(
 	filePath: string,
 	planWasEdited: boolean,
 	hasAgentTool: boolean,
+	allowedPrompts?: Array<{ tool: string; prompt: string }>,
 ): string {
 	const lines: string[] = [];
 
@@ -207,6 +217,14 @@ export function getExitPlanModeApprovedResult(
 	lines.push("");
 	lines.push(planWasEdited ? "## Approved Plan (edited by user):" : "## Approved Plan:");
 	lines.push(plan);
+
+	if (allowedPrompts && allowedPrompts.length > 0) {
+		lines.push("");
+		lines.push("## Pre-approved permissions:");
+		for (const p of allowedPrompts) {
+			lines.push(`- ${p.tool}: ${p.prompt}`);
+		}
+	}
 
 	if (hasAgentTool) {
 		lines.push("");

@@ -117,6 +117,7 @@ export function hydratePlanSessionState(
 		sessionState.state.lastPlanAttachmentHumanTurn = data.lastPlanAttachmentHumanTurn;
 		sessionState.state.planSlug = data.planSlug;
 		sessionState.state.planSnapshot = data.planSnapshot;
+		sessionState.state.lastAllowedPrompts = data.lastAllowedPrompts;
 		sessionState.planSlugCache = data.planSlug;
 		return;
 	}
@@ -129,6 +130,7 @@ export function hydratePlanSessionState(
 	sessionState.state.lastPlanAttachmentHumanTurn = undefined;
 	sessionState.state.planSlug = undefined;
 	sessionState.state.planSnapshot = undefined;
+	sessionState.state.lastAllowedPrompts = undefined;
 	sessionState.planSlugCache = undefined;
 }
 
@@ -144,6 +146,7 @@ export function serializePlanSessionState(sessionState: PlanSessionState): PlanS
 		lastPlanAttachmentHumanTurn: sessionState.state.lastPlanAttachmentHumanTurn,
 		planSlug: sessionState.planSlugCache ?? sessionState.state.planSlug,
 		planSnapshot: sessionState.state.planSnapshot,
+		lastAllowedPrompts: sessionState.state.lastAllowedPrompts,
 	};
 }
 

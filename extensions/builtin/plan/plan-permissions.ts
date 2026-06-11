@@ -13,7 +13,7 @@ import type { PlanSessionState } from "./types.js";
 // Read-only tools that are always allowed in plan mode
 // ============================================================================
 
-const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls", "time", "source"]);
+const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls", "time", "source", "LSP", "AskUserQuestion"]);
 const PLAN_SAFE_AGENT_TYPES = new Set(["Explore", "Plan", "explore", "plan"]);
 const ALWAYS_BLOCKED_TOOLS = new Set([
 	"notebookEdit",

@@ -18,6 +18,7 @@ import {
 } from "./plan-file-manager.js";
 import { getExitPlanModeApprovedResult } from "./plan-workflow-prompt.js";
 import { validatePlan, formatValidationMessage } from "./plan-validation.js";
+import { setPendingClearContextPlan } from "./clear-context-state.js";
 import {
 	isInTeammateContext,
 	submitPlanToLeader,
@@ -37,6 +38,13 @@ const ExitPlanModeInputSchema = Type.Object({
 	forceExit: Type.Optional(Type.Boolean({
 		description: "Force exit even if plan validation fails (for trivial changes)",
 	})),
+	allowedPrompts: Type.Optional(Type.Array(
+		Type.Object({
+			tool: Type.String({ description: "Tool name (e.g. 'Bash')" }),
+			prompt: Type.String({ description: "Semantic description of the permitted action" }),
+		}),
+		{ description: "Pre-approved tool permission rules for the implementation phase" },
+	)),
 });
 
 type ExitPlanModeInput = Static<typeof ExitPlanModeInputSchema>;
@@ -152,9 +160,20 @@ export function createExitPlanModeTool(
 				);
 			}
 
+			// Extract allowedPrompts
+			const allowedPrompts = "allowedPrompts" in input && Array.isArray(input.allowedPrompts)
+				? input.allowedPrompts as Array<{ tool: string; prompt: string }>
+				: undefined;
+
+			// Build preview
 			const preview = plan && plan.trim().length > 0
 				? plan.trim().slice(0, 1200)
 				: "No plan content was written.";
+
+			const allowedPromptsBlock = allowedPrompts && allowedPrompts.length > 0
+				? `\nRequested permissions:\n${allowedPrompts.map((p) => `  - ${p.tool}: ${p.prompt}`).join("\n")}\n`
+				: "";
+
 			const choice = await ctx.ui.select(
 				[
 					"Plan ready for review:",
@@ -162,44 +181,90 @@ export function createExitPlanModeTool(
 					"",
 					preview,
 					plan && plan.length > 1200 ? "\n...(truncated)" : "",
-					"",
+					allowedPromptsBlock,
 					"Choose next action:",
 				].join("\n"),
-				["Execute plan", "Keep planning"],
+				[
+					"Execute plan (standard)",
+					"Execute plan (elevated mode)",
+					"Execute plan (clear context + elevated)",
+					"Keep planning",
+					"Reject plan",
+				],
 			);
-			const approved = choice === "Execute plan";
 
-			if (!approved) {
+			// Handle "Keep planning" — reject, stay in plan mode
+			if (choice === "Keep planning") {
 				ctx.abort();
 				throw new Error(
-					"User rejected exiting plan mode. Stay in plan mode, revise the plan file, and call ExitPlanMode again when ready.",
+					"User chose to keep planning. Stay in plan mode, revise the plan file, and call ExitPlanMode again when ready.",
 				);
 			}
 
-			// Normal exit: restore permissions
+			// Handle "Reject plan" — reject with feedback
+			if (choice === "Reject plan") {
+				ctx.abort();
+				throw new Error(
+					"User rejected the plan. Stay in plan mode and revise the plan based on user feedback.",
+				);
+			}
+
+			// Approved — store allowedPrompts in session state
+			if (allowedPrompts) {
+				sessionState.state.lastAllowedPrompts = allowedPrompts;
+			}
+
+			// Handle "Execute plan (clear context + elevated)"
+			if (choice === "Execute plan (clear context + elevated)") {
+				handlePlanModeExit(sessionState);
+				sessionState.state.mode = "bypassPermissions";
+				api.appendEntry(PLAN_CUSTOM_TYPE, serializePlanSessionState(sessionState));
+				ctx.ui.setStatus("plan", undefined);
+				ctx.ui.setWidget("plan-mode", undefined);
+
+				// Queue plan for injection into the new session
+				const planSnippet = plan ? plan.trim().slice(0, 8000) : "(no plan content)";
+				setPendingClearContextPlan(planSnippet);
+
+				// Create a new session (clears old context)
+				await api.executeCommand("/new");
+
+				ctx.ui.notify("Plan approved. Starting fresh context with elevated permissions.", "info");
+				return {
+					content: [{
+						type: "text",
+						text: "Plan approved. New context started with elevated permissions. The plan has been injected as the initial message.",
+					}],
+					details: null,
+				};
+			}
+
+			// Handle "Execute plan (elevated mode)"
+			if (choice === "Execute plan (elevated mode)") {
+				handlePlanModeExit(sessionState);
+				sessionState.state.mode = "bypassPermissions";
+				api.appendEntry(PLAN_CUSTOM_TYPE, serializePlanSessionState(sessionState));
+				ctx.ui.setStatus("plan", undefined);
+				ctx.ui.setWidget("plan-mode", undefined);
+
+				const resultText = getExitPlanModeApprovedResult(plan, planFilePath, planWasEdited, hasAgentTool(), allowedPrompts);
+				ctx.ui.notify("Plan approved. Elevated mode active.", "info");
+				return {
+					content: [{ type: "text", text: resultText }],
+					details: null,
+				};
+			}
+
+			// Handle "Execute plan (standard)" — default
 			handlePlanModeExit(sessionState);
 			api.appendEntry(PLAN_CUSTOM_TYPE, serializePlanSessionState(sessionState));
-
-			// Clear plan mode status in TUI footer
 			ctx.ui.setStatus("plan", undefined);
 			ctx.ui.setWidget("plan-mode", undefined);
 
-			// Build result message
-			const resultText = getExitPlanModeApprovedResult(
-				plan,
-				planFilePath,
-				planWasEdited,
-				hasAgentTool(),
-			);
-
-			// Notify user
+			const resultText = getExitPlanModeApprovedResult(plan, planFilePath, planWasEdited, hasAgentTool(), allowedPrompts);
 			ctx.ui.notify("Plan approved. Implementation mode active.", "info");
-
 			return {
-				content: [{
-					type: "text",
-					text: resultText,
-				}],
+				content: [{ type: "text", text: resultText }],
 				details: null,
 			};
 		},

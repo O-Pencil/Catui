@@ -67,6 +67,7 @@ function createCommandHarness(cwd: string) {
 		events: bus,
 		registerCommand: (name: string, command: any) => commands.set(name, command),
 		registerTool: () => {},
+		registerShortcut: () => {},
 		on: () => {},
 		getActiveTools: () => [],
 		sendUserMessage: (content: string) => sentMessages.push(content),
@@ -276,7 +277,7 @@ test("ExitPlanMode rejection aborts current run and keeps plan mode", async () =
 
 		await assert.rejects(
 			tool.execute("exit", {}, undefined, undefined, ctx),
-			/User rejected exiting plan mode/,
+			/keep planning|Stay in plan mode/,
 		);
 		assert.equal(aborted, true);
 		assert.equal(sessionState.state.mode, "plan");
@@ -289,7 +290,7 @@ test("plan command supports manual /plan exit approval flow", async () => {
 	const cwd = createTempProject();
 	try {
 		const harness = createCommandHarness(cwd);
-		harness.ctx.ui.select = async () => "Execute plan";
+		harness.ctx.ui.select = async () => "Execute plan (standard)";
 		await planExtension(harness.api);
 
 		await harness.commands.get("plan").handler("", harness.ctx);

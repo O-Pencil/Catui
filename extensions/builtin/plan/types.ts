@@ -41,6 +41,8 @@ export interface PlanModeState {
 	planSlug?: string;
 	/** Last known plan file snapshot for recovery */
 	planSnapshot?: string;
+	/** Pre-approved tool permissions from the last ExitPlanMode call */
+	lastAllowedPrompts?: Array<{ tool: string; prompt: string }>;
 }
 
 // ============================================================================
@@ -121,6 +123,7 @@ export interface PlanStateEntryData {
 	lastPlanAttachmentHumanTurn?: number;
 	planSlug?: string;
 	planSnapshot?: string;
+	lastAllowedPrompts?: Array<{ tool: string; prompt: string }>;
 }
 
 // ============================================================================

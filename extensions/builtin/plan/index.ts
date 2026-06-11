@@ -32,6 +32,7 @@ import {
 } from "./plan-workflow-prompt.js";
 import { createEnterPlanModeTool } from "./enter-plan-mode-tool.js";
 import { createExitPlanModeTool } from "./exit-plan-mode-tool.js";
+import { getAndClearPendingPlan } from "./clear-context-state.js";
 import { PLAN_CUSTOM_TYPE, type PlanSessionState } from "./types.js";
 
 // ============================================================================
@@ -403,6 +404,14 @@ export default async function planExtension(api: ExtensionAPI) {
 	// =========================================================================
 
 	api.on("before_agent_start", async (_event, ctx) => {
+		// Clear-context plan injection: if a plan was queued before /new, inject it now
+		const pendingPlan = getAndClearPendingPlan();
+		if (pendingPlan) {
+			return {
+				appendSystemPrompt: `## Plan to Implement\n\nThe user approved the following plan in a previous context. Implement it now:\n\n${pendingPlan}`,
+			};
+		}
+
 		preparePlansDirectory(ctx);
 		const sessionState = getSessionState(api, ctx);
 		const { mode, needsPlanModeExitAttachment, hasExitedPlanModeInSession, planAttachmentCount } = sessionState.state;
@@ -414,7 +423,11 @@ export default async function planExtension(api: ExtensionAPI) {
 			const planFilePath = getPlanFilePath(api.events);
 			const planExists = getPlan(api.events) !== null;
 			return {
-				appendSystemPrompt: getPlanModeExitInstructions(planFilePath, planExists),
+				appendSystemPrompt: getPlanModeExitInstructions(
+					planFilePath,
+					planExists,
+					sessionState.state.lastAllowedPrompts,
+				),
 			};
 		}
 
@@ -458,6 +471,40 @@ export default async function planExtension(api: ExtensionAPI) {
 				appendSystemPrompt: prompt,
 			};
 		}
+	});
+
+	// =========================================================================
+	// Ctrl+G shortcut: open plan file in external editor
+	// =========================================================================
+
+	api.registerShortcut("ctrl+g" as any, {
+		description: "Open plan file in external editor",
+		handler: async (ctx: ExtensionContext) => {
+			const sessionState = getSessionState(api, ctx);
+			if (sessionState.state.mode !== "plan") {
+				ctx.ui.notify("Not in plan mode.", "info");
+				return;
+			}
+
+			const planFilePath = getPlanFilePath(api.events);
+			if (!getPlan(api.events)) {
+				await writePlan(api.events, "");
+			}
+
+			if (process.env.VISUAL || process.env.EDITOR) {
+				const opened = await ctx.ui.openExternalEditor(planFilePath, "Edit Plan");
+				if (opened) {
+					const state = getSessionState(api, ctx);
+					state.state.planSnapshot = getPlan(api.events) ?? undefined;
+					persistPlanState(api, state);
+					ctx.ui.notify(`Opened plan in editor: ${planFilePath}`, "info");
+				} else {
+					ctx.ui.notify("Failed to open plan in external editor.", "warning");
+				}
+			} else {
+				ctx.ui.notify("No $VISUAL or $EDITOR set. Cannot open external editor.", "warning");
+			}
+		},
 	});
 
 	// =========================================================================
