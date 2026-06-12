@@ -4,7 +4,7 @@
 phase: P8
 macro_stage: B        # 功能级（可选）；含 root index.ts 这个 R 单元的最终拆分
 batch: B6
-status: active-protocol-slicing
+status: root-narrowing-implementation
 risk: high
 depends_on: [P6]
 blocks: []
@@ -25,12 +25,13 @@ P8 现在拆成两个层次推进：
 > 📋 **可执行方案（逐符号 matrix + protocol inventory + protocol 切片 + subpath + 迁移指南）**：
 > [`../sdk-surface-review/P8-execution-scope.md`](../sdk-surface-review/P8-execution-scope.md)
 > 当前切片清单见 [`../sdk-surface-review/protocol-inventory.md`](../sdk-surface-review/protocol-inventory.md)。
+> root export 目标矩阵见 [`../sdk-surface-review/public-api-matrix.md`](../sdk-surface-review/public-api-matrix.md)，迁移指南见 [`../sdk-surface-review/migration-guide.md`](../sdk-surface-review/migration-guide.md)。
 
 ## 进入条件
 
 - [x] P1–P6 已完成且 sign-off 进入收尾。
 - [x] `@pencil-agent/extension-sdk` 已重命名为 `@pencil-agent/protocol`（2026-06-12 决议）。
-- [ ] root `index.ts` 收窄前必须明确 major 发版窗口（不与 patch 混发）。
+- [x] root `index.ts` 收窄前必须明确 major 发版窗口（2.0 beta hard break，不与 patch 混发）。
 
 ## 任务清单
 
@@ -38,28 +39,29 @@ P8 现在拆成两个层次推进：
 - [x] 建立 protocol 作为唯一公共契约生长面（`packages/protocol`）
 - [ ] 建立 protocol inventory，逐类标注 `protocol / host-only / ui-subpath / defer`
 - [ ] 逐切片迁移跨 publish 边界的公共契约，host 侧 re-export / extends 保兼容
-- [ ] **F03** 步骤 3：`index.ts` 仅 stable SDK 接口（✦**Q3** major vs deprecate 6mo）
-- [ ] **F06**：deprecate root exports；子路径暴露 `InteractiveMode` 等
+- [x] sign off root export destination matrix
+- [x] sign off migration guide and hard-break beta policy
+- [x] **F03** 步骤 3：`index.ts` 仅 stable SDK 接口（✦**Q3** = 2.0 beta hard break）
+- [x] **F06**：root exports hard-break 收窄；仅保留已签核 advanced subpaths，不暴露 modes/UI
 - [x] **纪律**：新协议类型只进 `@pencil-agent/protocol`，不进 host `index.ts`（`../evolution/dev-conventions.md` §3/§3b）
 - [ ] CHANGELOG + migration guide
 
 ## 当前评审结论
 
-P8 当前允许实现**非 breaking 的 protocol 切片**，但不直接执行 root `index.ts` 的破坏性收窄。
+P8 当前已从**非 breaking 的 protocol 切片**进入 root `index.ts` 的破坏性收窄实现窗口。
 
-默认建议：
+最终决议：
 
 ```text
-current window: protocol slicing only; preserve root exports
-future major window: choose breaking narrow or deprecation path
+current window: 2.0 beta hard break; narrow root exports; preserve only signed-off subpaths
 ```
 
 原因：
 
-- 直接收窄 root 会制造有意 public API diff。
-- protocol 切片是依赖反转和公共契约生成，host re-export 可保持兼容。
+- 直接收窄 root 会制造有意 public API diff，当前 2.0 beta 接受该 break。
+- protocol 切片已完成依赖反转和公共契约生成；root 不再承载 extension/UI/mode host internals。
 - 每个切片必须满足 `dev-conventions.md §3b`：只有跨 publish 边界的类型才进入 protocol。
-- 若后续执行 root 收窄，S-1 需要记录 intentional API break，并补 migration guide / external consumer smoke。
+- root 收窄必须以 `public-api-matrix.md` 和 `migration-guide.md` 为准，并补 external consumer smoke。
 
 ## 验证门控（DoD）
 

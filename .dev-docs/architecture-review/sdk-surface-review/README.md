@@ -3,7 +3,7 @@
 ```yaml
 review_id: sdk-surface-review
 phase: P8
-status: review-open
+status: root-narrowing-accepted
 created_at: 2026-06-07
 scope:
   - index.ts
@@ -20,7 +20,10 @@ P8 reviews whether the root package entry `@pencil-agent/nano-pencil` should rem
 
 Root narrowing remains a major-window API decision. Protocol slicing is allowed before that because host re-exports / extends the protocol contracts and preserves existing root behavior.
 
-> 📋 **Executable scope (per-symbol matrix + protocol inventory + protocol slicing + subpaths + migration guide)**: [`P8-execution-scope.md`](./P8-execution-scope.md). Current protocol slice inventory: [`protocol-inventory.md`](./protocol-inventory.md).
+> 📋 **Executable scope**: [`P8-execution-scope.md`](./P8-execution-scope.md).
+> Current protocol slice inventory: [`protocol-inventory.md`](./protocol-inventory.md).
+> Root export destination matrix: [`public-api-matrix.md`](./public-api-matrix.md).
+> Migration guide: [`migration-guide.md`](./migration-guide.md).
 
 ## Current Problem
 
@@ -64,6 +67,8 @@ P2/P6 already removed internal root-barrel cycles and added AI subpaths. P8 is t
 | [SK01](./findings/SK01-root-barrel-taxonomy.md) | reviewed | Classify root exports by stable SDK vs leaked implementation |
 | [SK02](./findings/SK02-extension-sdk-ownership.md) | reviewed | Move extension protocol growth to `@pencil-agent/protocol` |
 | [SK03](./findings/SK03-migration-strategy.md) | reviewed | Decide major-break vs deprecation strategy |
+| [public-api-matrix](./public-api-matrix.md) | signed-off | Per-export destination before root narrowing |
+| [migration-guide](./migration-guide.md) | signed-off | External migration wording before implementation |
 
 ## Review Verdict
 
@@ -81,11 +86,12 @@ Gate 2: root narrowing
   -> require migration guide + external consumer smoke
 ```
 
-Default recommendation: continue Gate 1 now; defer Gate 2 until the explicit major API window.
+Current decision: Gate 2 is accepted for the 2.0 beta major window. Root narrowing ships as a
+hard beta break, with migration documentation and explicit subpaths for retained advanced APIs.
 
 ## Non-Goals
 
-- Do not remove root exports without a migration guide.
+- Do not remove root exports without keeping the migration guide aligned.
 - Do not put new protocol types in the host root entry; grow `@pencil-agent/protocol`.
 - Do not treat UI components as stable root SDK unless a consumer contract proves they are required.
 

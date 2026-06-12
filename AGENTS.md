@@ -180,7 +180,14 @@ nanoPencil/
 ├── cli.ts                 # CLI entry point
 ├── main.ts                # Main CLI handler
 ├── config.ts              # Config discovery & loading
-├── index.ts               # Package exports
+├── index.ts               # Stable root SDK exports
+├── tools.ts               # Public ./tools subpath exports
+├── runtime.ts             # Public ./runtime subpath exports
+├── session.ts             # Public ./session subpath exports
+├── session-compaction.ts  # Public ./session/compaction subpath exports
+├── public-config.ts       # Public ./config subpath exports
+├── models.ts              # Public ./models subpath exports
+├── skills.ts              # Public ./skills subpath exports
 │
 ├── core/                  # Core functionality
 │   ├── runtime/           # Agent runtime & SDK

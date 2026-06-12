@@ -4,7 +4,7 @@
 doc: P8-execution-scope
 parent: ./README.md            # sdk-surface-review (SK01-03 = the WHY)
 runbook: ../execution-plan/P8-sdk-narrow.md
-status: ready-for-major-window
+status: implementation-accepted
 risk: high (intentional public API break — only valid in a major bump)
 created_at: 2026-06-11
 ```
@@ -50,6 +50,9 @@ for public API symbols** → it can only ship in a major version window (2.0).
 
 ## Export Matrix (296 → 4 destinations)
 
+Detailed sign-off matrix: [`public-api-matrix.md`](./public-api-matrix.md).
+Migration guide: [`migration-guide.md`](./migration-guide.md).
+
 > Source: full `index.ts` (348 lines). Counts are approximate per group.
 
 ### Bucket A — KEEP in root `@pencil-agent/nano-pencil` (~20, the stable host embedding SDK)
@@ -61,9 +64,8 @@ for public API symbols** → it can only ship in a major version window (2.0).
 | `VERSION`, `getAgentDir` | config |
 
 Tool factories (`createBashTool`, `createCodingTools`, `createReadTool`/Edit/Write/Find/Grep/Ls,
-`createReadOnlyTools`, `readOnlyTools`) — KEEP in root **or** move to `/tools` subpath (Bucket C).
-Decide by whether headless SDK embedding is a first-class use case (recommend: keep in root —
-embedding without custom tools is rare).
+`createReadOnlyTools`, `readOnlyTools`) — KEEP in root for SDK embedding and also expose through
+`./tools` with the concrete tool implementations.
 
 ### Bucket B — MOVE to `@pencil-agent/protocol` (only cross-publish public contracts)
 
@@ -109,22 +111,22 @@ Add `package.json` `exports` subpaths; remove from root:
 | Symbols | Disposition |
 |---------|-------------|
 | `main` (main.ts) | **remove** — CLI entry is the `nanopencil` bin, not an SDK export |
-| `InteractiveMode`, `runPrintMode`, `runRpcMode`, `*ModeOptions` (modes) | remove from root; `./modes` subpath only if programmatic mode-running is supported |
-| 38 interactive UI components (`*Component`, selectors, `appKey`/`keyHint`/`renderDiff`, editor keys) | **`./ui` subpath** — extensions use these (`CustomEditor`); keep a deliberate UI surface, not root |
-| theme utils (`getMarkdownTheme`, `highlightCode`, `initTheme`, `Theme`, `ThemeColor`, …) | `./ui` (or `./theme`) subpath |
+| `InteractiveMode`, `runPrintMode`, `runRpcMode`, `*ModeOptions` (modes) | remove from root; no first-implementation subpath because modes are not a supported public API yet |
+| 38 interactive UI components (`*Component`, selectors, `appKey`/`keyHint`/`renderDiff`, editor keys) | remove from root; no first-implementation `./ui` surface because TUI internals change frequently |
+| theme utils (`getMarkdownTheme`, `highlightCode`, `initTheme`, `Theme`, `ThemeColor`, …) | remove from root; future public UI/theme surface requires a focused review |
 | `copyToClipboard`, `parseFrontmatter`, `stripFrontmatter`, `ReadonlyFooterDataProvider` | remove from root or `./utils` (internal-leaning) |
 
 ## Rewire & republish checklist
 
 1. **protocol**: add public contracts one slice at a time (Bucket B) → bump version → **publish** when consumed externally.
 2. **host**: import protocol from `@pencil-agent/protocol` (not root barrel);
-   rewrite `index.ts` to Bucket A only; add Bucket C/D-UI subpaths to `package.json` `exports`.
+   rewrite `index.ts` to Bucket A only; add Bucket C subpaths to `package.json` `exports`.
 3. **builtin extensions**: switch relative `core/extensions-host/types` imports → `@pencil-agent/protocol`
    only when they need protocol-only contracts; rich host command/UI contexts stay host-local.
 4. **first-party packages**: `mem-core` already on protocol ✓; verify `soul-core`; republish if their
    protocol version bumps.
 5. **jiti alias** (`core/extensions-host/loader.ts:45`): decide what the runtime injects to user extensions —
-   keep `@pencil-agent/nano-pencil` → (narrowed root + `/ui`), and add `@pencil-agent/protocol` alias so
+   keep `@pencil-agent/nano-pencil` → narrowed root only, and add `@pencil-agent/protocol` alias so
    user extensions can adopt the protocol package. Update the `types.ts:204` doc example accordingly.
 6. **docs**: the `docs/extensions.md` + `docs/sdk.md` skill manuals (scaffolded) document the new surfaces.
 
@@ -140,7 +142,7 @@ Add `package.json` `exports` subpaths; remove from root:
   → import from `@pencil-agent/protocol`.
 - Sessions/compaction/config/models/runtime/tools/skills internals
   → import from `@pencil-agent/nano-pencil/{session,config,models,runtime,tools,skills}`.
-- Interactive UI components & theme → `@pencil-agent/nano-pencil/ui`.
+- Interactive UI components & theme are no longer public in the first P8 implementation.
 - `main` and CLI utilities are no longer exported (use the `nanopencil` bin).
 
 Codemod: most imports change only the module specifier, not the symbol names.
@@ -150,7 +152,7 @@ Codemod: most imports change only the module specifier, not the symbol names.
 
 1. B (protocol inventory + sliced host rewire) — verify host builds importing protocol from `@pencil-agent/protocol`.
 2. C (subpath exports) — `package.json exports` + confirm dist has each subpath's `.js`/`.d.ts`.
-3. D (root removal + `/ui` subpath) — rewrite `index.ts`.
+3. D (root removal; no first-implementation UI/modes subpath) — rewrite `index.ts`.
 4. **Symbol diff is now the INTENDED breaking set** — regenerate `collect-baseline.ts` symbols; the diff
    vs `baseline/public-api-symbols-main.txt` is reviewed as the *declared* P8 break (not an accident).
 5. Build method unchanged (tsc-per-package + minify + embed); only source moves + `exports` map + imports.

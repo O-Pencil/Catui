@@ -10,6 +10,34 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./tools": {
+      "import": "./dist/tools.js",
+      "types": "./dist/tools.d.ts"
+    },
+    "./runtime": {
+      "import": "./dist/runtime.js",
+      "types": "./dist/runtime.d.ts"
+    },
+    "./session": {
+      "import": "./dist/session.js",
+      "types": "./dist/session.d.ts"
+    },
+    "./session/compaction": {
+      "import": "./dist/session-compaction.js",
+      "types": "./dist/session-compaction.d.ts"
+    },
+    "./config": {
+      "import": "./dist/public-config.js",
+      "types": "./dist/public-config.d.ts"
+    },
+    "./models": {
+      "import": "./dist/models.js",
+      "types": "./dist/models.d.ts"
+    },
+    "./skills": {
+      "import": "./dist/skills.js",
+      "types": "./dist/skills.d.ts"
     }
   },
   "files": [
