@@ -1,7 +1,7 @@
 /**
  * [WHO]: Provides ExtensionAPI, ExtensionContext, ExtensionFactory, ExtensionUi,
  *        SessionManagerContract — the extension lifecycle protocol
- * [FROM]: Depends on ./commands, ./hooks, and ./tools for registration contracts
+ * [FROM]: Depends on ./commands, ./flags, ./hooks, and ./tools for registration contracts
  * [TO]: Consumed by packages/mem-core (extension adapter) and third-party extensions; the host's
  *       richer ExtensionContext/ExtensionAPI satisfy these structurally (extensions load dynamically)
  * [HERE]: packages/protocol/src/lifecycle.ts - the stable extension entry contract
@@ -13,6 +13,7 @@
 
 import type { TSchema } from "@sinclair/typebox";
 import type { ExtensionCommand } from "./commands.js";
+import type { ExtensionFlagOptions, ExtensionFlagValue } from "./flags.js";
 import type { HookEventName, HookHandler } from "./hooks.js";
 import type { ToolContract } from "./tools.js";
 
@@ -48,22 +49,16 @@ export interface ExtensionContext {
   ui: ExtensionUi;
 }
 
-/** A runtime flag an extension declares (parsed from CLI/config by the host). */
-export interface ExtensionFlag {
-  name: string;
-  description?: string;
-  type: "boolean" | "string";
-  default?: boolean | string;
-  /** Absolute path of the declaring extension (filled by the host loader). */
-  extensionPath: string;
-}
-
 /** The registration surface a host passes to an extension factory. */
 export interface ExtensionAPI {
   /** Subscribe to a lifecycle hook. */
   on(event: HookEventName, handler: HookHandler<ExtensionContext>): void;
   /** Register a slash command. */
   registerCommand(name: string, command: ExtensionCommand<ExtensionContext>): void;
+  /** Register a CLI/config flag declared by this extension. */
+  registerFlag(name: string, options: ExtensionFlagOptions): void;
+  /** Get the value of a registered CLI/config flag. */
+  getFlag(name: string): ExtensionFlagValue | undefined;
   /** Register a model-facing tool. Generic so each call infers its own parameter schema. */
   registerTool<TParams extends TSchema = TSchema, TDetails = unknown>(tool: ToolContract<TParams, TDetails>): void;
 }

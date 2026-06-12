@@ -23,6 +23,9 @@ completion contracts.
 `src/hooks.ts`: Public lifecycle hook-name vocabulary and generic hook handler
 contract; rich event payloads remain host-owned.
 
+`src/flags.ts`: Extension-declared CLI/config flag options, values, and loaded
+flag metadata.
+
 ## Boundary Rule
 
 Add a type here only when a published package or third-party extension needs it.

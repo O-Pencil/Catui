@@ -28,10 +28,14 @@ Key files:
 `src/tools.ts`: Tool runtime, permission, tool result, and tool registration
 contracts.
 
-`src/lifecycle.ts`: Minimal extension lifecycle, context, API, session-manager,
-and flag contracts.
+`src/lifecycle.ts`: Minimal extension lifecycle, context, API, and
+session-manager contracts.
 
 `src/commands.ts`: Slash command registration and argument-completion contracts.
+
+`src/hooks.ts`: Hook event-name vocabulary.
+
+`src/flags.ts`: Extension-declared CLI/config flag contracts.
 
 ### mem-core/
 

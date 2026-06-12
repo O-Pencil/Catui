@@ -41,6 +41,8 @@ import type {
 	ArgumentCompletionContext as ProtocolArgumentCompletionContext,
 	ExtensionCommand as ProtocolExtensionCommand,
 	ExtensionFlag,
+	ExtensionFlagOptions,
+	ExtensionFlagValue,
 	HookEventName as ProtocolHookEventName,
 	ToolRuntimeDescriptor,
 } from "@pencil-agent/protocol";
@@ -1087,17 +1089,10 @@ export interface ExtensionAPI {
 	): void;
 
 	/** Register a CLI flag. */
-	registerFlag(
-		name: string,
-		options: {
-			description?: string;
-			type: "boolean" | "string";
-			default?: boolean | string;
-		},
-	): void;
+	registerFlag(name: string, options: ExtensionFlagOptions): void;
 
 	/** Get the value of a registered CLI flag. */
-	getFlag(name: string): boolean | string | undefined;
+	getFlag(name: string): ExtensionFlagValue | undefined;
 
 	// =========================================================================
 	// Message Rendering

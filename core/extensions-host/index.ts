@@ -63,6 +63,8 @@ export type {
 	ExtensionEventName,
 	ExtensionFactory,
 	ExtensionFlag,
+	ExtensionFlagOptions,
+	ExtensionFlagValue,
 	ExtensionHandler,
 	// Runtime
 	ExtensionRuntime,

@@ -30,9 +30,10 @@ absorb host internals just because they appear in the old root barrel.
 | Tool runtime seam | `packages/protocol/src/tools.ts` | `ToolDefinition` extends `ToolRuntimeDescriptor` | landed | Tool runtime/permission fields are public extension declarations |
 | Minimal tool contract | `packages/protocol/src/tools.ts` | host still owns richer renderer/tool-result adapters | landed | Published packages can register tools without host imports |
 | Minimal lifecycle contract | `packages/protocol/src/lifecycle.ts` | host still owns typed events/actions/model/UI/session controls | landed | `mem-core` and external extensions need a small `ExtensionAPI`/`ExtensionContext` |
-| Extension flag | `packages/protocol/src/lifecycle.ts` | host re-exports `ExtensionFlag` | landed | CLI/config declaration is portable extension metadata |
+| Extension flag | `packages/protocol/src/flags.ts` | host re-exports `ExtensionFlag` | landed | CLI/config declaration is portable extension metadata |
 | Command contract | `packages/protocol/src/commands.ts` | host `RegisteredCommand` extends it with rich command context | landed | Slash command registration crosses extension/package boundaries |
 | Hook event-name vocabulary | `packages/protocol/src/hooks.ts` | host keeps rich event payloads and typed `on(...)` overloads | landed | Extensions need stable hook names, but payloads still expose host internals |
+| Flag contract | `packages/protocol/src/flags.ts` | host `registerFlag/getFlag` use protocol options/value types | landed | Extension-declared CLI/config flags cross the extension boundary |
 
 ## Candidate Buckets
 
@@ -47,6 +48,7 @@ absorb host internals just because they appear in the old root barrel.
 | `ProviderConfig` / model provider configs | `host-only` until consumer proves otherwise | Provider configuration is host/runtime policy, not an extension protocol by default. |
 | `KeybindingsManager` / `AppAction` | `ui-subpath` or host-only | Custom editors may need them, but they are TUI-host coupling, not general extension protocol. |
 | `ExecOptions` / `ExecResult` | `host-only` | Platform exec primitive; only promote if a published package needs it. |
+| Standalone `permissions.ts` | `defer` / no current consumer | Tool permission declarations already live in `tools.ts`; plan/team/sub-agent permissions are internal feature policy, not public protocol. |
 
 ## Slice Procedure
 
@@ -62,13 +64,14 @@ For each candidate:
 
 The next low-risk candidates are:
 
-- `permissions.ts`: factor permission declarations if a non-host package starts consuming them.
 - `themes.ts`: only if a third-party extension contract needs theme tokens without depending on host TUI internals.
+- `shortcuts.ts`: only if we can express key ids without depending on `@pencil-agent/tui` internals.
 
 Avoid next:
 
 - full `ExtensionAPI`
 - `ExtensionUIContext`
 - message renderer contracts
+- standalone `permissions.ts` without a real cross-publish consumer
 
 These are broad host surfaces and should wait for a focused review or a proven external consumer.

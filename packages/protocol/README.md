@@ -15,6 +15,7 @@ major bump (see `.dev-docs/architecture-review/evolution/dev-conventions.md`).
 | `tools` | tool runtime/permission seam (S1) | ✅ landed |
 | `commands` | slash-command registration + argument-completion contract | ✅ landed |
 | `hooks` | lifecycle hook event-name vocabulary, payloads stay host-owned | ✅ landed |
+| `flags` | extension-declared CLI/config flag contracts | ✅ landed |
 | `themes` | theme contract | ⏳ P3.1 (extract from host) |
 | `permissions` | third-party permission model | ⏳ P3.1 |
 | `lifecycle` | `ExtensionAPI` / `ExtensionContext` / `ExtensionFactory` + `SessionManagerContract` (S3) | ✅ minimal landed |

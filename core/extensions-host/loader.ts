@@ -36,6 +36,8 @@ import type {
 	Extension,
 	ExtensionAPI,
 	ExtensionFactory,
+	ExtensionFlagOptions,
+	ExtensionFlagValue,
 	ExtensionRuntime,
 	LoadExtensionsResult,
 	MessageRenderer,
@@ -229,10 +231,7 @@ function createExtensionAPI(
 			extension.shortcuts.set(shortcut, { shortcut, extensionPath: extension.path, ...options });
 		},
 
-		registerFlag(
-			name: string,
-			options: { description?: string; type: "boolean" | "string"; default?: boolean | string },
-		): void {
+		registerFlag(name: string, options: ExtensionFlagOptions): void {
 			extension.flags.set(name, { name, extensionPath: extension.path, ...options });
 			if (options.default !== undefined && !runtime.flagValues.has(name)) {
 				runtime.flagValues.set(name, options.default);
@@ -244,7 +243,7 @@ function createExtensionAPI(
 		},
 
 		// Flag access - checks extension registered it, reads from runtime
-		getFlag(name: string): boolean | string | undefined {
+		getFlag(name: string): ExtensionFlagValue | undefined {
 			if (!extension.flags.has(name)) return undefined;
 			return runtime.flagValues.get(name);
 		},
