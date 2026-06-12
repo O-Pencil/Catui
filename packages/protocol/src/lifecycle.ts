@@ -77,6 +77,16 @@ export interface ExtensionCommand {
   handler: (args: string | undefined, ctx: ExtensionContext) => void | Promise<void>;
 }
 
+/** A runtime flag an extension declares (parsed from CLI/config by the host). */
+export interface ExtensionFlag {
+  name: string;
+  description?: string;
+  type: "boolean" | "string";
+  default?: boolean | string;
+  /** Absolute path of the declaring extension (filled by the host loader). */
+  extensionPath: string;
+}
+
 /** The registration surface a host passes to an extension factory. */
 export interface ExtensionAPI {
   /** Subscribe to a lifecycle hook. */

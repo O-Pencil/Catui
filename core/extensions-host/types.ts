@@ -1298,13 +1298,10 @@ export interface RegisteredTool {
 	extensionPath: string;
 }
 
-export interface ExtensionFlag {
-	name: string;
-	description?: string;
-	type: "boolean" | "string";
-	default?: boolean | string;
-	extensionPath: string;
-}
+// ExtensionFlag is a portable extension-declaration contract — owned by
+// @pencil-agent/protocol (single source of truth). Re-exported here so existing
+// `import { ExtensionFlag } from "./types"` consumers keep working (non-breaking).
+export type { ExtensionFlag } from "@pencil-agent/protocol";
 
 export interface ExtensionShortcut {
 	shortcut: KeyId;
