@@ -1,13 +1,17 @@
 #!/bin/sh
 #
-# Pre-push workflow gate. Runs the fast, build-independent gates from
+# Pre-push workflow gate. Runs the workflow gates from
 # .dev-docs/feature-workflow.md §5 before code leaves the machine, so structural
 # violations (missing DIP headers, dependency cycles, package-boundary breaks,
 # type errors) are caught here instead of going red on main after a direct push.
 #
+# verify:all rebuilds the internal libs (incremental build:deps) first so tsc
+# resolves @pencil-agent/* against fresh dist — otherwise a pull/rebase that
+# changed sub-package source produces phantom "no exported member" type errors.
+#
 # Wired via `core.hooksPath=.githooks` (set by the `prepare` npm script on
-# `npm install`). Build-dependent checks (verify:package-boundary:dist, tests)
-# stay in CI. Bypass with `git push --no-verify` (discouraged).
+# `npm install`). Heavier checks (verify:package-boundary:dist, full tests) stay
+# in CI. Bypass with `git push --no-verify` (discouraged).
 #
 set -e
 

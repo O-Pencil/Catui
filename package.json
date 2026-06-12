@@ -44,7 +44,7 @@
     "verify:quality": "node --import tsx scripts/verify-quality.ts",
     "verify:package-boundary": "node --import tsx scripts/verify-package-boundary.ts",
     "verify:package-boundary:dist": "node --import tsx scripts/verify-package-boundary.ts --dist",
-    "verify:all": "npm run verify:dip && npm run verify:quality && npm run verify:package-boundary && npx tsc --noEmit",
+    "verify:all": "npm run build:deps && npm run verify:dip && npm run verify:quality && npm run verify:package-boundary && npx tsc --noEmit",
     "wiki:scan": "node --import tsx scripts/llm-wiki.ts scan",
     "wiki:update": "node --import tsx scripts/llm-wiki.ts update",
     "wiki:verify": "node --import tsx scripts/llm-wiki.ts verify",
