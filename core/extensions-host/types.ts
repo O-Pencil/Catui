@@ -41,6 +41,7 @@ import type {
 	ArgumentCompletionContext as ProtocolArgumentCompletionContext,
 	ExtensionCommand as ProtocolExtensionCommand,
 	ExtensionFlag,
+	HookEventName as ProtocolHookEventName,
 	ToolRuntimeDescriptor,
 } from "@pencil-agent/protocol";
 import type { Theme } from "../theme-contract.js";
@@ -902,6 +903,10 @@ export type ExtensionEvent =
 	| InputEvent
 	| ToolCallEvent
 	| ToolResultEvent;
+
+// Hook event names are portable extension vocabulary owned by protocol. Host keeps
+// the rich payload union and typed `ExtensionAPI.on(...)` overloads below.
+export type ExtensionEventName = ProtocolHookEventName;
 
 // ============================================================================
 // Event Results

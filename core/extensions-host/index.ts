@@ -60,6 +60,7 @@ export type {
 	// Errors
 	ExtensionError,
 	ExtensionEvent,
+	ExtensionEventName,
 	ExtensionFactory,
 	ExtensionFlag,
 	ExtensionHandler,

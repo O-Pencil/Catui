@@ -20,6 +20,9 @@ session-manager contract, hook handler, factory, and extension flag contracts.
 `src/commands.ts`: Slash command registration, command handler, and argument
 completion contracts.
 
+`src/hooks.ts`: Public lifecycle hook-name vocabulary and generic hook handler
+contract; rich event payloads remain host-owned.
+
 ## Boundary Rule
 
 Add a type here only when a published package or third-party extension needs it.

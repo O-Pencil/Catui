@@ -32,13 +32,14 @@ absorb host internals just because they appear in the old root barrel.
 | Minimal lifecycle contract | `packages/protocol/src/lifecycle.ts` | host still owns typed events/actions/model/UI/session controls | landed | `mem-core` and external extensions need a small `ExtensionAPI`/`ExtensionContext` |
 | Extension flag | `packages/protocol/src/lifecycle.ts` | host re-exports `ExtensionFlag` | landed | CLI/config declaration is portable extension metadata |
 | Command contract | `packages/protocol/src/commands.ts` | host `RegisteredCommand` extends it with rich command context | landed | Slash command registration crosses extension/package boundaries |
+| Hook event-name vocabulary | `packages/protocol/src/hooks.ts` | host keeps rich event payloads and typed `on(...)` overloads | landed | Extensions need stable hook names, but payloads still expose host internals |
 
 ## Candidate Buckets
 
 | Candidate | Destination | Decision |
 |-----------|-------------|----------|
 | `ExtensionAPI` full host overload set | `host-only` for now | Full event typing includes host-specific event payloads and actions; protocol keeps minimal `on/registerCommand/registerTool` shape. |
-| Hook event name vocabulary | `protocol`, later `hooks.ts` | Names are public, but per-event payloads need a separate review to avoid freezing host internals. |
+| Per-event hook payload types | `defer` | Names are public and landed in `hooks.ts`; payloads need a separate review to avoid freezing host internals. |
 | Tool call/result event payloads | `defer` | They reference agent-core/ai/TUI/content details; should be split into minimal protocol payloads before promotion. |
 | `ExtensionCommandContext` | `host-only` | It exposes session controls (`fork`, `switchSession`, `navigateTree`, `reload`) and settings; external protocol should not make those mandatory. |
 | `ExtensionUIContext` | `defer` / possible `ui` subpath | It depends on TUI components, themes, keybindings, overlays, and editor contracts; too broad for protocol root. |
@@ -61,8 +62,8 @@ For each candidate:
 
 The next low-risk candidates are:
 
-- `hooks.ts`: move only hook event **names** first, not payloads.
 - `permissions.ts`: factor permission declarations if a non-host package starts consuming them.
+- `themes.ts`: only if a third-party extension contract needs theme tokens without depending on host TUI internals.
 
 Avoid next:
 
