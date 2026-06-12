@@ -118,7 +118,7 @@ updated_at: 2026-06-09
 | # | 待办 | 类型 | 性质 |
 |---|------|------|------|
 | **O8a** | ✅ **P7 启动+构建线已执行（2026-06-10）**：MCP 异步非阻塞（默认配置启动 ~56s→1.9s）；`build:deps` 并行+incremental（no-op 109s→41.7s）。详见 `startup-async-review.md` | 代码（已完成）| startup-async-review |
-| **O8b** | **P7 体积线（大头已完成）**：✅ BR04 esbuild per-file minify 落地（**tarball −346K/−20%、unpacked 7.1→4.6M**，2026-06-11，transpile-only 不 bundle、keep-names）；✅ BR05 内嵌 .d.ts 剥离（−55K）；✅ BR03 metrics→≈0 收益**不做**。⚠️ 仅剩 BR02 browser 1.6M 独立包 gated（UX-first）| 代码（大头完成，仅 BR02 留）| bundle-redesign-review/closure.md（2026-06-11 Addendum）|
+| **O8b** | ✅ **P7 体积线已收口（2026-06-11）**：BR04 esbuild per-file minify（**tarball −346K/−20%**，不 bundle/keep-names）+ BR05 内嵌 .d.ts 剥离（−55K）已落地（本轮 ~−400K gzip）；BR03 metrics→≈0 收益不做；BR02 browser domain-skills(359K/占安装足迹 ~1%)**测量后保留 bundle**（联网功能 UX 优先,用户零感知二次下载,且缺失可优雅降级）。**无 P7 体积工作再 open** | 代码（已收口）| bundle-redesign-review/closure.md（P7 size line CLOSED）|
 | **O9** | **P8 SDK 收窄未执行（重构未完成）**：root barrel → 稳定 SDK 面（SK01-03）。会破 public API 296 不变量 → **需 maintainer 开 major 版本窗口**才能做 | **代码（重构遗留，需 major）** | sdk-surface-review |
 | O3 | **EV03 browser 独立包**（Q2①，砍 1.6M 安装体积）：UX-first，要先有 install/enable UX（与 O8 同属 P7 体积线）| 代码（可选）| BR02 reopen 条件 |
 | O5 | interactive 域内 post-P5 清理：resources-display(481) / slash-handlers(981) 扁平 handler | 代码（可选 backlog）| — |

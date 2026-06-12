@@ -10,9 +10,9 @@ code_scope:
     - BR01 package-boundary guard
     - BR05 strip embedded runtime-lib .d.ts from tarball (2026-06-10)
     - BR04 esbuild per-file minify (transpile-only, NO bundle) (2026-06-11)
-  deferred:
-    - BR02 browser package move
-    - BR03 model metadata chunking (metrics captured 2026-06-10 → ~0 win, not pursued)
+  measured_not_pursued:
+    - BR02 browser asset move (2026-06-11 → ~1% of install footprint, kept bundled for seamless UX)
+    - BR03 model metadata chunking (2026-06-10 → ~0 win, sync API forces eager parse)
 ```
 
 ## Closure Verdict
@@ -35,7 +35,7 @@ BR01 fixed the load-bearing release boundary. BR02-BR04 now have explicit gates 
 | Finding | State | Decision |
 |---------|-------|----------|
 | [BR01](./findings/BR01-package-boundary-hardening.md) | implemented | Keep public package vs embedded-private-lib guard. This is the only P7 code slice accepted now. |
-| [BR02](./findings/BR02-browser-asset-optionalization.md) | recalibrated-ux-first | Browser is one extension capability. Do not split raw Browser Harness assets first. |
+| [BR02](./findings/BR02-browser-asset-optionalization.md) | measured-kept-bundled | Browser domain-skills (1.6M/359K gzip) are ~1% of the ~275M install footprint; on-demand download is rejected to keep the networked browser feature seamless (no perceived secondary install). See 2026-06-11 addendum. |
 | [BR03](./findings/BR03-model-metadata-chunking.md) | reviewed-metrics-gated | Do not split `models.generated.ts` because of line count. Require startup/import/churn metrics. |
 | [BR04](./findings/BR04-esbuild-risk-deferral.md) | reviewed-deferred | Esbuild may help build speed, but bundling is deferred. If reopened, start transpile-only. |
 
@@ -194,6 +194,42 @@ minified), `--version`/`--help`/`--list-models` load the full graph, and all **2
 builtin extensions load with 0 errors registering 35 tools**. NOT yet validated:
 a live model turn (needs API key) and real-terminal TUI render — defer to the
 pre-publish beta-smoke-checklist on a maintainer machine.
+
+### BR02 (browser asset move) — measured, kept bundled
+
+The browser `agent-workspace/domain-skills` (80 site-recipe markdown files, 1.6M
+raw / **359K gzip**, ~26% of the *package* tarball) is the largest single asset.
+But measured against **install footprint**, not package size:
+
+| | size | share of install |
+|---|---|---|
+| domain-skills | 1.6M raw / 359K gzip | **~1%** |
+| node_modules (deps) | ~275M (koffi 85M, openai 13M, AI SDKs, …) | the rest |
+
+Decision (maintainer, 2026-06-11): **keep domain-skills bundled, do not move to
+on-demand download.** The browser is a networked feature whose UX matters more
+than 359K; an on-demand "downloading browser skills…" step would be perceptible
+friction, and the byte savings are ~1% of an install dominated by the provider
+SDKs + koffi. domain-skills also degrade gracefully when absent (`existsSync`
+filter in `resources_discover`), so the bundle is not a correctness requirement —
+it is purely the seamless-UX choice. If *install time* ever becomes the concern,
+the levers are koffi (85M, optional FFI) and the AI provider SDKs, not this asset.
+
+---
+
+## P7 size line — CLOSED (2026-06-11)
+
+| Slice | Outcome |
+|-------|---------|
+| BR01 package-boundary guard | ✅ implemented |
+| BR04 per-file minify | ✅ implemented (−346K/−20% tarball) |
+| BR05 embedded .d.ts strip | ✅ implemented (−55K) |
+| BR03 model metadata chunking | measured → ~0 win, not pursued |
+| BR02 browser asset move | measured → ~1% of install, kept bundled (UX) |
+
+Net shipped tarball reduction this cycle: ~−400K gzip (BR04 + BR05). The remaining
+big asset (browser domain-skills) is a deliberate UX-over-size keep. No further P7
+size work is open.
 
 ## Handoff
 
