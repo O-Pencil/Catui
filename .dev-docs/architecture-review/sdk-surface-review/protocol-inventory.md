@@ -47,8 +47,10 @@ absorb host internals just because they appear in the old root barrel.
 | `MessageRenderer` / render options | `defer` | Renderer contracts may become a UI protocol, but they currently depend on host theme and TUI component types. |
 | `ProviderConfig` / model provider configs | `host-only` until consumer proves otherwise | Provider configuration is host/runtime policy, not an extension protocol by default. |
 | `KeybindingsManager` / `AppAction` | `ui-subpath` or host-only | Custom editors may need them, but they are TUI-host coupling, not general extension protocol. |
+| Shortcut registration | `defer` | Extension-facing, but current contract depends on TUI `KeyId`; protocol needs its own key grammar before this can move without importing TUI internals. |
 | `ExecOptions` / `ExecResult` | `host-only` | Platform exec primitive; only promote if a published package needs it. |
 | Standalone `permissions.ts` | `defer` / no current consumer | Tool permission declarations already live in `tools.ts`; plan/team/sub-agent permissions are internal feature policy, not public protocol. |
+| Theme contract | `defer` | `core/theme-contract.ts` is pure, but current consumers are renderer/UI contracts. Move only after a separate UI/theme surface decision. |
 
 ## Slice Procedure
 
@@ -64,8 +66,9 @@ For each candidate:
 
 The next low-risk candidates are:
 
-- `themes.ts`: only if a third-party extension contract needs theme tokens without depending on host TUI internals.
-- `shortcuts.ts`: only if we can express key ids without depending on `@pencil-agent/tui` internals.
+- no further low-risk mechanical slice is currently proven.
+- revisit `shortcuts.ts` only after defining a protocol-owned key grammar.
+- revisit `themes.ts` only after deciding whether renderer/UI contracts become an explicit public surface.
 
 Avoid next:
 
@@ -73,5 +76,46 @@ Avoid next:
 - `ExtensionUIContext`
 - message renderer contracts
 - standalone `permissions.ts` without a real cross-publish consumer
+- shortcut registration while it still depends on `@pencil-agent/tui` `KeyId`
+
+## Candidate Evaluation Log
+
+### `permissions.ts`
+
+Decision: **defer / do not create now**.
+
+`ToolPermissions` and `ToolRuntimeDescriptor` already live in `tools.ts`, which is the only public
+tool-permission declaration currently needed. Other permission models found in the repo are feature
+policy, not public protocol:
+
+- `extensions/builtin/plan/*`: plan-mode write gating and approval state.
+- `extensions/builtin/team/*`: teammate approval queue and path allowlist.
+- `core/sub-agent/*`: sub-agent permission-mode inheritance.
+
+Promoting those would freeze feature-specific policy into the public protocol.
+
+### `shortcuts.ts`
+
+Decision: **defer until protocol owns a key grammar**.
+
+The host API currently exposes:
+
+```ts
+registerShortcut(shortcut: KeyId, options: { description?: string; handler(ctx): void | Promise<void> })
+```
+
+`KeyId` is imported from `@pencil-agent/tui` and is tied to terminal key parsing/keybinding behavior.
+Protocol must not import TUI internals. A future `shortcuts.ts` can be valid, but only if it defines a
+protocol-owned `ShortcutKey` grammar (for example a documented string pattern) and host maps that
+grammar to TUI `KeyId`.
+
+### `themes.ts` / renderer contracts
+
+Decision: **defer to a UI/theme surface review**.
+
+`core/theme-contract.ts` is already a pure type seam, but current theme usage is coupled to rendering:
+`MessageRenderer`, `ToolDefinition.renderCall/renderResult`, `ExtensionUIContext.custom`, TUI
+components, editor themes, overlays, and keybindings. Moving theme types alone would not create a
+complete public contract; moving the renderer/UI layer now would freeze too much host UI surface.
 
 These are broad host surfaces and should wait for a focused review or a proven external consumer.
