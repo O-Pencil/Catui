@@ -17,6 +17,10 @@ gate: gates.md#门组-b
 
 收窄 host `index.ts` 公共 export；2.x major bump。**唯一"功能不变"的例外**：对外 API 有意收窄。
 
+> 📋 **可执行方案（逐符号 matrix + extension-sdk 补全 + rewire/重发 + subpath + 迁移指南）**：
+> [`../sdk-surface-review/P8-execution-scope.md`](../sdk-surface-review/P8-execution-scope.md)
+> （2026-06-11 审计：builtin 扩展走相对 import、mem-core 已在 extension-sdk → 内部 churn 小，breaking 面主要是外部 SDK 消费者 + 用户扩展）。
+
 ## 进入条件
 
 - [ ] P1–P6 已完成且 [sign-off](./sign-off-main.md) 前置项满足（或 maintainer 决定 P8 与 sign-off 同窗口）

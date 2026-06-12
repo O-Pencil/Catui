@@ -20,6 +20,8 @@ P8 reviews whether the root package entry `@pencil-agent/nano-pencil` should rem
 
 This review is intentionally **docs-only** for the current sign-off window. P8 implementation would create an intentional public API diff, so it must not be mixed into the current "functionally unchanged" sign-off unless maintainers explicitly choose a major-version API window.
 
+> 📋 **Executable scope (per-symbol matrix + extension-sdk additions + rewire/republish + subpaths + migration guide)**: [`P8-execution-scope.md`](./P8-execution-scope.md) — ready for the 2.0 major window.
+
 ## Current Problem
 
 The root `index.ts` exports too many categories through one path:
