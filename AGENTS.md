@@ -20,6 +20,9 @@ This file provides guidance for **@o-pencil-agent** tooling and contributors whe
 - `@pencil-agent/agent-core` - Core Agent logic
 - `@pencil-agent/ai` - Model APIs and types
 - `@pencil-agent/tui` - Terminal UI components
+- `@pencil-agent/protocol` - Public protocol contracts for extensions and published integrations
+- `@pencil-agent/mem-core` - Persistent memory package integration
+- `@pencil-agent/soul-core` - AI personality package integration
 
 ---
 
@@ -204,6 +207,7 @@ nanoPencil/
 │   └── optional/          # Opt-in extensions
 │
 ├── packages/              # Bundled package-shaped integrations
+│   ├── protocol/          # Stable public protocol contracts
 │   ├── mem-core/          # Persistent memory system
 │   └── soul-core/         # AI personality engine
 │

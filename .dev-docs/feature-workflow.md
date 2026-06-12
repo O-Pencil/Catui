@@ -74,12 +74,12 @@ supersedes: REFACTOR-LEDGER §1c（已毕业到本文）
 
 | 层 | MUST | CAN | MUST-NOT |
 |----|------|-----|----------|
-| **`packages/`** | 独立 version+files；npm semver 可解析；无 host 反向依赖 | 稳定协议（extension-sdk）、可复用领域引擎（mem-core/soul-core）| ❌ 放 app feature；❌ 放只有 host 用的东西（那是 `core/lib/`）；❌ 依赖 host 内部符号 |
+| **`packages/`** | 独立 version+files；npm semver 可解析；无 host 反向依赖 | 稳定协议（protocol）、可复用领域引擎（mem-core/soul-core）| ❌ 放 app feature；❌ 放只有 host 用的东西（那是 `core/lib/`）；❌ 依赖 host 内部符号 |
 | **`core/`** | 是被多 mode/extension 复用的运行时原语，有明确 owner | 新增一个清晰的 runtime 子域 | ❌ 放单个 feature 的业务；❌ 放 UI；❌ 放只服务一个 extension 的逻辑 |
 | **`core/lib/`** | 仅 ai / agent-core / tui 三个 fork 内部库 | — | ❌ 放非 fork 的新代码；❌ 去掉 `private:true` / publish |
 | **`core/platform/`** | 零业务知识的横切原语 | config/i18n/telemetry/exec/utils | ❌ 任何业务知识；❌ 反向依赖业务层 |
 | **`modes/`** | 一种新 I/O 范式，或某 mode 专属适配/渲染 | mode 内 controller（capability-context）| ❌ 放跨 mode 的功能（→core/extension）；❌ 放业务能力 |
-| **`extensions/`** | 经 `ExtensionContext` / extension-sdk 协议消费 core；`builtin/`=默认加载、`optional/`=opt-in | 注册 tool / slash / 键位 / 生命周期 hook / 消息 renderer | ❌ 直接 import host 内部符号；❌ 跨 extension 依赖；❌ 默认加载却不走 GB-2 声明 |
+| **`extensions/`** | 经 `ExtensionContext` / protocol 协议消费 core；`builtin/`=默认加载、`optional/`=opt-in | 注册 tool / slash / 键位 / 生命周期 hook / 消息 renderer | ❌ 直接 import host 内部符号；❌ 跨 extension 依赖；❌ 默认加载却不走 GB-2 声明 |
 
 ### 走一遍：`teach`（用户用它学代码等）
 

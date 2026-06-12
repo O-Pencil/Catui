@@ -1,7 +1,7 @@
 /**
- * [WHO]: Provides ExtensionAPI, ExtensionContext, ExtensionFactory, ExtensionUi, ExtensionCommand,
+ * [WHO]: Provides ExtensionAPI, ExtensionContext, ExtensionFactory, ExtensionUi,
  *        SessionManagerContract, HookEventName, HookHandler — the extension lifecycle protocol
- * [FROM]: No dependencies — minimal structural protocol owned by protocol (S3 dependency-inversion target)
+ * [FROM]: Depends on ./commands and ./tools for command/tool registration contracts
  * [TO]: Consumed by packages/mem-core (extension adapter) and third-party extensions; the host's
  *       richer ExtensionContext/ExtensionAPI satisfy these structurally (extensions load dynamically)
  * [HERE]: packages/protocol/src/lifecycle.ts - the stable extension entry contract
@@ -12,6 +12,7 @@
  */
 
 import type { TSchema } from "@sinclair/typebox";
+import type { ExtensionCommand } from "./commands.js";
 import type { ToolContract } from "./tools.js";
 
 /** Read-only session info an extension may consult via `ctx.sessionManager`. */
@@ -67,16 +68,6 @@ export type HookEventName =
 // biome-ignore lint/suspicious/noExplicitAny: payload typing deferred to P3.1 hooks.ts
 export type HookHandler = (event: any, ctx: ExtensionContext) => void | Promise<void>;
 
-/** A slash command an extension registers via `api.registerCommand(...)`. */
-export interface ExtensionCommand {
-  /** Help text shown in command lists. */
-  description?: string;
-  /** Optional argument-completion provider. */
-  getArgumentCompletions?: (argumentPrefix: string) => Array<{ value: string; label: string }> | null;
-  /** Command body. `args` is the raw argument string (may be empty/undefined). */
-  handler: (args: string | undefined, ctx: ExtensionContext) => void | Promise<void>;
-}
-
 /** A runtime flag an extension declares (parsed from CLI/config by the host). */
 export interface ExtensionFlag {
   name: string;
@@ -92,7 +83,7 @@ export interface ExtensionAPI {
   /** Subscribe to a lifecycle hook. */
   on(event: HookEventName, handler: HookHandler): void;
   /** Register a slash command. */
-  registerCommand(name: string, command: ExtensionCommand): void;
+  registerCommand(name: string, command: ExtensionCommand<ExtensionContext>): void;
   /** Register a model-facing tool. Generic so each call infers its own parameter schema. */
   registerTool<TParams extends TSchema = TSchema, TDetails = unknown>(tool: ToolContract<TParams, TDetails>): void;
 }

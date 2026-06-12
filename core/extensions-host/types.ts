@@ -37,7 +37,12 @@ import type {
 	TUI,
 } from "@pencil-agent/tui";
 import type { Static, TSchema } from "@sinclair/typebox";
-import type { ToolRuntimeDescriptor } from "@pencil-agent/protocol";
+import type {
+	ArgumentCompletionContext as ProtocolArgumentCompletionContext,
+	ExtensionCommand as ProtocolExtensionCommand,
+	ExtensionFlag,
+	ToolRuntimeDescriptor,
+} from "@pencil-agent/protocol";
 import type { Theme } from "../theme-contract.js";
 import type { BashResult } from "../platform/exec/bash-executor.js";
 import type { CompactionPreparation, CompactionResult } from "../session/compaction/index.js";
@@ -977,15 +982,9 @@ export type MessageRenderer<T = unknown> = (
 // Command Registration
 // ============================================================================
 
-export interface ArgumentCompletionContext {
-	commandName: string;
-	argumentText: string;
-	argumentPrefix: string;
-	tokenIndex: number;
-	previousTokens: string[];
-}
+export type ArgumentCompletionContext = ProtocolArgumentCompletionContext;
 
-export interface RegisteredCommand {
+export interface RegisteredCommand extends ProtocolExtensionCommand<ExtensionCommandContext> {
 	name: string;
 	description?: string;
 	getArgumentCompletions?: (

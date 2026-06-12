@@ -13,11 +13,11 @@ major bump (see `.dev-docs/architecture-review/evolution/dev-conventions.md`).
 | Module | Contract | Status |
 |--------|----------|--------|
 | `tools` | tool runtime/permission seam (S1) | ✅ landed |
+| `commands` | slash-command registration + argument-completion contract | ✅ landed |
 | `themes` | theme contract | ⏳ P3.1 (extract from host) |
 | `hooks` | lifecycle event vocabulary | ⏳ P3.1 |
-| `commands` | slash-command contract | ⏳ P3.1 |
 | `permissions` | third-party permission model | ⏳ P3.1 |
-| `lifecycle` | `ExtensionAPI` / `ExtensionContext` / `ExtensionFactory` + `SessionManagerContract` (S3) | ⏳ P3.2 |
+| `lifecycle` | `ExtensionAPI` / `ExtensionContext` / `ExtensionFactory` + `SessionManagerContract` (S3) | ✅ minimal landed |
 
 ## Explicitly NOT here (EVOLUTION-RESERVED)
 

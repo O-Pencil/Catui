@@ -8,7 +8,7 @@ created_at: 2026-06-07
 scope:
   - index.ts
   - package.json exports
-  - packages/extension-sdk
+  - packages/protocol
   - core/extensions-host/types.ts
   - modes/index.ts
   - modes/interactive/components/index.ts
@@ -16,11 +16,11 @@ scope:
 
 ## Purpose
 
-P8 reviews whether the root package entry `@pencil-agent/nano-pencil` should remain a broad barrel or narrow to a stable SDK surface.
+P8 reviews whether the root package entry `@pencil-agent/nano-pencil` should remain a broad barrel or narrow to a stable SDK surface. It now also owns the non-breaking precursor: generating the stable public protocol contract in `@pencil-agent/protocol`.
 
-This review is intentionally **docs-only** for the current sign-off window. P8 implementation would create an intentional public API diff, so it must not be mixed into the current "functionally unchanged" sign-off unless maintainers explicitly choose a major-version API window.
+Root narrowing remains a major-window API decision. Protocol slicing is allowed before that because host re-exports / extends the protocol contracts and preserves existing root behavior.
 
-> 📋 **Executable scope (per-symbol matrix + extension-sdk additions + rewire/republish + subpaths + migration guide)**: [`P8-execution-scope.md`](./P8-execution-scope.md) — ready for the 2.0 major window.
+> 📋 **Executable scope (per-symbol matrix + protocol inventory + protocol slicing + subpaths + migration guide)**: [`P8-execution-scope.md`](./P8-execution-scope.md). Current protocol slice inventory: [`protocol-inventory.md`](./protocol-inventory.md).
 
 ## Current Problem
 
@@ -51,7 +51,7 @@ P2/P6 already removed internal root-barrel cycles and added AI subpaths. P8 is t
 | Category | Examples Today | Recommended Future Owner |
 |----------|----------------|--------------------------|
 | Stable host embedding SDK | `createAgentSession`, `PencilAgent`, `quickAgent`, logger types, session options | root `@pencil-agent/nano-pencil` |
-| Stable extension protocol | `ExtensionAPI`, `ExtensionContext`, tool contracts, lifecycle hooks | `@pencil-agent/extension-sdk` |
+| Stable extension / agent protocol | `ExtensionAPI`, `ExtensionContext`, tool contracts, lifecycle hooks, command contracts | `@pencil-agent/protocol` |
 | App/runtime internals | `AgentSession`, `SessionManager`, `ResourceLoader`, compaction internals, `SettingsManager` | explicit subpaths only if intentionally supported |
 | Tool factories | `createBashTool`, `bashTool`, `codingTools`, read/edit/write factories | likely root or `@pencil-agent/nano-pencil/tools` after consumer review |
 | Mode/UI implementation | `InteractiveMode`, `runPrintMode`, interactive components, theme internals | mode/UI subpaths, not root |
@@ -62,38 +62,37 @@ P2/P6 already removed internal root-barrel cycles and added AI subpaths. P8 is t
 | Finding | Status | Purpose |
 |---------|--------|---------|
 | [SK01](./findings/SK01-root-barrel-taxonomy.md) | reviewed | Classify root exports by stable SDK vs leaked implementation |
-| [SK02](./findings/SK02-extension-sdk-ownership.md) | reviewed | Move extension protocol growth to `@pencil-agent/extension-sdk` |
+| [SK02](./findings/SK02-extension-sdk-ownership.md) | reviewed | Move extension protocol growth to `@pencil-agent/protocol` |
 | [SK03](./findings/SK03-migration-strategy.md) | reviewed | Decide major-break vs deprecation strategy |
 
 ## Review Verdict
 
-P8 can proceed as review in parallel with sign-off validation, but should not proceed as code in the same branch unless maintainers accept one of these:
+P8 proceeds in two gates:
 
 ```text
-Option A: skip P8 for current sign-off
-  -> preserve root API
-  -> merge functionally unchanged refactor
-  -> reopen P8 later as API-breaking work
+Gate 1: protocol slicing
+  -> non-breaking
+  -> move only cross-publish contracts into @pencil-agent/protocol
+  -> host keeps rich types and re-exports/extends protocol contracts
 
-Option B: implement P8 before 2.0 final
+Gate 2: root narrowing
   -> accept intentional public API diff
   -> update sign-off S-1 to record breaking API changes
   -> require migration guide + external consumer smoke
 ```
 
-Default recommendation for the current branch: **Option A**.
+Default recommendation: continue Gate 1 now; defer Gate 2 until the explicit major API window.
 
 ## Non-Goals
 
-- Do not change `index.ts` during this review.
 - Do not remove root exports without a migration guide.
-- Do not put new protocol types in the host root entry; grow `extension-sdk`.
+- Do not put new protocol types in the host root entry; grow `@pencil-agent/protocol`.
 - Do not treat UI components as stable root SDK unless a consumer contract proves they are required.
 
 ## Acceptance If Implemented Later
 
 - Root exports shrink only according to the accepted taxonomy.
-- `@pencil-agent/extension-sdk` is the only growing extension protocol package.
+- `@pencil-agent/protocol` is the only growing public protocol package.
 - External consumers have migration paths.
 - `package.json` exports provide explicit subpaths for any retained non-root public surface.
 - `npm run wiki:all` public symbol diff is intentional and documented.

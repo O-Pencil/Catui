@@ -23,7 +23,7 @@ for public API symbols** → it can only ship in a major version window (2.0).
 
 ### Why (benefits, per refactor goal)
 
-- **可扩展**: extension authors depend on a small, versioned `@pencil-agent/extension-sdk`
+- **可扩展**: extension authors depend on a small, versioned `@pencil-agent/protocol`
   protocol package instead of the whole host barrel.
 - **可维护**: UI components / runtime internals stop being frozen-as-public-API, so the
   TUI and runtime become refactorable again (renaming `ModelSelectorComponent` is no
@@ -31,16 +31,16 @@ for public API symbols** → it can only ship in a major version window (2.0).
 - **可兼容**: only the intentional ~20-symbol SDK surface is the compatibility contract;
   internals evolve freely; subpaths let advanced users opt into volatility knowingly.
 - **合理分配 / 可读**: the export structure *becomes* the architecture map — root = embed
-  SDK, extension-sdk = write extensions, subpaths = advanced internals, removed = not
+  SDK, protocol = write extensions / package integrations, subpaths = advanced internals, removed = not
   public. New exports get a clear "落点" rule (the §2b layer-placement, extended to exports).
 
 ## What de-risks this (audited 2026-06-11)
 
 - **Builtin extensions do NOT import the root barrel** — they use relative imports
   `../../../core/extensions-host/types.js`. Narrowing root does not break builtin source.
-- **First-party packages are already on extension-sdk** — `packages/mem-core/src` imports
-  `ExtensionAPI`/`ExtensionContext` from `@pencil-agent/extension-sdk` (not the root barrel).
-- **extension-sdk already has the protocol foundation** — exports `./tools` + `./lifecycle`
+- **First-party packages are already on protocol** — `packages/mem-core/src` imports
+  `ExtensionAPI`/`ExtensionContext` from `@pencil-agent/protocol` (not the root barrel).
+- **protocol already has the foundation** — exports `./tools` + `./lifecycle` + `./commands`
   (P3). B is *completing* it, not starting from zero.
 - ∴ internal churn is small. The **breaking impact is external**: (a) external library
   consumers of `@pencil-agent/nano-pencil`, and (b) **user extensions** that import from
@@ -65,7 +65,7 @@ Tool factories (`createBashTool`, `createCodingTools`, `createReadTool`/Edit/Wri
 Decide by whether headless SDK embedding is a first-class use case (recommend: keep in root —
 embedding without custom tools is rare).
 
-### Bucket B — MOVE to `@pencil-agent/extension-sdk` (~94, the extension protocol)
+### Bucket B — MOVE to `@pencil-agent/protocol` (only cross-publish public contracts)
 
 The entire `from "./core/extensions-host/index.js"` block (index.ts:68–157):
 
@@ -82,11 +82,10 @@ The entire `from "./core/extensions-host/index.js"` block (index.ts:68–157):
   `wrapRegisteredTool(s)`, `wrapToolWithExtensions`, `wrapToolsWithExtensions`,
   `isBash/Edit/Find/Grep/Ls/Read/WriteToolResult`, `isToolCallEventType`.
 
-**Work**: move the *definitions* from `core/extensions-host/` into `packages/extension-sdk/src/`
-(extend `lifecycle.ts`/`tools.ts` + add `events.ts`, `commands.ts`, `widgets.ts`), then the host
-imports them back from `@pencil-agent/extension-sdk` (dependency inversion P3 started). extension-sdk
-exports them via `export *`. Builtin extensions' relative imports to `core/extensions-host/types`
-should switch to `@pencil-agent/extension-sdk` (cleanliness, not strictly required to build).
+**Updated work rule (2026-06-12)**: do **not** move the entire host `types.ts` block. First build
+[`protocol-inventory.md`](./protocol-inventory.md), then move only types that cross a publish boundary.
+Host-only rich types remain in `core/extensions-host/types.ts`; the host may re-export or `extends`
+protocol contracts to preserve compatibility.
 
 ### Bucket C — MOVE to explicit subpaths (~120, intentionally-supported internals)
 
@@ -117,15 +116,15 @@ Add `package.json` `exports` subpaths; remove from root:
 
 ## Rewire & republish checklist
 
-1. **extension-sdk**: add the full protocol (Bucket B) → bump version → **publish**.
-2. **host**: import protocol from `@pencil-agent/extension-sdk` (not `core/extensions-host` re-export);
+1. **protocol**: add public contracts one slice at a time (Bucket B) → bump version → **publish** when consumed externally.
+2. **host**: import protocol from `@pencil-agent/protocol` (not root barrel);
    rewrite `index.ts` to Bucket A only; add Bucket C/D-UI subpaths to `package.json` `exports`.
-3. **builtin extensions**: switch relative `core/extensions-host/types` imports → `@pencil-agent/extension-sdk`
-   (optional but completes the inversion; low risk, mechanical).
-4. **first-party packages**: `mem-core` already on extension-sdk ✓; verify `soul-core`; republish if their
+3. **builtin extensions**: switch relative `core/extensions-host/types` imports → `@pencil-agent/protocol`
+   only when they need protocol-only contracts; rich host command/UI contexts stay host-local.
+4. **first-party packages**: `mem-core` already on protocol ✓; verify `soul-core`; republish if their
    protocol version bumps.
 5. **jiti alias** (`core/extensions-host/loader.ts:45`): decide what the runtime injects to user extensions —
-   keep `@pencil-agent/nano-pencil` → (narrowed root + `/ui`), and add `@pencil-agent/extension-sdk` alias so
+   keep `@pencil-agent/nano-pencil` → (narrowed root + `/ui`), and add `@pencil-agent/protocol` alias so
    user extensions can adopt the protocol package. Update the `types.ts:204` doc example accordingly.
 6. **docs**: the `docs/extensions.md` + `docs/sdk.md` skill manuals (scaffolded) document the new surfaces.
 
@@ -138,7 +137,7 @@ Add `package.json` `exports` subpaths; remove from root:
 (createAgentSession, PencilAgent, quickAgent, loggers, VERSION).
 
 - Extension protocol (ExtensionAPI, ToolDefinition, lifecycle events, …)
-  → import from `@pencil-agent/extension-sdk`.
+  → import from `@pencil-agent/protocol`.
 - Sessions/compaction/config/models/runtime/tools/skills internals
   → import from `@pencil-agent/nano-pencil/{session,config,models,runtime,tools,skills}`.
 - Interactive UI components & theme → `@pencil-agent/nano-pencil/ui`.
@@ -149,7 +148,7 @@ Codemod: most imports change only the module specifier, not the symbol names.
 
 ## Execution order & gates
 
-1. B (extension-sdk completion + host rewire) — verify host builds importing protocol from extension-sdk.
+1. B (protocol inventory + sliced host rewire) — verify host builds importing protocol from `@pencil-agent/protocol`.
 2. C (subpath exports) — `package.json exports` + confirm dist has each subpath's `.js`/`.d.ts`.
 3. D (root removal + `/ui` subpath) — rewrite `index.ts`.
 4. **Symbol diff is now the INTENDED breaking set** — regenerate `collect-baseline.ts` symbols; the diff
@@ -160,6 +159,6 @@ Codemod: most imports change only the module specifier, not the symbol names.
 
 - [ ] root API is intentionally small (~20) and documented (docs/sdk.md).
 - [ ] no internal module imports the root barrel (already true for builtin source; verify after rewire).
-- [ ] extension protocol authoritative in extension-sdk; host + first-party packages import from it.
+- [ ] extension protocol authoritative in `@pencil-agent/protocol`; host + first-party packages import from it where contracts cross publish boundaries.
 - [ ] external consumer migration guide + CHANGELOG breaking note shipped.
 - [ ] public symbol diff accepted as declared P8 break in the 2.0 window.

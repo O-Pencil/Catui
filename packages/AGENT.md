@@ -16,6 +16,23 @@ to `core/lib/{ai,agent-core,tui}` and remain private workspace libraries.
 
 ## Member List
 
+### protocol/
+
+Stable public protocol package for extensions and first-party published
+integrations.
+
+Key files:
+
+`src/index.ts`: Package entry point.
+
+`src/tools.ts`: Tool runtime, permission, tool result, and tool registration
+contracts.
+
+`src/lifecycle.ts`: Minimal extension lifecycle, context, API, session-manager,
+and flag contracts.
+
+`src/commands.ts`: Slash command registration and argument-completion contracts.
+
 ### mem-core/
 
 Persistent memory package used by the built-in memory extension and runtime
