@@ -346,7 +346,7 @@ test("Controller: turn_end does accounting only; dispatch happens at agent_end",
 	}
 });
 
-test("Controller: total continuation limit pauses goal after 15 dispatches", async () => {
+test("Controller: total continuation limit pauses goal after 30 dispatches", async () => {
 	const agentDir = createTempAgentDir();
 	try {
 		const controller = makeController(agentDir);
@@ -354,18 +354,18 @@ test("Controller: total continuation limit pauses goal after 15 dispatches", asy
 
 		// Directly set the total continuation counter to just below the limit
 		// to avoid fighting with the consecutive counter in the simulation.
-		(controller as any).totalContinuationTurns = 14;
+		(controller as any).totalContinuationTurns = 29;
 
-		// Simulate an idle point that dispatches the 15th continuation
-		controller.on_turn_start("turn-14", "normal", 0);
+		// Simulate an idle point that dispatches the 30th continuation
+		controller.on_turn_start("turn-29", "normal", 0);
 		controller.on_token_usage(100);
 		await controller.on_turn_end();
 		const dispatched = controller.maybe_dispatch_continuation({ hasPendingMessages: false });
 		assert.equal(dispatched.dispatched, true);
-		assert.equal((controller as any).totalContinuationTurns, 15);
+		assert.equal((controller as any).totalContinuationTurns, 30);
 
 		// Next idle point should hit the total limit
-		controller.on_turn_start("turn-15", "normal", 0);
+		controller.on_turn_start("turn-30", "normal", 0);
 		controller.on_token_usage(200);
 		await controller.on_turn_end();
 		const finalOutcome = controller.maybe_dispatch_continuation({ hasPendingMessages: false });

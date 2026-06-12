@@ -21,8 +21,8 @@ import { GoalStore } from "./goal-store.js";
 import { buildBudgetLimitPrompt, buildCompletionAuditPrompt, buildContinuationPrompt, buildObjectiveUpdatedPrompt } from "./goal-prompts.js";
 
 const CONSECUTIVE_BLOCKED_THRESHOLD = 3;
-const CONSECUTIVE_CONTINUATION_THRESHOLD = 5;
-const MAX_TOTAL_CONTINUATION_TURNS = 15;
+const CONSECUTIVE_CONTINUATION_THRESHOLD = 10;
+const MAX_TOTAL_CONTINUATION_TURNS = 30;
 
 interface GoalDispatchOutcome {
 	dispatched: boolean;
