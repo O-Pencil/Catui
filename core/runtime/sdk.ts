@@ -32,6 +32,7 @@ import { findInitialModel } from "../model-resolver.js";
 import type { ResourceLoader } from "../platform/config/resource-loader.js";
 import { DefaultResourceLoader } from "../platform/config/resource-loader.js";
 import { getBuiltinExtensionPaths } from "../../builtin-extensions.js";
+import { createPlanModeCanUseTool, composePlanModeCanUseTool } from "./plan-mode-permissions.js";
 import { SessionManager } from "../session/session-manager.js";
 import { SettingsManager } from "../platform/config/settings-manager.js";
 import { AgentDirContext, defaultAgentDirContext } from "../agent-dir/agent-dir-context.js";
@@ -176,6 +177,16 @@ export interface CreateAgentSessionOptions extends SoulOptionsContract {
   mcpConfigPath?: string;
   /** Debug event verbosity level. "off" = none, "basic" = lifecycle, "verbose" = all. Default: "off" */
   debugLevel?: "off" | "basic" | "verbose";
+
+  /**
+   * Permission mode for the session.
+   *
+   * - `'agent'` (default): all tools available, full execution capability.
+   * - `'plan'`: restricted mode — only read-only tools and .md file writes allowed.
+   *   Blocks Bash (except read-only commands), Edit, and other mutating tools.
+   *   Useful for GUI consumers implementing a "plan before execute" workflow.
+   */
+  permissionMode?: "plan" | "agent";
 
   /**
    * Optional tool permission gate for intercepting tool calls before execution.
@@ -542,7 +553,9 @@ export async function createAgentSession(
     maxModelErrorRecoveryAttempts:
       options.maxModelErrorRecoveryAttempts ?? options.loopPolicy?.maxModelErrorRecoveryAttempts,
     maxStopHookContinuations: options.maxStopHookContinuations ?? options.loopPolicy?.maxStopHookContinuations,
-    canUseTool: options.canUseTool as any,
+    canUseTool: options.permissionMode === "plan"
+      ? composePlanModeCanUseTool(createPlanModeCanUseTool(cwd), options.canUseTool) as any
+      : options.canUseTool as any,
     getApiKey: async (provider) => {
       // Use the provider argument from the in-flight request;
       // agent.state.model may already be switched mid-turn.
