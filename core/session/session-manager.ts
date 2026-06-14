@@ -119,6 +119,12 @@ export interface SessionInfoEntry extends SessionEntryBase {
 	name?: string;
 }
 
+/** Tag entry for session-level labels (e.g., "important", "bug-fix"). */
+export interface TagEntry extends SessionEntryBase {
+	type: "tag";
+	tags: string[];
+}
+
 /**
  * Custom message entry for extensions to inject messages into LLM context.
  * Use customType to identify your extension's entries.
@@ -149,7 +155,8 @@ export type SessionEntry =
 	| CustomEntry
 	| CustomMessageEntry
 	| LabelEntry
-	| SessionInfoEntry;
+	| SessionInfoEntry
+	| TagEntry;
 
 /** Raw file entry (includes header) */
 export type FileEntry = SessionHeader | SessionEntry;
@@ -961,6 +968,31 @@ export class SessionManager {
 			}
 		}
 		return undefined;
+	}
+
+	/** Append a tag entry. Returns entry id. */
+	appendTagChange(tags: string[]): string {
+		const entry: TagEntry = {
+			type: "tag",
+			id: generateId(this.byId),
+			parentId: this.leafId,
+			timestamp: new Date().toISOString(),
+			tags: tags.map((t) => t.trim()).filter(Boolean),
+		};
+		this._appendEntry(entry);
+		return entry.id;
+	}
+
+	/** Get the current session tags from the latest tag entry, if any. */
+	getSessionTags(): string[] {
+		const entries = this.getEntries();
+		for (let i = entries.length - 1; i >= 0; i--) {
+			const entry = entries[i];
+			if (entry.type === "tag") {
+				return entry.tags;
+			}
+		}
+		return [];
 	}
 
 	/**

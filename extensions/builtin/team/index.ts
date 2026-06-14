@@ -46,6 +46,8 @@ import {
 	truncateForStatus,
 	updateTeamUi,
 } from "./team-ui.js";
+import { createTeamCreateTool } from "./team-tools/team-create-tool.js";
+import { createTeamDeleteTool } from "./team-tools/team-delete-tool.js";
 
 // Global runtime instance
 let runtime: TeamRuntime | null = null;
@@ -81,6 +83,10 @@ export default async function teamExtension(api: ExtensionAPI): Promise<void> {
 	});
 
 	api.registerMessageRenderer(TEAM_MESSAGE_TYPE, createTeamMessageRenderer());
+
+	// Register LLM-callable tools
+	api.registerTool(createTeamCreateTool(getRuntime));
+	api.registerTool(createTeamDeleteTool(getRuntime));
 
 	// Register commands
 	const commandNames = [

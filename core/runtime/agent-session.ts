@@ -2353,6 +2353,20 @@ export class AgentSession {
   }
 
   /**
+   * Tag the current session with labels (e.g., "important", "bug-fix").
+   */
+  tagSession(tags: string[]): void {
+    this.sessionManager.appendTagChange(tags);
+  }
+
+  /**
+   * Get the current session tags.
+   */
+  getSessionTags(): string[] {
+    return this.sessionManager.getSessionTags();
+  }
+
+  /**
    * Create a fork from a specific entry.
    * Emits before_fork/fork session events to extensions.
    *

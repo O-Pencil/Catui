@@ -93,6 +93,11 @@ const claudeCodeTools = [
 	"TodoWrite",
 	"WebFetch",
 	"WebSearch",
+	"CronCreate",
+	"CronDelete",
+	"CronList",
+	"TeamCreate",
+	"TeamDelete",
 ];
 
 const ccToolLookup = new Map(claudeCodeTools.map((t) => [t.toLowerCase(), t]));
