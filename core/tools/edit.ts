@@ -73,7 +73,8 @@ export function createEditTool(cwd: string, options?: EditToolOptions): AgentToo
 		description:
 			"Edit a file by replacing exact text. The oldText must match exactly (including whitespace). Use this for precise, surgical edits.",
 		parameters: editSchema,
-		validateInput: ({ path }: { path: string }) => {
+		validateInput: (rawArgs: Record<string, unknown>) => {
+			const path = (rawArgs.path ?? rawArgs.file_path) as string;
 			const absolutePath = resolveToCwd(path, cwd);
 			if (!fileStateCache.has(absolutePath)) {
 				return `Cannot edit ${path}: file has not been read yet. Use the read tool first.`;
@@ -81,9 +82,13 @@ export function createEditTool(cwd: string, options?: EditToolOptions): AgentToo
 		},
 		execute: async (
 			_toolCallId: string,
-			{ path, oldText, newText }: { path: string; oldText: string; newText: string },
+			rawArgs: Record<string, unknown>,
 			signal?: AbortSignal,
 		) => {
+			// Accept both catui names (path/oldText/newText) and anthropic-sdk names (file_path/old_string/new_string)
+			const path = (rawArgs.path ?? rawArgs.file_path) as string;
+			const oldText = (rawArgs.oldText ?? rawArgs.old_string) as string;
+			const newText = (rawArgs.newText ?? rawArgs.new_string) as string;
 			const absolutePath = resolveToCwd(path, cwd);
 			await options?.beforeWrite?.(absolutePath);
 

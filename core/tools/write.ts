@@ -54,9 +54,12 @@ export function createWriteTool(cwd: string, options?: WriteToolOptions): AgentT
 		parameters: writeSchema,
 		execute: async (
 			_toolCallId: string,
-			{ path, content }: { path: string; content: string },
+			rawArgs: Record<string, unknown>,
 			signal?: AbortSignal,
 		) => {
+			// Accept both catui name (path) and anthropic-sdk name (file_path)
+			const path = (rawArgs.path ?? rawArgs.file_path) as string;
+			const content = rawArgs.content as string;
 			const absolutePath = resolveToCwd(path, cwd);
 			const dir = dirname(absolutePath);
 			await options?.beforeWrite?.(absolutePath);

@@ -77,6 +77,14 @@ export function buildSystemPrompt(
   const contextFiles = providedContextFiles ?? [];
   const skills = providedSkills ?? [];
 
+  // Separate persona CATUI.md from other context files.
+  // Persona content defines identity/personality and should be injected at
+  // higher priority than project context files.
+  const isPersonaFile = (f: { path: string }) =>
+    f.path.includes("/personas/") && f.path.endsWith("/CATUI.md");
+  const personaFiles = contextFiles.filter(isPersonaFile);
+  const projectFiles = contextFiles.filter((f) => !isPersonaFile(f));
+
   if (customPrompt) {
     let prompt = customPrompt;
 
@@ -84,15 +92,23 @@ export function buildSystemPrompt(
       prompt += `\n\n${soulSection}`;
     }
 
+    // Inject persona identity before project context
+    if (personaFiles.length > 0) {
+      prompt += "\n\n# Your Identity\n\n";
+      for (const { path: filePath, content } of personaFiles) {
+        prompt += `${content}\n\n`;
+      }
+    }
+
     if (appendSection) {
       prompt += appendSection;
     }
 
     // Append project context files
-    if (contextFiles.length > 0) {
+    if (projectFiles.length > 0) {
       prompt += "\n\n# Project Context\n\n";
       prompt += "Project-related rules and specifications:\n\n";
-      for (const { path: filePath, content } of contextFiles) {
+      for (const { path: filePath, content } of projectFiles) {
         prompt += `## ${filePath}\n\n${content}\n\n`;
       }
     }
@@ -297,15 +313,23 @@ Only read the following docs when user asks about catui-agent, SDK, extensions, 
     prompt += `\n\n${soulSection}`;
   }
 
+  // Inject persona identity before project context
+  if (personaFiles.length > 0) {
+    prompt += "\n\n# Your Identity\n\n";
+    for (const { path: filePath, content } of personaFiles) {
+      prompt += `${content}\n\n`;
+    }
+  }
+
   if (appendSection) {
     prompt += appendSection;
   }
 
   // Append project context files
-  if (contextFiles.length > 0) {
+  if (projectFiles.length > 0) {
     prompt += "\n\n# Project Context\n\n";
     prompt += "Project-related rules and specifications:\n\n";
-    for (const { path: filePath, content } of contextFiles) {
+    for (const { path: filePath, content } of projectFiles) {
       prompt += `## ${filePath}\n\n${content}\n\n`;
     }
   }

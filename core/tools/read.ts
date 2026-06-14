@@ -67,9 +67,14 @@ export function createReadTool(cwd: string, options?: ReadToolOptions): AgentToo
 		isConcurrencySafe: true,
 		execute: async (
 			_toolCallId: string,
-			{ path, offset, limit, pages }: { path: string; offset?: number; limit?: number; pages?: string },
+			rawArgs: Record<string, unknown>,
 			signal?: AbortSignal,
 		) => {
+			// Accept both catui name (path) and anthropic-sdk name (file_path)
+			const path = (rawArgs.path ?? rawArgs.file_path) as string;
+			const offset = rawArgs.offset as number | undefined;
+			const limit = rawArgs.limit as number | undefined;
+			const pages = rawArgs.pages as string | undefined;
 			validateIntegerWindowOption({ name: "offset", value: offset, minimum: 1 });
 			validateIntegerWindowOption({ name: "limit", value: limit, minimum: 1 });
 
