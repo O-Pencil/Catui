@@ -66,7 +66,7 @@ import type {
   ResourceExtensionPaths,
   ResourceLoader,
 } from "../platform/config/resource-loader.js";
-import { getLatestCompactionEntry, SessionManager, type SessionEntry, type BranchSummaryEntry } from "../session/session-manager.js";
+import { getLatestCompactionEntry, SessionManager, type SessionEntry, type BranchSummaryEntry, type SessionInfo, type SessionListProgress } from "../session/session-manager.js";
 import type { SettingsManager } from "../platform/config/settings-manager.js";
 import { AgentDirContext } from "../agent-dir/agent-dir-context.js";
 
@@ -230,6 +230,7 @@ export type AgentSessionEvent =
   | { type: "sub_agent_tool_end"; subAgentId: string; toolName: string; isError: boolean; output?: unknown; durationMs?: number; parentToolCallId?: string }
   | { type: "sub_agent_end"; subAgentId: string; success: boolean; parentToolCallId?: string }
   | { type: "tool_input_delta"; toolCallId: string; toolName: string; delta: string }
+  | { type: "session_state_changed"; state: "idle" | "running" | "compacting" | "retrying"; timestamp: number }
   | {
       type: "debug";
       level: "basic" | "verbose";
@@ -537,8 +538,14 @@ export class AgentSession {
       disconnectFromAgent: () => this._disconnectFromAgent(),
       reconnectToAgent: () => this._reconnectToAgent(),
       abortAgent: () => this.abort(),
-      emitAutoCompactionStart: (reason) => this._emit({ type: "auto_compaction_start", reason }),
-      emitAutoCompactionEnd: (payload) => this._emit({ type: "auto_compaction_end", ...payload }),
+      emitAutoCompactionStart: (reason) => {
+        this._emit({ type: "auto_compaction_start", reason });
+        this._emit({ type: "session_state_changed", state: "compacting", timestamp: Date.now() });
+      },
+      emitAutoCompactionEnd: (payload) => {
+        this._emit({ type: "auto_compaction_end", ...payload });
+        this._emit({ type: "session_state_changed", state: "idle", timestamp: Date.now() });
+      },
       getAutoCompactionEnabled: () => this.settingsManager.getCompactionEnabled(),
       setAutoCompactionEnabled: (enabled) => this.settingsManager.setCompactionEnabled(enabled),
     });
@@ -752,6 +759,12 @@ export class AgentSession {
       // All other events: extensions run concurrently with UI notification
       const extensionPromise = this._extensionEventBridge.emitExtensionEvent(event);
       this._emit(event);
+      // Emit session state change for GUI consumption
+      if (event.type === "agent_start") {
+        this._emit({ type: "session_state_changed", state: "running", timestamp: Date.now() });
+      } else if (event.type === "agent_end") {
+        this._emit({ type: "session_state_changed", state: "idle", timestamp: Date.now() });
+      }
       await extensionPromise;
     }
 
@@ -2517,6 +2530,11 @@ export class AgentSession {
       },
       emitEvent: (event: RetrySessionEvent) => {
         this._emit(event);
+        if (event.type === "auto_retry_start") {
+          this._emit({ type: "session_state_changed", state: "retrying", timestamp: Date.now() });
+        } else if (event.type === "auto_retry_end") {
+          this._emit({ type: "session_state_changed", state: "idle", timestamp: Date.now() });
+        }
       },
     };
   }
@@ -2833,6 +2851,45 @@ export class AgentSession {
       extensionRunner: this._extensionRunner,
       theme: this._theme,
     });
+  }
+
+  // =========================================================================
+  // Session Listing (GUI-facing, stateless queries)
+  // =========================================================================
+
+  /**
+   * List sessions for the current project directory.
+   * Returns session metadata sorted by last modified time (newest first).
+   */
+  async listSessions(onProgress?: SessionListProgress): Promise<SessionInfo[]> {
+    return SessionManager.list(this._cwd, undefined, onProgress, this.agentCtx);
+  }
+
+  /**
+   * List all sessions across all project directories.
+   * Returns session metadata sorted by last modified time (newest first).
+   */
+  async listAllSessions(onProgress?: SessionListProgress): Promise<SessionInfo[]> {
+    return SessionManager.listAll(onProgress, this.agentCtx);
+  }
+
+  // =========================================================================
+  // Stats & Usage (GUI-facing convenience getters)
+  // =========================================================================
+
+  /** Total cost in USD for this session. */
+  getTotalCost(): number {
+    return this.getSessionStats().cost;
+  }
+
+  /** Total token usage breakdown for this session. */
+  getTotalTokens(): { input: number; output: number; cacheRead: number; cacheWrite: number; total: number } {
+    return this.getSessionStats().tokens;
+  }
+
+  /** Tool call count for this session. */
+  getToolCallCount(): number {
+    return this.getSessionStats().toolCalls;
   }
 
   // =========================================================================
