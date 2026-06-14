@@ -47,7 +47,7 @@ const cronCreateSchema = Type.Object({
 	durable: Type.Optional(
 		Type.Boolean({
 			description:
-				"true = persist to .claude/scheduled_tasks.json and survive restarts. false (default) = in-memory only, dies when this Claude session ends. Use true only when the user asks the task to survive across sessions.",
+				"true = persist to .claude/scheduled_tasks.json and survive restarts. false (default) = in-memory only, dies when this session ends. Use true only when the user asks the task to survive across sessions.",
 			default: false,
 		}),
 	),
@@ -126,7 +126,7 @@ export function createCronCreateTool() {
 				const recurring = params.recurring ?? true;
 				const where = effectiveDurable
 					? "Persisted to .claude/scheduled_tasks.json"
-					: "Session-only (not written to disk, dies when Claude exits)";
+					: "Session-only (not written to disk, dies when session exits)";
 
 				return {
 					content: [
