@@ -220,9 +220,10 @@ export type AgentSessionEvent =
     }
   // Sub-agent lifecycle events (forwarded from SubAgentEvent)
   | { type: "sub_agent_start"; subAgentId: string; agentType: string; description: string; isAsync: boolean }
-  | { type: "sub_agent_tool_start"; subAgentId: string; toolName: string }
-  | { type: "sub_agent_tool_end"; subAgentId: string; toolName: string; isError: boolean }
+  | { type: "sub_agent_tool_start"; subAgentId: string; toolName: string; input?: unknown }
+  | { type: "sub_agent_tool_end"; subAgentId: string; toolName: string; isError: boolean; output?: unknown; durationMs?: number }
   | { type: "sub_agent_end"; subAgentId: string; success: boolean }
+  | { type: "tool_input_delta"; toolCallId: string; toolName: string; delta: string }
   | {
       type: "debug";
       level: "basic" | "verbose";
@@ -241,9 +242,9 @@ function mapSubAgentEvent(event: SubAgentEvent): AgentSessionEvent | undefined {
     case "agent_start":
       return { type: "sub_agent_start", subAgentId: event.subAgentId, agentType: event.agentType, description: event.description, isAsync: event.isAsync };
     case "tool_start":
-      return { type: "sub_agent_tool_start", subAgentId: event.subAgentId, toolName: event.toolName };
+      return { type: "sub_agent_tool_start", subAgentId: event.subAgentId, toolName: event.toolName, input: event.args };
     case "tool_end":
-      return { type: "sub_agent_tool_end", subAgentId: event.subAgentId, toolName: event.toolName, isError: event.isError };
+      return { type: "sub_agent_tool_end", subAgentId: event.subAgentId, toolName: event.toolName, isError: event.isError, output: event.result, durationMs: event.durationMs };
     case "agent_end":
       return { type: "sub_agent_end", subAgentId: event.subAgentId, success: event.success };
     default:
@@ -730,6 +731,14 @@ export class AgentSession {
     if (event.type === "message_update") {
       // Streaming updates: emit to UI immediately, don't await extensions
       this._emit(event);
+      // Emit dedicated tool_input_delta for tool call argument streaming
+      const ame = event.assistantMessageEvent;
+      if (ame.type === "toolcall_delta") {
+        const block = ame.partial.content[ame.contentIndex] as { id?: string; name?: string } | undefined;
+        if (block?.id) {
+          this._emit({ type: "tool_input_delta", toolCallId: block.id, toolName: block.name ?? "", delta: ame.delta });
+        }
+      }
       this._extensionEventBridge.emitExtensionEvent(event).catch((err) => {
         this._logger.error("[extension] message_update event error", { error: err });
       });

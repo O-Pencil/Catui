@@ -18,7 +18,7 @@ export type SubAgentEvent =
   | { type: "message_end"; subAgentId: string; timestamp: number; text: string }
   | { type: "tool_start"; subAgentId: string; timestamp: number; toolName: string; args: unknown }
   | { type: "tool_update"; subAgentId: string; timestamp: number; toolName: string; partialResult: unknown }
-  | { type: "tool_end"; subAgentId: string; timestamp: number; toolName: string; isError: boolean }
+  | { type: "tool_end"; subAgentId: string; timestamp: number; toolName: string; isError: boolean; result?: unknown; durationMs?: number }
   | { type: "agent_end"; subAgentId: string; timestamp: number; success: boolean; error?: string };
 
 /**

@@ -7,6 +7,7 @@
 import type { AgentTool } from "@catui/agent-core";
 import { type Static, Type } from "@sinclair/typebox";
 import { constants } from "fs";
+import * as Diff from "diff";
 import { access as fsAccess, readFile as fsReadFile, stat as fsStat, writeFile as fsWriteFile } from "fs/promises";
 import { fileStateCache } from "./file-state-cache.js";
 import {
@@ -33,6 +34,8 @@ export interface EditToolDetails {
 	diff: string;
 	/** Line number of the first change in the new file (for editor navigation) */
 	firstChangedLine?: number;
+	/** Structured patch data (hunks with line-level detail) for GUI diff rendering */
+	structuredPatch?: unknown;
 }
 
 /**
@@ -237,6 +240,10 @@ export function createEditTool(cwd: string, options?: EditToolOptions): AgentToo
 						}
 
 						const diffResult = generateDiffString(baseContent, newContent);
+						let structuredPatch: unknown;
+						try {
+							structuredPatch = Diff.structuredPatch(path, path, baseContent, newContent, "", "");
+						} catch { /* ignore diff errors */ }
 						resolve({
 							content: [
 								{
@@ -244,7 +251,7 @@ export function createEditTool(cwd: string, options?: EditToolOptions): AgentToo
 									text: `Successfully replaced text in ${path}.`,
 								},
 							],
-							details: { diff: diffResult.diff, firstChangedLine: diffResult.firstChangedLine },
+							details: { diff: diffResult.diff, firstChangedLine: diffResult.firstChangedLine, structuredPatch },
 						});
 					} catch (error: unknown) {
 						// Clean up abort handler

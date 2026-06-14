@@ -218,6 +218,8 @@ function toSubAgentEvent(subAgentId: string, event: AgentSessionEvent): SubAgent
         timestamp,
         toolName: event.toolName,
         isError: event.isError,
+        result: event.result,
+        durationMs: event.durationMs,
       };
     default:
       return undefined;

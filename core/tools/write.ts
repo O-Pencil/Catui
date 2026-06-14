@@ -7,8 +7,9 @@
 import type { AgentTool } from "@catui/agent-core";
 import { type Static, Type } from "@sinclair/typebox";
 import { existsSync } from "fs";
-import { mkdir as fsMkdir, stat as fsStat, writeFile as fsWriteFile } from "fs/promises";
+import { mkdir as fsMkdir, readFile as fsReadFile, stat as fsStat, writeFile as fsWriteFile } from "fs/promises";
 import { dirname } from "path";
+import * as Diff from "diff";
 import { fileStateCache } from "./file-state-cache.js";
 import { resolveToCwd } from "./path-utils.js";
 
@@ -60,7 +61,7 @@ export function createWriteTool(cwd: string, options?: WriteToolOptions): AgentT
 			const dir = dirname(absolutePath);
 			await options?.beforeWrite?.(absolutePath);
 
-			return new Promise<{ content: Array<{ type: "text"; text: string }>; details: undefined }>(
+			return new Promise<{ content: Array<{ type: "text"; text: string }>; details: { structuredPatch: unknown } | undefined }>(
 				(resolve, reject) => {
 					// Check if already aborted
 					if (signal?.aborted) {
@@ -83,6 +84,12 @@ export function createWriteTool(cwd: string, options?: WriteToolOptions): AgentT
 					// Perform the write operation
 					(async () => {
 						try {
+							// Read old content for diff computation
+							let oldContent: string | undefined;
+							if (existsSync(absolutePath)) {
+								try { oldContent = await fsReadFile(absolutePath, "utf-8"); } catch { /* ignore */ }
+							}
+
 							// Staleness check: if file exists and was previously read, verify mtime
 							if (existsSync(absolutePath)) {
 								const cachedState = fileStateCache.get(absolutePath);
@@ -128,10 +135,18 @@ export function createWriteTool(cwd: string, options?: WriteToolOptions): AgentT
 								signal.removeEventListener("abort", onAbort);
 							}
 
+							// Compute structuredPatch for GUI diff rendering
+							let structuredPatch: unknown;
+							if (oldContent !== undefined) {
+								try {
+									structuredPatch = Diff.structuredPatch(absolutePath, absolutePath, oldContent, content, "", "");
+								} catch { /* ignore diff errors */ }
+							}
+
 							resolve({
 								content: [{ type: "text", text: `Successfully wrote ${content.length} bytes to ${path}` }],
-								details: undefined,
-							});
+								details: structuredPatch ? { structuredPatch } : undefined,
+							} as { content: Array<{ type: "text"; text: string }>; details: { structuredPatch: unknown } | undefined });
 						} catch (error: unknown) {
 							// Clean up abort handler
 							if (signal) {
