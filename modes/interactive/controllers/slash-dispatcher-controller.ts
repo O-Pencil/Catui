@@ -59,6 +59,7 @@ export interface SlashDispatcherCommandHandlers {
   handleMemoryCommand(): void;
   handleArminSaysHi(): void;
   handleBrowserOptInCommand(): void;
+  getAvailablePersonaIds(): string[];
   shutdown(): Promise<void>;
 }
 
@@ -100,9 +101,21 @@ export class SlashDispatcherController {
       return false;
     }
     const handler = this.builtinSlashCommands[cmd];
-    if (!handler) return false;
-    await handler(text, clear);
-    return true;
+    if (handler) {
+      await handler(text, clear);
+      return true;
+    }
+
+    // Check if the command matches a persona ID (e.g. /vex, /rem, /pencil)
+    const personaId = cmd.slice(1); // remove leading "/"
+    const personaIds = this.ctx.commands.getAvailablePersonaIds();
+    if (personaIds.includes(personaId)) {
+      clear();
+      await this.ctx.commands.handlePersonaCommand(`use ${personaId}`);
+      return true;
+    }
+
+    return false;
   }
 
   private createBuiltinSlashCommands(): Record<string, SlashCommandHandler> {

@@ -661,6 +661,7 @@ export class InteractiveMode {
         handleMemoryCommand: () => this.handleMemoryCommand(),
         handleArminSaysHi: () => this.handleArminSaysHi(),
         handleBrowserOptInCommand: () => this.handleBrowserOptInCommand(),
+        getAvailablePersonaIds: () => this.getAvailablePersonaIds(),
         shutdown: () => this.shutdown(),
       },
     });
@@ -4429,6 +4430,11 @@ export class InteractiveMode {
   }
 
   private async switchPersona(personaId: string): Promise<void> {
+    // setActivePersonaId triggers ensurePersonasDir() which copies bundled
+    // personas to ~/.catui/agent/personas/ on first run. Must be called
+    // before checking if the persona directory exists.
+    setActivePersonaId(personaId);
+
     const personaDir = getPersonaDir(personaId);
     if (!fs.existsSync(personaDir)) {
       this.showError(`Persona not found: ${personaId}\nExpected: ${personaDir}`);
@@ -4450,15 +4456,22 @@ export class InteractiveMode {
     }
 
     if (forkFromEntryId) {
-      const result = await this.session.fork(forkFromEntryId);
-      if (result.cancelled) return;
+      // Create branched session directly (instead of session.fork) so the
+      // user's last message is INCLUDED in the new branch. The general
+      // fork() excludes it (branches from parentId) to support edit-and-resend,
+      // but for persona switching we want the new persona to see the user's
+      // message and respond to it naturally.
+      this.session.sessionManager.createBranchedSession(forkFromEntryId);
+      // Sync agent messages with the new branch so the LLM sees the correct
+      // conversation history under the new persona.
+      const sessionContext = this.session.sessionManager.buildSessionContext();
+      this.session.agent.replaceMessages(sessionContext.messages);
     }
 
     // Tag this branch with personaId for later resume.
     this.session.sessionManager.appendCustomEntry("persona", { personaId });
 
     // Apply persona-specific env before reload so extensions/system prompt use it.
-    setActivePersonaId(personaId);
     process.env.NANOMEM_MEMORY_DIR = toAbsolutePath(
       getPersonaMemoryDir(personaId),
     );
@@ -4496,6 +4509,14 @@ export class InteractiveMode {
     this.chatContainer.addChild(new Spacer(1));
     this.chatContainer.addChild(new Text(lines.join("\n"), 1, 0));
     this.ui.requestRender();
+  }
+
+  private getAvailablePersonaIds(): string[] {
+    try {
+      return listPersonas();
+    } catch {
+      return [];
+    }
   }
 
   private handleBrowserOptInCommand(): void {

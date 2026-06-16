@@ -238,6 +238,7 @@ function loadSkillsFromDirInternal(
 function loadSkillFromFile(
 	filePath: string,
 	source: string,
+	options?: { standalone?: boolean },
 ): { skill: Skill | null; diagnostics: ResourceDiagnostic[] } {
 	const diagnostics: ResourceDiagnostic[] = [];
 
@@ -256,8 +257,11 @@ function loadSkillFromFile(
 		// Use name from frontmatter, or fall back to parent directory name
 		const name = frontmatter.name || parentDirName;
 
-		// Validate name
-		const nameErrors = validateName(name, parentDirName);
+		// For directory-based skills (SKILL.md inside skill-name/), validate that
+		// the frontmatter name matches the parent directory. For standalone .md files
+		// provided by extensions, skip this check — the parent is the extension dir,
+		// not a skill-named directory.
+		const nameErrors = options?.standalone ? [] : validateName(name, parentDirName);
 		for (const error of nameErrors) {
 			diagnostics.push({ type: "warning", message: error, path: filePath });
 		}
@@ -443,7 +447,7 @@ export function loadSkills(options: LoadSkillsOptions = {}): LoadSkillsResult {
 			if (stats.isDirectory()) {
 				addSkills(loadSkillsFromDirInternal(resolvedPath, source, true));
 			} else if (stats.isFile() && resolvedPath.endsWith(".md")) {
-				const result = loadSkillFromFile(resolvedPath, source);
+				const result = loadSkillFromFile(resolvedPath, source, { standalone: true });
 				if (result.skill) {
 					addSkills({ skills: [result.skill], diagnostics: result.diagnostics });
 				} else {
