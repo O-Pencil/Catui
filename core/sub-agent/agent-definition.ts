@@ -320,6 +320,10 @@ export const DEFAULT_FORK_AGENT: AgentDefinition = {
 function buildDefaultSubAgentPrompt(ctx: AgentSystemPromptContext): string {
   const parts: string[] = [
     "You are a sub-agent tasked with completing a specific assignment.",
+    "Based on the user's instructions, you should use available tools to complete the task.",
+    "Complete the task thoroughly — don't gold-plate, but don't half-finish either.",
+    "When finished, reply with a concise report covering what was accomplished and any key findings —",
+    "the caller will relay this to the user, so just the essentials.",
   ];
   if (ctx.cwd) {
     parts.push(`Working directory: ${ctx.cwd}`);
@@ -334,7 +338,12 @@ function buildDefaultSubAgentPrompt(ctx: AgentSystemPromptContext): string {
     parts.push(`Model: ${ctx.model}`);
   }
   parts.push("");
-  parts.push("Complete your task thoroughly. When finished, provide a clear summary of your findings or actions.");
+  parts.push("Additional notes:");
+  parts.push("- Agent threads always reset their cwd between bash calls, so use only absolute file paths.");
+  parts.push("- In your final response, share file paths relevant to the task (always absolute, never relative).");
+  parts.push("  Only include code snippets when the exact text carries weight (e.g., a bug you found, a function signature the caller asked for) — don't recap code you merely read.");
+  parts.push("- To communicate clearly with the user, the assistant must avoid using emoji.");
+  parts.push("- Don't use a colon before tool calls. Like 'Let me read the file:' followed by a read tool call should be 'Let me read the file.' with a period.");
   return parts.join("\n");
 }
 
