@@ -25,12 +25,26 @@ npm run dev-loop:pr -- <number>
 ```
 
 9. Stop only when the decision is `complete` or `blocked`.
+10. Before ending a non-complete session or handing work to another agent, run:
+
+```bash
+npm run dev-loop:handoff -- --artifact-dir .catui/dev-loop/<run-id>
+```
+
+The next agent should read `handoff.md`, `autonomy-state.json`, and the current issue's `lastFailureLogRef` before changing code.
 
 ## Decisions
 
 - `continue`: at least one required local command or PR check is failing; repair should continue.
 - `complete`: required local verification is green and, when provided, remote checks are green.
 - `blocked`: the same issue exhausted its attempt budget, permissions are missing, requirements are unclear, or a flaky/external failure needs human judgment.
+
+## Readiness
+
+- `green`: required local verification is green; continue to PR checks or final review if needed.
+- `repair-ready`: there is a concrete current issue and a focused command to rerun after the fix.
+- `needs-evidence`: the loop has partial or optional evidence but no blocking issue; collect focused verification before editing.
+- `blocked`: human judgment or credentials are required.
 
 ## Safety
 
