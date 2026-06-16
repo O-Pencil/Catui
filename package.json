@@ -74,6 +74,7 @@
     "dev-loop:verify": "node --import tsx scripts/dev-loop/run-verification.ts",
     "dev-loop:parse": "node --import tsx scripts/dev-loop/failure-parser.ts",
     "dev-loop:pr": "node --import tsx scripts/dev-loop/github-provider.ts",
+    "dev-loop:handoff": "node --import tsx scripts/dev-loop/handoff.ts",
     "dev-loop:watch": "node --import tsx scripts/dev-loop/watch.ts",
     "verify:dip": "node --import tsx scripts/verify-dip.ts",
     "verify:quality": "node --import tsx scripts/verify-quality.ts",
