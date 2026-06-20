@@ -17,14 +17,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SKILLS_DIR = join(__dirname, "skills");
 
 const DISCIPLINE_SKILLS = [
-	"brainstorming",
 	"interview",
 	"domain-modeling",
-	"codebase-design",
 	"handoff",
 	"systematic-debugging",
 	"test-driven-development",
-	"verification-before-completion",
 	"writing-plans",
 	"executing-plans",
 	"requesting-code-review",

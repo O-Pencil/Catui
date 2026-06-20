@@ -1,44 +1,64 @@
 ---
 name: interview
-description: Use when a user request has multiple unresolved decisions, touches many modules, or describes intent vaguely. Walks the decision tree one question at a time before implementation.
+description: Use when a user request has unclear intent, unresolved decisions, vague scope, or touches many modules. Clarifies what to build before implementation through exploration or structured questioning.
 ---
 
 # Interview
 
-Resolve every branch of the decision tree before writing code.
+Clarify what to build before writing code. Two modes: exploration (problem unclear) and interrogation (decisions unresolved).
 
 ## When to invoke
 
-- User request spans multiple modules or files with unclear boundaries.
-- Request is vague ("optimize", "improve", "add a feature") without concrete scope.
-- Multiple valid approaches exist and the trade-offs need user judgment.
+- User request is vague ("optimize", "improve", "add a feature") without concrete scope.
+- Intent is unclear — you don't know what problem they're solving.
+- Multiple valid approaches exist and trade-offs need user judgment.
+- Request spans multiple modules or files with unclear boundaries.
 - Architectural or behavioral decisions that are hard to reverse later.
 
 Do NOT invoke for: clear bug fixes, small targeted changes, tasks where the user already specified approach and scope.
 
 ## Gate
 
-No implementation until every decision in the tree is resolved. The gate is a shared understanding of what to build, how, and why — not a signed-off spec.
+No implementation until you can state:
+- The user-visible goal
+- The constrained scope
+- The recommended approach and at least one rejected alternative
+- The main files or modules likely affected
 
-## Process
+For small changes, the design can be short. The gate is clarity, not ceremony.
 
-1. **Read code first.** Before asking anything, explore the relevant parts of the codebase. If a question can be answered by reading code, answer it yourself. Do not ask the user what you can discover.
+## Mode 1: Exploration (problem unclear)
 
-2. **Map the decision tree.** Identify every decision that needs resolution. Order them by dependency — foundational choices first, details later.
+Use when you don't understand what the user wants to achieve.
 
-3. **Ask one question at a time using `AskUserQuestion`.** Each call should contain exactly one question. Always include a recommended option as the first choice with "(Recommended)" suffix. The recommendation should reflect your judgment based on codebase evidence.
+1. **Explore context.** Read relevant code, docs, recent changes. Understand the current state.
+2. **Ask open questions.** One at a time. "What problem are you trying to solve?" "What would success look like?"
+3. **Propose approaches.** Present 2-3 viable options with trade-offs.
+4. **Recommend one.** Explain why it fits the existing codebase.
+5. **Get approval.** Confirm the user agrees before proceeding.
 
-4. **Adapt the tree.** After each answer, reassess remaining questions. Some branches may become irrelevant; new ones may emerge. Continue until all critical decisions are resolved.
+## Mode 2: Interrogation (decisions unresolved)
 
-5. **Summarize and act.** Once the tree is walked, state the resolved decisions in 3-5 lines, then proceed to implementation. If the plan involves multiple steps, transition to `writing-plans`.
+Use when the problem is clear but implementation decisions need resolution.
+
+1. **Read code first.** Before asking anything, explore the relevant parts of the codebase. If a question can be answered by reading code, answer it yourself.
+2. **Map the decision tree.** Identify every decision. Order by dependency — foundational choices first.
+3. **Ask one question at a time using `AskUserQuestion`.** Each call contains exactly one question. Always include a recommended option as the first choice with "(Recommended)" suffix.
+4. **Adapt the tree.** After each answer, reassess. Some branches become irrelevant; new ones emerge.
+5. **Summarize.** State resolved decisions in 3-5 lines.
 
 ## Question quality
 
-- Each question must be specific and actionable. Not "what do you think about X?" but "should we use approach A or B for X?"
-- Recommendations must be grounded in codebase evidence, not generic best practices.
-- If you catch yourself asking a question whose answer is already in the code, stop and read the code instead.
+- Specific and actionable: "Should we use approach A or B?" not "What do you think?"
+- Recommendations grounded in codebase evidence, not generic best practices.
+- If you catch yourself asking something already answerable from code, stop and read the code.
 
-## Relationship to other skills
+## During the session
 
-- `brainstorming` is open-ended exploration; interview is structured interrogation. Use brainstorming when the problem itself is unclear; use interview when the problem is known but decisions are unresolved.
-- After interview resolves decisions, hand off to `writing-plans` if implementation spans multiple steps.
+If domain terms are being discussed or challenged, apply `domain-modeling` principles inline — sharpen vocabulary, update CONTEXT.md if it exists, offer ADRs for hard-to-reverse decisions.
+
+## Handoff
+
+Once decisions are resolved:
+- If implementation spans multiple steps → transition to `writing-plans`.
+- If it's a single focused change → proceed directly to implementation.

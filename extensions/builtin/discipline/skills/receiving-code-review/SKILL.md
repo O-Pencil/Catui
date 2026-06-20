@@ -20,3 +20,7 @@ Treat review as technical input to verify, not a script to follow blindly.
 ## YAGNI Check
 
 If feedback asks for "proper" infrastructure, search for actual usage. If nothing uses the path, consider deleting or deferring rather than expanding unused surface area.
+
+## After Review
+
+Once all feedback is addressed and verification passes, use `finishing-development-branch` to merge, push, or preserve the work.

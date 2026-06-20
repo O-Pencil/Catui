@@ -18,7 +18,8 @@ Execute the approved plan task by task with verification checkpoints.
    - Use `test-driven-development` for behavior changes.
    - Run the specified verification.
    - Mark the task complete only after evidence supports it.
-5. After all tasks, use `verification-before-completion`.
+5. After all tasks, run the completion checklist from the system prompt (tool called? verification run? output matches? evidence consistent?).
+6. Use `requesting-code-review` before merging.
 
 ## Stop Conditions
 

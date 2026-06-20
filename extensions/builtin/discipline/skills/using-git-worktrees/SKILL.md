@@ -23,3 +23,7 @@ Prefer isolated workspaces for risky or multi-step changes.
 ## Safety
 
 Do not remove harness-owned worktrees. Do not proceed from a failing baseline without telling the user what failed and getting direction or investigating the failure.
+
+## Relationship to other skills
+
+Use `using-git-worktrees` before `executing-plans` when the work should be isolated from the current branch. After setting up the worktree, proceed with `executing-plans` inside it.
