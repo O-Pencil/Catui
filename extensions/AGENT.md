@@ -35,7 +35,7 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
     - [FROM]: core/extensions-host/types, node path/url/fs
     - [HERE]: discipline extension entry
 
-`skills/`: Default skills for design clarification, structured decision interrogation (interview), root-cause debugging, TDD, verification before completion, plan writing/execution, review handling, worktree setup, and branch finishing
+`skills/`: Default skills for design clarification, structured decision interrogation (interview), domain model building (domain-modeling), deep module design vocabulary (codebase-design), cross-session context transfer (handoff), feedback-loop-driven debugging (systematic-debugging), vertical-slice TDD (test-driven-development), verification before completion, plan writing/execution, review handling, worktree setup, and branch finishing
 
 **Design Principle:**
 - Engineering discipline is delivered as default skills plus a short prompt reminder, not hard-coded core behavior.
