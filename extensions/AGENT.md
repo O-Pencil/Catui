@@ -21,7 +21,7 @@ The `extensions/` module contains built-in extensions that extend Catui's capabi
 First-party extension source. Default-enabled entries are auto-loaded by `getBuiltinExtensionPaths()`; entries marked optional in `builtInExtensions` require explicit configuration/CLI opt-in even if their source directory is still here.
 
 Current default extension directories:
-`btw/`, `debug/`, `diagnostics/`, `discipline/`, `grub/`, `idle-think/`, `interview/`, `link-world/`, `loop/`, `mcp/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `soul/`, `subagent/`, `team/`, `token-save/`.
+`btw/`, `debug/`, `diagnostics/`, `discipline/`, `grub/`, `idle-think/`, `link-world/`, `loop/`, `mcp/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `soul/`, `subagent/`, `team/`, `token-save/`.
 
 Current opt-in source still physically under `extensions/builtin/` pending Q2 physical/package decision:
 `browser/`.
@@ -35,7 +35,7 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
     - [FROM]: core/extensions-host/types, node path/url/fs
     - [HERE]: discipline extension entry
 
-`skills/`: Default skills for design clarification, root-cause debugging, TDD, verification before completion, plan writing/execution, review handling, worktree setup, and branch finishing
+`skills/`: Default skills for design clarification, structured decision interrogation (interview), root-cause debugging, TDD, verification before completion, plan writing/execution, review handling, worktree setup, and branch finishing
 
 **Design Principle:**
 - Engineering discipline is delivered as default skills plus a short prompt reminder, not hard-coded core behavior.
@@ -89,24 +89,6 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 **Design Principle:**
 - Token savings must not change command execution semantics.
 - Execution planning happens before bash, while filtering occurs after bash completes; raw output recovery is written for filtered results, and small/no-op savings fall back to raw output.
-
-#### interview/ — Requirement Clarification
-
-**P3 Contract:**
-`index.ts`: - [WHO]: Extension with /interview command, interview tool, lightweight before_agent_start hook
-    - [FROM]: core/extensions-host/types, core/session/session-manager
-    - [HERE]: interview extension entry
-
-**Design Principle (CRITICAL):**
-- `before_agent_start` hook MUST be synchronous and fast (<10ms)
-- NO LLM calls (runProbe) in before_agent_start - they cause unpredictable delays
-- NO UI interactions (confirm dialogs) in before_agent_start - they cause race conditions
-- If interview might be beneficial, return a lightweight hint and let the Agent decide whether to call the interview tool
-
-**Features:**
-- `/interview` command: Force interactive clarification
-- `interview` tool: Agent-triggered clarification via tool_call
-- `before_agent_start` hook: Lightweight synchronous check only
 
 #### teach/ — Guided Knowledge Teaching
 

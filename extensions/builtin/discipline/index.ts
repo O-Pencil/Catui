@@ -18,6 +18,7 @@ const SKILLS_DIR = join(__dirname, "skills");
 
 const DISCIPLINE_SKILLS = [
 	"brainstorming",
+	"interview",
 	"systematic-debugging",
 	"test-driven-development",
 	"verification-before-completion",
