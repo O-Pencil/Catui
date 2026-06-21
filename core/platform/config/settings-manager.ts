@@ -145,6 +145,10 @@ export interface Settings {
 	presence?: {
 		enabled?: boolean; // default: true - show AI-generated greeting and idle reminders
 	};
+	/** Next-step extension settings - Codex-style "suggest next steps" rule injected via before_agent_start */
+	nextStep?: {
+		enabled?: boolean; // default: true - append the suggestion rule to the agent system prompt
+	};
 	/** IdleThink extension settings - background code exploration during idle */
 	idleThink?: {
 		enabled?: boolean;           // default: true - agent thinks when idle
@@ -1204,6 +1208,19 @@ export class SettingsManager {
 		}
 		this.globalSettings.presence.enabled = enabled;
 		this.markModified("presence", "enabled");
+		this.save();
+	}
+
+	getNextStepEnabled(): boolean {
+		return this.settings.nextStep?.enabled ?? true;
+	}
+
+	setNextStepEnabled(enabled: boolean): void {
+		if (!this.globalSettings.nextStep) {
+			this.globalSettings.nextStep = {};
+		}
+		this.globalSettings.nextStep.enabled = enabled;
+		this.markModified("nextStep", "enabled");
 		this.save();
 	}
 

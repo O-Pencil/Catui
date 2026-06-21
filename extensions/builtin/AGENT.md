@@ -36,6 +36,7 @@ link-world/link-world-agent.md: Agent-facing skill that tells models to prefer w
 link-world/network-routing.md: Routing skill that tells models when to use web_search/web_fetch/link-world versus browser automation
 link-world/agent-workspace/: Seed workspace copied to .catui/link-world-workspace for project-local domain skills and notes
 mcp/index.ts: MCP protocol integration extension, MCP guidance resources
+next-step/index.ts: Default-on Codex-style "suggest next steps" rule injected into agent systemPrompt via before_agent_start; settings.nextStep.enabled guard (default true); NEXT_STEP_RULE export for testing
 presence/index.ts: AI-driven opening + idle presence lines, git/cwd snapshot, systemPrompt injection of recent presence lines, timers/debounce/idle in-flight lock, settings.presence.enabled guard, PRESENCE_MESSAGE_TYPE renderer
 presence/presence-memory.ts: Presence memory boundary - NanoMem directory/project discovery, memory-derived locale detection, randomized preference/lesson highlight selection for greeting prompts
 plan/index.ts: Plan Mode extension entry, /plan /plan:validate /plan:approve commands, EnterPlanMode/ExitPlanMode tools, permission gating, TUI status/widget, workflow prompt injection

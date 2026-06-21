@@ -98,6 +98,7 @@ export class SettingsOverlayController {
           showWorkingTrace: settingsManager.getShowWorkingTrace(),
           showMemoryTrace: settingsManager.getShowMemoryTrace(),
           presenceEnabled: settingsManager.getPresenceEnabled(),
+          nextStepEnabled: settingsManager.getNextStepEnabled(),
         },
         {
           onAutoCompactChange: (enabled) => {
@@ -209,6 +210,9 @@ export class SettingsOverlayController {
           },
           onPresenceEnabledChange: (enabled) => {
             settingsManager.setPresenceEnabled(enabled);
+          },
+          onNextStepEnabledChange: (enabled) => {
+            settingsManager.setNextStepEnabled(enabled);
           },
           onCancel: () => {
             done();

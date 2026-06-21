@@ -20,6 +20,7 @@ const BUNDLED_LINK_WORLD_EXTENSION = join(__dirname, "extensions", "builtin", "l
 const BUNDLED_SECURITY_AUDIT_EXTENSION = join(__dirname, "extensions", "builtin", "security-audit", "index.js");
 const BUNDLED_SOUL_EXTENSION = join(__dirname, "extensions", "builtin", "soul", "index.js");
 const BUNDLED_PRESENCE_EXTENSION = join(__dirname, "extensions", "builtin", "presence", "index.js");
+const BUNDLED_NEXT_STEP_EXTENSION = join(__dirname, "extensions", "builtin", "next-step", "index.js");
 const BUNDLED_ASK_USER_QUESTION_EXTENSION = join(__dirname, "extensions", "builtin", "ask-user-question", "index.js");
 const BUNDLED_TEACH_EXTENSION = join(__dirname, "extensions", "builtin", "teach", "index.js");
 const BUNDLED_LOOP_EXTENSION = join(__dirname, "extensions", "builtin", "loop", "index.js");
@@ -70,6 +71,7 @@ export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "security-audit", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "soul", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "presence", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: true, startsTimers: true, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/presence-opening.test.ts", "test/presence-locale.test.ts"] },
+	{ id: "next-step", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/next-step-injection.test.ts"] },
 	{ id: "ask-user-question", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: true, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "teach", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false },
 	{ id: "grub", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, testContracts: ["lifecycle", "external-process"], testFiles: ["test/grub-controller.test.ts"] },
@@ -218,11 +220,29 @@ export function getBuiltinExtensionPaths(): string[] {
 		if (existsSync(soulTs)) paths.push(soulTs);
 	}
 
+	// === Next-step extension (default-on Codex-style "suggest next steps" rule injection) ===
+	// Registered BEFORE presence so its rule text appears BEFORE presence content in the
+	// merged system prompt — see core/extensions-host/runner.ts:emitBeforeAgentStart
+	// (appendSystemPrompt accumulates in registration order via "\n\n"). If you reorder
+	// this, also re-verify test/next-step-injection.test.ts "merge order".
+	if (existsSync(BUNDLED_NEXT_STEP_EXTENSION)) {
+		paths.push(BUNDLED_NEXT_STEP_EXTENSION);
+	} else {
+		const nextStepTs = join(__dirname, "extensions", "builtin", "next-step", "index.ts");
+		if (existsSync(nextStepTs)) paths.push(nextStepTs);
+	}
+
 	if (existsSync(BUNDLED_PRESENCE_EXTENSION)) {
 		paths.push(BUNDLED_PRESENCE_EXTENSION);
 	} else {
 		const presenceTs = join(__dirname, "extensions", "builtin", "presence", "index.ts");
 		if (existsSync(presenceTs)) paths.push(presenceTs);
+	}
+	if (existsSync(BUNDLED_NEXT_STEP_EXTENSION)) {
+		paths.push(BUNDLED_NEXT_STEP_EXTENSION);
+	} else {
+		const nextStepTs = join(__dirname, "extensions", "builtin", "next-step", "index.ts");
+		if (existsSync(nextStepTs)) paths.push(nextStepTs);
 	}
 
 	// === AskUserQuestion extension (structured multiple-choice questions) ===

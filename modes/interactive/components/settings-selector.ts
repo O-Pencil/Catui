@@ -60,6 +60,7 @@ export interface SettingsConfig {
 	showWorkingTrace: boolean;
 	showMemoryTrace: boolean;
 	presenceEnabled: boolean;
+	nextStepEnabled: boolean;
 }
 
 export interface SettingsCallbacks {
@@ -89,6 +90,7 @@ export interface SettingsCallbacks {
 	onShowWorkingTraceChange: (enabled: boolean) => void;
 	onShowMemoryTraceChange: (enabled: boolean) => void;
 	onPresenceEnabledChange: (enabled: boolean) => void;
+	onNextStepEnabledChange: (enabled: boolean) => void;
 	onCancel: () => void;
 }
 
@@ -426,6 +428,16 @@ export class SettingsSelectorComponent extends Container {
 			values: ["true", "false"],
 		});
 
+		// Next-step toggle (insert after presence-enabled)
+		const presenceIndex = items.findIndex((item) => item.id === "presence-enabled");
+		items.splice(presenceIndex + 1, 0, {
+			id: "next-step-enabled",
+			label: "Suggest next steps",
+			description: "Append a Codex-style rule so the agent proposes natural follow-ups after completing a task",
+			currentValue: config.nextStepEnabled ? "true" : "false",
+			values: ["true", "false"],
+		});
+
 		// Add borders
 		this.addChild(new DynamicBorder());
 
@@ -503,6 +515,9 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "presence-enabled":
 						callbacks.onPresenceEnabledChange(newValue === "true");
+						break;
+					case "next-step-enabled":
+						callbacks.onNextStepEnabledChange(newValue === "true");
 						break;
 				}
 			},
