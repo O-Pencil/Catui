@@ -72,6 +72,7 @@ export function onTasksUpdated(listener: TaskUpdateListener): () => void {
 const watchers = new Map<string, FSWatcher>();
 const POLL_INTERVAL_MS = 5000;
 const pollTimers = new Map<string, ReturnType<typeof setInterval>>();
+const pendingPollStarts = new Set<string>();
 
 /**
  * Per-directory snapshot used by the polling fallback. The polling timer only
@@ -105,20 +106,29 @@ async function snapshotTasksDir(dir: string): Promise<string> {
 	}
 }
 
+function startPollingTimer(dir: string): void {
+	const timer = setInterval(() => {
+		void snapshotTasksDir(dir).then((snap) => {
+			const previous = lastSeenSnapshots.get(dir);
+			if (previous === snap) return;
+			lastSeenSnapshots.set(dir, snap);
+			notifyTasksUpdated();
+		}).catch(() => {
+			// Snapshot failure is not actionable here; skip this tick.
+		});
+	}, POLL_INTERVAL_MS);
+	timer.unref?.();
+	pollTimers.set(dir, timer);
+}
+
 /**
  * Start watching a task directory for changes (fs.watch + 5s polling fallback).
  * Multiple calls with the same dir are idempotent.
  */
 export function startTaskFileWatcher(dir: string): void {
-	if (watchers.has(dir) || pollTimers.has(dir)) return;
+	if (watchers.has(dir) || pollTimers.has(dir) || pendingPollStarts.has(dir)) return;
 
-	// Seed the polling snapshot so the first 5s tick does not fire a spurious
-	// change event when nothing has actually changed since startup.
-	void snapshotTasksDir(dir).then((snap) => {
-		lastSeenSnapshots.set(dir, snap);
-	}).catch(() => {
-		lastSeenSnapshots.set(dir, "");
-	});
+	pendingPollStarts.add(dir);
 
 	// Primary: fs.watch
 	try {
@@ -135,24 +145,27 @@ export function startTaskFileWatcher(dir: string): void {
 	// Only fire `notifyTasksUpdated()` when the on-disk state has actually
 	// changed since the last poll. Without this guard the auto-hidden task
 	// panel would re-render on every poll and visibly flicker.
-	const timer = setInterval(() => {
-		void snapshotTasksDir(dir).then((snap) => {
-			const previous = lastSeenSnapshots.get(dir);
-			if (previous === snap) return;
+	void snapshotTasksDir(dir)
+		.then((snap) => {
+			if (!pendingPollStarts.has(dir)) return;
 			lastSeenSnapshots.set(dir, snap);
-			notifyTasksUpdated();
-		}).catch(() => {
-			// Snapshot failure is not actionable here; skip this tick.
+			startPollingTimer(dir);
+		})
+		.catch(() => {
+			if (!pendingPollStarts.has(dir)) return;
+			lastSeenSnapshots.set(dir, "");
+			startPollingTimer(dir);
+		})
+		.finally(() => {
+			pendingPollStarts.delete(dir);
 		});
-	}, POLL_INTERVAL_MS);
-	timer.unref?.();
-	pollTimers.set(dir, timer);
 }
 
 /**
  * Stop watching a task directory.
  */
 export function stopTaskFileWatcher(dir: string): void {
+	pendingPollStarts.delete(dir);
 	const watcher = watchers.get(dir);
 	if (watcher) {
 		watcher.close();

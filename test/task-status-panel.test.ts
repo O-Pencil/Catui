@@ -140,7 +140,11 @@ test("TaskStatusPanelComponent renders completed tasks with strikethrough", () =
 
 	try {
 		const { ui } = createMockTUI();
-		const panel = new TaskStatusPanelComponent(ui, noopTheme);
+		const themedStrike: Theme = {
+			...noopTheme,
+			strikethrough: (text) => `~~${text}~~`,
+		};
+		const panel = new TaskStatusPanelComponent(ui, themedStrike);
 		panel.update([
 			{ id: "1", subject: "Done task", status: "completed" },
 		]);
@@ -153,8 +157,33 @@ test("TaskStatusPanelComponent renders completed tasks with strikethrough", () =
 
 		assert.equal(taskLines.length, 1, "should have one task line");
 		const taskLine = taskLines[0].render(80)[0] ?? "";
-		assert.ok(taskLine.includes("\x1b[9m"), "completed task should have strikethrough open");
-		assert.ok(taskLine.includes("\x1b[29m"), "completed task should have strikethrough close");
+		assert.ok(taskLine.includes("~~Done task~~"), "completed task should have strikethrough styling");
+	} finally {
+		globalThis.setInterval = originalSetInterval;
+		globalThis.clearInterval = originalClearInterval;
+	}
+});
+
+test("TaskStatusPanelComponent uses theme strikethrough for completed task subjects", () => {
+	const originalSetInterval = globalThis.setInterval;
+	const originalClearInterval = globalThis.clearInterval;
+	(globalThis as unknown as { setInterval: typeof setInterval }).setInterval = (() => 1) as typeof setInterval;
+	(globalThis as unknown as { clearInterval: typeof clearInterval }).clearInterval = (() => {}) as typeof clearInterval;
+
+	try {
+		const { ui } = createMockTUI();
+		const themedStrike: Theme = {
+			...noopTheme,
+			strikethrough: (text) => `<strike>${text}</strike>`,
+		};
+		const panel = new TaskStatusPanelComponent(ui, themedStrike);
+		panel.update([
+			{ id: "1", subject: "Done task", status: "completed" },
+		]);
+
+		const taskLines = (panel as unknown as { taskLines: Array<{ render(width: number): string[] }> }).taskLines;
+		const taskLine = taskLines[0].render(80)[0] ?? "";
+		assert.ok(taskLine.includes("<strike>Done task</strike>"), "completed subject should be styled through theme.strikethrough");
 	} finally {
 		globalThis.setInterval = originalSetInterval;
 		globalThis.clearInterval = originalClearInterval;

@@ -28,8 +28,6 @@ const MIN_VISIBLE_TASKS = 3;
 /** CC parity: a task that transitioned to `completed` within this window is
  *  promoted to the top of the completed bucket so the user can see it. */
 const RECENT_COMPLETED_TTL_MS = 30_000;
-const STRIKETHROUGH_OPEN = "\x1b[9m";
-const STRIKETHROUGH_CLOSE = "\x1b[29m";
 
 export class TaskStatusPanelComponent extends Container {
   private tui: TUI;
@@ -197,7 +195,7 @@ export class TaskStatusPanelComponent extends Container {
         // Completed: dim + strikethrough so the user can see it finished
         // without it competing with active work for attention.
         subjectStyle = (s: string) =>
-          this.theme.fg("dim", `${STRIKETHROUGH_OPEN}${s}${STRIKETHROUGH_CLOSE}`);
+          this.theme.fg("dim", this.theme.strikethrough(s));
       } else if (task.status === "in_progress") {
         icon = this.theme.fg("accent", "◼");
         // In-progress: bold

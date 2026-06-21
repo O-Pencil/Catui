@@ -47,11 +47,8 @@ import { theme } from "../theme/theme.js";
 import { consumeMatchingVisibleUserQuery } from "../user-query-dedupe.js";
 import {
 	getTaskListId,
-	getTasksDir,
 	listTasks,
 	onTasksUpdated,
-	resetTaskList,
-	stopTaskFileWatcher,
 } from "../../../extensions/builtin/task/task-store.js";
 import { DEFAULT_TASK_LIST_ID } from "../../../extensions/builtin/task/task-types.js";
 
@@ -157,6 +154,7 @@ export class StreamRenderController {
   // Task status panel subscription
   private taskUpdateUnsubscribe: (() => void) | undefined = undefined;
   private taskAutoHideTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  private hiddenCompletedTaskSignature: string | undefined = undefined;
 
   constructor(private readonly ctx: StreamRenderContext) {}
 
@@ -660,7 +658,17 @@ export class StreamRenderController {
           clearTimeout(this.taskAutoHideTimer);
           this.taskAutoHideTimer = undefined;
         }
+        this.hiddenCompletedTaskSignature = undefined;
         return;
+      }
+
+      const allDone = tasks.every((t) => t.status === "completed");
+      const taskSignature = getTaskPanelSignature(tasks);
+      if (allDone && !state.taskStatusPanel && this.hiddenCompletedTaskSignature === taskSignature) {
+        return;
+      }
+      if (!allDone) {
+        this.hiddenCompletedTaskSignature = undefined;
       }
 
       // Create panel if it doesn't exist
@@ -673,36 +681,26 @@ export class StreamRenderController {
       this.ctx.layout.requestRender();
 
       // Auto-hide after all tasks complete (like CC).
-      // CC behavior: 5s grace window → resetTaskList() wipes the task JSON
-      // files and the panel unmounts. The user can no longer review the
-      // completed list, but the panel is guaranteed not to flicker back in
-      // from a stale fs.watch / poll tick.
-      const allDone = tasks.length > 0 && tasks.every((t) => t.status === "completed");
+      // Keep completed task files for review, but remember the completed
+      // snapshot after unmounting so fs.watch / poll cannot resurrect the same
+      // finished panel and flicker forever.
       if (allDone) {
         if (!this.taskAutoHideTimer) {
           this.taskAutoHideTimer = setTimeout(async () => {
             this.taskAutoHideTimer = undefined;
-            // Verify still all done before nuking the disk state.
             const currentTasks = await listTasks(agentDir, taskListId)
               .catch(() => []);
-            const stillAllDone = currentTasks.length > 0 &&
-              currentTasks.every((t) => t.status === "completed");
+            const visibleCurrentTasks = currentTasks
+              .filter((t) => !(t.metadata as Record<string, unknown>)?._internal)
+              .map((t) => ({
+                id: t.id,
+                subject: t.subject,
+                status: t.status as "pending" | "in_progress" | "completed",
+              }));
+            const stillAllDone = visibleCurrentTasks.length > 0 &&
+              visibleCurrentTasks.every((t) => t.status === "completed");
             if (stillAllDone) {
-              // 1. Wipe the task list on disk so a stale fs.watch / poll tick
-              //    cannot resurrect the panel.
-              try {
-                await resetTaskList(agentDir, taskListId);
-              } catch {
-                // Best-effort — panel cleanup below must still run.
-              }
-              // 2. Stop the per-directory file watcher + polling timer so
-              //    nothing re-fires notifyTasksUpdated while the panel is gone.
-              try {
-                stopTaskFileWatcher(getTasksDir(agentDir, taskListId));
-              } catch {
-                // Same — swallow.
-              }
-              // 3. Dispose the panel.
+              this.hiddenCompletedTaskSignature = getTaskPanelSignature(visibleCurrentTasks);
               if (state.taskStatusPanel) {
                 state.taskStatusPanel.dispose?.();
                 statusContainer.removeChild(state.taskStatusPanel);
@@ -723,6 +721,13 @@ export class StreamRenderController {
       // Ignore errors reading tasks
     }
   }
+}
+
+function getTaskPanelSignature(tasks: Array<Pick<TaskStatusEntry, "id" | "subject" | "status">>): string {
+  return tasks
+    .map((task) => `${task.id}\u0000${task.status}\u0000${task.subject}`)
+    .sort()
+    .join("\u0001");
 }
 
 // ============================================================================

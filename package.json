@@ -94,7 +94,7 @@
     "test:utils": "node --test --import tsx test/logger.test.ts",
     "test:commands": "node --test --import tsx test/slash-command-catalog.test.ts test/extension-command-completions.test.ts test/interactive-slash-command-arguments.test.ts test/rpc-command-catalog.test.ts",
     "test:security": "node --test --import tsx test/security-audit.test.ts",
-    "test:tools": "node --test --import tsx test/workspace-write-guard.test.ts test/read-tool.test.ts test/tool-window-validation.test.ts test/bash-sandbox.test.ts",
+    "test:tools": "node --test --import tsx test/workspace-write-guard.test.ts test/read-tool.test.ts test/tool-window-validation.test.ts test/bash-sandbox.test.ts test/task-status-panel.test.ts test/task-store-polling.test.ts test/stream-render-task-panel.test.ts",
     "test:presence": "node --test --import tsx test/presence-opening.test.ts",
     "test:interactive-memory-notify": "node --test --import tsx test/interactive-memory-notify.test.ts test/session-manager-header.test.ts",
     "start": "npx cross-env NODE_ENV=production node --no-deprecation dist/cli.js",
