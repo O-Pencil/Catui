@@ -323,7 +323,7 @@ if (currentIteration >= maxIterations) stop("failed");
 if (consecutiveFailures >= maxConsecutiveFailures) stop("failed");
 ```
 
-**优点**：用户直观理解（"最多跑 25 轮"），不依赖 token 计费。
+**优点**：用户直观理解（"最多跑 99 轮"），不依赖 token 计费。
 **缺点**：每轮消耗的 token 可能差异很大，无法精确控制成本。
 
 ---
