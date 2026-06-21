@@ -147,11 +147,19 @@ test("formatSnapshot uses user-facing terminal state labels", () => {
 	const cwd = createTempWorkspace();
 	try {
 		const controller = new GrubController();
-		controller.start("Readable terminal state", cwd);
+		const task = controller.start("Readable terminal state", cwd);
+		writeFeatureList(task.featureListPath, {
+			...featureList(task.goal, 3),
+			features: featureList(task.goal, 3).features.map((feature, index) =>
+				index === 0 ? { ...feature, passes: true, evidence: "verified" } : feature,
+			),
+		});
 		const snapshot = controller.stop("Stopped by user request.", "stopped");
 		assert.ok(snapshot);
 		const formatted = formatSnapshot(snapshot);
 		assert.match(formatted, /State: stopped/);
+		assert.match(formatted, /Progress: 1\/3 checks done/);
+		assert.match(formatted, /Remaining: feature-2, feature-3/);
 		assert.match(formatted, /Needs attention: Stopped by user request/);
 		assert.doesNotMatch(formatted, /phase|stateFile|completedIterations/);
 	} finally {
@@ -381,6 +389,37 @@ test("grub controller rejects weak initializer feature-list", () => {
 		assert.equal(result.ok, false);
 		if (!result.ok) {
 			assert.match(result.message, /15-40/);
+		}
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("grub controller reports malformed feature-list JSON location and context", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		const task = controller.start("Diagnose malformed JSON", cwd);
+		writeFileSync(
+			task.featureListPath,
+			[
+				"{",
+				'  "version": 1,',
+				'  "goal": "Diagnose malformed JSON",',
+				'  "features": [',
+				'    {"id": "broken" "category": "functional"}',
+				"  ]",
+				"}",
+			].join("\n"),
+			"utf-8",
+		);
+
+		const result = controller.validateFeatureListAfterTurn();
+		assert.equal(result.ok, false);
+		if (!result.ok) {
+			assert.match(result.message, /line 5/i);
+			assert.match(result.message, />\s*5\s+\|/);
+			assert.match(result.message, /"id": "broken"/);
 		}
 	} finally {
 		cleanup(cwd);

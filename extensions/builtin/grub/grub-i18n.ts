@@ -63,6 +63,8 @@ const GRUB_TEXT = {
 		initScript: "Init script",
 		stateFile: "State file",
 		featuresPassing: (passing: number, total: number) => `Progress: ${passing}/${total} checks done`,
+		remainingFeatures: (ids: string[], hidden: number) =>
+			`Remaining: ${ids.join(", ")}${hidden > 0 ? ` (+${hidden} more)` : ""}`,
 		lastSummary: "Last summary",
 		lastNextStep: "Last next step",
 		lastError: "Last error",
@@ -154,6 +156,8 @@ const GRUB_TEXT = {
 		initScript: "初始化脚本",
 		stateFile: "状态文件",
 		featuresPassing: (passing: number, total: number) => `进度：${passing}/${total} 项已完成`,
+		remainingFeatures: (ids: string[], hidden: number) =>
+			`剩余：${ids.join("、")}${hidden > 0 ? `（另有 ${hidden} 项）` : ""}`,
 		lastSummary: "上次总结",
 		lastNextStep: "下一步",
 		lastError: "最近错误",

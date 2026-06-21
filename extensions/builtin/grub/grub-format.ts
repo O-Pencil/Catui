@@ -48,6 +48,17 @@ export function formatSnapshot(snapshot: GrubTaskSnapshot): string {
 		`${text.updated}: ${formatDate(snapshot.updatedAt, locale)}`,
 	];
 
+	const list = readFeatureList(snapshot.featureListPath);
+	if (list) {
+		const passing = list.features.filter((feature) => feature.passes).length;
+		const pending = list.features.filter((feature) => !feature.passes);
+		lines.push(text.featuresPassing(passing, list.features.length));
+		if (pending.length > 0) {
+			const visible = pending.slice(0, 8).map((feature) => feature.id);
+			lines.push(text.remainingFeatures(visible, pending.length - visible.length));
+		}
+	}
+
 	if (snapshot.lastDecision?.summary) lines.push(`${text.lastUpdate}: ${snapshot.lastDecision.summary}`);
 	if (snapshot.lastDecision?.nextStep) lines.push(`${text.next}: ${snapshot.lastDecision.nextStep}`);
 	if (snapshot.lastError) lines.push(`${text.lastIssue}: ${snapshot.lastError}`);

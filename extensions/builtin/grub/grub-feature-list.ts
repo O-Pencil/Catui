@@ -1,5 +1,5 @@
 /**
- * [WHO]: Provides readFeatureList, writeFeatureList, isFeatureList, validateFeatureListDiff, sanitizeInitializerFeatureList, InitializerSanitizeResult, countPassing, allPassing, firstPending, createInitialFeatureList, migrateChecklistToFeatureList, FeatureListDiffError
+ * [WHO]: Provides readFeatureList, readFeatureListResult, FeatureListReadResult, writeFeatureList, isFeatureList, validateFeatureListDiff, sanitizeInitializerFeatureList, InitializerSanitizeResult, countPassing, allPassing, firstPending, createInitialFeatureList, migrateChecklistToFeatureList, FeatureListDiffError
  * [FROM]: Depends on node:fs, node:path, ./grub-types
  * [TO]: Consumed by ./grub-controller.ts, ./index.ts for structured feature tracking
  * [HERE]: extensions/builtin/grub/grub-feature-list.ts - JSON feature list IO with diff validation that limits agent mutations to passes/evidence fields
@@ -44,16 +44,71 @@ export function isFeatureList(value: unknown): value is FeatureList {
 	return v.features.every(isFeatureItem);
 }
 
+export type FeatureListReadResult =
+	| { ok: true; list: FeatureList }
+	| { ok: false; error: string };
+
 export function readFeatureList(path: string): FeatureList | null {
-	if (!existsSync(path)) return null;
-	try {
-		const raw = readFileSync(path, "utf-8");
-		const parsed: unknown = JSON.parse(raw);
-		if (!isFeatureList(parsed)) return null;
-		return parsed;
-	} catch {
-		return null;
+	const result = readFeatureListResult(path);
+	return result.ok ? result.list : null;
+}
+
+export function readFeatureListResult(path: string): FeatureListReadResult {
+	if (!existsSync(path)) {
+		return { ok: false, error: "feature-list.json is missing" };
 	}
+
+	let raw: string;
+	try {
+		raw = readFileSync(path, "utf-8");
+	} catch (error) {
+		return {
+			ok: false,
+			error: `could not read feature-list.json: ${error instanceof Error ? error.message : String(error)}`,
+		};
+	}
+
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		if (!isFeatureList(parsed)) {
+			return { ok: false, error: "feature-list.json does not match the required schema" };
+		}
+		return { ok: true, list: parsed };
+	} catch (error) {
+		return { ok: false, error: formatJsonParseError(raw, error) };
+	}
+}
+
+function formatJsonParseError(raw: string, error: unknown): string {
+	const message = error instanceof Error ? error.message : String(error);
+	const location = locateJsonError(raw, message);
+	if (!location) return `invalid JSON: ${message}`;
+
+	const lines = raw.split(/\r?\n/);
+	const start = Math.max(1, location.line - 2);
+	const end = Math.min(lines.length, location.line + 2);
+	const width = String(end).length;
+	const context: string[] = [];
+	for (let line = start; line <= end; line += 1) {
+		const marker = line === location.line ? ">" : " ";
+		context.push(`${marker} ${String(line).padStart(width)} | ${lines[line - 1] ?? ""}`);
+	}
+	return `invalid JSON at line ${location.line}, column ${location.column}: ${message}\n${context.join("\n")}`;
+}
+
+function locateJsonError(raw: string, message: string): { line: number; column: number } | undefined {
+	const direct = /line\s+(\d+)\s+column\s+(\d+)/i.exec(message);
+	if (direct) {
+		return { line: Number(direct[1]), column: Number(direct[2]) };
+	}
+
+	const positioned = /position\s+(\d+)/i.exec(message);
+	if (!positioned) return undefined;
+	const position = Math.min(Number(positioned[1]), raw.length);
+	const prefix = raw.slice(0, position);
+	const line = prefix.split(/\r?\n/).length;
+	const lastNewline = Math.max(prefix.lastIndexOf("\n"), prefix.lastIndexOf("\r"));
+	return { line, column: position - lastNewline };
 }
 
 export function writeFeatureList(path: string, list: FeatureList): void {

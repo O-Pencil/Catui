@@ -7,7 +7,7 @@
 
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import { allPassing, firstPending, readFeatureList, sanitizeInitializerFeatureList, validateFeatureListDiff, writeFeatureList } from "./grub-feature-list.js";
+import { allPassing, firstPending, readFeatureList, readFeatureListResult, sanitizeInitializerFeatureList, validateFeatureListDiff, writeFeatureList } from "./grub-feature-list.js";
 import { type GrubLocale } from "./grub-i18n.js";
 import { persistState, stateFilePathFor } from "./grub-persistence.js";
 import { buildGrubTaskPrompt, getPromptPrefix } from "./grub-prompts.js";
@@ -177,16 +177,17 @@ export class GrubController {
 		}
 
 		const task = this.activeTask;
-		const list = readFeatureList(task.featureListPath);
-		if (!list) {
+		const readResult = readFeatureListResult(task.featureListPath);
+		if (!readResult.ok) {
 			return {
 				ok: false,
 				message:
 					task.locale === "zh"
-						? "任务清单缺失或格式不正确，需要先修好清单再继续。"
-						: "The task checklist is missing or malformed. It needs to be fixed before continuing.",
+						? `任务清单缺失或格式不正确，需要先修好清单再继续：${readResult.error}`
+						: `The task checklist is missing or malformed and must be fixed before continuing: ${readResult.error}`,
 			};
 		}
+		const list = readResult.list;
 
 		if (task.phase === "initializer") {
 			// Only genuinely unfixable structural problems should fail the turn

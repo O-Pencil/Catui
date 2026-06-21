@@ -94,7 +94,9 @@ setting `evidence`.
   calls `discoverActiveTasks()` and adopts the most recent running task
   without auto-dispatching — the user types `/grub resume` to continue.
 - **Safety limits**: 25 iterations and 3 consecutive failures by default;
-  override with `--max-iter` / `--max-fail`.
+  override with `--max-iter` / `--max-fail`. When a limit stops the task, the
+  terminal summary includes the passing count and pending feature IDs so a
+  later `/grub resume` or new task has an explicit handoff point.
 - **Stale harness cleanup**: on extension load, terminal harnesses older
   than 30 days are pruned from `.grub/`.
 
