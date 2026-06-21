@@ -3,6 +3,11 @@
  * [FROM]: Depends on @catui/tui, extensions/builtin/task/task-store
  * [TO]: Consumed by StreamRenderController
  * [HERE]: modes/interactive/components/task-status-panel.ts - CC-style task status TUI panel
+ *
+ * Completed tasks stay visible (no auto-dispose) and are visually de-emphasized
+ * via dim + strikethrough. Tasks that just transitioned to completed are
+ * prioritized for the RECENT_COMPLETED_TTL_MS window so the user can see what
+ * just finished before it ages out.
  */
 
 import { Container, Spacer, Text, truncateToWidth, type TUI } from "@catui/tui";
@@ -20,6 +25,11 @@ const TASK_SPINNER_FRAMES = ["♫", "♬"];
 /** Max tasks visible before collapsing. Dynamically adjusted by terminal height. */
 const MAX_VISIBLE_TASKS = 10;
 const MIN_VISIBLE_TASKS = 3;
+/** CC parity: a task that transitioned to `completed` within this window is
+ *  promoted to the top of the completed bucket so the user can see it. */
+const RECENT_COMPLETED_TTL_MS = 30_000;
+const STRIKETHROUGH_OPEN = "\x1b[9m";
+const STRIKETHROUGH_CLOSE = "\x1b[29m";
 
 export class TaskStatusPanelComponent extends Container {
   private tui: TUI;
@@ -30,6 +40,14 @@ export class TaskStatusPanelComponent extends Container {
   private taskLines: Text[] = [];
   private overflowLine: Text | undefined;
   private lastTasks: TaskStatusEntry[] = [];
+  /** Tracks when each task was last observed transitioning to `completed`.
+   *  Only newly-completed tasks are recorded; tasks that go back to pending
+   *  have their entry removed by `pruneCompletionTimestamps()`. */
+  private completionTimestamps = new Map<string, number>();
+  /** Last task ID set we saw as completed. Used to detect transitions. */
+  private previousCompletedIds = new Set<string>();
+  /** Whether the snapshot has been seeded yet (first update call). */
+  private snapshotSeeded = false;
 
   constructor(tui: TUI, theme: Theme) {
     super();
@@ -38,6 +56,39 @@ export class TaskStatusPanelComponent extends Container {
     this.headerText = new Text("", 0, 0);
     this.addChild(new Spacer(1));
     this.addChild(this.headerText);
+  }
+
+  /**
+   * Update completion timestamp tracking: a task only gets a fresh timestamp
+   * the first time we see it transition from non-completed → completed within
+   * this component's lifetime. Initial seed does not count as a transition so
+   * re-rendering a session that boots up with completed tasks does not
+   * promote them to "recent".
+   */
+  private updateCompletionTimestamps(tasks: TaskStatusEntry[]): void {
+    const currentCompletedIds = new Set(
+      tasks.filter((t) => t.status === "completed").map((t) => t.id),
+    );
+    const now = Date.now();
+
+    if (!this.snapshotSeeded) {
+      this.snapshotSeeded = true;
+    } else {
+      for (const id of currentCompletedIds) {
+        if (!this.previousCompletedIds.has(id)) {
+          this.completionTimestamps.set(id, now);
+        }
+      }
+    }
+
+    // Drop timestamps for tasks that left the completed bucket.
+    for (const id of Array.from(this.completionTimestamps.keys())) {
+      if (!currentCompletedIds.has(id)) {
+        this.completionTimestamps.delete(id);
+      }
+    }
+
+    this.previousCompletedIds = currentCompletedIds;
   }
 
   private getSummaryText(tasks: TaskStatusEntry[]): string {
@@ -97,6 +148,7 @@ export class TaskStatusPanelComponent extends Container {
   /** Rebuild the panel from current task list. */
   update(tasks: TaskStatusEntry[]): void {
     this.lastTasks = tasks;
+    this.updateCompletionTimestamps(tasks);
 
     // Remove old task lines
     for (const line of this.taskLines) super.removeChild(line);
@@ -128,8 +180,8 @@ export class TaskStatusPanelComponent extends Container {
     const rows = this.tui.terminal?.rows ?? 24;
     const maxVisible = Math.min(MAX_VISIBLE_TASKS, Math.max(MIN_VISIBLE_TASKS, rows - 14));
 
-    // Prioritize: in_progress first, then pending, then recently completed
-    const sorted = this.prioritizeTasks(tasks, maxVisible);
+    // Prioritize: in_progress → pending → recent completed → older completed
+    const sorted = this.prioritizeTasks(tasks);
     const visibleTasks = sorted.slice(0, maxVisible);
     const hiddenCount = tasks.length - maxVisible;
 
@@ -142,8 +194,10 @@ export class TaskStatusPanelComponent extends Container {
 
       if (task.status === "completed") {
         icon = this.theme.fg("success", "✔");
-        // Completed: dim
-        subjectStyle = (s: string) => this.theme.fg("dim", s);
+        // Completed: dim + strikethrough so the user can see it finished
+        // without it competing with active work for attention.
+        subjectStyle = (s: string) =>
+          this.theme.fg("dim", `${STRIKETHROUGH_OPEN}${s}${STRIKETHROUGH_CLOSE}`);
       } else if (task.status === "in_progress") {
         icon = this.theme.fg("accent", "◼");
         // In-progress: bold
@@ -185,8 +239,7 @@ export class TaskStatusPanelComponent extends Container {
       if (hiddenCompleted > 0) parts.push(`${hiddenCompleted} completed`);
       this.overflowLine = new Text(
         this.theme.fg("dim", `  … +${hiddenCount} ${parts.join(", ")}`),
-        0,
-        0,
+        0, 0,
       );
       this.addChild(this.overflowLine);
     }
@@ -196,13 +249,39 @@ export class TaskStatusPanelComponent extends Container {
    * Prioritize tasks for display:
    * 1. in_progress (most important — user needs to see what's happening)
    * 2. pending (what's next)
-   * 3. completed (least important, show most recent first)
+   * 3. completed, split into:
+   *    3a. recently completed (within RECENT_COMPLETED_TTL_MS) — promoted
+   *    3b. older completed
+   * Within each bucket, stable id order.
    */
-  private prioritizeTasks(tasks: TaskStatusEntry[], _maxVisible: number): TaskStatusEntry[] {
-    const inProgress = tasks.filter((t) => t.status === "in_progress");
-    const pending = tasks.filter((t) => t.status === "pending");
+  private prioritizeTasks(tasks: TaskStatusEntry[]): TaskStatusEntry[] {
+    const inProgress = tasks
+      .filter((t) => t.status === "in_progress")
+      .sort((a, b) => a.id.localeCompare(b.id));
+    const pending = tasks
+      .filter((t) => t.status === "pending")
+      .sort((a, b) => a.id.localeCompare(b.id));
+    const now = Date.now();
     const completed = tasks.filter((t) => t.status === "completed");
-    return [...inProgress, ...pending, ...completed];
+    const recentCompleted = completed
+      .filter((t) => {
+        const ts = this.completionTimestamps.get(t.id);
+        return ts !== undefined && now - ts < RECENT_COMPLETED_TTL_MS;
+      })
+      .sort((a, b) => {
+        const aTs = this.completionTimestamps.get(a.id) ?? 0;
+        const bTs = this.completionTimestamps.get(b.id) ?? 0;
+        // Most recent first
+        if (aTs !== bTs) return bTs - aTs;
+        return a.id.localeCompare(b.id);
+      });
+    const olderCompleted = completed
+      .filter((t) => {
+        const ts = this.completionTimestamps.get(t.id);
+        return ts === undefined || now - ts >= RECENT_COMPLETED_TTL_MS;
+      })
+      .sort((a, b) => a.id.localeCompare(b.id));
+    return [...inProgress, ...pending, ...recentCompleted, ...olderCompleted];
   }
 
   /** Get the last known tasks. */

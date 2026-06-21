@@ -45,7 +45,14 @@ import { TaskStatusPanelComponent, type TaskStatusEntry } from "../components/ta
 import type { InteractiveState, PlanProgressState, SubAgentState } from "../state/interactive-state.js";
 import { theme } from "../theme/theme.js";
 import { consumeMatchingVisibleUserQuery } from "../user-query-dedupe.js";
-import { listTasks, onTasksUpdated, resetTaskList, getTaskListId } from "../../../extensions/builtin/task/task-store.js";
+import {
+	getTaskListId,
+	getTasksDir,
+	listTasks,
+	onTasksUpdated,
+	resetTaskList,
+	stopTaskFileWatcher,
+} from "../../../extensions/builtin/task/task-store.js";
 import { DEFAULT_TASK_LIST_ID } from "../../../extensions/builtin/task/task-types.js";
 
 export interface StreamRenderStatePort {
@@ -665,19 +672,37 @@ export class StreamRenderController {
       state.taskStatusPanel.update(tasks);
       this.ctx.layout.requestRender();
 
-      // Auto-hide after all tasks complete (like CC)
-      const allDone = tasks.every((t) => t.status === "completed");
+      // Auto-hide after all tasks complete (like CC).
+      // CC behavior: 5s grace window → resetTaskList() wipes the task JSON
+      // files and the panel unmounts. The user can no longer review the
+      // completed list, but the panel is guaranteed not to flicker back in
+      // from a stale fs.watch / poll tick.
+      const allDone = tasks.length > 0 && tasks.every((t) => t.status === "completed");
       if (allDone) {
         if (!this.taskAutoHideTimer) {
           this.taskAutoHideTimer = setTimeout(async () => {
             this.taskAutoHideTimer = undefined;
-            // Verify still all done
+            // Verify still all done before nuking the disk state.
             const currentTasks = await listTasks(agentDir, taskListId)
               .catch(() => []);
             const stillAllDone = currentTasks.length > 0 &&
               currentTasks.every((t) => t.status === "completed");
             if (stillAllDone) {
-              // Just remove the panel — don't reset the task list (user may want to review)
+              // 1. Wipe the task list on disk so a stale fs.watch / poll tick
+              //    cannot resurrect the panel.
+              try {
+                await resetTaskList(agentDir, taskListId);
+              } catch {
+                // Best-effort — panel cleanup below must still run.
+              }
+              // 2. Stop the per-directory file watcher + polling timer so
+              //    nothing re-fires notifyTasksUpdated while the panel is gone.
+              try {
+                stopTaskFileWatcher(getTasksDir(agentDir, taskListId));
+              } catch {
+                // Same — swallow.
+              }
+              // 3. Dispose the panel.
               if (state.taskStatusPanel) {
                 state.taskStatusPanel.dispose?.();
                 statusContainer.removeChild(state.taskStatusPanel);

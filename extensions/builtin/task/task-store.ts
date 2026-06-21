@@ -74,11 +74,51 @@ const POLL_INTERVAL_MS = 5000;
 const pollTimers = new Map<string, ReturnType<typeof setInterval>>();
 
 /**
+ * Per-directory snapshot used by the polling fallback. The polling timer only
+ * fires `notifyTasksUpdated()` when the current on-disk state actually differs
+ * from this snapshot, so an idle session does not get a synthetic refresh tick
+ * every 5s that would re-render (and re-flicker) a hidden task panel.
+ */
+const lastSeenSnapshots = new Map<string, string>();
+
+async function snapshotTasksDir(dir: string): Promise<string> {
+	try {
+		const entries = await readdir(dir);
+		// Only consider json files; deterministic order so the snapshot is stable
+		// when the same tasks exist between polls.
+		const jsonNames = entries.filter((name) => name.endsWith(".json")).sort();
+		const parts: string[] = [];
+		for (const name of jsonNames) {
+			try {
+				const raw = await readFile(join(dir, name), "utf-8");
+				parts.push(`${name}:${raw}`);
+			} catch {
+				// File vanished between readdir and readFile — surface as a
+				// presence marker so deletion is detected as a change.
+				parts.push(`${name}:<missing>`);
+			}
+		}
+		return parts.join("|");
+	} catch {
+		// Directory missing or unreadable — treat as "no tasks" snapshot.
+		return "";
+	}
+}
+
+/**
  * Start watching a task directory for changes (fs.watch + 5s polling fallback).
  * Multiple calls with the same dir are idempotent.
  */
 export function startTaskFileWatcher(dir: string): void {
 	if (watchers.has(dir) || pollTimers.has(dir)) return;
+
+	// Seed the polling snapshot so the first 5s tick does not fire a spurious
+	// change event when nothing has actually changed since startup.
+	void snapshotTasksDir(dir).then((snap) => {
+		lastSeenSnapshots.set(dir, snap);
+	}).catch(() => {
+		lastSeenSnapshots.set(dir, "");
+	});
 
 	// Primary: fs.watch
 	try {
@@ -91,9 +131,19 @@ export function startTaskFileWatcher(dir: string): void {
 		// fs.watch may fail on some platforms — fall through to polling
 	}
 
-	// Fallback: 5s polling (handles edge cases like NFS, Docker mounts)
+	// Fallback: 5s polling (handles edge cases like NFS, Docker mounts).
+	// Only fire `notifyTasksUpdated()` when the on-disk state has actually
+	// changed since the last poll. Without this guard the auto-hidden task
+	// panel would re-render on every poll and visibly flicker.
 	const timer = setInterval(() => {
-		notifyTasksUpdated();
+		void snapshotTasksDir(dir).then((snap) => {
+			const previous = lastSeenSnapshots.get(dir);
+			if (previous === snap) return;
+			lastSeenSnapshots.set(dir, snap);
+			notifyTasksUpdated();
+		}).catch(() => {
+			// Snapshot failure is not actionable here; skip this tick.
+		});
 	}, POLL_INTERVAL_MS);
 	timer.unref?.();
 	pollTimers.set(dir, timer);
@@ -113,6 +163,7 @@ export function stopTaskFileWatcher(dir: string): void {
 		clearInterval(timer);
 		pollTimers.delete(dir);
 	}
+	lastSeenSnapshots.delete(dir);
 }
 
 /**

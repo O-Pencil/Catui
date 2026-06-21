@@ -131,3 +131,71 @@ test("TaskStatusPanelComponent switches to completed icon and clears spinner tim
 		globalThis.clearInterval = originalClearInterval;
 	}
 });
+
+test("TaskStatusPanelComponent renders completed tasks with strikethrough", () => {
+	const originalSetInterval = globalThis.setInterval;
+	const originalClearInterval = globalThis.clearInterval;
+	(globalThis as unknown as { setInterval: typeof setInterval }).setInterval = (() => 1) as typeof setInterval;
+	(globalThis as unknown as { clearInterval: typeof clearInterval }).clearInterval = (() => {}) as typeof clearInterval;
+
+	try {
+		const { ui } = createMockTUI();
+		const panel = new TaskStatusPanelComponent(ui, noopTheme);
+		panel.update([
+			{ id: "1", subject: "Done task", status: "completed" },
+		]);
+
+		const headerComponent = (panel as unknown as { headerText: { render(width: number): string[] } }).headerText;
+		const taskLines = (panel as unknown as { taskLines: Array<{ render(width: number): string[] }> }).taskLines;
+
+		const header = headerComponent.render(80)[0] ?? "";
+		assert.ok(!header.includes("\x1b[9m"), "header should not have strikethrough");
+
+		assert.equal(taskLines.length, 1, "should have one task line");
+		const taskLine = taskLines[0].render(80)[0] ?? "";
+		assert.ok(taskLine.includes("\x1b[9m"), "completed task should have strikethrough open");
+		assert.ok(taskLine.includes("\x1b[29m"), "completed task should have strikethrough close");
+	} finally {
+		globalThis.setInterval = originalSetInterval;
+		globalThis.clearInterval = originalClearInterval;
+	}
+});
+
+test("TaskStatusPanelComponent prioritizes recently completed tasks", () => {
+	const originalSetInterval = globalThis.setInterval;
+	const originalClearInterval = globalThis.clearInterval;
+	(globalThis as unknown as { setInterval: typeof setInterval }).setInterval = (() => 1) as typeof setInterval;
+	(globalThis as unknown as { clearInterval: typeof clearInterval }).clearInterval = (() => {}) as typeof clearInterval;
+
+	try {
+		const { ui } = createMockTUI();
+		const panel = new TaskStatusPanelComponent(ui, noopTheme);
+
+		// First update: all completed (initial seed, no transition)
+		panel.update([
+			{ id: "1", subject: "Old completed", status: "completed" },
+			{ id: "2", subject: "Old completed 2", status: "completed" },
+		]);
+
+		// Second update: task 3 just completed (transition detected)
+		panel.update([
+			{ id: "1", subject: "Old completed", status: "completed" },
+			{ id: "2", subject: "Old completed 2", status: "completed" },
+			{ id: "3", subject: "Just completed", status: "completed" },
+		]);
+
+		const taskLines = (panel as unknown as { taskLines: Array<{ render(width: number): string[] }> }).taskLines;
+		assert.equal(taskLines.length, 3, "should have three task lines");
+
+		// First line should be the recently completed task (id: 3)
+		const firstLine = taskLines[0].render(80)[0] ?? "";
+		assert.ok(firstLine.includes("Just completed"), "recently completed task should be first");
+
+		// Last line should be older completed tasks
+		const lastLine = taskLines[2].render(80)[0] ?? "";
+		assert.ok(lastLine.includes("Old completed"), "older completed task should be last");
+	} finally {
+		globalThis.setInterval = originalSetInterval;
+		globalThis.clearInterval = originalClearInterval;
+	}
+});
