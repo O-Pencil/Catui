@@ -16,7 +16,7 @@ export interface TaskStatusEntry {
   blockedBy?: string[];
 }
 
-const BRAILLE_FRAMES = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
+const TASK_SPINNER_FRAMES = ["♫", "♬"];
 /** Max tasks visible before collapsing. Dynamically adjusted by terminal height. */
 const MAX_VISIBLE_TASKS = 10;
 const MIN_VISIBLE_TASKS = 3;
@@ -25,6 +25,7 @@ export class TaskStatusPanelComponent extends Container {
   private tui: TUI;
   private theme: Theme;
   private spinnerFrame = 0;
+  private spinnerTimer: NodeJS.Timeout | undefined;
   private headerText: Text;
   private taskLines: Text[] = [];
   private overflowLine: Text | undefined;
@@ -37,6 +38,60 @@ export class TaskStatusPanelComponent extends Container {
     this.headerText = new Text("", 0, 0);
     this.addChild(new Spacer(1));
     this.addChild(this.headerText);
+  }
+
+  private getSummaryText(tasks: TaskStatusEntry[]): string {
+    const completed = tasks.filter((t) => t.status === "completed").length;
+    const inProgress = tasks.filter((t) => t.status === "in_progress").length;
+    const pending = tasks.length - completed - inProgress;
+
+    const parts: string[] = [];
+    if (completed > 0) parts.push(`${completed} done`);
+    if (inProgress > 0) parts.push(`${inProgress} in progress`);
+    if (pending > 0) parts.push(`${pending} open`);
+
+    return parts.join(", ");
+  }
+
+  private updateHeader(tasks: TaskStatusEntry[]): void {
+    const completed = tasks.filter((t) => t.status === "completed").length;
+    const inProgress = tasks.filter((t) => t.status === "in_progress").length;
+    const anyRunning = inProgress > 0;
+    const allDone = tasks.length > 0 && completed === tasks.length;
+
+    if (!anyRunning) {
+      this.spinnerFrame = 0;
+    }
+
+    const spinner = anyRunning
+      ? this.theme.fg("accent", TASK_SPINNER_FRAMES[this.spinnerFrame])
+      : allDone
+        ? this.theme.fg("success", "✔")
+        : this.theme.fg("dim", "◼");
+
+    const summary = this.getSummaryText(tasks);
+    this.headerText.setText(` ${spinner} ${this.theme.bold("Tasks")} ${this.theme.fg("dim", `(${summary})`)}`);
+  }
+
+  private startSpinner(): void {
+    if (this.spinnerTimer) return;
+    this.spinnerTimer = setInterval(() => {
+      this.spinnerFrame = (this.spinnerFrame + 1) % TASK_SPINNER_FRAMES.length;
+      if (this.lastTasks.length > 0) {
+        this.updateHeader(this.lastTasks);
+        this.tui.requestRender();
+      }
+    }, 500);
+  }
+
+  private stopSpinner(): void {
+    if (!this.spinnerTimer) return;
+    clearInterval(this.spinnerTimer);
+    this.spinnerTimer = undefined;
+  }
+
+  dispose(): void {
+    this.stopSpinner();
   }
 
   /** Rebuild the panel from current task list. */
@@ -52,33 +107,22 @@ export class TaskStatusPanelComponent extends Container {
     }
 
     if (tasks.length === 0) {
+      this.stopSpinner();
       this.headerText.setText("");
       return;
     }
 
-    const completed = tasks.filter((t) => t.status === "completed").length;
     const inProgress = tasks.filter((t) => t.status === "in_progress").length;
-    const pending = tasks.length - completed - inProgress;
     const anyRunning = inProgress > 0;
-    const allDone = completed === tasks.length;
 
-    // Spinner
     if (anyRunning) {
-      this.spinnerFrame = (this.spinnerFrame + 1) % BRAILLE_FRAMES.length;
+      this.startSpinner();
+    } else {
+      this.stopSpinner();
     }
-    const spinner = anyRunning
-      ? this.theme.fg("accent", BRAILLE_FRAMES[this.spinnerFrame])
-      : allDone
-        ? this.theme.fg("success", "✔")
-        : this.theme.fg("dim", "◼");
 
     // Header — summary line like CC: "{total} tasks ({completed} done, ...)"
-    const parts: string[] = [];
-    if (completed > 0) parts.push(`${completed} done`);
-    if (inProgress > 0) parts.push(`${inProgress} in progress`);
-    if (pending > 0) parts.push(`${pending} open`);
-    const summary = parts.join(", ");
-    this.headerText.setText(` ${spinner} ${this.theme.bold("Tasks")} ${this.theme.fg("dim", `(${summary})`)}`);
+    this.updateHeader(tasks);
 
     // Compute max visible based on terminal height
     const rows = this.tui.terminal?.rows ?? 24;

@@ -414,6 +414,7 @@ export class StreamRenderController {
         state.planProgress = undefined;
         // Clean up task status panel
         if (state.taskStatusPanel) {
+          state.taskStatusPanel.dispose?.();
           statusContainer.removeChild(state.taskStatusPanel);
           state.taskStatusPanel = undefined;
         }
@@ -644,6 +645,7 @@ export class StreamRenderController {
       if (tasks.length === 0) {
         // No tasks — remove panel if it exists
         if (state.taskStatusPanel) {
+          state.taskStatusPanel.dispose?.();
           statusContainer.removeChild(state.taskStatusPanel);
           state.taskStatusPanel = undefined;
         }
@@ -677,6 +679,7 @@ export class StreamRenderController {
             if (stillAllDone) {
               // Just remove the panel — don't reset the task list (user may want to review)
               if (state.taskStatusPanel) {
+                state.taskStatusPanel.dispose?.();
                 statusContainer.removeChild(state.taskStatusPanel);
                 state.taskStatusPanel = undefined;
               }
