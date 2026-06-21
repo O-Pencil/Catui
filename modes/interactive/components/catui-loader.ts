@@ -33,6 +33,7 @@ export class CatuiLoader extends Container {
 	private message: string;
 	private suffix = "";
 	private interval: NodeJS.Timeout | undefined;
+	private tipTimeout: NodeJS.Timeout | undefined;
 	private tipInterval: NodeJS.Timeout | undefined;
 	private currentFrame = 0;
 	private textComponent: Text;
@@ -81,7 +82,8 @@ export class CatuiLoader extends Container {
 
 	private startTipRotation(): void {
 		// Show first tip after a short delay (only if still loading)
-		setTimeout(() => {
+		this.tipTimeout = setTimeout(() => {
+			this.tipTimeout = undefined;
 			if (!this.isStopped) {
 				this.tipComponent.setText(this.theme.fg("dim", `  ╙ tip: ${this.getRandomTip()}`));
 				this.tui.requestRender();
@@ -97,7 +99,7 @@ export class CatuiLoader extends Container {
 	}
 
 	private startAnimation(): void {
-		const updateFrame = () => {
+		const updateFrame = (options?: { requestRender?: boolean }) => {
 			if (this.isStopped) return;
 
 			const frameChar = this.frames[this.currentFrame];
@@ -109,13 +111,16 @@ export class CatuiLoader extends Container {
 			const display = `${diamond} ${this.theme.fg("accent", this.message)}${suffixPart}`;
 
 			this.textComponent.setText(display);
-			this.tui.requestRender();
+			if (options?.requestRender !== false) {
+				this.tui.requestRender();
+			}
 
 			this.currentFrame = (this.currentFrame + 1) % this.frames.length;
 		};
 
-		// Initial render
-		updateFrame();
+		// Prepare the first frame without requesting a render before the loader
+		// is mounted; callers request render after adding it to the status tree.
+		updateFrame({ requestRender: false });
 
 		// Update every 200ms for smooth rotation
 		this.interval = setInterval(updateFrame, 200);
@@ -160,8 +165,16 @@ export class CatuiLoader extends Container {
 	}
 
 	setMessage(message: string, options?: { resetStallTimer?: boolean; suffix?: string }): void {
+		const nextSuffix = options?.suffix ?? "";
+		if (
+			options?.resetStallTimer === false &&
+			this.message === message &&
+			this.suffix === nextSuffix
+		) {
+			return;
+		}
 		this.message = message;
-		this.suffix = options?.suffix ?? "";
+		this.suffix = nextSuffix;
 		if (options?.resetStallTimer !== false) {
 			this.resetStallTimer();
 		}
@@ -182,6 +195,10 @@ export class CatuiLoader extends Container {
 		if (this.interval) {
 			clearInterval(this.interval);
 			this.interval = undefined;
+		}
+		if (this.tipTimeout) {
+			clearTimeout(this.tipTimeout);
+			this.tipTimeout = undefined;
 		}
 		if (this.tipInterval) {
 			clearInterval(this.tipInterval);
