@@ -14,6 +14,8 @@ coverage/
 .nanopencil/
 # Repo dev-loop runtime artifacts (local verification/check logs)
 .catui/dev-loop/
+# token-save runtime cache (per-shell capture log + history; daemon regenerates)
+.catui/token-save/
 # Daily pencil-on-pencil self-study runtime artifacts (task prompts + outputs)
 .pencil-self-study/
 # scripts/self-diagnosis/ per-run artifacts (task + output + analysis, gitkeep stays)
