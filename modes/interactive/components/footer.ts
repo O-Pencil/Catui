@@ -5,7 +5,7 @@
  * [HERE]: modes/interactive/components/footer.ts - status bar footer and shared context progress rendering
  */
 
-import { type Component, truncateToWidth, visibleWidth } from "@catui/tui";
+import { type Component, createNextComponent, NextText, truncateToWidth, visibleWidth } from "@catui/tui";
 import type { AgentSession } from "../../../core/runtime/agent-session.js";
 import type { ReadonlyFooterDataProvider } from "../footer-data-provider.js";
 import { theme } from "../theme/theme.js";
@@ -31,6 +31,10 @@ function formatTokens(count: number): string {
 	if (count < 1000000) return `${Math.round(count / 1000)}k`;
 	if (count < 10000000) return `${(count / 1000000).toFixed(1)}M`;
 	return `${Math.round(count / 1000000)}M`;
+}
+
+function renderFooterLine(line: string, width: number): string {
+	return createNextComponent(NextText({ children: line })).render(width)[0] ?? "";
 }
 
 export function renderContextProgressBar(contextPercent: number, barWidth = 12): string {
@@ -193,7 +197,7 @@ export class FooterComponent implements Component {
 		if (fullNeeded <= width) {
 			const padding = " ".repeat(Math.max(0, width - fullNeeded));
 			const line = theme.fg("dim", pwd) + sep + statsStr + sep + theme.fg("dim", rightSide) + extPart + padding;
-			return [line];
+			return [renderFooterLine(line, width)];
 		}
 
 		// Try without ext: pwd · stats · right
@@ -201,7 +205,7 @@ export class FooterComponent implements Component {
 		if (noExtNeeded <= width) {
 			const padding = " ".repeat(Math.max(0, width - noExtNeeded));
 			const line = theme.fg("dim", pwd) + sep + statsStr + sep + theme.fg("dim", rightSide) + padding;
-			return [line];
+			return [renderFooterLine(line, width)];
 		}
 
 		// Try without right side: pwd · stats · ext
@@ -209,7 +213,7 @@ export class FooterComponent implements Component {
 		if (partialNeeded <= width) {
 			const padding = " ".repeat(Math.max(0, width - partialNeeded));
 			const line = theme.fg("dim", pwd) + sep + statsStr + extPart + padding;
-			return [line];
+			return [renderFooterLine(line, width)];
 		}
 
 		// Try just pwd · stats
@@ -217,7 +221,7 @@ export class FooterComponent implements Component {
 		if (minimalNeeded <= width) {
 			const padding = " ".repeat(Math.max(0, width - minimalNeeded));
 			const line = theme.fg("dim", pwd) + sep + statsStr + padding;
-			return [line];
+			return [renderFooterLine(line, width)];
 		}
 
 		// Truncation fallback: truncate pwd to fit everything
@@ -232,10 +236,10 @@ export class FooterComponent implements Component {
 		if (remaining >= sepWidth + rightWidth) {
 			const padding = " ".repeat(Math.max(0, remaining - sepWidth - rightWidth));
 			const line = theme.fg("dim", truncatedPwd) + sep + statsStr + sep + theme.fg("dim", rightSide) + padding;
-			return [truncateToWidth(line, width, "…")];
+			return [renderFooterLine(truncateToWidth(line, width, "…"), width)];
 		}
 		const padding = " ".repeat(Math.max(0, width - truncatedPwd.length - sepWidth - statsWidth));
 		const line = theme.fg("dim", truncatedPwd) + sep + statsStr + padding;
-		return [truncateToWidth(line, width, "…")];
+		return [renderFooterLine(truncateToWidth(line, width, "…"), width)];
 	}
 }

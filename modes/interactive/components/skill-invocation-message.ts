@@ -2,10 +2,10 @@
  * [WHO]: SkillInvocationMessageComponent
  * [FROM]: Depends on @catui/tui, ../theme/theme.js, ./keybinding-hints.js
  * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/skill-invocation-message.ts -
+ * [HERE]: modes/interactive/components/skill-invocation-message.ts - skill invocation display
  */
 
-import { Box, Markdown, type MarkdownTheme, Text } from "@catui/tui";
+import { Box, type Component, createNextComponent, Markdown, type MarkdownTheme, NextLegacy, Text } from "@catui/tui";
 import type { ParsedSkillBlock } from "../../../core/runtime/agent-session.js";
 import { getMarkdownTheme, theme } from "../theme/theme.js";
 import { editorKey } from "./keybinding-hints.js";
@@ -16,15 +16,36 @@ import { editorKey } from "./keybinding-hints.js";
  * Only renders the skill block itself - user message is rendered separately.
  */
 export class SkillInvocationMessageComponent extends Box {
+	private nextContent: Component;
 	private expanded = false;
 	private skillBlock: ParsedSkillBlock;
 	private markdownTheme: MarkdownTheme;
 
 	constructor(skillBlock: ParsedSkillBlock, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
 		super(1, 1, (t) => theme.bg("customMessageBg", t));
+		this.nextContent = createNextComponent(
+			NextLegacy({
+				component: {
+					render: (width: number) => this.renderLegacy(width),
+					invalidate: () => this.invalidateLegacy(),
+				},
+			}),
+		);
 		this.skillBlock = skillBlock;
 		this.markdownTheme = markdownTheme;
 		this.updateDisplay();
+	}
+
+	private renderLegacy(width: number): string[] {
+		return super.render(width);
+	}
+
+	private invalidateLegacy(): void {
+		super.invalidate();
+	}
+
+	override render(width: number): string[] {
+		return this.nextContent.render(width);
 	}
 
 	setExpanded(expanded: boolean): void {

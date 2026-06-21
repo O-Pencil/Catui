@@ -5,11 +5,11 @@
  * [WHO]: BashExecutionComponent
  * [FROM]: Depends on @catui/tui, strip-ansi, ../theme/theme.js, ./dynamic-border.js, ./keybinding-hints.js
  * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/bash-execution.ts -
+ * [HERE]: modes/interactive/components/bash-execution.ts - bash command execution display
  */
 
 
-import { Container, Loader, Spacer, Text, type TUI } from "@catui/tui";
+import { type Component, Container, createNextComponent, Loader, NextLegacy, Spacer, Text, type TUI } from "@catui/tui";
 import stripAnsi from "strip-ansi";
 import {
 	DEFAULT_MAX_BYTES,
@@ -26,6 +26,7 @@ import { truncateToVisualLines } from "./visual-truncate.js";
 const PREVIEW_LINES = 20;
 
 export class BashExecutionComponent extends Container {
+	private nextContent: Component;
 	private command: string;
 	private outputLines: string[] = [];
 	private status: "running" | "complete" | "cancelled" | "error" = "running";
@@ -39,6 +40,14 @@ export class BashExecutionComponent extends Container {
 
 	constructor(command: string, ui: TUI, excludeFromContext = false) {
 		super();
+		this.nextContent = createNextComponent(
+			NextLegacy({
+				component: {
+					render: (width: number) => this.renderLegacy(width),
+					invalidate: () => this.invalidateLegacy(),
+				},
+			}),
+		);
 		this.command = command;
 		this.ui = ui;
 
@@ -71,6 +80,18 @@ export class BashExecutionComponent extends Container {
 
 		// Bottom border
 		this.addChild(new DynamicBorder(borderColor));
+	}
+
+	private renderLegacy(width: number): string[] {
+		return super.render(width);
+	}
+
+	private invalidateLegacy(): void {
+		super.invalidate();
+	}
+
+	override render(width: number): string[] {
+		return this.nextContent.render(width);
 	}
 
 	/**

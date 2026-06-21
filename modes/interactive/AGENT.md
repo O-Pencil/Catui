@@ -23,31 +23,32 @@ agent-loop-status.ts: formatAgentLoopStatusLines(), formats last agent loop resu
 slash-command-arguments.ts: Built-in TUI slash command argument completion helpers for model, agent-loop, thinking, MCP, language, persona, and login commands
 footer-data-provider.ts: FooterDataProvider class, supplies model/session/branch footer information for the TUI status bar
 at-mentions.ts: extractAtMentionedFiles, buildAtMentionContext — @-mention file reference parser for user input, supports @filename and @file:line-range syntax (CC §XI)
+user-query-dedupe.ts: isSameVisibleUserQuery — shared predicate for reconciling optimistic user echoes with runtime/session-context user messages, including @-mention expanded prompts
 theme/theme.ts: Theme loader and definitions, ThemeJson schema validation, chalk-based color system
 components/index.ts: Component barrel exports, re-exports all UI components for extensions
 components/extension-selector.ts: Extension selector UI, keyboard navigation with timeout support
 components/thinking-selector.ts: Thinking level selector, displays reasoning token estimates per level
 components/theme-selector.ts: Theme selector UI, live preview on selection
-components/user-message.ts: User message display, Markdown rendering with theme colors
+components/user-message.ts: User message display, Markdown rendering with theme colors; transcript slice using tui-next legacy adapter for width-clamped Markdown output
 components/bordered-loader.ts: Loader with borders, cancellable loading animation
 components/oauth-selector.ts: OAuth provider selector, login/logout mode support
 components/user-message-selector.ts: User message list selector, chronological message selection
 components/diff.ts: Diff visualization, parseDiffLine for +/- line rendering
 components/daxnuts.ts: Easter egg animation, tribute to dax (@thdxr) for Kimi K2.5
-components/assistant-message.ts: Assistant message display, Markdown with code blocks
+components/assistant-message.ts: Assistant message display, Markdown with code blocks; transcript slice using tui-next legacy adapter for width-clamped assistant/thinking/error output
 components/login-dialog.ts: Login UI dialog, OAuth flow initiation
-components/footer.ts: Status bar footer, displays model/session/branch info and clamp-safe context progress bars
+components/footer.ts: Status bar footer, displays model/session/branch info and clamp-safe context progress bars; first low-risk tui-next-backed surface via @catui/tui bridge
 components/show-images-selector.ts: Image toggle selector, enables/disables image display
 components/catui-loader.ts: Brand animation loader, rotating diamond animation
 components/countdown-timer.ts: Countdown timer, reusable timer for dialogs
 components/visual-truncate.ts: Smart text truncation, accounts for line wrapping
 components/extension-editor.ts: Multi-line editor for extensions, Ctrl+G for external editor
 components/config-selector.ts: Package resources manager, enable/disable packages
-components/custom-message.ts: Custom message renderer, MessageRenderer interface
+components/custom-message.ts: Custom message renderer, MessageRenderer interface; extension transcript slice using tui-next legacy adapter for final width clamping
 components/tree-selector.ts: Tree view selector, hierarchical session display
-components/bash-execution.ts: Bash command execution display, streaming output with truncation
-components/tool-execution.ts: Tool call execution display, image rendering support
-components/skill-invocation-message.ts: Skill invocation display, collapsed/expanded state
+components/bash-execution.ts: Bash command execution display, streaming output with truncation; transcript/bash-output slice using tui-next legacy adapter for final width clamping
+components/tool-execution.ts: Tool call execution display, image rendering support; transcript/tool-output slice using tui-next legacy adapter for final width clamping
+components/skill-invocation-message.ts: Skill invocation display, collapsed/expanded state; system transcript slice using tui-next legacy adapter for final width clamping
 components/soul-stats.ts: Soul statistics display, personality profile visualization
 components/dynamic-border.ts: Dynamic border component, viewport-width adaptive
 components/attachments-bar.ts: File attachments bar, path/mimeType display
@@ -55,8 +56,8 @@ components/memory-stats.ts: Memory statistics display, NanoMem engine integratio
 components/session-selector-search.ts: Session fuzzy search, ParsedSearchQuery parsing
 components/armin.ts: Easter egg animation, XBM art animation
 components/keybinding-hints.ts: Keyboard hints utilities, editorKey/appKey formatting
-components/compaction-summary-message.ts: Compaction message display, context window summary
-components/branch-summary-message.ts: Branch summary display, git branch visualization
+components/compaction-summary-message.ts: Compaction message display, context window summary; system transcript slice using tui-next legacy adapter for final width clamping
+components/branch-summary-message.ts: Branch summary display, git branch visualization; system transcript slice using tui-next legacy adapter for final width clamping
 components/extension-input.ts: Extension input component, timeout countdown support
 components/custom-editor.ts: Custom editor with app keybindings, actionHandlers map
 components/model-selector.ts: Model picker UI, fuzzy filter with Ctrl+N append; emits selected model only, provider configuration and default-model persistence stay with caller

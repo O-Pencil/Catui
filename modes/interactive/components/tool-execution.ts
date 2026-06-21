@@ -2,17 +2,20 @@
  * [WHO]: ToolExecutionOptions, ToolExecutionComponent
  * [FROM]: Depends on node:os, strip-ansi, ../../../core/tools/edit-diff.js, ../../../core/tools/index.js, ../../../core/tools/truncate.js
  * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/tool-execution.ts -
+ * [HERE]: modes/interactive/components/tool-execution.ts - tool call/result display
  */
 
 import * as os from "node:os";
 import {
 	Box,
+	type Component,
 	Container,
+	createNextComponent,
 	getCapabilities,
 	getImageDimensions,
 	Image,
 	imageFallback,
+	NextLegacy,
 	Spacer,
 	Text,
 	type TUI,
@@ -78,6 +81,7 @@ type WriteHighlightCache = {
  * Component that renders a tool call with its result (updateable)
  */
 export class ToolExecutionComponent extends Container {
+	private nextContent: Component;
 	private contentBox: Box; // Used for custom tools and bash visual truncation
 	private contentText: Text; // For built-in tools (with its own padding/bg)
 	private imageComponents: Image[] = [];
@@ -112,6 +116,14 @@ export class ToolExecutionComponent extends Container {
 		cwd: string = process.cwd(),
 	) {
 		super();
+		this.nextContent = createNextComponent(
+			NextLegacy({
+				component: {
+					render: (width: number) => this.renderLegacy(width),
+					invalidate: () => this.invalidateLegacy(),
+				},
+			}),
+		);
 		this.toolName = toolName;
 		this.args = args;
 		this.showImages = options.showImages ?? true;
@@ -134,6 +146,18 @@ export class ToolExecutionComponent extends Container {
 		}
 
 		this.updateDisplay();
+	}
+
+	private renderLegacy(width: number): string[] {
+		return super.render(width);
+	}
+
+	private invalidateLegacy(): void {
+		super.invalidate();
+	}
+
+	override render(width: number): string[] {
+		return this.nextContent.render(width);
 	}
 
 	/**

@@ -2,12 +2,12 @@
  * [WHO]: CustomMessageComponent
  * [FROM]: Depends on @catui/tui, ../theme/theme.js
  * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/custom-message.ts -
+ * [HERE]: modes/interactive/components/custom-message.ts - extension custom message display
  */
 
 import type { TextContent } from "@catui/ai/types";
 import type { Component } from "@catui/tui";
-import { Box, Container, Markdown, type MarkdownTheme, Spacer, Text } from "@catui/tui";
+import { Box, Container, createNextComponent, Markdown, type MarkdownTheme, NextLegacy, Spacer, Text } from "@catui/tui";
 import type { MessageRenderer } from "../../../core/extensions-host/types.js";
 import type { CustomMessage } from "../../../core/messages.js";
 import { getMarkdownTheme, theme } from "../theme/theme.js";
@@ -17,6 +17,7 @@ import { getMarkdownTheme, theme } from "../theme/theme.js";
  * Uses distinct styling to differentiate from user messages.
  */
 export class CustomMessageComponent extends Container {
+	private nextContent: Component;
 	private message: CustomMessage<unknown>;
 	private customRenderer?: MessageRenderer;
 	private box: Box;
@@ -30,6 +31,14 @@ export class CustomMessageComponent extends Container {
 		markdownTheme: MarkdownTheme = getMarkdownTheme(),
 	) {
 		super();
+		this.nextContent = createNextComponent(
+			NextLegacy({
+				component: {
+					render: (width: number) => this.renderLegacy(width),
+					invalidate: () => this.invalidateLegacy(),
+				},
+			}),
+		);
 		this.message = message;
 		this.customRenderer = customRenderer;
 		this.markdownTheme = markdownTheme;
@@ -40,6 +49,18 @@ export class CustomMessageComponent extends Container {
 		this.box = new Box(1, 1, (t) => theme.bg("customMessageBg", t));
 
 		this.rebuild();
+	}
+
+	private renderLegacy(width: number): string[] {
+		return super.render(width);
+	}
+
+	private invalidateLegacy(): void {
+		super.invalidate();
+	}
+
+	override render(width: number): string[] {
+		return this.nextContent.render(width);
 	}
 
 	updateMessage(message: CustomMessage<unknown>): void {

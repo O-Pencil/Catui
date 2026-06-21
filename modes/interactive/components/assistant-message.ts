@@ -6,14 +6,24 @@
  */
 
 import type { AssistantMessage } from "@catui/ai/types";
-import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@catui/tui";
+import {
+	type Component,
+	Container,
+	createNextComponent,
+	Markdown,
+	type MarkdownTheme,
+	NextLegacy,
+	Spacer,
+	Text,
+} from "@catui/tui";
 import { getMarkdownTheme, theme } from "../theme/theme.js";
 
 /**
  * Component that renders a complete assistant message
  */
-export class AssistantMessageComponent extends Container {
+export class AssistantMessageComponent implements Component {
 	private contentContainer: Container;
+	private nextContent: Component;
 	private hideThinkingBlock: boolean;
 	private markdownTheme: MarkdownTheme;
 	private lastMessage?: AssistantMessage;
@@ -23,25 +33,27 @@ export class AssistantMessageComponent extends Container {
 		hideThinkingBlock = false,
 		markdownTheme: MarkdownTheme = getMarkdownTheme(),
 	) {
-		super();
-
 		this.hideThinkingBlock = hideThinkingBlock;
 		this.markdownTheme = markdownTheme;
 
 		// Container for text/thinking content
 		this.contentContainer = new Container();
-		this.addChild(this.contentContainer);
+		this.nextContent = createNextComponent(NextLegacy({ component: this.contentContainer }));
 
 		if (message) {
 			this.updateContent(message);
 		}
 	}
 
-	override invalidate(): void {
-		super.invalidate();
+	invalidate(): void {
+		this.contentContainer.invalidate();
 		if (this.lastMessage) {
 			this.updateContent(this.lastMessage);
 		}
+	}
+
+	render(width: number): string[] {
+		return this.nextContent.render(width);
 	}
 
 	setHideThinkingBlock(hide: boolean): void {
