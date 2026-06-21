@@ -14,7 +14,7 @@ keys.ts: KeyId, matchesKey, parseKey, keyboard input handling, supports Kitty ke
 editor-component.ts: EditorComponent interface, custom editor component interface for extensions (vim/emacs modes)
 keybindings.ts: EditorKeybindingsManager, getEditorKeybindings, setEditorKeybindings, editor action keybinding definitions
 terminal.ts: Terminal, ProcessTerminal, terminal detection and configuration, stdin/stdout management
-index.ts: tui barrel exports, entry point for package, exports all components and core TUI classes
+index.ts: tui barrel exports, entry point for package, exports legacy components/core TUI classes plus controlled tui-next bridge symbols
 fuzzy.ts: FuzzyMatch, fuzzyMatch, fuzzyFilter, fuzzy matching utilities for ordered character matching
 components/cancellable-loader.ts: CancellableLoader class, interruptible loading indicator with AbortSignal support
 components/image.ts: ImageTheme, ImageOptions, Image class, image component using terminal protocols
@@ -27,7 +27,13 @@ components/settings-list.ts: SettingItem, SettingsListTheme, SettingsList class,
 components/spacer.ts: Spacer class, spacer element rendering empty lines
 components/box.ts: Box class, box/drawing primitive with background and child rendering
 components/truncated-text.ts: TruncatedText class, text truncation to fit viewport width
-components/select-list.ts: SelectItem, SelectListTheme, SelectList class, selectable list with keyboard navigation
+components/select-list.ts: SelectItem, SelectListTheme, SelectList class, selectable list with keyboard navigation and width-clamped no-match output
+next/types.ts: NextChild, NextNode, TextNode, BoxNode — internal tui-next node contracts for CC-style primitives
+next/components/Text.ts: Text, TextProps — CC-style text primitive for tui-next isolated renderer
+next/components/Box.ts: Box, BoxProps — CC-style box primitive for tui-next isolated renderer
+next/components/Legacy.ts: NextLegacy, LegacyProps — embeds existing legacy Component instances inside tui-next trees
+next/legacy-adapter.ts: createNextComponent, internal render-to-lines bridge from tui-next nodes to legacy Component with width-clamped legacy child output
+next/index.ts: tui-next internal barrel exports for isolated migration tests and future interactive slices
 vitest.config.ts: Vitest configuration for TUI package tests
 
 Rule: Members complete, one item per line, parent links valid, precise terms first

@@ -28,6 +28,16 @@ export { type SettingItem, SettingsList, type SettingsListTheme } from "./compon
 export { Spacer } from "./components/spacer.js";
 export { Text } from "./components/text.js";
 export { TruncatedText } from "./components/truncated-text.js";
+// Internal next-engine bridge for staged TUI migration
+export {
+	Box as NextBox,
+	type BoxProps as NextBoxProps,
+	createNextComponent,
+	NextLegacy,
+	type LegacyProps as NextLegacyProps,
+	Text as NextText,
+	type TextProps as NextTextProps,
+} from "./next/index.js";
 // Editor component interface (for custom editors)
 export type { EditorComponent } from "./editor-component.js";
 // Fuzzy matching
