@@ -18,6 +18,7 @@ import {
 	collectMemoryHighlights,
 	detectLanguageFromMemory,
 	getMemoryDir,
+	getPersonaMemoryDir,
 	getProject,
 	type PresenceMemoryEngine,
 } from "./presence-memory.js";
@@ -62,11 +63,58 @@ function getPersonaPresenceLines(kind: "opening" | "idle"): string[] {
 	}
 }
 
+const PERSONA_IDENTITY_HEADINGS = ["## Identity", "## Tone", "## Working Style"] as const;
+const PERSONA_IDENTITY_MAX_CHARS = 1200;
+
+/**
+ * Read persona identity blocks (Identity / Tone / Working Style) from the active
+ * persona's CATUI.md. These are persona-locked hard constraints — the model's
+ * presence output must conform to them.
+ *
+ * Returns concatenated blocks, truncated to PERSONA_IDENTITY_MAX_CHARS.
+ * Returns empty string when persona is missing or no matching sections found.
+ *
+ * Excludes `## Presence` (handled by getPersonaPresenceLines) and `## Example Interactions`
+ * (kept terse on purpose; the examples can leak style choices that the LLM echoes
+ * verbatim, which we don't want for short opening/idle lines).
+ */
+function loadPersonaIdentity(): string {
+	const personaDir = process.env.NANO_PERSONA_DIR;
+	if (!personaDir) return "";
+	const catuiPath = join(personaDir, "CATUI.md");
+	if (!existsSync(catuiPath)) return "";
+	try {
+		const content = readFileSync(catuiPath, "utf-8");
+		const blocks: string[] = [];
+		for (const heading of PERSONA_IDENTITY_HEADINGS) {
+			const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+			const match = content.match(
+				new RegExp(`${escaped}\\s*\\n([\\s\\S]*?)(?=\\n## |\\n# |$)`),
+			);
+			if (!match) continue;
+			const trimmed = match[1]!.trim();
+			if (trimmed.length > 0) {
+				blocks.push(`${heading}\n${trimmed}`);
+			}
+		}
+		if (blocks.length === 0) return "";
+		const joined = blocks.join("\n\n");
+		if (joined.length <= PERSONA_IDENTITY_MAX_CHARS) return joined;
+		return joined.slice(0, PERSONA_IDENTITY_MAX_CHARS) + "\n…";
+	} catch {
+		return "";
+	}
+}
+
 // Fallback messages for when AI generation fails or memory is empty
 function getFallbackOpeningLines(locale?: "en" | "zh"): string[] {
 	const personaLines = getPersonaPresenceLines("opening");
-	if (personaLines.length > 0) return personaLines;
 	const useLocale = locale || getLocale();
+	// Only use persona lines when their language matches the requested locale.
+	// A Chinese-only persona should not leak its lines when the user is in English.
+	if (personaLines.length > 0 && personaLinesMatchLocale(personaLines, useLocale)) {
+		return personaLines;
+	}
 	if (!locale || useLocale === getLocale()) {
 		const lines = tValue<string[]>("msg.presence.opening");
 		if (Array.isArray(lines)) return lines;
@@ -92,8 +140,10 @@ function getFallbackOpeningLines(locale?: "en" | "zh"): string[] {
 
 function getFallbackIdleLines(locale?: "en" | "zh"): string[] {
 	const personaLines = getPersonaPresenceLines("idle");
-	if (personaLines.length > 0) return personaLines;
 	const useLocale = locale || getLocale();
+	if (personaLines.length > 0 && personaLinesMatchLocale(personaLines, useLocale)) {
+		return personaLines;
+	}
 	if (!locale || useLocale === getLocale()) {
 		const lines = tValue<string[]>("msg.presence.idle");
 		if (Array.isArray(lines)) return lines;
@@ -116,6 +166,23 @@ function getFallbackIdleLines(locale?: "en" | "zh"): string[] {
 	];
 }
 
+/**
+ * Heuristic: do the persona presence lines primarily use the requested locale's script?
+ * Used so a Chinese-only persona does not leak Chinese lines when the user is in English.
+ * Count Chinese characters vs Latin word tokens across the lines.
+ */
+function personaLinesMatchLocale(lines: readonly string[], locale: "en" | "zh"): boolean {
+	if (lines.length === 0) return false;
+	let chinese = 0;
+	let latin = 0;
+	for (const line of lines) {
+		chinese += (line.match(/[一-鿿]/g) || []).length;
+		latin += (line.match(/[A-Za-z]+/g) || []).length;
+	}
+	if (locale === "zh") return chinese >= latin;
+	return latin >= chinese;
+}
+
 type PresenceState = {
 	lastActivityAt: number;
 	idleReminderSent: boolean;
@@ -125,6 +192,7 @@ type PresenceState = {
 	idleTimer?: ReturnType<typeof setInterval>;
 	unsubscribeInput?: () => void;
 	memEngine?: PresenceMemoryEngine;
+	personaMemEngine?: PresenceMemoryEngine;
 	recentPresenceLines: string[]; // Last few presence lines (max 3) for per-turn agent injection
 	lastPresenceAt?: number; // Timestamp of last sendPresence (debounce)
 	idleGenerating?: boolean; // In-flight lock for async idle generation
@@ -272,24 +340,37 @@ function clearTimers(state: PresenceState): void {
 	state.unsubscribeInput = undefined;
 }
 
-async function initMemEngine(state: PresenceState): Promise<void> {
-	if (state.memEngine) return;
+async function initMemEngine(
+	state: PresenceState,
+	kind: "global" | "persona" = "global",
+): Promise<void> {
+	if (kind === "persona" && state.personaMemEngine) return;
+	if (kind === "global" && state.memEngine) return;
+	const memoryDir = kind === "persona" ? getPersonaMemoryDir() : getMemoryDir();
+	if (kind === "persona" && !memoryDir) {
+		// Persona has no memory dir; do not init an engine.
+		state.personaMemEngine = undefined;
+		return;
+	}
 	try {
 		const memModule = await importRuntimeModule<{
 			NanoMemEngine: new (config: unknown) => NonNullable<PresenceState["memEngine"]>;
 			getConfig: (options: { memoryDir: string; locale: "en" | "zh" }) => unknown;
 		}>(["catui-mem"], "mem-core");
 		if (!memModule?.NanoMemEngine || !memModule.getConfig) {
-			state.memEngine = undefined;
+			if (kind === "persona") state.personaMemEngine = undefined;
+			else state.memEngine = undefined;
 			return;
 		}
 		const { NanoMemEngine, getConfig } = memModule;
-		const memoryDir = getMemoryDir();
-		const config = getConfig({ memoryDir, locale: getLocale() === "zh" ? "zh" : "en" });
-		state.memEngine = new NanoMemEngine(config);
+		const config = getConfig({ memoryDir: memoryDir!, locale: getLocale() === "zh" ? "zh" : "en" });
+		const engine = new NanoMemEngine(config) as NonNullable<PresenceState["memEngine"]>;
+		if (kind === "persona") state.personaMemEngine = engine;
+		else state.memEngine = engine;
 	} catch {
 		// NanoMem not available, use fallback messages
-		state.memEngine = undefined;
+		if (kind === "persona") state.personaMemEngine = undefined;
+		else state.memEngine = undefined;
 	}
 }
 
@@ -344,13 +425,21 @@ async function buildGreetingPrompt(
 	kind: "opening" | "idle" = "opening",
 	lastUserMessage?: string,
 ): Promise<string | undefined> {
-	if (!state.memEngine) return undefined;
+	if (!state.memEngine && !state.personaMemEngine) return undefined;
 
 	try {
-		// Get recent episodes for context
-		const episodes = await state.memEngine.getAllEpisodes();
+		// Get recent episodes from persona memory first, then global, deduped by date.
+		const personaEpisodes = state.personaMemEngine ? await state.personaMemEngine.getAllEpisodes() : [];
+		const globalEpisodes = state.memEngine ? await state.memEngine.getAllEpisodes() : [];
+		const seenDates = new Set<string>();
+		const episodes = [...personaEpisodes, ...globalEpisodes].filter((ep) => {
+			if (!ep.date) return false;
+			if (seenDates.has(ep.date)) return false;
+			seenDates.add(ep.date);
+			return true;
+		});
 		const recentEpisodes = episodes
-			.filter((ep) => ep.date && !ep.consolidated)
+			.filter((ep) => !ep.consolidated)
 			.sort((a, b) => {
 				const aTime = a.endedAt || a.startedAt || "";
 				const bTime = b.endedAt || b.startedAt || "";
@@ -370,13 +459,16 @@ async function buildGreetingPrompt(
 					? "根据下面的上下文，生成一句开场问候语。"
 					: "用户安静了几分钟。轻轻问候一下，别打扰他。一句话就够。",
 				"",
+				"约束分级（按优先级）:",
+				"[1] 最高优先级 — persona 锁定的人格（system prompt 已注入）。必须严格遵守。",
+				"[2] 中优先级 — soul 演化的偏好。与 persona 不冲突时遵循；冲突时被 persona 覆盖。",
+				"[3] 背景参考 — 记忆、经验、episodes。提供话题，不强制语气。",
+				"",
 				"要求:",
 				"- 简短自然，不要太正式",
-				"- 如果有身份、语气、称呼或角色偏好，必须遵守",
 				kind === "idle" ? "- 不要重复你之前说过的开场白" : "- 如果有上下文，可以自然提一句",
 				"- 不要为了有话说而硬找话题",
 				"- 如果他只是在做很琐碎的事情，不需要特别提起，简单打个招呼就好",
-				"- 普通偏好和经验只是背景参考；身份、语气、称呼和角色偏好不是背景，必须优先遵守",
 				"- 不要反复提同样的记忆或概念，要换着花样",
 				"",
 				"项目状态:",
@@ -387,7 +479,7 @@ async function buildGreetingPrompt(
 			];
 
 			if (recentEpisodes.length > 0) {
-				lines.push("", "最近在做:");
+				lines.push("", "[3] 最近在做（背景参考）:");
 				for (const ep of recentEpisodes.slice(0, 2)) {
 					const summary = ep.summary?.slice(0, 80) || "无摘要";
 					lines.push(`- ${summary}`);
@@ -395,15 +487,15 @@ async function buildGreetingPrompt(
 			}
 
 			if (highlights.preferences.length > 0) {
-				lines.push("", "你知道他的偏好:");
+				lines.push("", "[3] 你知道他的偏好（背景参考）:");
 				for (const p of highlights.preferences) lines.push(`- ${p}`);
 			}
 			if (soulHints.identityPreferences.length > 0) {
-				lines.push("", "高优先级身份/语气/称呼约束:");
+				lines.push("", "[2] Soul 演化的偏好（中优先级，和 persona 不冲突时遵循）:");
 				for (const p of soulHints.identityPreferences) lines.push(`- ${p}`);
 			}
 			if (highlights.lessons.length > 0) {
-				lines.push("", "记下的经验:");
+				lines.push("", "[3] 记下的经验（背景参考）:");
 				for (const l of highlights.lessons) lines.push(`- ${l}`);
 			}
 
@@ -413,7 +505,7 @@ async function buildGreetingPrompt(
 			}
 
 			if (soulHints.traits.length > 0) {
-				lines.push("", `你的人格倾向: ${soulHints.traits.join(", ")}${soulHints.tone ? ` (心情: ${soulHints.tone})` : ""}`);
+				lines.push("", `[2] Soul 人格倾向（中优先级参考）: ${soulHints.traits.join(", ")}${soulHints.tone ? ` (心情: ${soulHints.tone})` : ""}`);
 			}
 
 			if (state.recentPresenceLines.length > 0) {
@@ -434,13 +526,16 @@ async function buildGreetingPrompt(
 					? "Generate a casual opening greeting based on the context below."
 					: "The user has been quiet for a few minutes. Drop a soft, non-pushy check-in. One short sentence.",
 				"",
+				"Constraint priorities (highest first):",
+				"[1] Persona-locked identity (already in system prompt). Must follow strictly.",
+				"[2] Soul-evolved preferences. Follow when not conflicting with [1]; override [1] never.",
+				"[3] Background reference: memory, lessons, episodes. Topic source, not style.",
+				"",
 				"Requirements:",
 				"- Keep it short and natural, not formal",
-				"- If identity, tone, address, or role preferences are present, follow them",
 				kind === "idle" ? "- Do NOT repeat your earlier opening greeting" : "- If there's recent context, mention it naturally",
 				"- Don't force a topic just to have something to say",
 				"- If they're only doing trivial things (like creating an empty folder), don't mention it - just say hi",
-				"- Ordinary preferences and lessons are background context; identity, tone, address, and role preferences are high-priority constraints",
 				"- Don't keep bringing up the same memories or concepts repeatedly",
 				"",
 				"Project state:",
@@ -451,7 +546,7 @@ async function buildGreetingPrompt(
 			];
 
 			if (recentEpisodes.length > 0) {
-				lines.push("", "Recently worked on:");
+				lines.push("", "[3] Recently worked on (background reference):");
 				for (const ep of recentEpisodes.slice(0, 2)) {
 					const summary = ep.summary?.slice(0, 80) || "No summary";
 					lines.push(`- ${summary}`);
@@ -459,15 +554,15 @@ async function buildGreetingPrompt(
 			}
 
 			if (highlights.preferences.length > 0) {
-				lines.push("", "What you know about them:");
+				lines.push("", "[3] What you know about them (background reference):");
 				for (const p of highlights.preferences) lines.push(`- ${p}`);
 			}
 			if (soulHints.identityPreferences.length > 0) {
-				lines.push("", "High-priority identity/tone/address constraints:");
+				lines.push("", "[2] Soul-evolved preferences (medium priority, follow when not conflicting with persona):");
 				for (const p of soulHints.identityPreferences) lines.push(`- ${p}`);
 			}
 			if (highlights.lessons.length > 0) {
-				lines.push("", "Lessons remembered:");
+				lines.push("", "[3] Lessons remembered (background reference):");
 				for (const l of highlights.lessons) lines.push(`- ${l}`);
 			}
 
@@ -477,7 +572,7 @@ async function buildGreetingPrompt(
 			}
 
 			if (soulHints.traits.length > 0) {
-				lines.push("", `Your personality tilt: ${soulHints.traits.join(", ")}${soulHints.tone ? ` (mood: ${soulHints.tone})` : ""}`);
+				lines.push("", `[2] Soul personality tilt (medium priority reference): ${soulHints.traits.join(", ")}${soulHints.tone ? ` (mood: ${soulHints.tone})` : ""}`);
 			}
 
 			if (state.recentPresenceLines.length > 0) {
@@ -493,7 +588,11 @@ async function buildGreetingPrompt(
 
 			return lines.join("\n");
 		}
-	} catch {
+	} catch (e) {
+		if (process.env.CATUI_DEBUG_PRESENCE) {
+			// eslint-disable-next-line no-console
+			console.error("[presence] buildGreetingPrompt failed:", e);
+		}
 		return undefined;
 	}
 }
@@ -503,21 +602,26 @@ function buildPresenceSystemPrompt(
 	soulHints: PresenceSoulHints,
 	kind: "opening" | "idle",
 ): string {
+	const personaIdentity = loadPersonaIdentity();
+	const personaBlock = personaIdentity
+		? `\n\n[Persona Identity — highest priority, persona-locked]\n${personaIdentity}\n[/Persona Identity]`
+		: "";
+
 	const traitsHint = soulHints.traits.length > 0
-		? ` ${locale === "zh" ? "人格倾向" : "Personality tilt"}: ${soulHints.traits.map((t) => t.split(":")[0]).join(", ")}.`
+		? ` ${locale === "zh" ? "Soul 人格倾向（中优先级，参考）" : "Soul personality tilt (medium priority, reference)"}: ${soulHints.traits.map((t) => t.split(":")[0]).join(", ")}.`
 		: "";
 	const identityHint = soulHints.identityPreferences.length > 0
-		? ` ${locale === "zh" ? "必须遵守这些身份/语气/称呼约束" : "Follow these identity/tone/address constraints"}: ${soulHints.identityPreferences.join(" | ")}.`
+		? ` ${locale === "zh" ? "Soul 演化偏好（中优先级，和 persona 不冲突时遵循）" : "Soul-evolved preferences (medium priority, follow when not conflicting with persona)"}: ${soulHints.identityPreferences.join(" | ")}.`
 		: "";
 
 	if (locale === "zh") {
 		return kind === "opening"
-			? `生成一句简短自然的开场问候。不要覆盖已知身份设定。${identityHint}${traitsHint}`
-			: `生成一句简短、轻声、不打扰的问候。不要覆盖已知身份设定。${identityHint}${traitsHint}`;
+			? `生成一句简短自然的开场问候。先遵守 persona 锁定的人格，再考虑 soul 风格。${personaBlock}${identityHint}${traitsHint}`
+			: `生成一句简短、轻声、不打扰的问候。先遵守 persona 锁定的人格，再考虑 soul 风格。${personaBlock}${identityHint}${traitsHint}`;
 	}
 	return kind === "opening"
-		? `Generate one brief, natural opening greeting. Do not override known identity settings.${identityHint}${traitsHint}`
-		: `Generate one brief, quiet, non-pushy check-in. Do not override known identity settings.${identityHint}${traitsHint}`;
+		? `Generate one brief, natural opening greeting. Follow the persona-locked identity first, then the soul style hints.${personaBlock}${identityHint}${traitsHint}`
+		: `Generate one brief, quiet, non-pushy check-in. Follow the persona-locked identity first, then the soul style hints.${personaBlock}${identityHint}${traitsHint}`;
 }
 
 function getLastUserMessage(ctx: ExtensionContext): string | undefined {
@@ -565,16 +669,16 @@ async function generatePresenceLine(
 			memoryIdentityPreferences,
 		),
 	};
-	const prompt = await buildGreetingPrompt(
+	const promptPair = await buildPresencePromptPair(
 		state,
 		locale,
 		presenceHints,
 		kind,
 		lastUser,
 	);
-	if (!prompt) return fallback();
+	if (!promptPair) return fallback();
 
-	const systemPrompt = buildPresenceSystemPrompt(locale, presenceHints, kind);
+	const { systemPrompt, userPrompt: prompt } = promptPair;
 
 	try {
 		const line = await ctx.completeSimple(systemPrompt, prompt);
@@ -655,7 +759,8 @@ async function maybeSendOpening(
 	if (!canSendOpening(ctx)) return false;
 
 	// Initialize memory + soul engines if not already done
-	await initMemEngine(state);
+	await initMemEngine(state, "global");
+	await initMemEngine(state, "persona");
 
 	// Generate AI-powered greeting
 	const greeting = await generatePresenceLine(api, ctx, state, "opening");
@@ -692,7 +797,8 @@ function maybeSendIdleReminder(api: ExtensionAPI, ctx: ExtensionContext, state: 
 	state.idleGenerating = true;
 	void (async () => {
 		try {
-			await initMemEngine(state);
+			await initMemEngine(state, "global");
+			await initMemEngine(state, "persona");
 			const line = await generatePresenceLine(api, ctx, state, "idle");
 			if (canSendPresence(ctx)) {
 				sendPresence(api, state, line);
@@ -720,7 +826,8 @@ async function generateAwakening(
 	const apiKey = await ctx.modelRegistry.getApiKey(ctx.model);
 	if (!apiKey) return;
 
-	await initMemEngine(state);
+	await initMemEngine(state, "global");
+	await initMemEngine(state, "persona");
 
 	try {
 		const episodes = state.memEngine
@@ -950,10 +1057,31 @@ export default async function presenceExtension(api: ExtensionAPI) {
 	});
 }
 
+/**
+ * Test-only helper: assemble the (systemPrompt, userPrompt) pair that generatePresenceLine
+ * would feed to ctx.completeSimple, without actually invoking the LLM. This lets tests
+ * verify the prompt wiring (persona-locked identity, priority labels, soul de-prioritization,
+ * layered memory) end-to-end without spinning up a model.
+ */
+async function buildPresencePromptPair(
+	state: PresenceState,
+	locale: "en" | "zh",
+	soulHints: PresenceSoulHints,
+	kind: "opening" | "idle",
+	lastUserMessage?: string,
+): Promise<{ systemPrompt: string; userPrompt: string } | undefined> {
+	const userPrompt = await buildGreetingPrompt(state, locale, soulHints, kind, lastUserMessage);
+	if (!userPrompt) return undefined;
+	const systemPrompt = buildPresenceSystemPrompt(locale, soulHints, kind);
+	return { systemPrompt, userPrompt };
+}
+
 export const __testUtils = {
 	getFallbackOpeningLines,
 	getFallbackIdleLines,
 	getPersonaPresenceLines,
+	loadPersonaIdentity,
+	personaLinesMatchLocale,
 	resolveBundledPackageEntry,
 	importRuntimeModule,
 	detectLanguageFromMemory,
@@ -961,4 +1089,5 @@ export const __testUtils = {
 	getOpeningDelayMs,
 	collectSoulHints,
 	buildPresenceSystemPrompt,
+	buildPresencePromptPair,
 };
