@@ -113,6 +113,13 @@ test("system-prompt: places soul section once after base instructions", () => {
 	);
 });
 
+test("system-prompt: default opening contains no hard-coded creator identity", () => {
+	const prompt = buildSystemPrompt({ selectedTools: ["read"] });
+
+	assert.match(prompt, /^You are an interactive coding agent\./);
+	assert.doesNotMatch(prompt, /Your creator is|creator is cunyu666/i);
+});
+
 test("before_agent_start: append-only extensions preserve soul base prompt", async () => {
 	const basePrompt = buildSystemPrompt({
 		selectedTools: ["read"],
