@@ -7,6 +7,198 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.2] - 2026-06-22
+
+### Added
+- feat(persona): add Aria, a GPT-4o-flavored universal companion
+- feat(persona): add lucy frontend specialist persona
+- feat(next-step): default-on builtin extension for post-task suggestion rule
+- feat(grub): show run summary and recap on completion
+- feat(presence): persona-locked identity + layered persona/global memory
+- feat(grub): raise default iteration limit from 25 to 99
+- feat(interactive): user query dedupe + @-mention context reaches main loop
+- feat(model): custom provider context window + max output overrides
+- feat(models): add minimax m3 to coding plan defaults
+- feat(interactive): migrate footer + transcript components through NextLegacy
+- feat(tui): add NextBox/NextText/NextLegacy + legacy adapter bridge
+- feat(input): @-mention file references in user input
+- feat(task): per-session task list isolation + cross-terminal live updates
+- feat(grub): terminal snapshot shows passing/pending IDs, JSON errors get context
+- feat(runtime): circuit breaker for auto-compaction failures
+- feat(sub-agent): wire shared InProcessSubAgentBackend with real SendMessage
+- feat(mcp): complete SSE transport implementation
+- feat(mcp): add SSESession interface and connection state to MCPClient
+- feat(mcp): add sseUrl field to MCPServerConfig
+- feat(prompt): absorb Fable 5 prompt improvements
+- feat(discipline): absorb 3 new skills + enhance debugging and TDD
+- feat(discipline): add interview skill for structured decision interrogation
+- feat(prompt): absorb Codex prompt improvements
+- feat(update): silent background auto-update every 30 minutes
+- feat(prompt): absorb Claude Code system prompt into Catui
+- feat(update): auto-download and restart on new version detected
+- feat(v1.1.8): session listing API, session_state_changed event, stats getters
+- feat(v1.1.7): expose settings API on AgentSession for GUI consumption
+- feat(v1.1.6): align remaining CC tools, session tag API, and new extensions
+- feat(sdk): systemPrompt object format and thinkingBudgets option
+- feat(sdk): tool parameter field name compatibility and persona injection priority
+- feat(sdk): sdk:mcp_ready enrichment, parentToolCallId, and new session options
+- feat(sdk): streaming tool input, structuredPatch, and sub-agent event details
+- feat(sdk): add permissionMode option for plan mode
+- feat(sdk): align with anthropic-sdk for GUI consumption
+- feat: bundle preset personas, add qwen3.7-plus to dashscope-coding
+- feat(tui): replace welcome banner ASCII art
+- feat(goal): strengthen continuation prompts and raise limits
+- feat(p8)!: narrow public SDK surface
+- feat(goal): pull-model continuation + clean terminal stop
+- feat: extension clearFollowUpQueue API, persona startup env fix, remove streaming preview
+- feat(tui): persistent task status panel and streaming output preview
+- feat(persona): persona system hardening, presence style switching, slash command highlighting
+- feat(models): add remote model discovery + fix loader accent bleed
+- feat(models): remote model discovery with known-model fallback
+- feat(ui): rate-limit cat working message rotation
+- feat(ui): TUI debug logging, loader polish, and plan progress panel
+- feat(plan): interview phase workflow and config
+- feat(grub): blocked signal detection and task state improvements
+- feat(models): auto-probe custom provider context window
+- feat(tools): find sort by modified time
+- feat(tools): grep output modes, multiline, and type filter
+- feat(tools): bash background tasks and configurable timeout
+- feat(tools): add PDF document support across type system and providers
+- feat(ui): add Ctrl+K to reconfigure API key from model selector
+- feat(models): add 13 models to Ali Token Plan provider
+- feat(sub-agent): wire TUI panel with tree layout and braille spinner
+- feat: CachedContainer render cache, notification queue, presence/goal/soul enhancements
+- feat(tools): add renderCall/renderResult to task, plan, goal, ask-user-question tools
+- feat(link-world): expand MCP bridge — WebFetch, WebSearch, LSP integration
+- feat(plan): enhance plan mode — ExitPlanMode tool, workflow prompts, context cleanup
+- feat(lsp): add LSP client extension — goToDefinition, findReferences, hover
+- feat(insights): add session insights engine with HTML report generation
+- feat(ask-user-question): add interactive question dialog extension
+- feat(goal): add /goal long-running task extension — controller, store, prompts
+- feat(loop): 1:1 port CC cron/loop system — parser, tasks, scheduler, lock, tools
+- feat(task): add TaskCreate/Get/Update/List/Stop/Output + ToolSearch extension
+- feat(teach): add guided knowledge teaching extension
+
+### Fixed
+- fix(loop): move durable cron state from project .claude/ to agent dir
+- fix(tui): suppress completed task panel resurrection
+- fix(tui): eliminate task panel flicker after completion
+- fix(tui): stabilize task panel spinner rendering
+- fix(loader): CatuiLoader tip timeout leak + initial-frame render dedup
+- fix(tui): hardware cursor tracking, force render, paste buffer, select-list no-match truncation
+- fix(editor): narrow full-width cursor no longer overflows; bracket-paste recovery
+- fix: recurring cron tasks firing immediately on startup when overdue
+- fix: persona switch failure and skill name mismatch warnings
+- fix(tui): never crash on an over-width rendered line at narrow widths
+- fix(loop): replace "Claude" with generic terms in cron tool descriptions
+- fix(tui): restore startup cats banner
+- fix(goal): guard debug filesystem writes
+- fix(config): mkdir -p before writing models.json (defensive, fresh-install safety)
+- fix(interactive): debug logging must never crash on a fresh install (P0, 2.0.0)
+- fix(protocol): re-export extension flag types
+- fix: ai subpath aliases, plan shortcut conflict, persona switch without fork
+- fix: cat message carousel 3s interval, persona env on startup
+- fix(persona): set NANO_PERSONA_DIR on startup for default persona
+- fix(ui): shorten cat working messages to single words
+- fix(ui): declare missing highlightInput property on CustomEditor
+- fix(models): type discovery API response
+- fix(goal): update timer format assertions for 0.1s precision
+- fix(ui): wire promptForProviderApiKey in ProviderConfigPort
+- fix(goal): prevent infinite continuation loop and improve TUI feedback
+- fix(sub-agent): break agent-registry import cycle + repair SendMessage tool
+- fix(dip): list send-message-tool.ts in core/sub-agent AGENT.md
+- fix(sub-agent): improve MCP availability check + add SendMessage tool + custom agent loading
+- fix(dip): add missing P3 headers to insights/loop extensions + list file-state-cache
+- fix(grub): port auto-sanitize initializer hygiene from main (0eea985)
+- fix(release): loosen mem-core extension sdk shim
+- fix(release): make mem-core publish build self-contained
+- fix(release): require republished mem-core for beta.5
+- fix(release): add default exports for bundled internal libs
+- fix(release): bundle internal runtime libs for beta.3
+- fix(build): resolve extension sdk workspace types
+
+### Changed
+- refactor(token-save): move runtime data out of project tree
+- refactor(discipline): consolidate skills, remove redundancy, add cross-references
+- refactor(protocol): add extension flag contract
+- refactor(protocol): add hook event vocabulary
+- refactor(protocol): add command contract slice
+- refactor(protocol): consolidate ExtensionFlag into @pencil-agent/protocol (Phase B sample)
+- refactor(protocol): rename @pencil-agent/extension-sdk → @pencil-agent/protocol (Phase B B0)
+- refactor(docs): split shipped user manuals from internal dev docs; scaffold feature-skill manuals
+- refactor(tools): improve edit/read/write tools + add file state cache
+- refactor(sub-agent): port CC agent architecture — definitions, registry, filtering, safety
+
+### Performance
+- perf(build): minify shipped JS per-file (esbuild transform, no bundle) — BR04
+- perf(build): strip embedded runtime-lib .d.ts/.map from the published tarball
+- perf(startup): load MCP off the critical path + parallel/incremental build:deps
+
+### Documentation
+- docs(codex-goal-vs-grub): reflect grub 99-iteration default
+- docs: design docs + external catui docs review
+- docs(learning-framework): add reusable "learn-a-codebase" framework + catui course pack
+- docs(protocol): update README with usage examples and API docs
+- docs(p8): record protocol candidate deferrals
+- docs(conventions): type/protocol placement rule + rename extension-sdk → @pencil-agent/protocol
+- docs(p8): add executable P8 scope — per-symbol export matrix + migration
+- docs(p7): close the size line — record BR02 measured/kept-bundled
+- docs: add design docs for goal, loop refactor, and plan mode
+- docs: add CC architecture analysis — agent design, TUI design, goal comparison
+- docs: update AGENT.md files and add architecture review notes
+- docs(agents): make feature-workflow MANDATORY in root project instructions
+- docs(arch-review): archive/triage the review corpus (#4)
+- docs(workflow): add layer-placement decision + per-layer MUST/CAN/MUST-NOT
+- docs(workflow): graduate feature workflow into canonical .dev-docs/feature-workflow.md
+- docs(refactor): summarize outcomes and feature workflow
+- docs(signoff): record sign-off + cutover; honestly mark P7/P8 incomplete
+- docs(signoff): fill S-1 through S-6 acceptance results
+- docs(p8): review sdk surface boundaries
+- docs(signoff): add readiness runbook
+- docs(p7): close bundle redesign review
+- docs(p7): defer esbuild bundling
+- docs(p7): gate model metadata chunking
+- docs(p7): review browser extension packaging
+- docs(p7): review bundle redesign boundary
+- docs(ledger): update D5 — fix via publishing first-party packages (beta.2)
+
+### Maintenance
+- chore(models): sync generated catalog after release
+- chore(persona): refine lucy tone with occasional question-mark pause
+- chore(models): regenerate known-models catalog post-1.2.0
+- chore(models): regenerate known-models catalog post-1.1.16
+- chore(gitignore): exclude token-save runtime cache from version control
+- chore(dev-loop): add verification loop tooling
+- chore(verify-package-boundary): resolve internal libs via execFileSync
+- chore(prompt): drop hard-coded creator identity from default opening
+- chore: v1.1.15 — PawBench prompt optimizations, overthinking guard, soul dedup
+- chore: v1.1.14 — persona switch fix, skill validation, slash shortcuts
+- chore: add dev-loop handoff script and update dev-docs
+- chore: v1.1.10 — session listing, session_state_changed event, stats getters
+- chore(v1.1.10): replace nanoPencil with catui in docs, add dev-loop infra
+- chore: bump version to 1.1.9
+- chore(release): bump catui-agent to 1.1.2
+- chore(release): bump catui-agent to 1.1.1
+- chore(release): bump catui-agent to 1.1.0
+- chore(release): bump catui-agent to 1.0.0
+- chore(release): publish catui-agent packages
+- chore(release): 2.0.0
+- chore(release): 2.0.0-beta.10
+- chore(release): 2.0.0-beta.9
+- chore(workflow): verify:all rebuilds internal libs before tsc
+- chore(release): 2.0.0-beta.8
+- chore(release): 2.0.0-beta.7
+- chore: fix DIP header for discovery-cache test
+- chore: fix DIP headers and AGENT.md member lists for new files
+- chore(models): add generated known-models metadata
+- chore(workflow): add pre-push gate so workflow checks run before code leaves the machine
+- chore: remove local review docs from tracking (already in .gitignore)
+- chore: register new extensions, update deps, add config module
+- chore: remove deprecated interview extension
+- chore(dip): remove CLAUDE.md duplicates, keep AGENT.md as canonical P2
+- chore(p7): guard package boundaries
+
+
 ## [1.2.1] - 2026-06-21
 
 ### Added
