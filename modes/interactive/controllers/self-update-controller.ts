@@ -125,7 +125,7 @@ export class SelfUpdateController {
   async handleUpdateCommand(): Promise<void> {
     this.chat.addChild(new Spacer(1));
     this.chat.addChild(
-      new Text(theme.fg("accent", "🔍 Checking for updates..."), 1, 0),
+      new Text(theme.fg("accent", "↝ Checking for updates..."), 1, 0),
     );
     this.render();
 
@@ -148,7 +148,7 @@ export class SelfUpdateController {
       const versionComparison = latestVersion !== "unknown" ? this.compareVersion(latestVersion, currentVersion) : 0;
 
       const lines: string[] = [];
-      lines.push(theme.fg("accent", "📦 Catui Update Checker"));
+      lines.push(theme.fg("accent", "↝ Catui Update Checker"));
       lines.push("");
       lines.push(`Current version: ${theme.fg("dim", currentVersion)}`);
       lines.push(
@@ -160,7 +160,7 @@ export class SelfUpdateController {
       lines.push("");
 
       if (latestVersion !== "unknown" && versionComparison > 0) {
-        lines.push(theme.fg("success", `✨ New version ${latestVersion} available!`));
+        lines.push(theme.fg("success", `✦ New version ${latestVersion} available!`));
         lines.push("");
 
         this.chat.addChild(new Spacer(1));
@@ -171,7 +171,7 @@ export class SelfUpdateController {
         await this.showUpdateOptions(latestVersion);
         return;
       } else if (latestVersion !== "unknown" && versionComparison < 0) {
-        lines.push(theme.fg("success", "✨ You're ahead!"));
+        lines.push(theme.fg("success", "✦ You're ahead!"));
         lines.push("");
         lines.push(
           theme.fg(
@@ -180,7 +180,7 @@ export class SelfUpdateController {
           ),
         );
       } else {
-        lines.push(theme.fg("success", "✨ Up to date!"));
+        lines.push(theme.fg("success", "✦ Up to date!"));
         lines.push("");
         lines.push(
           theme.fg("dim", "You're running the latest version of Catui."),
@@ -195,7 +195,7 @@ export class SelfUpdateController {
         new Text(
           theme.fg(
             "warning",
-            `⚠️  Failed to check for updates: ${error instanceof Error ? error.message : "Unknown error"}`,
+            `✕ Update failed: ${error instanceof Error ? error.message : "Unknown error"}`,
           ),
           1,
           0,
@@ -222,7 +222,7 @@ export class SelfUpdateController {
   handleReinstallCommand(): void {
     this.chat.addChild(new Spacer(1));
     this.chat.addChild(
-      new Text(theme.fg("accent", "🔄 Force Reinstalling Catui..."), 1, 0),
+      new Text(theme.fg("accent", "↝ Force Reinstalling Catui..."), 1, 0),
     );
     this.chat.addChild(
       new Text(
@@ -239,14 +239,14 @@ export class SelfUpdateController {
     uninstall.on("close", (code) => {
       if (code !== 0) {
         this.chat.addChild(
-          new Text(theme.fg("warning", `⚠️  Uninstall failed (exit code ${code}), continuing anyway...`), 1, 0),
+          new Text(theme.fg("warning", `✕ Uninstall failed (exit code ${code}), continuing anyway...`), 1, 0),
         );
         this.render();
       }
 
       // Step 2: Clear cache
       this.chat.addChild(
-        new Text(theme.fg("dim", "🧹 Clearing npm cache..."), 1, 0),
+        new Text(theme.fg("dim", "↝ Clearing npm cache..."), 1, 0),
       );
       this.render();
 
@@ -255,7 +255,7 @@ export class SelfUpdateController {
       cacheClean.on("close", () => {
         // Step 3: Reinstall
         this.chat.addChild(
-          new Text(theme.fg("dim", "📦 Installing latest version..."), 1, 0),
+          new Text(theme.fg("dim", "↝ Installing latest version..."), 1, 0),
         );
         this.render();
 
@@ -264,7 +264,7 @@ export class SelfUpdateController {
         install.on("close", (installCode) => {
           if (installCode === 0) {
             this.chat.addChild(
-              new Text(theme.fg("success", "✅ Catui reinstalled successfully!"), 1, 0),
+              new Text(theme.fg("success", "◈ Catui reinstalled successfully!"), 1, 0),
             );
             this.chat.addChild(
               new Text(theme.fg("accent", "Press 'R' to restart Catui"), 1, 0),
@@ -283,7 +283,7 @@ export class SelfUpdateController {
             waitForRestart();
           } else {
             this.chat.addChild(
-              new Text(theme.fg("warning", `⚠️  Reinstall failed (exit code ${installCode})`), 1, 0),
+              new Text(theme.fg("warning", `✕ Reinstall failed (exit code ${installCode})`), 1, 0),
             );
             this.chat.addChild(
               new Text(
@@ -298,7 +298,7 @@ export class SelfUpdateController {
 
         install.on("error", (err) => {
           this.chat.addChild(
-            new Text(theme.fg("warning", `⚠️  Install failed: ${err.message}`), 1, 0),
+            new Text(theme.fg("warning", `✕ Install failed: ${err.message}`), 1, 0),
           );
           this.render();
         });
@@ -307,7 +307,7 @@ export class SelfUpdateController {
 
     uninstall.on("error", (err) => {
       this.chat.addChild(
-        new Text(theme.fg("warning", `⚠️  Uninstall failed: ${err.message}`), 1, 0),
+        new Text(theme.fg("warning", `✕ Uninstall failed: ${err.message}`), 1, 0),
       );
       this.render();
     });
@@ -339,7 +339,7 @@ export class SelfUpdateController {
       }
 
       // "prompt" mode: show selector dialog
-      const title = `${theme.fg("accent", "📦 Update Available")}\n\n${theme.fg("dim", `Current: ${VERSION}`)}\n${theme.fg("success", `Latest:  ${latestVersion}`)}\n\n${theme.fg("dim", "A new version is available. Would you like to update now?")}`;
+      const title = `${theme.fg("accent", "↝ Update Available")}\n\n${theme.fg("dim", `Current: ${VERSION}`)}\n${theme.fg("success", `Latest:  ${latestVersion}`)}\n\n${theme.fg("dim", "A new version is available. Would you like to update now?")}`;
 
       const choice = await this.ctx.showSelector(title, [
         "1. Update now and restart",
@@ -355,7 +355,7 @@ export class SelfUpdateController {
         this.ctx.setSkippedVersion(latestVersion);
         this.chat.addChild(new Spacer(1));
         this.chat.addChild(
-          new Text(theme.fg("dim", `⏭️  Skipped version ${latestVersion}. You won't be prompted again.`), 1, 0),
+          new Text(theme.fg("dim", `» Skipped version ${latestVersion}. You won't be prompted again.`), 1, 0),
         );
         this.render();
       }
@@ -495,7 +495,7 @@ export class SelfUpdateController {
         this.chat.addChild(new Spacer(1));
         this.chat.addChild(
           new Text(
-            theme.fg("success", "✅ Skip cleared! Auto-update enabled. Catui will check for updates on startup."),
+            theme.fg("success", "◈ Skip cleared! Auto-update enabled. Catui will check for updates on startup."),
             1,
             0,
           ),
@@ -551,7 +551,7 @@ export class SelfUpdateController {
       this.chat.addChild(new Spacer(1));
       this.chat.addChild(
         new Text(
-          theme.fg("accent", "👋 Exiting. Run this command to update:"),
+          theme.fg("accent", "↝ Exiting. Run this command to update:"),
           1,
           0,
         ),
@@ -571,7 +571,7 @@ export class SelfUpdateController {
       this.chat.addChild(new Spacer(1));
       this.chat.addChild(
         new Text(
-          theme.fg("dim", `⏭️  Skipped version ${latestVersion}. You won't be prompted for this version again.`),
+          theme.fg("dim", `» Skipped version ${latestVersion}. You won't be prompted for this version again.`),
           1,
           0,
         ),
@@ -589,7 +589,7 @@ export class SelfUpdateController {
       this.chat.addChild(new Spacer(1));
       this.chat.addChild(
         new Text(
-          theme.fg("success", "✅ Auto-update enabled! Catui will check for updates on startup."),
+          theme.fg("success", "◈ Auto-update enabled! Catui will check for updates on startup."),
           1,
           0,
         ),
@@ -602,7 +602,7 @@ export class SelfUpdateController {
       this.chat.addChild(new Spacer(1));
       this.chat.addChild(
         new Text(
-          theme.fg("dim", "✅ Auto-update disabled. You'll be prompted when updates are available."),
+          theme.fg("dim", "◈ Auto-update disabled. You'll be prompted when updates are available."),
           1,
           0,
         ),
@@ -617,7 +617,7 @@ export class SelfUpdateController {
   private async performUpdate(latestVersion: string, retryCount = 0): Promise<void> {
     this.chat.addChild(new Spacer(1));
     this.chat.addChild(
-      new Text(theme.fg("accent", "🔄 Updating Catui..."), 1, 0),
+      new Text(theme.fg("accent", "↝ Updating Catui..."), 1, 0),
     );
     this.render();
 
@@ -634,7 +634,7 @@ export class SelfUpdateController {
         if (code === 0) {
           this.chat.addChild(
             new Text(
-              theme.fg("success", `✅ Successfully updated to version ${latestVersion}!`),
+              theme.fg("success", `◈ Successfully updated to version ${latestVersion}!`),
               1,
               0,
             ),
@@ -656,7 +656,7 @@ export class SelfUpdateController {
             if (key === "r" || key === "R") {
               this.chat.addChild(
                 new Text(
-                  theme.fg("dim", "🔄 Restarting Catui..."),
+                  theme.fg("dim", "↝ Restarting Catui..."),
                   1,
                   0,
                 ),
@@ -673,7 +673,7 @@ export class SelfUpdateController {
         } else {
           this.chat.addChild(
             new Text(
-              theme.fg("warning", `⚠️  Update failed (exit code ${code})`),
+              theme.fg("warning", `✕ Update failed (exit code ${code})`),
               1,
               0,
             ),
@@ -696,7 +696,7 @@ export class SelfUpdateController {
       child.on("error", async (err) => {
         this.chat.addChild(
           new Text(
-            theme.fg("warning", `⚠️  Failed to run npm: ${err.message}`),
+            theme.fg("warning", `✕ Failed to run npm: ${err.message}`),
             1,
             0,
           ),
@@ -753,7 +753,7 @@ export class SelfUpdateController {
       this.chat.addChild(new Spacer(1));
       this.chat.addChild(
         new Text(
-          theme.fg("accent", "👋 Exiting. Run this command to update:"),
+          theme.fg("accent", "↝ Exiting. Run this command to update:"),
           1,
           0,
         ),
