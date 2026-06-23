@@ -41,7 +41,7 @@ function recoveryPathFromDetails(event: ToolResultEvent): string | undefined {
 	return match?.[1]?.trim();
 }
 
-async function migrateLegacyTokenSave(projectPath: string, projectKey: string, dataDir: string): Promise<void> {
+export async function migrateLegacyTokenSave(projectPath: string, projectKey: string, dataDir: string): Promise<void> {
 	const legacyDir = join(projectPath, ".catui", "token-save");
 	const marker = join(dataDir, ".migrated");
 	try {

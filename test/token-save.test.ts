@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getBuiltinExtensionPaths } from "../builtin-extensions.ts";
@@ -11,6 +11,8 @@ import { splitShellSegments } from "../extensions/builtin/token-save/lexer.ts";
 import { applyTokenSavePlan, applyTokenSaveStream } from "../extensions/builtin/token-save/runner.ts";
 import { planCommand } from "../extensions/builtin/token-save/rewrite.ts";
 import { applyTomlStyleFilter } from "../extensions/builtin/token-save/toml-dsl.ts";
+import { migrateLegacyTokenSave } from "../extensions/builtin/token-save/index.ts";
+import { projectKeyForPath, dataDirForKey } from "../extensions/builtin/token-save/paths.ts";
 
 test("builtin extensions include token-save by default", () => {
 	const paths = getBuiltinExtensionPaths();
@@ -176,4 +178,118 @@ test("bash executor honors explicit cwd for TokenSave user bash integration", as
 	const result = await executeBash("node -e \"console.log(process.cwd())\"", { cwd: project });
 	assert.equal(result.exitCode, 0);
 	assert.equal(await realpath(result.output.trim()), await realpath(project));
+});
+
+// ===========================================================================
+// Token-save legacy migration: idempotency, atomic marker, partial state
+// ===========================================================================
+
+test("token-save migration: legacy history + raw/ move to user-level dataDir", async () => {
+	const project = await mkdtemp(join(tmpdir(), "tokensave-mig-"));
+	const projectKey = await projectKeyForPath(project);
+	const dataDir = dataDirForKey(projectKey);
+
+	// Plant legacy <project>/.catui/token-save/{history.jsonl,raw/}
+	const legacyDir = join(project, ".catui", "token-save");
+	const legacyRaw = join(legacyDir, "raw");
+	await mkdir(legacyRaw, { recursive: true });
+	await writeFile(join(legacyDir, "history.jsonl"), "line1\nline2\n");
+	await writeFile(join(legacyRaw, "abc.log"), "log1");
+	await writeFile(join(legacyRaw, "def.log"), "log2");
+
+	await migrateLegacyTokenSave(project, projectKey, dataDir);
+
+	// New dataDir should have marker + history + raw/
+	const markerStat = await readFile(join(dataDir, ".migrated"), "utf8").catch(() => null);
+	assert.ok(markerStat !== null, "marker should be created");
+
+	const newHistory = await readFile(join(dataDir, "history.jsonl"), "utf8");
+	assert.equal(newHistory, "line1\nline2\n");
+
+	const abcContent = await readFile(join(dataDir, "raw", "abc.log"), "utf8");
+	const defContent = await readFile(join(dataDir, "raw", "def.log"), "utf8");
+	assert.equal(abcContent, "log1");
+	assert.equal(defContent, "log2");
+});
+
+test("token-save migration: idempotent — second call is a no-op when .migrated exists", async () => {
+	const project = await mkdtemp(join(tmpdir(), "tokensave-mig2-"));
+	const projectKey = await projectKeyForPath(project);
+	const dataDir = dataDirForKey(projectKey);
+
+	// First migration: plant legacy data
+	const legacyDir = join(project, ".catui", "token-save");
+	await mkdir(legacyDir, { recursive: true });
+	await writeFile(join(legacyDir, "history.jsonl"), "first\n");
+
+	await migrateLegacyTokenSave(project, projectKey, dataDir);
+	// Re-plant legacy data AFTER first migration
+	await mkdir(legacyDir, { recursive: true });
+	await writeFile(join(legacyDir, "history.jsonl"), "second-run\n");
+
+	// Second migration should be no-op (marker exists)
+	await migrateLegacyTokenSave(project, projectKey, dataDir);
+
+	// dataDir history should still be the FIRST migration's content
+	const newHistory = await readFile(join(dataDir, "history.jsonl"), "utf8");
+	assert.equal(newHistory, "first\n", "second migration should not overwrite");
+});
+
+test("token-save migration: concurrent migrations — only one wins (atomic marker)", async () => {
+	const project = await mkdtemp(join(tmpdir(), "tokensave-mig-race-"));
+	const projectKey = await projectKeyForPath(project);
+	const dataDir = dataDirForKey(projectKey);
+
+	// Plant legacy history
+	const legacyDir = join(project, ".catui", "token-save");
+	await mkdir(legacyDir, { recursive: true });
+	await writeFile(join(legacyDir, "history.jsonl"), "race-test\n");
+
+	// 6 concurrent migrations
+	await Promise.all(
+		Array.from({ length: 6 }, () =>
+			migrateLegacyTokenSave(project, projectKey, dataDir),
+		),
+	);
+
+	// dataDir should have exactly one history.jsonl with race-test content
+	const newHistory = await readFile(join(dataDir, "history.jsonl"), "utf8");
+	assert.equal(newHistory, "race-test\n");
+});
+
+test("token-save migration: missing legacy data — no crash, marker still placed", async () => {
+	const project = await mkdtemp(join(tmpdir(), "tokensave-mig-empty-"));
+	const projectKey = await projectKeyForPath(project);
+	const dataDir = dataDirForKey(projectKey);
+
+	// No legacy data planted
+	await migrateLegacyTokenSave(project, projectKey, dataDir);
+
+	// Marker should exist (one-shot done)
+	const marker = await readFile(join(dataDir, ".migrated"), "utf8").catch(() => null);
+	assert.ok(marker !== null, "marker should exist even with no legacy data");
+});
+
+test("token-save migration: rename tool is used (not copy) — source should be gone", async () => {
+	const project = await mkdtemp(join(tmpdir(), "tokensave-mig-rename-"));
+	const projectKey = await projectKeyForPath(project);
+	const dataDir = dataDirForKey(projectKey);
+
+	const legacyDir = join(project, ".catui", "token-save");
+	const legacyHistory = join(legacyDir, "history.jsonl");
+	await mkdir(legacyDir, { recursive: true });
+	await writeFile(legacyHistory, "rename-test\n");
+
+	await migrateLegacyTokenSave(project, projectKey, dataDir);
+
+	// Source should be gone (rename, not copy)
+	await readFile(legacyHistory, "utf8")
+		.then(() => assert.fail("legacy history should be gone after rename"))
+		.catch((err: NodeJS.ErrnoException) => {
+			assert.equal(err.code, "ENOENT", "source should be ENOENT after rename");
+		});
+
+	// dest should have it
+	const newHistory = await readFile(join(dataDir, "history.jsonl"), "utf8");
+	assert.equal(newHistory, "rename-test\n");
 });
