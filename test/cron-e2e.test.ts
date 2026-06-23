@@ -270,3 +270,104 @@ test("scheduler end-to-end: fires task after delay", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ===========================================================================
+// 5. Scheduler Lock Race (O_EXCL + stale recovery)
+// ===========================================================================
+
+import { tryAcquireSchedulerLock, releaseSchedulerLock } from "../extensions/builtin/loop/cron/cron-tasks-lock.js";
+import { readFile, writeFile } from "node:fs/promises";
+
+test("cron lock: first acquire wins, concurrent attempts fail", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "catui-lock-"));
+  try {
+    const ok1 = await tryAcquireSchedulerLock({ dir }, "session-A");
+    assert.equal(ok1, true, "first acquire should succeed");
+
+    // A second live session must be blocked while the first holds the lock.
+    const ok2 = await tryAcquireSchedulerLock({ dir }, "session-B");
+    assert.equal(ok2, false, "second acquire should fail while first is alive");
+  } finally {
+    await releaseSchedulerLock({ dir }, "session-A").catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("cron lock: idempotent re-acquire by same sessionId", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "catui-lock-"));
+  try {
+    assert.equal(await tryAcquireSchedulerLock({ dir }, "session-A"), true);
+    // Same session, simulated resume (same sessionId, same PID): should succeed.
+    assert.equal(await tryAcquireSchedulerLock({ dir }, "session-A"), true);
+  } finally {
+    await releaseSchedulerLock({ dir }, "session-A").catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("cron lock: stale lock (dead PID) is recovered", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "catui-lock-"));
+  try {
+    // Plant a stale lock with a PID that does not exist. Pick a high PID that's
+    // virtually never running on macOS/Linux.
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(dir, "cron"), { recursive: true });
+    const stalePath = join(dir, "cron", "scheduled_tasks.lock");
+    await writeFile(
+      stalePath,
+      JSON.stringify({ sessionId: "ghost", pid: 999_999, acquiredAt: Date.now() }),
+    );
+    // After write, tryAcquireSchedulerLock should detect stale (PID 999999 not
+    // running) and recover.
+    const ok = await tryAcquireSchedulerLock({ dir }, "session-B");
+    assert.equal(ok, true, "stale lock should be recovered");
+
+    // And the lock file should now belong to session-B.
+    const raw = await readFile(stalePath, "utf8");
+    const parsed = JSON.parse(raw);
+    assert.equal(parsed.sessionId, "session-B");
+  } finally {
+    await releaseSchedulerLock({ dir }, "session-B").catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("cron lock: 8 concurrent attempts — exactly one wins", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "catui-lock-"));
+  try {
+    // All 8 fire at the same time. O_EXCL must let exactly one win.
+    const attempts = await Promise.all(
+      Array.from({ length: 8 }, (_, i) =>
+        tryAcquireSchedulerLock({ dir }, `session-${i}`),
+      ),
+    );
+    const winners = attempts.filter((x) => x === true);
+    assert.equal(winners.length, 1, `exactly one acquirer wins, got ${winners.length}`);
+  } finally {
+    // Whoever won — release by reading the lock and releasing as that session.
+    try {
+      const raw = await readFile(join(dir, "cron", "scheduled_tasks.lock"), "utf8");
+      const parsed = JSON.parse(raw);
+      await releaseSchedulerLock({ dir }, parsed.sessionId).catch(() => {});
+    } catch {
+      // lock may not exist
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("cron lock: release by non-owner is no-op", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "catui-lock-"));
+  try {
+    assert.equal(await tryAcquireSchedulerLock({ dir }, "session-A"), true);
+    // Different session tries to release — should not affect the lock.
+    await releaseSchedulerLock({ dir }, "session-B");
+    // session-A still owns the lock.
+    const raw = await readFile(join(dir, "cron", "scheduled_tasks.lock"), "utf8");
+    const parsed = JSON.parse(raw);
+    assert.equal(parsed.sessionId, "session-A");
+  } finally {
+    await releaseSchedulerLock({ dir }, "session-A").catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
