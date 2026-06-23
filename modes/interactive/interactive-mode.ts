@@ -2290,6 +2290,16 @@ export class InteractiveMode {
       }
       return;
     }
+    // When a user message starts being processed, the agent has just picked it
+    // up from the steering/follow-up queue. agent-session already spliced it
+    // from the session's _steeringMessages/_followUpMessages, but the UI's
+    // pendingMessagesContainer is not auto-refreshed. Re-render now so the
+    // "Steering: <msg> / ↳ Alt+Up to edit all queued messages" line disappears
+    // the moment the queued message starts processing (instead of lingering
+    // until the next user submit / dequeue).
+    if (event.type === "message_start" && event.message.role === "user") {
+      this.updatePendingMessagesDisplay();
+    }
     await this.streamRender.handle(event);
   }
 
