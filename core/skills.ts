@@ -306,7 +306,9 @@ export function formatSkillsForPrompt(skills: Skill[]): string {
 
 	const lines = [
 		"\n\nThe following skills provide specialized instructions for specific tasks.",
-		"Use the read tool to load a skill's file when the task matches its description.",
+		"Skills are listed in priority order: extension-provided skills appear first, followed by user and project skills.",
+		"When a task matches a skill's description, use the read tool to load that skill's file.",
+		"Prefer extension-provided skills over user/project skills when multiple skills could apply.",
 		"When a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.",
 		"",
 		"<available_skills>",
