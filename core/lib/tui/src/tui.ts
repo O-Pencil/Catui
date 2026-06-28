@@ -429,8 +429,16 @@ export class TUI extends Container {
 			(data) => this.handleInput(data),
 			() => this.requestRender(),
 		);
+		this.terminal.hideCursor();
 		this.requestCellSizeQuery();
-		this.requestRender();
+		// 同步触发首帧渲染，跳过 requestRender() 的 process.nextTick。
+		// 之前这里走 process.nextTick，会让首帧再多等一个 tick，
+		// 叠加启动时残留的 stdout / TTY echo，用户会看到"两条线
+		// 先于完整 UI 出现"的撕裂感。start() 返回时屏幕已经
+		// 有完整内容；后续异步 IO 完成后由 requestRender() 走
+		// 差分补齐。
+		this.renderRequested = false;
+		this.doRender();
 	}
 
 	addInputListener(listener: InputListener): () => void {

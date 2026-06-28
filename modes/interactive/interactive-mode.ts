@@ -1050,6 +1050,114 @@ export class InteractiveMode {
     // Do not show changelog on startup; version check will prompt to update CLI when newer version exists
     this.fdPath = getToolPath("fd") ?? undefined;
 
+    // ① 同步构建完整 UI 树（含占位组件）。所有 addChild 必须在
+    //    ui.start() 之前完成，让 TUI 首帧就能渲染出全部区块，
+    //    不再出现"输入框两条线先出现、其它等 1 秒"的撕裂感。
+    this.buildHeaderAndLayout();
+
+    this.ui.addChild(this.notificationQueue);
+    this.ui.addChild(this.chatContainer);
+    this.ui.addChild(this.pendingMessagesContainer);
+    this.ui.addChild(this.statusContainer);
+    this.surfaces.renderWidgets(); // Initialize with default spacer
+    this.ui.addChild(this.widgetContainerAbove);
+    this.ui.addChild(this.editorContainer);
+    this.ui.addChild(this.widgetContainerBelow);
+    this.ui.addChild(this.footer);
+    this.ui.setFocus(this.editor);
+
+    this.setupKeyHandlers();
+    this.setupEditorSubmitHandler();
+
+    // ② 防 echo 残影 + 立即启动 TUI。TUI.start() 现在会同步触发
+    //    首帧 doRender()（见 core/lib/tui/src/tui.ts），所以下面的
+    //    这行一执行，屏幕上就已经有完整 UI 了。
+    this.ui.terminal.write("\x1b[?25l\x1b[2J\x1b[H");
+    this.ui.start();
+    time("interactive.ui.firstFrame");
+    this.isInitialized = true;
+    this.prewarmStartupTools();
+
+    // Set terminal title
+    this.updateTerminalTitle();
+
+    // Subscribe to agent events
+    this.subscribeToAgent();
+
+    // ③ fire-and-forget 异步补充真值。所有对 UI 有可见影响但需要
+    //    异步结果的步骤在这里并发跑，每个完成点 requestRender 一次，
+    //    由 differential render 自动把"占位"补成"真值"。
+    //    注意：先 clear 一次 chatContainer，避免 showLoadedResources
+    //    在 initExtensions 完成前被 renderInitialMessages 提前写入
+    //    的占位消息污染。
+    this.chatContainer.clear();
+
+    void this.applyPersonaFromSessionIfAny()
+      .catch((err: unknown) =>
+        this.showExtensionError(
+          "(persona)",
+          err instanceof Error ? err.message : String(err),
+        ),
+      )
+      .finally(() => this.ui.requestRender());
+
+    void this.initExtensions()
+      .catch((err: unknown) =>
+        this.showExtensionError(
+          "(extensions)",
+          err instanceof Error ? err.message : String(err),
+        ),
+      )
+      .finally(() => {
+        this.renderInitialMessages({ requestRender: false });
+        this.ui.requestRender();
+      });
+
+    void this.session.extensionRunner
+      ?.emit({ type: "session_ready" })
+      .catch((err: unknown) =>
+        this.showExtensionError(
+          "(session_ready)",
+          err instanceof Error ? err.message : String(err),
+        ),
+      )
+      .finally(() => this.ui.requestRender());
+
+    void this.modelOverlay
+      .updateAvailableProviderCount()
+      .catch(() => {
+        /* footer 数字保持占位即可 */
+      })
+      .finally(() => {
+        this.footer.invalidate();
+        this.ui.requestRender();
+      });
+
+    // ④ 主题 / branch watcher 同步挂上
+    onThemeChange(() => {
+      this.ui.invalidate();
+      this.updateEditorBorderColor();
+      this.ui.requestRender();
+    });
+    this.footerDataProvider.onBranchChange(() => {
+      this.ui.requestRender();
+    });
+
+    time("interactive.firstInput.ready");
+    printTimings();
+
+    // Warm MCP tools in the background now that the prompt is usable. MCP server
+    // spawn/handshake can take many seconds (the npx-based default servers
+    // measure ~20s); blocking the UI on it used to make startup feel frozen.
+    // Tools merge into the live runtime when ready (sdk:mcp_ready → showStatus).
+    void this.session.warmupMcpTools();
+  }
+
+  /**
+   * 同步构建 header + layout。把这段从 init() 抽出，让 init()
+   * 的主体只剩"装配与启动"，阅读性更好。
+   */
+  private buildHeaderAndLayout(): void {
     // Add header container as first child
     this.ui.addChild(this.headerContainer);
 
@@ -1108,65 +1216,6 @@ export class InteractiveMode {
       this.builtInHeader = new Text("", 0, 0);
       this.headerContainer.addChild(this.builtInHeader);
     }
-
-    this.ui.addChild(this.notificationQueue);
-    this.ui.addChild(this.chatContainer);
-    this.ui.addChild(this.pendingMessagesContainer);
-    this.ui.addChild(this.statusContainer);
-    this.surfaces.renderWidgets(); // Initialize with default spacer
-    this.ui.addChild(this.widgetContainerAbove);
-    this.ui.addChild(this.editorContainer);
-    this.ui.addChild(this.widgetContainerBelow);
-    this.ui.addChild(this.footer);
-    this.ui.setFocus(this.editor);
-
-    this.setupKeyHandlers();
-    this.setupEditorSubmitHandler();
-
-    // If current session is tagged with a persona, apply it before loading extensions.
-    await this.applyPersonaFromSessionIfAny();
-
-    // Initialize extensions first so resources are shown before messages
-    await this.initExtensions();
-
-    // Render initial messages AFTER showing loaded resources
-    this.renderInitialMessages({ requestRender: false });
-
-    // Start the UI
-    this.ui.start();
-    time("interactive.ui.start");
-    this.isInitialized = true;
-    this.prewarmStartupTools();
-
-    // Set terminal title
-    this.updateTerminalTitle();
-
-    // Subscribe to agent events
-    this.subscribeToAgent();
-    await this.session.extensionRunner?.emit({ type: "session_ready" });
-
-    // Set up theme file watcher
-    onThemeChange(() => {
-      this.ui.invalidate();
-      this.updateEditorBorderColor();
-      this.ui.requestRender();
-    });
-
-    // Set up git branch watcher (uses provider instead of footer)
-    this.footerDataProvider.onBranchChange(() => {
-      this.ui.requestRender();
-    });
-
-    // Initialize available provider count for footer display
-    await this.modelOverlay.updateAvailableProviderCount();
-    time("interactive.firstInput.ready");
-    printTimings();
-
-    // Warm MCP tools in the background now that the prompt is usable. MCP server
-    // spawn/handshake can take many seconds (the npx-based default servers
-    // measure ~20s); blocking the UI on it used to make startup feel frozen.
-    // Tools merge into the live runtime when ready (sdk:mcp_ready → showStatus).
-    void this.session.warmupMcpTools();
   }
 
   /**
