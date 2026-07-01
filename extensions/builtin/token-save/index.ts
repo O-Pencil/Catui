@@ -77,10 +77,72 @@ export async function migrateLegacyTokenSave(projectPath: string, projectKey: st
 		} catch {
 			// best-effort
 		}
+		// After moving the raw/*.log files we MUST rewrite rawRecoveryPath
+		// entries in the now-renamed history.jsonl, otherwise the agent's
+		// recovery footer links point at the empty legacy directory and
+		// clicking them hits ENOENT. The legacy path prefix is
+		// `<projectPath>/.catui/token-save/raw/` and every old record uses
+		// exactly that prefix.
+		await rewriteHistoryRecoveryPaths(newHistory, legacyRaw, newRaw);
 		// projectKey is recorded only to make the migration observable; nothing reads it
 		void projectKey;
 	} catch {
 		// Migration must never break the agent startup.
+	}
+}
+
+/**
+ * Rewrite `rawRecoveryPath` entries in history.jsonl so they point at the
+ * new raw/ location instead of the legacy project-internal directory.
+ *
+ * Without this step the agent's footer links for the migrated records
+ * point at a directory that's been emptied by the rename above, so the
+ * user clicks the link and gets ENOENT.
+ *
+ * Path rewrite rules:
+ *   - `legacyRaw` prefix (`<projectPath>/.catui/token-save/raw/`) → `newRaw`
+ *   - Files that no longer exist in the new location are left as-is
+ *     (graceful: the agent still has the filtered output, just no raw).
+ *   - Records without `rawRecoveryPath` are untouched.
+ */
+async function rewriteHistoryRecoveryPaths(
+	historyFile: string,
+	legacyRaw: string,
+	newRaw: string,
+): Promise<void> {
+	const { readFile, writeFile } = await import("node:fs/promises");
+	const { existsSync } = await import("node:fs");
+	let text: string;
+	try {
+		text = await readFile(historyFile, "utf8");
+	} catch {
+		return;
+	}
+	if (!text) return;
+
+	const lines = text.split("\n");
+	let rewritten = 0;
+	let missingInNew = 0;
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (!line) continue;
+		let record: { rawRecoveryPath?: string };
+		try {
+			record = JSON.parse(line);
+		} catch {
+			continue;
+		}
+		const oldPath = record.rawRecoveryPath;
+		if (!oldPath || !oldPath.startsWith(legacyRaw)) continue;
+		const fileName = oldPath.slice(legacyRaw.length);
+		const newPath = newRaw + fileName;
+		record.rawRecoveryPath = newPath;
+		lines[i] = JSON.stringify(record);
+		rewritten++;
+		if (!existsSync(newPath)) missingInNew++;
+	}
+	if (rewritten > 0) {
+		await writeFile(historyFile, lines.join("\n"), "utf8");
 	}
 }
 

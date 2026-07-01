@@ -4,7 +4,8 @@
 
 Member List
 paths.ts: projectKeyForPath() (realpath → sha1[0:12]), dataDirForKey(), resolveTokenSavePaths() — runtime data lives under ~/.catui/token-save/projects/<key>/, never inside the project tree
-index.ts: tokenSaveExtension async entry — resolves dataDir once, runs one-shot migrateLegacyTokenSave(), registers /tokensave command, hooks tool_call / user_bash / tool_result events
+index.ts: tokenSaveExtension async entry — resolves dataDir once, runs one-shot migrateLegacyTokenSave() (now also rewrites rawRecoveryPath fields in the migrated history.jsonl so agent footer links don't hit ENOENT), registers /tokensave command, hooks tool_call / user_bash / tool_result events
+no-output-builtins.ts: NO_OUTPUT_BUILTINS set + isNoOutputBuiltin() helper — extracted to break the rewrite.ts <-> filters.ts import cycle; consulted by planCommand and classifyCommand to short-circuit shell builtins (cd / pwd / export / unset / …) whose stdout is empty or session-only
 config.ts: loadTokenSaveConfigFilters() — loads user-level ~/.catui/token-save/filters.json plus project-level .catui/token-save/filters.json (only when .catui/token-save/trust.json opts in with {trusted:true}); project config layout unchanged
 rewrite.ts: planCommand() + rewriteRules registry — 11 command-shape patterns (git status/diff/log, cat/head/tail, rg/grep/find/ls, tsc, eslint/biome, pytest, vitest/jest, npm/pnpm install, jq/curl) with capture/stream/passthrough modes; honors TOKEN_SAVE_DISABLED env, heredoc, and write-redirection guards
 filters.ts: classifyCommand() + filterTokenSaveOutput() + estimateTokens() — pure command classifiers and per-category compact*() functions (git status/diff/log, file read, TypeScript, lint, pytest, test, search, package-manager, json, generic)

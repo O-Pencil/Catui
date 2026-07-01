@@ -5,6 +5,7 @@
  * [HERE]: extensions/builtin/token-save/filters.ts - pure token-saving filter library
  */
 import { truncateHead, truncateTail } from "../../../core/tools/truncate.js";
+import { isNoOutputBuiltin } from "./no-output-builtins.js";
 
 export type TokenSaveCategory =
 	| "git-status"
@@ -62,6 +63,16 @@ export function classifyCommand(command: string): TokenSaveClassification {
 	const segment = firstCommandSegment(command);
 	if (hasWriteRedirection(segment)) {
 		return { category: "generic", mode: "passthrough", reason: "write redirection" };
+	}
+	// Same short-circuit as planCommand: shell builtins like cd / pwd /
+	// export produce empty or session-only output. classifyCommand runs
+	// alongside planCommand in filterTokenSaveOutput; routing these
+	// through "filtered" lets compactGeneric return near-original text
+	// (no real savings), which then triggers a history record with
+	// mode=filtered + savedTokens=0. Short-circuit here too so both the
+	// filter decision and the history mode agree.
+	if (isNoOutputBuiltin(segment)) {
+		return { category: "generic", mode: "passthrough", reason: "no-output shell builtin" };
 	}
 
 	if (/\bgit\s+status\b/.test(segment)) return { category: "git-status", mode: "filtered" };

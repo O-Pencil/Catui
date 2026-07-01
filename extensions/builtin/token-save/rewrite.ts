@@ -6,6 +6,7 @@
  */
 import { splitShellSegments } from "./lexer.js";
 import type { TokenSaveCategory } from "./filters.js";
+import { isNoOutputBuiltin } from "./no-output-builtins.js";
 
 export interface RewriteRule {
 	id: string;
@@ -64,6 +65,11 @@ export function planCommand(command: string): RewriteDecision {
 	if (disabled(first)) return passthrough(command, "disabled by env");
 	if (hasHeredoc(first)) return passthrough(command, "heredoc");
 	if (hasWriteRedirection(first)) return passthrough(command, "write redirection");
+	// Shell builtins that produce no capture-worthy output. Sending these
+	// through capture mode runs the filter for nothing — the filter gets a
+	// near-empty input, generates zero savings, and writes a 'filtered
+	// savedTokens=0' history record that pollutes the /tokensave summary.
+	if (isNoOutputBuiltin(normalized)) return passthrough(command, "no-output shell builtin");
 
 	for (const rule of rewriteRules) {
 		if (rule.pattern.test(normalized)) {
