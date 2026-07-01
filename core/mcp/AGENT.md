@@ -8,7 +8,10 @@ figma-auth.ts: registerFigmaMcpOAuthProvider(), Figma OAuth integration for MCP 
 mcp-types.ts: MCPServerConfig, MCPTool, MCPToolResult shared contracts for MCP client/config/adapter boundaries
 mcp-client.ts: MCPClient class, MCP client for JSON-RPC over stdio, key invariant: one client per MCP server process
 mcp-guidance.ts: APIKeyGuidance interface, getAPIKeyGuidance(), formatGuidanceMessage(), getMissingKeyServers(), requiresAPIKey(), API key guidance for MCP servers
-mcp-adapter.ts: createMCPTool(), loadMCPTools(), getMCPToolDisplayName(), adapts MCP tools to Catui tool system, converts MCP tool schema to ToolDefinition
+mcp-server-hints.ts: MCP_SERVER_HINTS, getMcpServerScenarios(), getMcpServerHint(), per-server scenario vocabulary for guidance text consumed by mcp-adapter
+mcp-schema-inference.ts: SCENARIO_RULES, inferScenariosFromSchema(), renderSchemaInferences(), inputSchema.properties field-name → scenario phrase inference, complements server-level hints at tool grain
+mcp-capabilities-hint.ts: buildMcpCapabilitiesHint(), MCP_CAPABILITIES_CUSTOM_TYPE, renders one-shot MCP capability summary persisted as a CustomMessage by agent-session.warmupMcpTools
+mcp-adapter.ts: createMCPTool(), loadMCPTools(), getMCPToolDisplayName(), adapts MCP tools to Catui tool system, converts MCP tool schema to ToolDefinition; emits scenario-aware guidance/description via mcp-server-hints
 index.ts: MCP module barrel exports, re-exports MCPClient, MCP contracts, createMCPTool, loadMCPTools, guidance utilities
 mcp-manager.ts: MCPManager class, MCP server lifecycle and tool integration, manages client connections and tool registration
 
