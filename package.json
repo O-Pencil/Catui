@@ -55,7 +55,7 @@
   ],
   "scripts": {
     "dev": "tsx cli.ts",
-    "test": "npm run test:dev-loop && npm run test:security && npm run test:commands && npm run test:tools",
+    "test": "npm run test:dev-loop && npm run test:security && npm run test:commands && npm run test:tools && npm run test:mcp",
     "build": "npm run clean:dist && npm run build:deps && tsc -p tsconfig.build.json && npm run copy:internal-libs && npm run copy:theme:json && npm run copy:assets && npm run build:meta && npm run minify:dist",
     "build:meta": "node scripts/generate-build-meta.js",
     "minify:dist": "node scripts/minify-dist.js",
@@ -87,6 +87,7 @@
     "wiki:build": "node --import tsx scripts/llm-wiki.ts build",
     "wiki:all": "node --import tsx scripts/llm-wiki.ts all",
     "watch": "tsc --watch",
+    "test:mcp": "node --test --import tsx test/mcp-tool-description.test.ts test/mcp-hint-injection.test.ts test/system-prompt.test.ts",
     "test:subagent": "node --test --import tsx test/subagent-parser.test.ts test/worktree-manager.test.ts test/bash-sandbox.test.ts",
     "test:dev-loop": "node --test --import tsx test/dev-loop.test.ts",
     "test:team": "node --test --import tsx test/team-parser.test.ts test/team-runtime.test.ts",

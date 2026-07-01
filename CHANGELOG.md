@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- feat(mcp): per-tool scenario phrases in MCP tool descriptions (`createMCPTool` now emits a `guidance` field plus a scenario-enriched `description` suffix, drawing from a per-server hint map and a schema-driven inference pass)
+- feat(mcp): system-prompt "MCP Tools Awareness" paragraph (auto-injected by `buildSystemPrompt` when at least one `mcp_*` tool is active; ≤800 chars even with 20+ tools)
+- feat(mcp): warmup-time MCP capabilities hint (`buildMcpCapabilitiesHint` writes a hidden CustomMessage into the session after MCP tools finish loading, so the LLM sees the full roster at the start of every turn)
+
+### Removed
+- refactor(mcp): drop the `mcp-suggest` builtin extension, its `/mcp:suggest status|on|off` slash command, and its per-turn keyword matcher. Layer 1 (scenario-enriched `description`) + Layer 3 (warmup hint) already cover the same ground at lower prompt cost and without the default-off opt-in UX confusion
+
+### Documentation
+- docs(mcp-awareness): new `docs/mcp-awareness.md` describing the four-layer nudge (description / system-prompt paragraph / warmup hint / per-turn hint), the corresponding code owners, and the test coverage matrix
+
+### Tests
+- test(mcp): 21 cases in `test/mcp-tool-description.test.ts` (description / guidance format, schema inference, server-hint fallback)
+- test(mcp): 13 cases in `test/mcp-hint-injection.test.ts` (hint builder shape + end-to-end pipeline through `convertToLlm`)
+- test(prompt): 8 cases in `test/system-prompt.test.ts` (regression guard for the Project Context block in the main template; covers the case where the block was once silently removed leaving only the customPrompt branch with the injection)
+
+---
+
 ## [1.2.3] - 2026-06-29
 
 ### Added
