@@ -142,8 +142,8 @@ export const CATUI_DEFAULT_MODELS_JSON = {
 					id: "glm-4.7",
 					name: "GLM-4.7",
 					input: ["text"],
-					contextWindow: 202752,
-					maxTokens: 16384,
+					contextWindow: 169984,
+					maxTokens: 65536,
 				},
 				{
 					id: "kimi-k2.5",
