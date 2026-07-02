@@ -3,15 +3,17 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ExtensionAPI, UserBashEvent, UserBashEventResult } from "../core/extensions-host/types.ts";
 import { getBuiltinExtensionPaths } from "../builtin-extensions.ts";
 import { executeBash } from "../core/platform/exec/bash-executor.ts";
 import { loadTokenSaveConfigFilters } from "../extensions/builtin/token-save/config.ts";
 import { classifyCommand, estimateTokens, filterTokenSaveOutput } from "../extensions/builtin/token-save/filters.ts";
 import { splitShellSegments } from "../extensions/builtin/token-save/lexer.ts";
-import { applyTokenSavePlan, applyTokenSaveStream } from "../extensions/builtin/token-save/runner.ts";
+import { applyTokenSavePlan } from "../extensions/builtin/token-save/runner.ts";
 import { planCommand } from "../extensions/builtin/token-save/rewrite.ts";
 import { applyTomlStyleFilter } from "../extensions/builtin/token-save/toml-dsl.ts";
 import { migrateLegacyTokenSave } from "../extensions/builtin/token-save/index.ts";
+import tokenSaveExtension from "../extensions/builtin/token-save/index.ts";
 import { projectKeyForPath, dataDirForKey } from "../extensions/builtin/token-save/paths.ts";
 
 test("builtin extensions include token-save by default", () => {
@@ -39,9 +41,9 @@ test("token-save lexer handles quoted operators and pipes", () => {
 	]);
 });
 
-test("token-save rewrite registry plans capture, stream, and passthrough modes", () => {
+test("token-save rewrite registry plans capture and passthrough modes", () => {
 	assert.deepEqual(planCommand("git status --short").target, "tokensave git status");
-	assert.equal(planCommand("pnpm exec tsc --noEmit").mode, "stream");
+	assert.equal(planCommand("pnpm exec tsc --noEmit").mode, "capture");
 	assert.equal(planCommand("cat > generated.txt").mode, "passthrough");
 	assert.equal(planCommand("TOKEN_SAVE_DISABLED=1 git status").mode, "passthrough");
 });
@@ -110,27 +112,10 @@ test("token-save runner writes raw recovery for filtered output", async () => {
 
 	const result = await applyTokenSavePlan("npm test", raw, dataDir);
 
-	assert.equal(result.plan.mode, "stream");
+	assert.equal(result.plan.mode, "capture");
 	assert.equal(result.shouldReplace, true);
 	assert.ok(result.rawRecoveryPath);
 	assert.equal(await readFile(result.rawRecoveryPath!, "utf8"), raw);
-});
-
-test("token-save stream runner filters accumulated chunks", async () => {
-	const dataDir = await mkdtemp(join(tmpdir(), "tokensave-stream-"));
-	const chunks = [
-		Array.from({ length: 120 }, (_, i) => `log line ${i}\n`).join(""),
-		"FAIL test/example.test.ts\n",
-		"AssertionError: expected true to be false\n",
-		"Tests: 1 failed, 25 passed\n",
-	];
-
-	const result = await applyTokenSaveStream("npm test", chunks, dataDir);
-
-	assert.equal(result.plan.mode, "stream");
-	assert.equal(result.shouldReplace, true);
-	assert.match(result.filteredText, /FAIL test\/example\.test\.ts/);
-	assert.doesNotMatch(result.filteredText, /log line 1\nlog line 2\nlog line 3/);
 });
 
 test("token-save config DSL applies pipeline stages in order", () => {
@@ -178,6 +163,23 @@ test("bash executor honors explicit cwd for TokenSave user bash integration", as
 	const result = await executeBash("node -e \"console.log(process.cwd())\"", { cwd: project });
 	assert.equal(result.exitCode, 0);
 	assert.equal(await realpath(result.output.trim()), await realpath(project));
+});
+
+test("token-save does not register a user_bash replacement executor", async () => {
+	const project = await mkdtemp(join(tmpdir(), "tokensave-user-bash-"));
+	let userBashHandler: ((event: UserBashEvent) => UserBashEventResult | void | Promise<UserBashEventResult | void>) | undefined;
+	const api = {
+		cwd: project,
+		registerCommand: () => {},
+		on: (event: string, handler: unknown) => {
+			if (event === "user_bash") {
+				userBashHandler = handler as typeof userBashHandler;
+			}
+		},
+	} as unknown as ExtensionAPI;
+
+	await tokenSaveExtension(api);
+	assert.equal(userBashHandler, undefined, "token-save must leave user bash execution on BashRunner");
 });
 
 // ===========================================================================

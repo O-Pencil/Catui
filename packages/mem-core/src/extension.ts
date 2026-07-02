@@ -588,7 +588,7 @@ export default function nanomemExtension(api: ExtensionAPI) {
 				sessionsReviewing: options.sessionsReviewing,
 				result: result.stats,
 			};
-			ctx.ui.setStatus("nanomem", `Memory refresh: done (+${result.stats.added})`);
+			ctx.ui.setStatus("nanomem", "");
 			if (options.notifyWhenDone || (ctx.hasUI && result.stats.added + result.stats.updated > 0)) {
 				ctx.ui.notify(formatDreamResult(result, memoryDir), "info");
 			}

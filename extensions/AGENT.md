@@ -63,8 +63,8 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 #### token-save/ — Default Token Savings
 
 **P3 Contract:**
-`index.ts`: - [WHO]: Extension with bash tool_result/user_bash filtering, savings tracking, and /tokensave command
-    - [FROM]: core/extensions-host/types, core/platform/exec/bash-executor, token-save filters/tracking helpers
+`index.ts`: - [WHO]: Extension with bash tool_result filtering, savings tracking, and /tokensave command
+    - [FROM]: core/extensions-host/types, token-save filters/tracking helpers
     - [TO]: Auto-loaded by builtin-extensions.ts
     - [HERE]: token-save extension entry
 
@@ -74,11 +74,9 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 
 `lexer.ts`: Quote-aware shell segment splitter for compound command and pipe planning
 
-`rewrite.ts`: Central TokenSave rewrite registry that maps high-noise commands to internal TokenSave execution plans
+`rewrite.ts`: Central TokenSave rewrite registry that maps high-noise commands to TokenSave capture/passthrough plans
 
-`runner.ts`: Capture/stream/passthrough contract that combines rewrite decisions, filters, raw recovery, and token accounting
-
-`stream.ts`: Bounded stream accumulator used by stream-mode runner paths to cap raw capture without changing process exit semantics
+`runner.ts`: Capture/passthrough contract that combines rewrite decisions, filters, raw recovery, and token accounting
 
 `recovery.ts`: Raw output recovery writer for filtered command output
 

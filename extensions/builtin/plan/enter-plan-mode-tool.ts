@@ -104,10 +104,7 @@ export function createEnterPlanModeTool(
 			api.appendEntry(PLAN_CUSTOM_TYPE, serializePlanSessionState(sessionState));
 			ctx.ui.setStatus("plan", "Plan mode");
 			ctx.ui.setWidget("plan-mode", [
-				"PLAN MODE",
-				`Plan: ${getPlanFilePath(api.events)}`,
-				"Read-only except the plan file",
-				"Use /plan open to edit; ExitPlanMode requests approval",
+				`\x1b[35mPlan Mode On\x1b[0m`,
 			], { placement: "aboveEditor" });
 
 			return {

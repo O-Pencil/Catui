@@ -18,6 +18,13 @@ export interface RuntimeSystemPromptOptions {
   toolNames: string[];
   baseToolRegistry: Map<string, AgentTool>;
   soulInjection?: string;
+  /**
+   * Names of currently active MCP-powered tools (prefix `mcp_`). When
+   * provided and non-empty, the rendered system prompt gains an
+   * "MCP Tools Awareness" section. Defaults to deriving from `toolNames`
+   * so existing callers don't need to opt in.
+   */
+  mcpToolNames?: readonly string[];
 }
 
 export function buildRuntimeSystemPrompt(
@@ -26,6 +33,8 @@ export function buildRuntimeSystemPrompt(
   const validToolNames = options.toolNames.filter((name) =>
     options.baseToolRegistry.has(name),
   );
+  const mcpToolNames =
+    options.mcpToolNames ?? options.toolNames.filter((n) => n.startsWith("mcp_"));
   const appendSystemPromptParts = options.resourceLoader.getAppendSystemPrompt();
   const appendSystemPrompt =
     appendSystemPromptParts.length > 0
@@ -40,6 +49,7 @@ export function buildRuntimeSystemPrompt(
     appendSystemPrompt,
     selectedTools: validToolNames,
     soulInjection: options.soulInjection,
+    mcpToolNames,
   });
 }
 

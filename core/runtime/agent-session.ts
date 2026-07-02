@@ -57,6 +57,11 @@ import {
   type ToolInfo,
 } from "../extensions-host/index.js";
 import type { CustomMessage } from "../messages.js";
+import { createCustomMessage } from "../messages.js";
+import {
+  MCP_CAPABILITIES_CUSTOM_TYPE,
+  buildMcpCapabilitiesHint,
+} from "../mcp/mcp-capabilities-hint.js";
 import type { ModelRegistry } from "../model-registry.js";
 import {
   expandPromptTemplate,
@@ -427,6 +432,16 @@ export class AgentSession {
   private _extensionRunnerRef?: { current?: ExtensionRunner };
   private _soulManager?: any; // SoulManager from nanosoul
   private _lastSoulInjection?: string;
+  /**
+   * Idempotency guard for the one-shot MCP capabilities hint CustomMessage.
+   * Set after the first warmupMcpTools() persists the hint so a reload that
+   * re-warms MCP doesn't append the hint a second time within the same
+   * session. Reset on /clear and similar destructive operations; for
+   * simplicity we leave it sticky here — appending the same hint twice is
+   * harmless (it's just slightly more verbose context), but skipping is
+   * tidier.
+   */
+  private _mcpCapabilitiesInjected = false;
   private _initialActiveToolNames?: string[];
   private _baseToolsOverride?: Record<string, AgentTool>;
   private _extensionUIContext?: ExtensionUIContext;
@@ -2464,6 +2479,35 @@ export class AgentSession {
         mcpTools,
       });
       this._emitDebug("basic", "mcp", "mcp_warmup_complete", { toolCount });
+
+      // Persist a one-shot capabilities hint into the session so the LLM sees
+      // the MCP tool roster at the top of its next turn. Idempotent — second
+      // warmup within the same session is a no-op. The hint rides through
+      // convertToLlm as a role:"user" message that the model treats as
+      // out-of-band context (see MCP_CAPABILITIES_CUSTOM_TYPE docstring).
+      if (!this._mcpCapabilitiesInjected && mcpTools.length > 0) {
+        const mcpToolDefs = this._customTools.filter((t) =>
+          t.name.startsWith("mcp_"),
+        );
+        const hintBody = buildMcpCapabilitiesHint(mcpToolDefs);
+        if (hintBody) {
+          try {
+            const now = new Date().toISOString();
+            const hintMessage = createCustomMessage(
+              MCP_CAPABILITIES_CUSTOM_TYPE,
+              hintBody,
+              false, // display=false → hidden from user UI but persisted
+              undefined,
+              now,
+            );
+            this.sessionManager.appendMessage(hintMessage);
+            this._mcpCapabilitiesInjected = true;
+          } catch (appendError) {
+            // Hint injection must never crash the warmup path.
+            this._emit({ type: "sdk:error", source: "mcp", error: appendError });
+          }
+        }
+      }
     } catch (error) {
       // MCP problems must never crash startup (background warmup is
       // fire-and-forget; one-shot modes await but should still boot).

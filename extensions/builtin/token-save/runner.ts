@@ -2,12 +2,11 @@
  * [WHO]: applyTokenSavePlan() combines rewrite planning, filtering, recovery, and token accounting
  * [FROM]: Depends on ./filters, ./rewrite, ./recovery
  * [TO]: Consumed by extensions/builtin/token-save/index.ts and tests
- * [HERE]: extensions/builtin/token-save/runner.ts - TokenSave capture/stream/passthrough result contract
+ * [HERE]: extensions/builtin/token-save/runner.ts - TokenSave capture/passthrough result contract
  */
 import { estimateTokens, filterTokenSaveOutput } from "./filters.js";
 import { writeRawRecovery } from "./recovery.js";
 import { planCommand, type RewriteDecision } from "./rewrite.js";
-import { TokenSaveStreamAccumulator } from "./stream.js";
 
 export interface TokenSaveRunResult {
 	plan: RewriteDecision;
@@ -40,22 +39,6 @@ export async function applyTokenSavePlan(command: string, rawText: string, dataD
 			result.savingsPct >= MIN_SAVINGS_PCT &&
 			result.filteredText !== result.rawText,
 	};
-}
-
-export async function applyTokenSaveStream(
-	command: string,
-	chunks: Iterable<string>,
-	dataDir: string,
-): Promise<TokenSaveRunResult> {
-	const accumulator = new TokenSaveStreamAccumulator();
-	for (const chunk of chunks) {
-		accumulator.push(chunk);
-	}
-	const snapshot = accumulator.snapshot();
-	const rawText = snapshot.truncated
-		? `${snapshot.text}\n\n[TokenSave raw capture capped at ${snapshot.text.length} chars from ${snapshot.totalBytes} bytes]`
-		: snapshot.text;
-	return applyTokenSavePlan(command, rawText, dataDir);
 }
 
 function buildResult(

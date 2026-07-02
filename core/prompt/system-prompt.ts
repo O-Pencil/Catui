@@ -28,6 +28,13 @@ export interface BuildSystemPromptOptions {
   soulInjection?: string;
   /** Guidance for extension tools (collected from ToolDefinition.guidance) */
   extensionToolsGuidance?: Record<string, string>;
+  /**
+   * Names of currently active MCP-powered tools. When provided and non-empty,
+   * the prompt gains an "MCP Tools Awareness" section reminding the LLM that
+   * mcp_-prefixed tools extend local capabilities and should be preferred over
+   * bash/read approximations when the task matches.
+   */
+  mcpToolNames?: readonly string[];
 }
 
 function buildSoulSection(soulInjection?: string): string {
@@ -54,6 +61,7 @@ export function buildSystemPrompt(
     skills: providedSkills,
     soulInjection,
     extensionToolsGuidance = {},
+    mcpToolNames,
   } = options;
   const resolvedCwd = cwd ?? process.cwd();
 
@@ -152,6 +160,21 @@ export function buildSystemPrompt(
     extensionOnlyTools.length > 0
       ? extensionOnlyTools.map((t) => `- ${t}: ${extensionToolsGuidance[t]}`).join("\n")
       : null;
+
+  // MCP Tools Awareness — appears as a fixed paragraph right after the
+  // "Available tools" enumeration so the LLM can connect user intent
+  // (e.g. "fetch a public web page") to the right mcp_ tool. Length is
+  // bounded so 20+ MCP tools don't blow the prompt budget. The
+  // `mcpToolNames` list comes from the active runtime (filtered by
+  // agent-session) so the paragraph reflects what the model can actually
+  // call right now, not what could theoretically exist.
+  const mcpToolNamesSection =
+    mcpToolNames && mcpToolNames.length > 0
+      ? `\n\n## MCP Tools Awareness\n` +
+        `Tools prefixed \`mcp_\` extend local capabilities through external MCP servers (filesystem, fetch, github, etc.). ` +
+        `When the user's request matches an MCP server's domain, prefer the corresponding \`mcp_\` tool over bash/read/curl approximations. ` +
+        `Each MCP tool's own description lists the scenarios it covers. Active MCP tools: ${mcpToolNames.slice(0, 5).join(", ")}${mcpToolNames.length > 5 ? `, +${mcpToolNames.length - 5} more` : ""}.`
+      : "";
 
   // Build rules based on actually available tools
   const guidelinesList: string[] = [];
@@ -448,7 +471,7 @@ another agent (or your future self) will resume from it. Include current progres
 and any critical data needed to continue seamlessly.
 
 Available tools:
-${toolsList}${extensionToolsList ? `\n${extensionToolsList}` : ""}
+${toolsList}${extensionToolsList ? `\n${extensionToolsList}` : ""}${mcpToolNamesSection}
 
 Besides the above tools, you may also have access to other custom tools based on project configuration.
 
@@ -543,7 +566,12 @@ Only read the following docs when user asks about catui-agent, SDK, extensions, 
     prompt += appendSection;
   }
 
-  // Append project context files
+  // Append project context files (AGENT.md / .CATUI.md / etc.) to the main
+  // template path so the model sees project-level rules and module docs.
+  // The customPrompt branch above handles its own context-file injection
+  // because it builds the prompt from scratch; here we append to the
+  // fixed-template path. Persona CATUI.md is already injected higher up
+  // (under "Your Identity"), so projectFiles here excludes those.
   if (projectFiles.length > 0) {
     prompt += "\n\n# Project Context\n\n";
     prompt += "Project-related rules and specifications:\n\n";

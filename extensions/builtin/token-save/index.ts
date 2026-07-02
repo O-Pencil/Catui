@@ -1,5 +1,5 @@
 /**
- * [WHO]: tokenSaveExtension - default-on bash output filtering, savings tracking, and /tokensave command
+ * [WHO]: tokenSaveExtension - default-on bash tool-result filtering, savings tracking, and /tokensave command
  * [FROM]: Depends on core/extensions-host/types, ./filters, ./tracking, ./paths
  * [TO]: Auto-loaded by builtin-extensions.ts as a default extension
  * [HERE]: extensions/builtin/token-save/index.ts - TokenSave extension entry point
@@ -7,7 +7,6 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { ExtensionAPI, ToolResultEvent, ToolResultEventResult } from "../../../core/extensions-host/types.js";
-import { executeBash, type BashResult } from "../../../core/platform/exec/bash-executor.js";
 import { loadTokenSaveConfigFilters, type ConfiguredTokenSaveFilter } from "./config.js";
 import { applyTokenSavePlan } from "./runner.js";
 import { planCommand } from "./rewrite.js";
@@ -77,10 +76,72 @@ export async function migrateLegacyTokenSave(projectPath: string, projectKey: st
 		} catch {
 			// best-effort
 		}
+		// After moving the raw/*.log files we MUST rewrite rawRecoveryPath
+		// entries in the now-renamed history.jsonl, otherwise the agent's
+		// recovery footer links point at the empty legacy directory and
+		// clicking them hits ENOENT. The legacy path prefix is
+		// `<projectPath>/.catui/token-save/raw/` and every old record uses
+		// exactly that prefix.
+		await rewriteHistoryRecoveryPaths(newHistory, legacyRaw, newRaw);
 		// projectKey is recorded only to make the migration observable; nothing reads it
 		void projectKey;
 	} catch {
 		// Migration must never break the agent startup.
+	}
+}
+
+/**
+ * Rewrite `rawRecoveryPath` entries in history.jsonl so they point at the
+ * new raw/ location instead of the legacy project-internal directory.
+ *
+ * Without this step the agent's footer links for the migrated records
+ * point at a directory that's been emptied by the rename above, so the
+ * user clicks the link and gets ENOENT.
+ *
+ * Path rewrite rules:
+ *   - `legacyRaw` prefix (`<projectPath>/.catui/token-save/raw/`) → `newRaw`
+ *   - Files that no longer exist in the new location are left as-is
+ *     (graceful: the agent still has the filtered output, just no raw).
+ *   - Records without `rawRecoveryPath` are untouched.
+ */
+async function rewriteHistoryRecoveryPaths(
+	historyFile: string,
+	legacyRaw: string,
+	newRaw: string,
+): Promise<void> {
+	const { readFile, writeFile } = await import("node:fs/promises");
+	const { existsSync } = await import("node:fs");
+	let text: string;
+	try {
+		text = await readFile(historyFile, "utf8");
+	} catch {
+		return;
+	}
+	if (!text) return;
+
+	const lines = text.split("\n");
+	let rewritten = 0;
+	let missingInNew = 0;
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (!line) continue;
+		let record: { rawRecoveryPath?: string };
+		try {
+			record = JSON.parse(line);
+		} catch {
+			continue;
+		}
+		const oldPath = record.rawRecoveryPath;
+		if (!oldPath || !oldPath.startsWith(legacyRaw)) continue;
+		const fileName = oldPath.slice(legacyRaw.length);
+		const newPath = newRaw + fileName;
+		record.rawRecoveryPath = newPath;
+		lines[i] = JSON.stringify(record);
+		rewritten++;
+		if (!existsSync(newPath)) missingInNew++;
+	}
+	if (rewritten > 0) {
+		await writeFile(historyFile, lines.join("\n"), "utf8");
 	}
 }
 
@@ -130,16 +191,6 @@ export default async function tokenSaveExtension(api: ExtensionAPI): Promise<voi
 		const plan = planCommand(command);
 		if (plan.mode === "passthrough") return;
 		return { input: { ...event.input, command } };
-	});
-
-	api.on("user_bash", async (event) => {
-		if (event.excludeFromContext) return;
-		const plan = planCommand(event.command);
-		if (plan.mode === "passthrough") return;
-
-		const rawResult = await executeBash(event.command, { cwd: event.cwd });
-		const filteredResult = await applyToBashResult(event.command, rawResult, dataDir, configuredFilters, tracker, Date.now(), api.cwd);
-		return { result: filteredResult };
 	});
 
 	api.on("tool_result", async (event: ToolResultEvent): Promise<ToolResultEventResult | void> => {
@@ -192,55 +243,6 @@ export default async function tokenSaveExtension(api: ExtensionAPI): Promise<voi
 			details: event.details,
 		};
 	});
-}
-
-async function applyToBashResult(
-	command: string,
-	rawResult: BashResult,
-	dataDir: string,
-	configuredFilters: ConfiguredTokenSaveFilter[],
-	tracker: TokenSaveTracker,
-	started: number,
-	projectPath: string,
-): Promise<BashResult> {
-	const result = await applyTokenSavePlan(command, rawResult.output, dataDir);
-	const configured = applyConfiguredFilter(command, rawResult.output, configuredFilters);
-	if (configured && configured.length < result.filteredText.length) {
-		result.filteredText = configured;
-		result.outputTokens = Math.ceil(configured.length / 4);
-		result.savedTokens = Math.max(0, result.inputTokens - result.outputTokens);
-		result.savingsPct = result.inputTokens > 0 ? Math.round((result.savedTokens / result.inputTokens) * 100) : 0;
-		result.shouldReplace = result.savedTokens >= 32 && result.savingsPct >= 12;
-	}
-
-	tracker.add({
-		projectPath,
-		command,
-		category: result.plan.category,
-		mode: result.plan.mode === "passthrough" ? "passthrough" : "filtered",
-		inputTokens: result.inputTokens,
-		outputTokens: result.outputTokens,
-		savedTokens: result.savedTokens,
-		savingsPct: result.savingsPct,
-		elapsedMs: Date.now() - started,
-		isError: (rawResult.exitCode ?? 0) !== 0,
-		rawRecoveryPath: result.rawRecoveryPath ?? rawResult.fullOutputPath,
-	});
-
-	if (!result.shouldReplace) return rawResult;
-	const footer = [
-		"",
-		`[TokenSave: ${result.inputTokens} -> ${result.outputTokens} estimated tokens, saved ${result.savedTokens} (${result.savingsPct}%), mode=${result.plan.mode}, category=${result.plan.category}]`,
-		result.rawRecoveryPath ? `[Raw recovery: ${result.rawRecoveryPath}]` : undefined,
-	]
-		.filter(Boolean)
-		.join("\n");
-	return {
-		...rawResult,
-		output: `${result.filteredText}${footer}`,
-		truncated: rawResult.truncated,
-		fullOutputPath: result.rawRecoveryPath ?? rawResult.fullOutputPath,
-	};
 }
 
 function applyConfiguredFilter(command: string, rawText: string, filters: ConfiguredTokenSaveFilter[]): string | undefined {

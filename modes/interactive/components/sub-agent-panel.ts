@@ -9,7 +9,7 @@ import { Container, Spacer, Text, type TUI } from "@catui/tui";
 import type { Theme } from "../theme/theme.js";
 import type { SubAgentState } from "../state/interactive-state.js";
 
-const BRAILLE_FRAMES = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
+const BRAILLE_FRAMES = ["♫", "♬"];
 const CONDENSED_ROW_THRESHOLD = 16;
 
 export class SubAgentPanelComponent extends Container {
