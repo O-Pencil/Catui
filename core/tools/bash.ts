@@ -1,8 +1,9 @@
 /**
- * [WHO]: BashTool, bashTool, createBashTool, BashToolInput, BashToolDetails
+ * [WHO]: BashTool, bashTool, createBashTool, BashToolInput, BashToolDetails, BashOperations
  * [FROM]: Depends on agent-core, node:fs, node:path, node:os, node:child_process
  * [TO]: Consumed by core/tools/index.ts
- * [HERE]: core/tools/bash.ts - shell command execution boundary; consumed by orchestrator
+ * [HERE]: core/tools/bash.ts - shell command execution boundary; consumed by orchestrator.
+ *   Stdio[0] = "pipe" with 30s stdin grace timer (see ADR bash-stdin-pipe-decision).
  */
 import { randomBytes } from "node:crypto";
 import { createWriteStream, existsSync, readFileSync } from "node:fs";
@@ -104,6 +105,20 @@ export interface BashOperations {
 			onData: (data: Buffer) => void;
 			signal?: AbortSignal;
 			timeout?: number;
+			/**
+			 * How long to wait for the child process to finish reading from stdin
+			 * before forcibly closing it. Defaults to 30000 (30s).
+			 *
+			 * Background: previously `stdio[0]` was `"ignore"`, which made any
+			 * interactive command (`npm init`, `npx create-x`, `read -p`, etc.)
+			 * either fail with EOF immediately or hang forever. With `"pipe"`,
+			 * the child waits for stdin; this timeout prevents indefinite hangs
+			 * by closing stdin after the grace period, letting the command fall
+			 * back to its default behavior.
+			 *
+			 * See `.dev-docs/architecture-review/bash-stdin-pipe-decision/ADR.md`.
+			 */
+			stdinTimeoutMs?: number;
 			env?: NodeJS.ProcessEnv;
 			onSpawn?: (pid: number) => void;
 		},
@@ -114,7 +129,7 @@ export interface BashOperations {
  * Default bash operations using local shell
  */
 const defaultBashOperations: BashOperations = {
-	exec: (command, cwd, { onData, signal, timeout, env, onSpawn }) => {
+	exec: (command, cwd, { onData, signal, timeout, stdinTimeoutMs, env, onSpawn }) => {
 		return new Promise((resolve, reject) => {
 			const { shell, args } = getShellConfig();
 
@@ -127,7 +142,7 @@ const defaultBashOperations: BashOperations = {
 				cwd,
 				detached: true,
 				env: env ?? getShellEnv(),
-				stdio: ["ignore", "pipe", "pipe"],
+				stdio: ["pipe", "pipe", "pipe"],
 			});
 
 			if (child.pid) onSpawn?.(child.pid);
@@ -145,6 +160,23 @@ const defaultBashOperations: BashOperations = {
 				}, timeout * 1000);
 			}
 
+			// Stdin grace timer: close stdin after `stdinTimeoutMs` so commands
+			// waiting for input (npm init, read -p, etc.) fall back to defaults
+			// instead of hanging forever. See ADR bash-stdin-pipe-decision.
+			const stdinGraceMs = stdinTimeoutMs ?? 30_000;
+			let stdinTimer: NodeJS.Timeout | undefined;
+			let stdinClosed = false;
+			const closeStdin = () => {
+				if (stdinClosed) return;
+				stdinClosed = true;
+				try {
+					child.stdin?.end();
+				} catch {
+					// stdin may already be closed; ignore
+				}
+			};
+			stdinTimer = setTimeout(closeStdin, stdinGraceMs);
+
 			// Stream stdout and stderr
 			if (child.stdout) {
 				child.stdout.on("data", onData);
@@ -156,7 +188,9 @@ const defaultBashOperations: BashOperations = {
 			// Handle shell spawn errors
 			child.on("error", (err) => {
 				if (timeoutHandle) clearTimeout(timeoutHandle);
+				if (stdinTimer) clearTimeout(stdinTimer);
 				if (signal) signal.removeEventListener("abort", onAbort);
+				closeStdin();
 				reject(err);
 			});
 
@@ -178,7 +212,9 @@ const defaultBashOperations: BashOperations = {
 			// Handle process exit
 			child.on("close", (code) => {
 				if (timeoutHandle) clearTimeout(timeoutHandle);
+				if (stdinTimer) clearTimeout(stdinTimer);
 				if (signal) signal.removeEventListener("abort", onAbort);
+				closeStdin();
 
 				if (signal?.aborted) {
 					reject(new Error("aborted"));
