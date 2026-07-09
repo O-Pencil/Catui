@@ -1,11 +1,11 @@
 /**
- * [WHO]: ApprovalSelectorComponent, ApprovalDecision, ApprovalChoice
- * [FROM]: Depends on @catui/tui, ../theme/theme.js
- * [TO]: Consumed by modes/interactive/interactive-mode.ts (Layer 2 pre-execution gate)
- * [HERE]: modes/interactive/components/approval-selector.ts - TUI selector for dangerous bash commands.
- *   Spawned by the bash tool spawn-pre-hook when isDangerousCommand() matches.
- *   Choices: once / session / always / deny (+ view for long commands >70 chars).
- *   60s timeout -> deny (fail-closed). See ADR bash-pre-execution-approval-decision.
+ * [WHO]: ApprovalSelectorComponent, ApprovalDecision, ApprovalChoice, CliApprovalClient, APPROVAL_TIMEOUT_MS
+ * [FROM]: Depends on @catui/tui, ../theme/theme.js, node:process
+ * [TO]: Consumed by modes/interactive/interactive-mode.ts (ApprovalSelectorComponent, Layer 2 TUI surface) and
+ *   main.ts (CliApprovalClient, Layer 2 runtime wire) — both honor ADR bash-pre-execution-approval-decision.
+ * [HERE]: modes/interactive/components/approval-selector.ts - TUI selector + minimal CLI client for
+ *   dangerous bash commands. ApprovalSelectorComponent is the polished Layer 3 surface; CliApprovalClient
+ *   is the Layer 2 wiring proof-of-life (does not mount to TUI, reads stdin directly + 60s timeout -> deny).
  */
 
 import { Container, getEditorKeybindings, Spacer, TruncatedText } from "@catui/tui";
@@ -134,3 +134,69 @@ export class ApprovalSelectorComponent extends Container {
 }
 
 export { TIMEOUT_MS as APPROVAL_TIMEOUT_MS };
+
+/**
+ * Minimal CLI approval client — emits a short prompt on stdout and reads a
+ * single character from stdin. NOT a polished TUI; this is the layer-2
+ * "the chain works end-to-end" client used by main.ts wiring without taking
+ * a hard dependency on @catui/tui or PromptHost. Polished TUI selector is
+ * implemented by `ApprovalSelectorComponent` above; a follow-up will wire
+ * that as the interactive-mode runtime client.
+ *
+ * Timeout: 60s. Defaults to "deny" (fail-closed).
+ */
+export class CliApprovalClient {
+	private approvalPrompted = false;
+
+	async request(decision: ApprovalDecision): Promise<ApprovalChoice> {
+		const reason = decision.reason;
+		const commandPreview = decision.command.length > 80
+			? decision.command.slice(0, 77) + "..."
+			: decision.command;
+		process.stdout.write(
+			`\n⚠ Dangerous command (${reason}):\n  $ ${commandPreview}\n` +
+			`  [o]nce / [s]ession / [a]lways / [d]eny  (timeout 60s -> deny)\n> `,
+		);
+		this.approvalPrompted = true;
+
+		const choice = await Promise.race([
+			this.readLine(),
+			this.timeout(),
+		]);
+		process.stdout.write("\n");
+		return choice;
+	}
+
+	private readLine(): Promise<ApprovalChoice> {
+		return new Promise((resolve) => {
+			const stdin = process.stdin;
+			stdin.setEncoding("utf8");
+			const onData = (chunk: Buffer | string) => {
+				stdin.removeListener("data", onData);
+				stdin.removeListener("end", onEnd);
+				resolve(this.mapChar(String(chunk).trim()));
+			};
+			const onEnd = () => {
+				stdin.removeListener("data", onData);
+				resolve("deny");
+			};
+			stdin.once("data", onData);
+			stdin.once("end", onEnd);
+		});
+	}
+
+	private timeout(): Promise<ApprovalChoice> {
+		return new Promise((resolve) => {
+			setTimeout(() => resolve("deny"), TIMEOUT_MS);
+		});
+	}
+
+	private mapChar(s: string): ApprovalChoice {
+		if (s === "o" || s === "1") return "once";
+		if (s === "s" || s === "2") return "session";
+		if (s === "a" || s === "3") return "always";
+		if (s === "d" || s === "4") return "deny";
+		// Empty / unknown -> fail-closed
+		return "deny";
+	}
+}

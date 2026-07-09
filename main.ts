@@ -34,6 +34,8 @@ import { AgentDirContext, defaultAgentDirContext, loadAgentDirContext } from "./
 
 import { time } from "./core/platform/timings.js";
 import { allTools } from "./core/tools/index.js";
+import { createBashTool } from "./core/tools/bash.js";
+import { CliApprovalClient } from "./modes/interactive/components/approval-selector.js";
 import { runMigrations, showDeprecationWarnings } from "./migrations.js";
 // Mode runners (interactive/print/rpc) are dynamically imported at dispatch time (P6/EV02)
 // so the CLI only pays for the selected mode — eager-importing the modes barrel here would
@@ -973,6 +975,22 @@ export async function main(args: string[]) {
 	// Inject the theme so HTML export renders custom extension tools (the UI layer owns the
 	// theme; core/runtime no longer imports it — U2 seam). `theme` is the lazy singleton proxy.
 	sessionOptions.theme = theme;
+
+	// Layer 2 (ADR bash-pre-execution-approval-decision): inject a pre-execution
+	// approval client for bash tool. Interactive + catui product app only — print /
+	// rpc modes use the fast-path (no client wired) so existing CLI behavior is
+	// preserved. The CLI client here is the layer-2 *runtime* wire; the full TUI
+	// selector (ApprovalSelectorComponent) is the polished layer-3 surface and
+	// stays unmounted in this commit — see ADR §D6 "session persistence" + the
+	// "out of scope" list in commit 93cd746.
+	if (isInteractive && isCatuiProductApp) {
+		sessionOptions.baseToolsOverride = {
+			bash: createBashTool(parsedCwd, {
+				commandPrefix: settingsManager.getShellCommandPrefix(),
+				approval: new CliApprovalClient(),
+			}),
+		};
+	}
 
 	// Handle CLI --api-key as runtime override (not persisted)
 	if (parsed.apiKey) {

@@ -102,6 +102,10 @@ export const defaultLogger: SDKLogger = {
 };
 
 export interface CreateAgentSessionOptions extends SoulOptionsContract {
+  /** Override base tools (useful for custom runtimes, e.g. injecting approval
+   *  client into bash tool under ADR bash-pre-execution-approval-decision).
+   *  Use `Tool` from core/tools/index for the widest schema compatibility. */
+  baseToolsOverride?: Record<string, Tool>;
   /** Working directory for project-local discovery. Default: process.cwd() */
   cwd?: string;
   /** Global config directory. Default: ~/.catui/agents/default */
@@ -813,6 +817,7 @@ export async function createAgentSession(
     theme: options.theme,
     createSession: createAgentSession,
     debugLevel: options.debugLevel,
+    baseToolsOverride: options.baseToolsOverride,
   });
 
   time("session.construct");
