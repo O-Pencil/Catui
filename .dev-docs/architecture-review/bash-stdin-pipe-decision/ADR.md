@@ -2,11 +2,23 @@
 
 ```yaml
 adr_id: bash-stdin-pipe-decision
-status: implemented   # 2026-07-05 用户拍板 + 实施完成 + 五道门 + 回归 PASS
+status: implemented-but-reopened   # 2026-07-05 实施 + 五道门 + 回归 PASS；2026-07-05 二次实测发现未解决用户最初问题
 created_at: 2026-07-05
-scope: core/tools/bash.ts   # 1-2 行改动
-related: ../../scripts/_scratch/interactive-bash-repro/
-related_review: ../progress-indicator-review/   # 同方向不同步的兄弟评审
+reopened_at: 2026-07-05
+reopen_reason: 30s stdin timer is **defensive fallback only**, not the real fix.
+              User's actual pain is "command never showed it needed input". timer
+              just prevents infinite hang; user still can't answer y/N from TUI,
+              still can't see the prompt. Real fix needs pre-execution gate
+              (hermes-agent style: dangerous pattern detection + TUI selector +
+              session persistence + fail-closed default). Layer 1 (stdin timer)
+              stays as the safety net; layers 2-3 deferred to next ADR.
+scope_now: core/tools/bash.ts (Layer 1 — implemented)
+scope_next: TBD by successor ADR (`bash-pre-execution-approval-decision`)
+references:
+  - ../../scripts/_scratch/interactive-bash-repro/ (Layer 1 repro)
+  - ../../scripts/_scratch/test-real-bash-debug.mjs (Layer 1 verification)
+  - hermes-agent approval_callback in callbacks.py:186-241 (inspiration for Layer 2)
+  - hermes-agent DANGEROUS_PATTERNS in tools/approval.py:498+ (inspiration for Layer 2)
 ```
 
 ## Context（背景）

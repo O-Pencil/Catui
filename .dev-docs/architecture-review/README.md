@@ -57,7 +57,8 @@ This is a one-shot exercise. After the maintainer has acted on the Arch Agent's 
 - `bundle-redesign-review/` — P7 体积线（BR01–04，closed-as-gated；BR02-04 体积代码未执行）
 - `sdk-surface-review/` — P8 SDK 收窄（SK01–03，**review-open = 未实现，deferred 到 major 窗口**）
 - `dev-loop-review/` — 仓库自用 agent-agnostic 开发闭环（DL01–02，implementation-open）
-- `bash-stdin-pipe-decision/` — bash tool stdin pipe + 30s grace timer（ADR 形态，**implemented 2026-07-05**；修 `core/tools/bash.ts` 交互式命令 hang/EOF 失败）
+- `bash-stdin-pipe-decision/` — bash tool stdin pipe + 30s grace timer（ADR 形态，**implemented-but-reopened 2026-07-05**；Layer 1 修了 stdin hang，Layer 2/3 移到下一个 ADR）
+- `bash-pre-execution-approval-decision/` — bash pre-execution approval gate（hermes 风格，**NOT-STARTED 2026-07-05**；含 HANDOFF.md 接手起点）
 - `findings/` F01–F08 — 微观判断（决策起点）
 - `top-level-structure-review.md` — 为什么选候选 D
 - `refactor-plan.md` / `refactor-validation.md` — 计划 + 验收结论
