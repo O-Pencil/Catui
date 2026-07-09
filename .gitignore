@@ -76,3 +76,6 @@ agent-workspace/
 
 # Personal planning notes
 .cunyu/
+
+# Temporary regression files (place bash-* patterns tests here)
+.tmp-regression/

@@ -1,9 +1,10 @@
 /**
- * [WHO]: BashTool, bashTool, createBashTool, BashToolInput, BashToolDetails, BashOperations
+ * [WHO]: BashTool, bashTool, createBashTool, BashToolInput, BashToolDetails, BashOperations, isDangerousCommand, DangerousCommandCheck
  * [FROM]: Depends on agent-core, node:fs, node:path, node:os, node:child_process
  * [TO]: Consumed by core/tools/index.ts
  * [HERE]: core/tools/bash.ts - shell command execution boundary; consumed by orchestrator.
- *   Stdio[0] = "pipe" with 30s stdin grace timer (see ADR bash-stdin-pipe-decision).
+ *   Stdio[0] = "pipe" with 30s stdin grace timer (ADR bash-stdin-pipe-decision).
+ *   Layer 2: DANGEROUS_PATTERNS + isDangerousCommand (ADR bash-pre-execution-approval-decision).
  */
 import { randomBytes } from "node:crypto";
 import { createWriteStream, existsSync, readFileSync } from "node:fs";
@@ -84,6 +85,72 @@ export type BashToolInput = Static<typeof bashSchema>;
 export interface BashToolDetails {
 	truncation?: TruncationResult;
 	fullOutputPath?: string;
+}
+
+/**
+ * Result of a dangerous-command pattern check.
+ * See ADR `.dev-docs/architecture-review/bash-pre-execution-approval-decision/ADR.md`.
+ */
+export interface DangerousCommandCheck {
+	matched: boolean;
+	/** Pattern label when matched, e.g. "shell command via -c/-lc flag". */
+	reason?: string;
+}
+
+/**
+ * Patterns that warrant pre-execution user approval.
+ * Derived from `hermes-agent`'s `tools/approval.py:498+` DANGEROUS_PATTERNS,
+ * narrowed to the npm/npx/curl/git shell-injection surface relevant here.
+ * PowerShell-specific and SQL patterns are omitted intentionally — see ADR.
+ */
+const DANGEROUS_PATTERNS: Array<[RegExp, string]> = [
+	// Destructive deletes
+	[/\brm\s+(-[^\s]*\s+)*\//, "delete in root path"],
+	[/\brm\s+-[^\s]*r/, "recursive delete"],
+	[/\brm\s+--recursive\b/, "recursive delete (long flag)"],
+	[/\bcmd(?:\.exe)?\s+\/(?:c|k)\s+.*\b(?:del|erase|rd|rmdir)\b/, "Windows cmd destructive delete"],
+	// Permission widening
+	[/\bchmod\s+(-[^\s]*\s+)*(777|666|o\+[rwx]*w|a\+[rwx]*w)\b/, "world/other-writable permissions"],
+	[/\bchmod\s+--recursive\b.*(777|666|o\+[rwx]*w|a\+[rwx]*w)/, "recursive world/other-writable"],
+	// Disk / process
+	[/\bmkfs\b/, "format filesystem"],
+	[/\bdd\s+.*if=/, "disk copy"],
+	[/>\s*\/dev\/sd/, "write to block device"],
+	[/\bkill\s+-9\s+-1\b/, "kill all processes"],
+	[/\bpkill\s+-9\b/, "force kill processes"],
+	[/\bkillall\s+(-[^\s]*\s+)*-(9|KILL|SIGKILL)\b/, "force kill processes (killall -KILL)"],
+	// Shell-injection
+	[/\b(bash|sh|zsh|ksh)\s+-[^\s]*c(\s+|$)/, "shell command via -c/-lc flag"],
+	[/\b(python[23]?|perl|ruby|node)\s+-[ec]\s+/, "script execution via -e/-c flag"],
+	// Use RegExp ctor for the next two to avoid TS lexer ambiguity with `/` inside character classes
+	[new RegExp("\\b(curl|wget)\\b.*\\|\\s*(?:[\\/\\w]*\\/)?(?:ba)?sh(?:\\s|$|-c)"), "pipe remote content to shell"],
+	[new RegExp("(?:\\beval\\b|\\bsource\\b|\\.)\\s*(?:\\$\\(\\s*|`\\s*)(?:curl|wget)\\b"), "execute remote content via command substitution"],
+	[new RegExp("\\b(base64|base32)\\s+(?:-[dD]|--decode)\\b.*\\|\\s*\\b(bash|sh|zsh|ksh|dash)\\b"), "pipe decoded content to shell (possible obfuscation)"],
+	// npm / yarn / npx surface (the user's actual pain point)
+	[/\bnpm\s+(?:install|i|add)\s+(?:-g|--global)/, "global npm install"],
+	[/\bnpx\s+(?:create-|@?\w+\/|\S+)/, "npx package execution (often downloads + may be interactive)"],
+	[/\byarn\s+global\s+add\b/, "yarn global add"],
+	// Git force-push to main/master
+	[/\bgit\s+push\s+(?:-f|--force(?:-with-lease)?)\b.*\b(?:origin\s+)?(?:main|master)\b/, "force-push to main/master"],
+	// Fork bomb
+	[/:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, "fork bomb"],
+];
+
+/**
+ * Check whether `command` matches any DANGEROUS_PATTERNS entry.
+ * Returns `{ matched, reason }` — `reason` is the human-readable pattern label.
+ *
+ * Pure function — no side effects, no I/O. Intended to be used by spawn
+ * pre-hook (Layer 2) and by tests.
+ */
+export function isDangerousCommand(command: string): DangerousCommandCheck {
+	if (!command) return { matched: false };
+	for (const [pattern, reason] of DANGEROUS_PATTERNS) {
+		if (pattern.test(command)) {
+			return { matched: true, reason };
+		}
+	}
+	return { matched: false };
 }
 
 /**
