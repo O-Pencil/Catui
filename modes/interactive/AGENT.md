@@ -66,6 +66,7 @@ components/scoped-models-selector.ts: Scoped models selector, project-specific m
 components/apikey-input.ts: API key input dialog, readline-based prompt
 components/provider-selector.ts: Provider picker UI, custom protocol provider support
 components/settings-selector.ts: Settings UI, thinking level/transport selection
+components/approval-selector.ts: ApprovalSelectorComponent, ApprovalDecision, ApprovalChoice — Layer 2 TUI selector for dangerous bash commands (4 choices + Esc deny + 60s timeout default deny); spawn by bash tool's pre-execution approval gate; ADR bash-pre-execution-approval-decision
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
 

@@ -1,10 +1,12 @@
 /**
- * [WHO]: BashTool, bashTool, createBashTool, BashToolInput, BashToolDetails, BashOperations, isDangerousCommand, DangerousCommandCheck
+ * [WHO]: BashTool, bashTool, createBashTool, BashToolInput, BashToolDetails, BashOperations,
+ *        isDangerousCommand, DangerousCommandCheck, ApprovalClient, ApprovalChoice, ApprovalDecision
  * [FROM]: Depends on agent-core, node:fs, node:path, node:os, node:child_process
  * [TO]: Consumed by core/tools/index.ts
  * [HERE]: core/tools/bash.ts - shell command execution boundary; consumed by orchestrator.
- *   Stdio[0] = "pipe" with 30s stdin grace timer (ADR bash-stdin-pipe-decision).
- *   Layer 2: DANGEROUS_PATTERNS + isDangerousCommand (ADR bash-pre-execution-approval-decision).
+ *   Layer 1: stdio[0] = "pipe" + 30s stdin grace timer (ADR bash-stdin-pipe-decision).
+ *   Layer 2: DANGEROUS_PATTERNS + isDangerousCommand + pre-execution approval gate
+ *            (ADR bash-pre-execution-approval-decision).
  */
 import { randomBytes } from "node:crypto";
 import { createWriteStream, existsSync, readFileSync } from "node:fs";
@@ -324,12 +326,46 @@ export interface BashToolOptions {
 	commandPrefix?: string;
 	/** Hook to adjust command, cwd, or env before execution */
 	spawnHook?: BashSpawnHook;
+	/**
+	 * Layer 2: pre-execution approval client. When provided, dangerous
+	 * commands (see isDangerousCommand) will prompt the user before spawn.
+	 * When omitted, no approval gating happens — fast-path only.
+	 * See ADR .dev-docs/architecture-review/bash-pre-execution-approval-decision/ADR.md.
+	 */
+	approval?: ApprovalClient;
+	/**
+	 * Layer 2: skip approval gating entirely (for tests or non-interactive
+	 * modes). Defaults to false.
+	 */
+	skipApproval?: boolean;
 }
+
+/**
+ * Client injected into bash tool for pre-execution approval prompts.
+ * `request()` should resolve to a user choice; if it rejects or times out,
+ * the bash tool fails closed (treats as "deny").
+ */
+export interface ApprovalClient {
+	request(decision: ApprovalDecision): Promise<ApprovalChoice>;
+}
+
+/**
+ * Reducer of what we send to the approval client.
+ */
+export interface ApprovalDecision {
+	command: string;
+	description: string;
+	reason: string;
+}
+
+export type ApprovalChoice = "once" | "session" | "always" | "deny";
 
 export function createBashTool(cwd: string, options?: BashToolOptions): AgentTool<typeof bashSchema> {
 	const ops = options?.operations ?? defaultBashOperations;
 	const commandPrefix = options?.commandPrefix;
 	const spawnHook = options?.spawnHook;
+	const approval = options?.approval;
+	const skipApproval = options?.skipApproval ?? false;
 
 	return {
 		name: "bash",
@@ -397,6 +433,41 @@ export function createBashTool(cwd: string, options?: BashToolOptions): AgentToo
 
 			// Handle run_in_background: start command and return immediately
 			if (run_in_background) {
+				// Layer 2: pre-execution approval gate for background tasks too.
+				// Same fail-closed semantics as the foreground path above.
+				if (!skipApproval && approval && command) {
+					const danger = isDangerousCommand(commandPrefix ? `${commandPrefix}\n${command}` : command);
+					if (danger.matched) {
+						let choice: ApprovalChoice;
+						try {
+							choice = await approval.request({
+								command: commandPrefix ? `${commandPrefix}\n${command}` : command,
+								description: _description ?? "",
+								reason: danger.reason ?? "dangerous pattern matched",
+							});
+						} catch (err) {
+							return {
+								content: [{
+									type: "text",
+									text: `Background command denied (approval error): ${err instanceof Error ? err.message : String(err)}`,
+								}],
+								details: undefined,
+								isError: true,
+							};
+						}
+						if (choice === "deny") {
+							return {
+								content: [{
+									type: "text",
+									text: `Background command denied by user: ${danger.reason ?? "dangerous pattern"}`,
+								}],
+								details: undefined,
+								isError: true,
+							};
+						}
+					}
+				}
+
 				const taskId = randomBytes(4).toString("hex");
 				const outputPath = getTempFilePath();
 				const backgroundTask: BackgroundTask = {
@@ -446,6 +517,46 @@ export function createBashTool(cwd: string, options?: BashToolOptions): AgentToo
 			// Apply command prefix if configured (e.g., "shopt -s expand_aliases" for alias support)
 			const resolvedCommand = commandPrefix ? `${commandPrefix}\n${command}` : command;
 			const spawnContext = resolveSpawnContext(resolvedCommand, cwd, spawnHook);
+
+			// Layer 2: pre-execution approval gate (ADR bash-pre-execution-approval-decision).
+			// Fast-path when skipApproval=true OR no approval client wired (print/rpc mode).
+			// Fail-closed: any exception, timeout, or "deny" response aborts execution.
+			if (!skipApproval && approval && command) {
+				const danger = isDangerousCommand(resolvedCommand);
+				if (danger.matched) {
+					let choice: ApprovalChoice;
+					try {
+						choice = await approval.request({
+							command: resolvedCommand,
+							description: _description ?? "",
+							reason: danger.reason ?? "dangerous pattern matched",
+						});
+					} catch (err) {
+						// Approval rejected / threw -> fail-closed
+						return {
+							content: [{
+								type: "text",
+								text: `Command denied (approval error): ${err instanceof Error ? err.message : String(err)}`,
+							}],
+							details: undefined,
+							isError: true,
+						};
+					}
+					if (choice === "deny") {
+						return {
+							content: [{
+								type: "text",
+								text: `Command denied by user: ${danger.reason ?? "dangerous pattern"}`,
+							}],
+							details: undefined,
+							isError: true,
+						};
+					}
+					// "once" / "session" / "always" all proceed to spawn.
+					// Session persistence ("session"/"always" mapping to a config allowlist)
+					// is out of scope for Layer 2 — deferred to Layer 3 (same ADR §D6).
+				}
+			}
 
 			return new Promise((resolve, reject) => {
 				// We'll stream to a temp file if output gets large
