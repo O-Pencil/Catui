@@ -2,7 +2,9 @@
  * [WHO]: Provides AuthProviderConfigController + AuthProviderConfigContext — interactive auth/provider configuration
  * [FROM]: Depends on @catui/ai OAuth helpers, core/model/custom-providers, config paths, TUI components
  * [TO]: Consumed by modes/interactive/interactive-mode.ts and model-overlay providerConfig port
- * [HERE]: modes/interactive/controllers/auth-provider-config-controller.ts — P5 auth/provider-config slice
+ * [HERE]: modes/interactive/controllers/auth-provider-config-controller.ts — P5 auth/provider-config slice;
+ * built-in provider selection shows a Browse models / API-key action menu so credential updates stay
+ * reachable without a hidden shortcut (parity with custom protocol providers)
  *
  * Owns interactive credential/config prompts and OAuth UI. It does not own model selection overlay;
  * model-overlay consumes this controller through ProviderConfigPort and receives model application
@@ -48,6 +50,8 @@ export interface AuthProviderConfigSurface {
     placeholder?: string,
     opts?: { initialValue?: string },
   ): Promise<string | undefined>;
+  /** Titled single-choice option picker; resolves undefined on cancel. */
+  pickOption(title: string, options: string[]): Promise<string | undefined>;
   requestRender(): void;
   getUi(): TUI;
   getEditorContainer(): Container;
@@ -123,7 +127,7 @@ export class AuthProviderConfigController {
     this.ctx.surface.requestRender();
 
     if (!isCustomProtocolProvider(provider)) {
-      this.ctx.modelBridge.showModelSelector(undefined, provider);
+      await this.showBuiltInProviderActions(provider);
       return;
     }
 
@@ -140,6 +144,45 @@ export class AuthProviderConfigController {
     } catch (error) {
       this.ctx.surface.showError(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  /**
+   * Action menu after picking a built-in (non-custom-protocol) provider from the
+   * provider selector: browse models or (re)configure the provider API key.
+   * Gives built-in providers the same always-reachable credential entry that
+   * custom protocol providers (e.g. Anthropic-compatible) have on selection.
+   * Both paths continue into the model selector for that provider.
+   */
+  private async showBuiltInProviderActions(provider: string): Promise<void> {
+    const authStorage = this.ctx.modelRegistry.authStorage;
+    // OAuth-managed credentials are edited via /login, not the API-key prompt
+    // (which would replace the OAuth token with an api_key entry).
+    if (authStorage.get(provider)?.type === "oauth") {
+      this.ctx.modelBridge.showModelSelector(undefined, provider);
+      return;
+    }
+
+    const configured = authStorage.hasAuth(provider);
+    const browseAction = "Browse models";
+    const keyAction = configured ? "Update API key" : "Set API key";
+
+    const choice = await this.ctx.surface.pickOption(provider, [
+      browseAction,
+      keyAction,
+    ]);
+    if (choice === undefined) {
+      this.ctx.surface.requestRender();
+      return;
+    }
+
+    if (choice === keyAction) {
+      await this.promptForProviderApiKey(provider, {
+        title: `${configured ? "Update" : "Set"} API key for ${provider}`,
+      });
+      this.ctx.modelRegistry.refresh();
+    }
+
+    this.ctx.modelBridge.showModelSelector(undefined, provider);
   }
 
   async showOAuthSelector(mode: "login" | "logout"): Promise<void> {

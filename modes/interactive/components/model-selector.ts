@@ -1,5 +1,5 @@
 /**
- * [WHO]: Provides ModelSelectorComponent — model picker UI with scope/filter/add-OpenRouter affordances
+ * [WHO]: Provides ModelSelectorComponent — model picker UI with scope/filter/add-OpenRouter/update-API-key affordances
  * [FROM]: Depends on @catui/ai, @catui/tui, model-registry types, theme,
  *         DynamicBorder, keybinding hints
  * [TO]: Consumed by modes/interactive/interactive-mode.ts and components/index.ts; emits selected
@@ -128,6 +128,17 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			this.addChild(
 				new Text(
 					theme.fg("muted", "Ctrl+N: add OpenRouter model by id (same as openrouter.ai)"),
+					0,
+					0,
+				),
+			);
+		}
+
+		if (this.onConfigureApiKey) {
+			this.addChild(new Spacer(1));
+			this.addChild(
+				new Text(
+					theme.fg("muted", "Ctrl+K: update API key for current provider"),
 					0,
 					0,
 				),
