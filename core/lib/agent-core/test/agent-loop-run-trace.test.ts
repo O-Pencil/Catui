@@ -1,10 +1,11 @@
 import { EventStream } from "@catui/ai/events";
 import type { AssistantMessage, AssistantMessageEvent, Message, Model, UserMessage } from "@catui/ai/types";
 import { describe, expect, it } from "vitest";
+import { Type } from "@catui/ai/schema";
 import { agentLoop } from "../src/agent-loop.js";
 import { structuredAdaptiveAgentLoop } from "../src/structured-adaptive-agent-loop.js";
 import { InMemoryRunTraceSink, RunTraceRecorder } from "../src/run-trace-recorder.js";
-import type { AgentContext, AgentLoopConfig, AgentMessage } from "../src/types.js";
+import type { AgentContext, AgentLoopConfig, AgentMessage, AgentTool } from "../src/types.js";
 
 class FinalStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
 	constructor(message: AssistantMessage) {
@@ -51,5 +52,31 @@ describe("agent loop run tracing", () => {
 			"run.started", "turn.started", "model.requested", "model.responded", "turn.completed", "run.completed",
 		]);
 		expect(sink.snapshot().at(-1)).toMatchObject({ payload: { stopReason: "stop", turnCount: 1, toolCallCount: 0 } });
+	});
+
+	it.each([
+		["standard", agentLoop],
+		["weak-model-compatible", structuredAdaptiveAgentLoop],
+	] as const)("pairs tool trace events for %s", async (framework, run) => {
+		const sink = new InMemoryRunTraceSink();
+		const recorder = new RunTraceRecorder({ runId: `tool-${framework}`, sink });
+		const schema = Type.Object({});
+		const tool: AgentTool<typeof schema> = {
+			name: "read", label: "Read", description: "Read", parameters: schema,
+			async execute() { return { content: [{ type: "text", text: "ok" }], details: {} }; },
+		};
+		let call = 0;
+		const stream = run([prompt], { systemPrompt: "help", messages: [], tools: [tool] }, {
+			model, loopFramework: framework, convertToLlm: (messages: AgentMessage[]) => messages as Message[], runTrace: recorder,
+		}, undefined, () => {
+			const message = call++ === 0
+				? { ...response, stopReason: "toolUse" as const, content: [{ type: "toolCall" as const, id: "call-1", name: "read", arguments: {} }] }
+				: response;
+			return new FinalStream(message);
+		});
+		for await (const _event of stream) { /* drain */ }
+		const events = sink.snapshot();
+		expect(events.map((traceEvent) => traceEvent.kind)).toEqual(expect.arrayContaining(["tool.requested", "tool.started", "tool.completed"]));
+		expect(events.at(-1)).toMatchObject({ kind: "run.completed", payload: { toolCallCount: 1 } });
 	});
 });

@@ -1,4 +1,9 @@
-/** Versioned semantic trace protocol shared by every agent loop implementation. */
+/**
+ * [WHO]: RunTraceEventV1 protocol, runtime validation, ordered trace validation, and canonical fingerprints
+ * [FROM]: Depends only on Node crypto
+ * [TO]: Consumed by recorders, replay, runtime persistence, and harness eval
+ * [HERE]: core/lib/agent-core/src/run-trace.ts - versioned semantic audit contract
+ */
 import { createHash } from "node:crypto";
 
 export type TraceLoopFramework = "standard" | "weak-model-compatible";

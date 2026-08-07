@@ -24,6 +24,7 @@ slash-command-catalog.ts: buildSessionSlashCommands(), buildExtensionSlashComman
 export-bridge.ts: exportSessionHtml(), getLastAssistantText(), owns HTML export wiring and last assistant text extraction; Theme remains injected through AgentSessionConfig
 plan-mode-permissions.ts: createPlanModeCanUseTool(), composePlanModeCanUseTool(), SDK-level plan mode tool permission enforcement; explicit planFilePath enables strict single-file writes while omitted paths preserve the legacy markdown profile; consumed by sdk.ts when permissionMode === 'plan'
 checkpoint-store.ts: FileCheckpointStore, path-confined atomic JSON persistence with cross-process at-most-once checkpoint consumption
+run-trace-jsonl.ts: JsonlRunTraceSink and readRunTraceJsonl, owner-only bounded JSONL persistence for versioned semantic run traces
 thinking-levels.ts: pure thinking-level logic extracted from AgentSession (P4.2) — THINKING_LEVELS(_WITH_XHIGH), modelSupportsThinking/Xhigh, availableThinkingLevels, clampThinkingLevel, nextThinkingLevel; no session state, reusable by rpc/print
 model-cycle.ts: pure model-cycle decisions extracted from AgentSession (P4.2) — pickThinkingLevelOnModelChange, nextCyclicIndex; side effects are owned by model-controller.ts
 
@@ -47,6 +48,7 @@ model-cycle.ts: pure model-cycle decisions extracted from AgentSession (P4.2) �
 | runtime prompt resource assembly | `prompt-assembly.ts` | function deps | P4 |
 | HTML export + last assistant text | `export-bridge.ts` | function deps | P4 |
 | retry coordination | `retry-coordinator.ts` | `RetryCoordinatorHost` | pre-existing |
+| semantic run trace persistence | `run-trace-jsonl.ts` | `RunTraceSink` + validated JSONL reader | versioned offline replay and audit boundary |
 | pure thinking-level / model-cycle logic | `thinking-levels.ts`, `model-cycle.ts` | pure functions (no session state) | P4.2 |
 | cancellation slot / listener registry (primitives) | `../platform/abort-slot.ts`, `../platform/listeners.ts` | reusable primitives | P4.2 |
 | composition root: state, facade, loop continuation, teardown | `agent-session.ts` | — (owns adapters + orchestration) | [AS06](../../.dev-docs/architecture-review/runtime-session-review/findings/AS06-agent-session-public-facade.md); reload [AS09 deferred], teardown [AS12 rejected] |

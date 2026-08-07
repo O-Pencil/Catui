@@ -1,3 +1,9 @@
+/**
+ * [WHO]: replayRunTrace, ReplayDivergence, and semantic lifecycle reconstruction
+ * [FROM]: Depends on validated V1 run traces
+ * [TO]: Consumed by harness eval and offline trace diagnostics
+ * [HERE]: core/lib/agent-core/src/run-replay.ts - pure deterministic replay validator
+ */
 import { validateRunTrace, type RunTraceEventV1, type RunTraceKindV1 } from "./run-trace.js";
 
 export interface ReplayDivergence {
@@ -97,6 +103,7 @@ function semanticReplay(events: RunTraceEventV1[]): ReplayResult {
 	const requestedModels = new Set<number>();
 	const openTools = new Map<string, "requested" | "started">();
 	let checkpointCount = 0;
+	let completedToolCount = 0;
 
 	for (const event of events) {
 		switch (event.kind) {
@@ -124,6 +131,7 @@ function semanticReplay(events: RunTraceEventV1[]): ReplayResult {
 				break;
 			case "tool.completed":
 				if (!openTools.delete(event.payload.toolCallId)) return divergence(event.sequence, `tool.${event.payload.toolCallId}`, "requested", "missing", event.kind);
+				completedToolCount += 1;
 				break;
 			case "checkpoint.created":
 				checkpointCount += 1;
@@ -134,6 +142,7 @@ function semanticReplay(events: RunTraceEventV1[]): ReplayResult {
 			if (unpairedTool) return divergence(event.sequence, `tool.${unpairedTool}`, "completed", openTools.get(unpairedTool), event.kind);
 			if (openTurns.size > 0) return divergence(event.sequence, `turn.${openTurns.values().next().value as number}`, "completed", "open", event.kind);
 			if (requestedModels.size > 0) return divergence(event.sequence, `model.${requestedModels.values().next().value as number}`, "responded", "requested", event.kind);
+			if (event.payload.toolCallCount !== completedToolCount) return divergence(event.sequence, "payload.toolCallCount", event.payload.toolCallCount, completedToolCount, event.kind);
 			return {
 				ok: true,
 				summary: {

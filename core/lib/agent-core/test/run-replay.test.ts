@@ -47,4 +47,13 @@ describe("replayRunTrace", () => {
 		for (let index = 5; index < unpaired.length; index += 1) unpaired[index] = { ...unpaired[index], sequence: index + 1 } as RunTraceEventV1;
 		expect(replayRunTrace(unpaired)).toMatchObject({ ok: false, divergence: { kind: "run.completed", fieldPath: "tool.c1" } });
 	});
+
+	it("rejects run totals that do not match replayed tool completions", () => {
+		const mismatched = trace();
+		mismatched[5] = { ...mismatched[5], payload: { ...mismatched[5].payload, toolCallCount: 1 } } as RunTraceEventV1;
+		expect(replayRunTrace(mismatched)).toMatchObject({
+			ok: false,
+			divergence: { sequence: 6, fieldPath: "payload.toolCallCount", expected: 1, actual: 0 },
+		});
+	});
 });

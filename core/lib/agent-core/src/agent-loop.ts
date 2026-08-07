@@ -57,7 +57,7 @@ import {
 	waitForAssistantStreamEvent,
 	type AssistantStreamNext,
 } from "./agent-loop-stream-events.js";
-import { traceModelRequested, traceModelResponded, traceRunCompleted, traceRunStarted, traceTurnCompleted, traceTurnStarted } from "./run-trace-context.js";
+import { traceModelRequested, traceModelResponded, traceRunCompleted, traceRunStarted, traceToolBatch, traceTurnCompleted, traceTurnStarted } from "./run-trace-context.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 256;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 512;
@@ -530,6 +530,7 @@ async function runLoop(
 					currentContext.messages.length,
 					await config.getProgressMarker?.(),
 				);
+				await traceToolBatch(config.runTrace, toolCalls, toolExecution.toolResults, Boolean(config.toolPolicies?.length || config.canUseTool));
 				toolResults.push(
 					...enforceToolResultBatchSize(toolExecution.toolResults, config.maxToolResultBatchSizeChars),
 				);
@@ -551,6 +552,7 @@ async function runLoop(
 				if (toolExecution.approvalRequired) {
 					const { checkpointId, policyId } = toolExecution.approvalRequired;
 					stream.push({ type: "turn_end", message, toolResults });
+					await traceTurnCompleted(config.runTrace, turnCount, message);
 					finishStandardLoop(stream, newMessages, {
 						config, turnCount, toolCallCount, startedAt, usage, permissionDenials,
 						stopReason: "approval_required", transitions, checkpointId,
@@ -567,6 +569,7 @@ async function runLoop(
 					stream.push({ type: "message_start", message: { ...limitMessage } });
 					stream.push({ type: "message_end", message: limitMessage });
 					stream.push({ type: "turn_end", message: limitMessage, toolResults });
+					await traceTurnCompleted(config.runTrace, turnCount, limitMessage);
 					finishStandardLoop(stream, newMessages, {
 						config, turnCount, toolCallCount, startedAt, usage, permissionDenials,
 						stopReason: limitMessage.stopReason, transitions,

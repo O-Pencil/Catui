@@ -57,7 +57,7 @@ import {
 	waitForAssistantStreamEvent,
 	type AssistantStreamNext,
 } from "./agent-loop-stream-events.js";
-import { traceModelRequested, traceModelResponded, traceRunCompleted, traceRunStarted, traceTurnCompleted, traceTurnStarted } from "./run-trace-context.js";
+import { traceModelRequested, traceModelResponded, traceRunCompleted, traceRunStarted, traceToolBatch, traceTurnCompleted, traceTurnStarted } from "./run-trace-context.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 256;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 512;
@@ -538,6 +538,7 @@ async function runStructuredAdaptiveQueryLoop(
 			toolExecution.toolResults,
 			config.maxToolResultBatchSizeChars,
 		);
+		await traceToolBatch(config.runTrace, toolCalls, toolResults, Boolean(config.toolPolicies?.length || config.canUseTool));
 		state.permissionDenials.push(...toolExecution.permissionDenials);
 
 		for (const result of toolResults) {
@@ -549,6 +550,7 @@ async function runStructuredAdaptiveQueryLoop(
 		if (toolExecution.approvalRequired) {
 			const { checkpointId, policyId } = toolExecution.approvalRequired;
 			stream.push({ type: "turn_end", message, toolResults });
+			await traceTurnCompleted(config.runTrace, state.turnCount, message);
 			recordTransition(state, { reason: "approval_required", checkpointId, policyId });
 			state.finalStopReason = "approval_required";
 			state.finalErrorMessage = `Approval required before tool execution. Checkpoint: ${checkpointId}`;
@@ -584,6 +586,7 @@ async function runStructuredAdaptiveQueryLoop(
 			stream.push({ type: "message_start", message: { ...limitMessage } });
 			stream.push({ type: "message_end", message: limitMessage });
 			stream.push({ type: "turn_end", message: limitMessage, toolResults });
+			await traceTurnCompleted(config.runTrace, state.turnCount, limitMessage);
 			recordTransition(state, { reason: "livelock_detected", ...livelock });
 			state.finalStopReason = "error";
 			state.finalErrorMessage = limitMessage.errorMessage;
@@ -609,6 +612,7 @@ async function runStructuredAdaptiveQueryLoop(
 		}
 
 		stream.push({ type: "turn_end", message, toolResults });
+		await traceTurnCompleted(config.runTrace, state.turnCount, message);
 
 		if (toolExecution.steeringMessages && toolExecution.steeringMessages.length > 0) {
 			progressTracker?.reset();

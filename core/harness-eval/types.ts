@@ -1,3 +1,9 @@
+/**
+ * [WHO]: Harness eval manifests, fixtures, contexts, metrics, and reports
+ * [FROM]: Depends on agent-core framework and trace types
+ * [TO]: Consumed by the eval runner, built-in corpus, CLI, and tests
+ * [HERE]: core/harness-eval/types.ts - deterministic eval contracts
+ */
 import type { AgentLoopFramework, ReplayDivergence, RunTraceEventV1 } from "@catui/agent-core";
 
 export interface HarnessEvalThresholds {

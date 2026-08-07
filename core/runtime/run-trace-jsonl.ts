@@ -1,3 +1,9 @@
+/**
+ * [WHO]: JsonlRunTraceSink, readRunTraceJsonl, secure file permissions, and byte limits
+ * [FROM]: Depends on Node filesystem APIs and the agent-core trace contract
+ * [TO]: Exported through the public runtime subpath for host persistence
+ * [HERE]: core/runtime/run-trace-jsonl.ts - secure host-owned trace storage
+ */
 import { chmod, open, readFile, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { mkdir } from "node:fs/promises";

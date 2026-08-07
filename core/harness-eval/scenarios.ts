@@ -1,3 +1,9 @@
+/**
+ * [WHO]: Built-in harness eval manifest and eight semantic regression fixtures
+ * [FROM]: Depends on deterministic eval contexts and agent-core trace recording
+ * [TO]: Consumed by scripts/harness-eval.ts and CI
+ * [HERE]: core/harness-eval/scenarios.ts - required offline evaluation corpus
+ */
 import { InMemoryRunTraceSink, RunTraceRecorder, type TraceToolOutcome } from "@catui/agent-core";
 import type { HarnessEvalContext, HarnessEvalFixture, HarnessEvalManifest } from "./types.js";
 

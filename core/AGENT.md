@@ -177,6 +177,8 @@ The `core/` module contains the central business logic for Catui. It orchestrate
 
 ### Other Modules
 
+`harness-eval/`: Deterministic manifest runner, isolated fixture contracts, and required offline regression corpus
+
 `theme-contract.ts`: Theme/ThemeColor/ThemeBg/ColorMode structural contract (U2 seam); modes Theme class implements it so core never imports the modes UI layer for the type
 `messages.ts`: Message handling and formatting
 

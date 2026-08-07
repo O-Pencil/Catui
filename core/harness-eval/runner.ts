@@ -1,3 +1,9 @@
+/**
+ * [WHO]: Manifest validation, isolated fixture execution, replay metrics, and threshold decisions
+ * [FROM]: Depends on agent-core replay plus temporary filesystem workspaces
+ * [TO]: Consumed by the harness eval CLI and tests
+ * [HERE]: core/harness-eval/runner.ts - deterministic regression gate engine
+ */
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

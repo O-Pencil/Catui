@@ -1,3 +1,9 @@
+/**
+ * [WHO]: RunTraceRecorder, RunTraceSink, redaction/failure policies, and InMemoryRunTraceSink
+ * [FROM]: Depends on the V1 run trace protocol
+ * [TO]: Consumed by agent loops, host sinks, and deterministic eval fixtures
+ * [HERE]: core/lib/agent-core/src/run-trace-recorder.ts - bounded serialized trace delivery
+ */
 import { randomUUID } from "node:crypto";
 import {
 	parseRunTraceEvent,
@@ -44,6 +50,7 @@ export class RunTraceRecorder {
 	#tail: Promise<void> = Promise.resolve();
 	#pending = 0;
 	#sequence = 0;
+	#requiredFailure: unknown;
 
 	constructor(options: RunTraceRecorderOptions) {
 		if (options.runId.length === 0) throw new Error("Run trace runId must not be empty");
@@ -105,7 +112,10 @@ export class RunTraceRecorder {
 			})
 			.catch((error: unknown) => {
 				this.#failures.push({ sequence, message: errorMessage(error) });
-				if (this.#options.failureMode === "required") rejectResult(error);
+				if (this.#options.failureMode === "required") {
+					this.#requiredFailure ??= error;
+					rejectResult(error);
+				}
 				else resolveResult(undefined);
 			})
 			.finally(() => {
@@ -116,6 +126,7 @@ export class RunTraceRecorder {
 
 	async flush(): Promise<void> {
 		await this.#tail;
+		if (this.#requiredFailure !== undefined) throw this.#requiredFailure;
 	}
 }
 
