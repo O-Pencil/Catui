@@ -57,6 +57,7 @@ import {
 	waitForAssistantStreamEvent,
 	type AssistantStreamNext,
 } from "./agent-loop-stream-events.js";
+import { traceModelRequested, traceModelResponded, traceRunCompleted, traceRunStarted, traceTurnCompleted, traceTurnStarted } from "./run-trace-context.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 256;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 512;
@@ -277,6 +278,7 @@ async function runLoop(
 	let maxOutputTokensOverride: number | undefined;
 	let lastTransition: AgentLoopTransition = { reason: "start" };
 	const transitions: AgentLoopTransition[] = [];
+	await traceRunStarted(config.runTrace, "standard", currentContext.messages);
 	const recordTransition = (transition: AgentLoopTransition): AgentLoopTransition => {
 		lastTransition = transition;
 		transitions.push(transition);
@@ -337,6 +339,7 @@ async function runLoop(
 			}
 
 			turnCount++;
+			await traceTurnStarted(config.runTrace, turnCount);
 			// Overthinking guard: warn agent to wrap up before hitting hard limit
 			if (!turnWarningInjected && turnCount > maxTurns * 0.8) {
 				turnWarningInjected = true;
@@ -379,6 +382,7 @@ async function runLoop(
 
 			// Stream assistant response
 			timing.turnCount++;
+			await traceModelRequested(config.runTrace, turnCount, currentContext.messages);
 			const responseStartMessageCount = newMessages.length;
 			const message = await streamAssistantResponse(
 				currentContext,
@@ -392,6 +396,7 @@ async function runLoop(
 			addUsage(usage, message.usage);
 			maxOutputTokensOverride = undefined;
 			newMessages.push(message);
+			await traceModelResponded(config.runTrace, turnCount, message);
 
 			if (message.stopReason === "error" || message.stopReason === "aborted") {
 				const errorSubtype =
@@ -583,6 +588,7 @@ async function runLoop(
 			}
 
 			stream.push({ type: "turn_end", message, toolResults });
+			await traceTurnCompleted(config.runTrace, turnCount, message);
 
 			if (
 				!hasMoreToolCalls &&
@@ -959,9 +965,10 @@ function finishStandardLoop(
 	newMessages: AgentMessage[],
 	options: StandardLoopFinishOptions,
 ): void {
+	const stopReason = options.stopReason ?? inferStopReason(newMessages);
 	stream.push({
 		type: "agent_result",
-		stopReason: options.stopReason ?? inferStopReason(newMessages),
+		stopReason,
 		loopFramework: resolveAgentRunLoopFramework(options.config),
 		loopPolicy: buildAgentRunPolicy(options.config),
 		turnCount: options.turnCount,
@@ -977,8 +984,26 @@ function finishStandardLoop(
 		checkpointId: options.checkpointId,
 	});
 	_tlog(`loop_finished stopReason=${options.stopReason ?? inferStopReason(newMessages)} turns=${options.turnCount} tools=${options.toolCallCount} duration=${Date.now() - options.startedAt}ms`);
-	stream.push({ type: "agent_end", messages: newMessages });
-	stream.end(newMessages);
+	const end = () => {
+		stream.push({ type: "agent_end", messages: newMessages });
+		stream.end(newMessages);
+	};
+	if (!options.config.runTrace) {
+		end();
+		return;
+	}
+	void traceRunCompleted(options.config.runTrace, {
+		stopReason,
+		turnCount: options.turnCount,
+		toolCallCount: options.toolCallCount,
+		messages: newMessages,
+	}).then(end, (error: unknown) => {
+		const traceError = createLoopLimitMessage(options.config, `Required run trace failed: ${error instanceof Error ? error.message : String(error)}`);
+		newMessages.push(traceError);
+		stream.push({ type: "message_start", message: { ...traceError } });
+		stream.push({ type: "message_end", message: traceError });
+		end();
+	});
 }
 
 function emptyUsage(): Usage {

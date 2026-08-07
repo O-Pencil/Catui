@@ -21,6 +21,7 @@ import type { streamSimple } from "@catui/ai/stream";
 import type { Static, TSchema } from "@catui/ai/schema";
 import type { AgentToolPolicy } from "./tool-policy.js";
 import type { CheckpointStore } from "./run-checkpoint.js";
+import type { RunTraceRecorder } from "./run-trace-recorder.js";
 
 /** Stream function - can return sync or Promise for async config lookup */
 export type StreamFn = (
@@ -224,6 +225,9 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	/** Optional persistence port used when a tool policy pauses for approval. */
 	checkpointStore?: CheckpointStore;
 	checkpointTtlMs?: number;
+
+	/** Optional versioned semantic trace recorder. Tracing is disabled when omitted. */
+	runTrace?: RunTraceRecorder;
 
 	/**
 	 * Optional in-loop model error recovery hook.

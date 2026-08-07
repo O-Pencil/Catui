@@ -23,3 +23,4 @@ export * from "./run-checkpoint.js";
 export * from "./run-trace.js";
 export * from "./run-trace-recorder.js";
 export * from "./run-replay.js";
+export * from "./run-trace-context.js";

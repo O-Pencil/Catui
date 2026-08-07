@@ -164,6 +164,9 @@ export interface AgentOptions {
 	toolPolicies?: AgentLoopConfig["toolPolicies"];
 	checkpointStore?: AgentLoopConfig["checkpointStore"];
 	checkpointTtlMs?: number;
+
+	/** Optional recorder for one versioned semantic run trace. */
+	runTrace?: AgentLoopConfig["runTrace"];
 }
 
 export type AgentLoopPolicyOptions = Pick<
@@ -235,6 +238,7 @@ export class Agent {
 	private toolPolicies?: AgentLoopConfig["toolPolicies"];
 	private checkpointStore?: AgentLoopConfig["checkpointStore"];
 	private checkpointTtlMs?: number;
+	private runTrace?: AgentLoopConfig["runTrace"];
 	private checkpointResumeInProgress = false;
 
 	constructor(opts: AgentOptions = {}) {
@@ -267,6 +271,7 @@ export class Agent {
 		this.toolPolicies = opts.toolPolicies;
 		this.checkpointStore = opts.checkpointStore ?? new InMemoryCheckpointStore();
 		this.checkpointTtlMs = opts.checkpointTtlMs;
+		this.runTrace = opts.runTrace;
 	}
 
 	/**
@@ -405,6 +410,10 @@ export class Agent {
 
 	setModelErrorRecovery(recoverModelError: AgentLoopConfig["recoverModelError"] | undefined) {
 		this.setLoopPolicy({ recoverModelError });
+	}
+
+	setRunTrace(recorder: AgentLoopConfig["runTrace"]): void {
+		this.runTrace = recorder;
 	}
 
 	replaceMessages(ms: AgentMessage[]) {
@@ -778,6 +787,7 @@ export class Agent {
 			toolPolicies: this.toolPolicies,
 			checkpointStore: this.checkpointStore,
 			checkpointTtlMs: this.checkpointTtlMs,
+			runTrace: this.runTrace,
 			getSteeringMessages: async () => {
 				if (skipInitialSteeringPoll) {
 					skipInitialSteeringPoll = false;
