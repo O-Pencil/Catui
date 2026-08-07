@@ -3,10 +3,10 @@
  * parallelism.
  *
  * Replaces the serial `&& ` chain. The only build-time dependency among the
- * libs is agent-core → ai (agent-core imports `@catui/ai/*` declarations),
+ * libs are agent-core → ai and mem-core → protocol,
  * so:
- *   Phase 1 (parallel): protocol, ai, tui   — mutually independent
- *   Phase 2:            agent-core               — needs ai's .d.ts
+ *   Phase 1 (parallel): protocol, ai, tui, soul-core — mutually independent
+ *   Phase 2 (parallel): agent-core, mem-core         — need phase 1 declarations
  *
  * Unlike a shell `p1 & p2 & wait` chain, this propagates any sub-build failure
  * (POSIX `wait` with no args returns 0 even when a child failed, which would
@@ -18,8 +18,9 @@ const PHASE_1 = [
 	"packages/protocol",
 	"core/lib/ai",
 	"core/lib/tui",
+	"packages/soul-core",
 ];
-const PHASE_2 = ["core/lib/agent-core"];
+const PHASE_2 = ["core/lib/agent-core", "packages/mem-core"];
 
 function buildPackage(prefix) {
 	return new Promise((resolve, reject) => {
@@ -37,9 +38,7 @@ function buildPackage(prefix) {
 
 async function run() {
 	await Promise.all(PHASE_1.map(buildPackage));
-	for (const prefix of PHASE_2) {
-		await buildPackage(prefix);
-	}
+	await Promise.all(PHASE_2.map(buildPackage));
 }
 
 run().catch((error) => {
