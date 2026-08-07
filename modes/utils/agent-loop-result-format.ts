@@ -20,6 +20,7 @@ export function formatLoopPolicySummary(policy: AgentRunPolicy | undefined): str
 	const parts: string[] = [];
 	if (policy.maxTurnsPerPrompt !== undefined) parts.push(`turns=${policy.maxTurnsPerPrompt}`);
 	if (policy.maxToolCallsPerPrompt !== undefined) parts.push(`tools=${policy.maxToolCallsPerPrompt}`);
+	if (policy.loopProgress !== undefined) parts.push(`livelock=${policy.loopProgress.repetitionThreshold}`);
 	if (policy.maxToolConcurrency !== undefined) parts.push(`concurrency=${policy.maxToolConcurrency}`);
 	if (policy.maxToolResultBatchSizeChars !== undefined) {
 		parts.push(`toolResultChars=${policy.maxToolResultBatchSizeChars}`);
@@ -51,6 +52,8 @@ export function formatLoopTransitionSummary(transition: AgentLoopTransition): st
 			return `tool_result (${plural(transition.toolCallCount, "tool call")})`;
 		case "follow_up":
 			return "follow_up";
+		case "livelock_detected":
+			return `livelock_detected (${transition.repeatCount} repeats, ${transition.fingerprint})`;
 		case "max_turns_reached":
 			return `max_turns_reached (${transition.turnCount}/${transition.maxTurns} turns)`;
 		case "tool_call_limit_reached":

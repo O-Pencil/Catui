@@ -17,7 +17,7 @@ import {
 } from "@catui/ai/types";
 import { EventStream } from "@catui/ai/events";
 import { validateToolArguments } from "@catui/ai/schema";
-import { ToolNotFoundError } from "./errors.js";
+import { ToolNotFoundError, ToolPermissionDeniedError } from "./errors.js";
 import type {
 	AgentEvent,
 	AgentLoopConfig,
@@ -26,6 +26,7 @@ import type {
 	AgentToolPermissionDenial,
 	AgentToolResult,
 } from "./types.js";
+import { ToolPolicyPipeline } from "./tool-policy.js";
 
 const DEFAULT_SAFE_TOOL_NAMES = new Set([
 	"read",
@@ -64,6 +65,9 @@ export async function runStructuredAdaptiveTools(
 	getSteeringMessages?: AgentLoopConfig["getSteeringMessages"],
 	maxConcurrency?: number,
 	canUseTool?: AgentLoopConfig["canUseTool"],
+	toolPolicies?: AgentLoopConfig["toolPolicies"],
+	checkpointStore?: AgentLoopConfig["checkpointStore"],
+	checkpointTtlMs?: number,
 ): Promise<StructuredAdaptiveToolRunResult> {
 	const results: ToolResultMessage[] = [];
 	const contextMessages: AgentMessage[] = [];
@@ -82,6 +86,9 @@ export async function runStructuredAdaptiveTools(
 					signal,
 					stream,
 					canUseTool,
+					toolPolicies,
+					checkpointStore,
+					checkpointTtlMs,
 			),
 			maxConcurrency,
 		);
@@ -221,6 +228,9 @@ export async function runStructuredAdaptiveToolUse(
 	signal: AbortSignal | undefined,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	canUseTool?: AgentLoopConfig["canUseTool"],
+	toolPolicies?: AgentLoopConfig["toolPolicies"],
+	checkpointStore?: AgentLoopConfig["checkpointStore"],
+	checkpointTtlMs?: number,
 ): Promise<StructuredAdaptiveToolUseResult> {
 	const startedAt = Date.now();
 	stream.push({
@@ -235,12 +245,22 @@ export async function runStructuredAdaptiveToolUse(
 
 	try {
 		if (!tool) throw new ToolNotFoundError(toolCall.name);
-		const validatedArgs = validateToolArguments(tool, toolCall);
+		let validatedArgs = validateToolArguments(tool, toolCall);
 		const validationMessage = await tool.validateInput?.(validatedArgs);
 		if (typeof validationMessage === "string" && validationMessage.trim()) {
 			throw new Error(validationMessage);
 		}
-		const permission = await canUseTool?.({
+		const policyDecision = toolPolicies?.length
+			? await new ToolPolicyPipeline(toolPolicies, { checkpointStore, checkpointTtlMs }).evaluateBefore({
+				toolCallId: toolCall.id,
+				toolName: tool.name,
+				requestedToolName: toolCall.name,
+				input: validatedArgs,
+				rawInput: toolCall.arguments,
+			})
+			: undefined;
+		if (policyDecision?.decision === "allow" && policyDecision.input !== undefined) validatedArgs = policyDecision.input;
+		const permission = policyDecision && policyDecision.decision !== "allow" ? policyDecision : await canUseTool?.({
 			toolCallId: toolCall.id,
 			toolName: tool.name,
 			requestedToolName: toolCall.name,
@@ -248,15 +268,19 @@ export async function runStructuredAdaptiveToolUse(
 			rawInput: toolCall.arguments,
 			tool,
 		});
-		if (permission?.decision === "deny") {
+		if (permission?.decision === "deny" || permission?.decision === "pause") {
 			const reason = permission.reason?.trim();
+			const policyId = "policyId" in permission ? permission.policyId : undefined;
+			const checkpointId = "checkpointId" in permission ? permission.checkpointId : undefined;
 			result = {
 				content: [
 					{ type: "text", text: reason ? `Permission denied: ${reason}` : `Permission denied for ${tool.name}` },
 				],
 				details: {
-					errorType: "permission_denied",
+					errorType: permission.decision === "pause" ? "approval_required" : "permission_denied",
 					reason,
+					policyId,
+					checkpointId,
 					toolName: tool.name,
 					toolCallId: toolCall.id,
 				},
@@ -276,18 +300,32 @@ export async function runStructuredAdaptiveToolUse(
 		}
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
+		const denied = error instanceof ToolPermissionDeniedError;
 		result = {
 			content: [{ type: "text", text: message }],
-			details: isPermissionDeniedMessage(message)
+			details: denied || isPermissionDeniedMessage(message)
 				? {
 						errorType: "permission_denied",
 						reason: message,
+						policyId: denied ? error.policyId : undefined,
 						toolName: tool?.name ?? toolCall.name,
 						toolCallId: toolCall.id,
 					}
 				: {},
 		};
 		isError = true;
+	}
+	if (tool && toolPolicies?.length) {
+		result = await new ToolPolicyPipeline(toolPolicies).evaluateAfter({
+			toolCallId: toolCall.id,
+			toolName: tool.name,
+			requestedToolName: toolCall.name,
+			input: toolCall.arguments,
+			rawInput: toolCall.arguments,
+			result,
+			isError,
+		});
+		if (result.details && typeof result.details === "object" && (result.details as { errorType?: unknown }).errorType === "result_policy_failed") isError = true;
 	}
 
 	stream.push({

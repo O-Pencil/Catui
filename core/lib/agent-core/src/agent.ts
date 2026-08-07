@@ -152,6 +152,14 @@ export interface AgentOptions {
 
 	/** Maximum tool calls allowed for one prompt/continue loop. */
 	maxToolCallsPerPrompt?: number;
+
+	/** Optional no-progress detector. */
+	loopProgress?: AgentLoopConfig["loopProgress"];
+
+	/** Ordered tool policies evaluated before canUseTool. */
+	toolPolicies?: AgentLoopConfig["toolPolicies"];
+	checkpointStore?: AgentLoopConfig["checkpointStore"];
+	checkpointTtlMs?: number;
 }
 
 export type AgentLoopPolicyOptions = Pick<
@@ -168,6 +176,10 @@ export type AgentLoopPolicyOptions = Pick<
 	| "maxToolConcurrency"
 	| "maxTurnsPerPrompt"
 	| "maxToolCallsPerPrompt"
+	| "loopProgress"
+	| "toolPolicies"
+	| "checkpointStore"
+	| "checkpointTtlMs"
 >;
 
 export class Agent {
@@ -213,6 +225,10 @@ export class Agent {
 	private maxToolConcurrency?: number;
 	private maxTurnsPerPrompt?: number;
 	private maxToolCallsPerPrompt?: number;
+	private loopProgress?: AgentLoopConfig["loopProgress"];
+	private toolPolicies?: AgentLoopConfig["toolPolicies"];
+	private checkpointStore?: AgentLoopConfig["checkpointStore"];
+	private checkpointTtlMs?: number;
 
 	constructor(opts: AgentOptions = {}) {
 		this._state = { ...this._state, ...opts.initialState };
@@ -239,6 +255,10 @@ export class Agent {
 		this.maxToolConcurrency = opts.maxToolConcurrency;
 		this.maxTurnsPerPrompt = opts.maxTurnsPerPrompt;
 		this.maxToolCallsPerPrompt = opts.maxToolCallsPerPrompt;
+		this.loopProgress = opts.loopProgress;
+		this.toolPolicies = opts.toolPolicies;
+		this.checkpointStore = opts.checkpointStore;
+		this.checkpointTtlMs = opts.checkpointTtlMs;
 	}
 
 	/**
@@ -368,6 +388,10 @@ export class Agent {
 		if ("maxToolConcurrency" in options) this.maxToolConcurrency = options.maxToolConcurrency;
 		if ("maxTurnsPerPrompt" in options) this.maxTurnsPerPrompt = options.maxTurnsPerPrompt;
 		if ("maxToolCallsPerPrompt" in options) this.maxToolCallsPerPrompt = options.maxToolCallsPerPrompt;
+		if ("loopProgress" in options) this.loopProgress = options.loopProgress;
+		if ("toolPolicies" in options) this.toolPolicies = options.toolPolicies;
+		if ("checkpointStore" in options) this.checkpointStore = options.checkpointStore;
+		if ("checkpointTtlMs" in options) this.checkpointTtlMs = options.checkpointTtlMs;
 	}
 
 	setModelErrorRecovery(recoverModelError: AgentLoopConfig["recoverModelError"] | undefined) {
@@ -588,6 +612,10 @@ export class Agent {
 			maxToolConcurrency: this.maxToolConcurrency,
 			maxTurnsPerPrompt: this.maxTurnsPerPrompt,
 			maxToolCallsPerPrompt: this.maxToolCallsPerPrompt,
+			loopProgress: this.loopProgress,
+			toolPolicies: this.toolPolicies,
+			checkpointStore: this.checkpointStore,
+			checkpointTtlMs: this.checkpointTtlMs,
 			getSteeringMessages: async () => {
 				if (skipInitialSteeringPoll) {
 					skipInitialSteeringPoll = false;

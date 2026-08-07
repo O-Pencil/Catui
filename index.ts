@@ -6,6 +6,7 @@
  */
 
 export { getAgentDir, VERSION } from "./config.js";
+export { FileCheckpointStore } from "./core/runtime/checkpoint-store.js";
 export {
   CatuiAgent,
   quickAgent,

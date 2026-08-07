@@ -50,6 +50,7 @@ import {
 	startToolUseSummary,
 } from "./agent-loop-tool-summaries.js";
 import { buildAgentRunPolicy, resolveAgentRunLoopFramework } from "./agent-run-result.js";
+import { LoopProgressTracker } from "./loop-progress.js";
 import {
 	waitForAbortableOperation,
 	waitForAssistantStream,
@@ -223,6 +224,7 @@ async function runStructuredAdaptiveQueryLoop(
 		return;
 	}
 	let firstTurn = true;
+	const progressTracker = config.loopProgress ? new LoopProgressTracker(config.loopProgress) : undefined;
 
 	while (true) {
 		if (!firstTurn) {
@@ -277,6 +279,9 @@ async function runStructuredAdaptiveQueryLoop(
 			stream,
 			resolveMaxToolConcurrency(config.maxToolConcurrency),
 			config.canUseTool,
+			config.toolPolicies,
+			config.checkpointStore,
+			config.checkpointTtlMs,
 		);
 		timing.turnCount++;
 		const responseStartMessageCount = newMessages.length;
@@ -514,6 +519,9 @@ async function runStructuredAdaptiveQueryLoop(
 						config.getSteeringMessages,
 						config.maxToolConcurrency,
 						config.canUseTool,
+						config.toolPolicies,
+						config.checkpointStore,
+						config.checkpointTtlMs,
 					);
 		const toolResults = enforceToolResultBatchSize(
 			toolExecution.toolResults,
@@ -526,6 +534,37 @@ async function runStructuredAdaptiveQueryLoop(
 			newMessages.push(result);
 			stream.push({ type: "message_start", message: result });
 			stream.push({ type: "message_end", message: result });
+		}
+		let livelock: ReturnType<LoopProgressTracker["observe"]>;
+		if (progressTracker) {
+			for (let index = 0; index < toolResults.length; index++) {
+				const result = toolResults[index];
+				const toolCall = toolCalls[index];
+				if (!result || !toolCall) continue;
+				const errorType = result.details && typeof result.details === "object"
+					? (result.details as { errorType?: unknown }).errorType
+					: undefined;
+				livelock = progressTracker.observe({
+					toolName: toolCall.name,
+					input: toolCall.arguments,
+					outcome: !result.isError ? "success" : errorType === "permission_denied" || errorType === "approval_required" ? "denied" : "error",
+				});
+				if (livelock) break;
+			}
+		}
+		if (livelock) {
+			const limitMessage = createLoopLimitMessage(config, `livelock_detected: stopped after a repeated no-progress tool cycle (${livelock.repeatCount} repeats).`);
+			currentContext.messages.push(limitMessage);
+			newMessages.push(limitMessage);
+			stream.push({ type: "message_start", message: { ...limitMessage } });
+			stream.push({ type: "message_end", message: limitMessage });
+			stream.push({ type: "turn_end", message: limitMessage, toolResults });
+			recordTransition(state, { reason: "livelock_detected", ...livelock });
+			state.finalStopReason = "error";
+			state.finalErrorMessage = limitMessage.errorMessage;
+			state.finalErrorSubtype = "livelock_detected";
+			finish(stream, newMessages, state);
+			return;
 		}
 		for (const contextMessage of toolExecution.contextMessages) {
 			currentContext.messages.push(contextMessage);

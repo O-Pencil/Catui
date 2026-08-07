@@ -4,7 +4,7 @@
  * [TO]: Consumed by core/extensions-host/index.ts
  * [HERE]: core/extensions-host/wrapper.ts - wraps RegisteredTool into AgentTool
  */
-import type { AgentTool, AgentToolUpdateCallback } from "@catui/agent-core";
+import { ToolPermissionDeniedError, type AgentTool, type AgentToolUpdateCallback } from "@catui/agent-core";
 import type { ExtensionRunner } from "./runner.js";
 import type { RegisteredTool, ToolCallEventResult } from "./types.js";
 
@@ -64,7 +64,7 @@ export function wrapToolWithExtensions<T>(tool: AgentTool<any, T>, runner: Exten
 
 					if (callResult?.block) {
 						const reason = callResult.reason || "Tool execution was blocked by an extension";
-						throw new Error(reason);
+						throw new ToolPermissionDeniedError(reason, tool.name, toolCallId, "extension:tool_call");
 					}
 					if (callResult?.input) {
 						toolInput = callResult.input;

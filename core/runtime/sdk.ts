@@ -11,6 +11,8 @@ import {
   type AgentLoopPolicyOptions,
   type AgentMessage,
   type AgentToolPermissionDecision,
+  type AgentToolPolicy,
+  type CheckpointStore,
   type ThinkingLevel,
 } from "@catui/agent-core";
 import type { Message, Model } from "@catui/ai/types";
@@ -101,6 +103,8 @@ export const defaultLogger: SDKLogger = {
   info: (msg, ...args) => console.log(msg, ...args),
 };
 
+let legacyPlanProfileWarningEmitted = false;
+
 export interface CreateAgentSessionOptions extends SoulOptionsContract {
   /** Override base tools (useful for custom runtimes, e.g. injecting approval
    *  client into bash tool under ADR bash-pre-execution-approval-decision).
@@ -135,6 +139,7 @@ export interface CreateAgentSessionOptions extends SoulOptionsContract {
     | "maxOutputTokenRecoveryAttempts"
     | "maxModelErrorRecoveryAttempts"
     | "maxStopHookContinuations"
+    | "loopProgress"
   >;
   /** Maximum assistant turns allowed for one prompt. */
   maxTurnsPerPrompt?: number;
@@ -152,6 +157,13 @@ export interface CreateAgentSessionOptions extends SoulOptionsContract {
   maxModelErrorRecoveryAttempts?: number;
   /** Maximum stop-hook validation/correction continuations per prompt. */
   maxStopHookContinuations?: number;
+  /** Stop repeated no-progress tool cycles before the coarse turn cap. */
+  loopProgress?: AgentLoopPolicyOptions["loopProgress"];
+  /** Ordered pre-execution policies. */
+  toolPolicies?: readonly AgentToolPolicy[];
+  /** Persistence port for policy pause checkpoints. */
+  checkpointStore?: CheckpointStore;
+  checkpointTtlMs?: number;
   /** Models available for cycling (Ctrl+P in interactive mode) */
   scopedModels?: Array<{ model: Model<any>; thinkingLevel: ThinkingLevel }>;
 
@@ -191,6 +203,9 @@ export interface CreateAgentSessionOptions extends SoulOptionsContract {
    *   Useful for GUI consumers implementing a "plan before execute" workflow.
    */
   permissionMode?: "plan" | "agent";
+
+  /** Active plan file. Supplying it enables strict single-file plan writes. */
+  planFilePath?: string;
 
   /**
    * Optional tool permission gate for intercepting tool calls before execution.
@@ -428,7 +443,7 @@ function buildCanUseTool(
   };
 
   if (permissionMode === "plan") {
-    const planCheck = createPlanModeCanUseTool(cwd);
+    const planCheck = createPlanModeCanUseTool(cwd, { planFilePath: options.planFilePath });
     return composePlanModeCanUseTool(
       planCheck,
       async (event: any) => {
@@ -460,6 +475,10 @@ export async function createAgentSession(
 
   // Setup logger
   const logger = options.silent ? silentLogger : (options.logger ?? defaultLogger);
+  if (options.permissionMode === "plan" && !options.planFilePath && !legacyPlanProfileWarningEmitted) {
+    legacyPlanProfileWarningEmitted = true;
+    logger.warn("[deprecated] SDK plan mode without planFilePath uses the legacy markdown-write profile; provide planFilePath for strict single-file writes.");
+  }
 
   // Merge custom env vars into process.env (before MCP init so servers can use them)
   if (options.env) {
@@ -658,6 +677,10 @@ export async function createAgentSession(
       options.maxModelErrorRecoveryAttempts ?? options.loopPolicy?.maxModelErrorRecoveryAttempts,
     maxStopHookContinuations: options.maxStopHookContinuations ?? options.loopPolicy?.maxStopHookContinuations,
     canUseTool: buildCanUseTool(options, cwd),
+    loopProgress: options.loopProgress ?? options.loopPolicy?.loopProgress,
+    toolPolicies: options.toolPolicies,
+    checkpointStore: options.checkpointStore,
+    checkpointTtlMs: options.checkpointTtlMs,
     getApiKey: async (provider) => {
       // Use the provider argument from the in-flight request;
       // agent.state.model may already be switched mid-turn.

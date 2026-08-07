@@ -1,7 +1,7 @@
 # Agent harness reliability review
 
 ```yaml
-status: implementing
+status: closed
 issue: HAP-45
 decision: unified policy pipeline plus progress and checkpoint runtime primitives
 ```
@@ -21,12 +21,11 @@ contract. Plan-mode product state stays in the plan extension.
 
 ## Acceptance
 
-- [ ] One ordered policy outcome model is consumed by both loops.
-- [ ] Plan-mode duplicated predicates are removed or reduced to a single owner.
-- [ ] Repetition can terminate before the coarse turn cap without false progress loss.
-- [ ] Paused approvals can be resumed once across a fresh runtime instance.
-- [ ] Compatibility and all repository gates are green.
+- [x] One ordered policy outcome model is consumed by both loops.
+- [x] SDK plan mode supports the interactive strict single-file invariant with a staged legacy profile.
+- [x] Repetition can terminate before the coarse turn cap without false progress loss.
+- [x] Paused approvals can be resumed once across a fresh runtime instance.
+- [x] Compatibility and all repository gates are green.
 
 See `findings/AH01-runtime-contract.md` for the load-bearing decision and `closure.md`
 for final evidence.
-

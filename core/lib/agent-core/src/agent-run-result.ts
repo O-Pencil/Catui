@@ -37,5 +37,8 @@ export function buildAgentRunPolicy(config: AgentLoopConfig): AgentRunPolicy {
 	if (config.maxToolCallsPerPrompt !== undefined) {
 		policy.maxToolCallsPerPrompt = config.maxToolCallsPerPrompt;
 	}
+	if (config.loopProgress !== undefined) {
+		policy.loopProgress = { ...config.loopProgress };
+	}
 	return policy;
 }

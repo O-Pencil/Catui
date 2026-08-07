@@ -57,6 +57,9 @@ export class StructuredAdaptiveStreamingToolExecutor {
 		private readonly stream: EventStream<AgentEvent, AgentMessage[]>,
 		maxConcurrency: number,
 		private readonly canUseTool?: AgentLoopConfig["canUseTool"],
+		private readonly toolPolicies?: AgentLoopConfig["toolPolicies"],
+		private readonly checkpointStore?: AgentLoopConfig["checkpointStore"],
+		private readonly checkpointTtlMs?: number,
 	) {
 		this.toolByName = buildToolMap(tools);
 		this.maxConcurrency = Math.max(1, Math.floor(maxConcurrency));
@@ -180,6 +183,9 @@ export class StructuredAdaptiveStreamingToolExecutor {
 			record.abortController.signal,
 			this.stream,
 			this.canUseTool,
+			this.toolPolicies,
+			this.checkpointStore,
+			this.checkpointTtlMs,
 		)
 			.then((result) => {
 				record.toolResult = result.toolResult;

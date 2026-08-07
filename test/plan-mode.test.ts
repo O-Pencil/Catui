@@ -15,6 +15,7 @@ import {
 	writePlan,
 } from "../extensions/builtin/plan/plan-file-manager.js";
 import { shouldAllowToolCall } from "../extensions/builtin/plan/plan-permissions.js";
+import { createPlanModeCanUseTool } from "../core/runtime/plan-mode-permissions.js";
 import {
 	getPlanModeExitInstructions,
 	getPlanModeInstructions,
@@ -105,7 +106,7 @@ test("plan command enters plan mode without querying for bare /plan", async () =
 		assert.equal(state.state.prePlanMode, "default");
 		assert.deepEqual(harness.sentMessages, []);
 		assert.equal(harness.statuses.get("plan"), "Plan mode");
-		assert.ok(harness.widgets.get("plan-mode")?.[0].includes("PLAN MODE"));
+		assert.ok(harness.widgets.get("plan-mode")?.[0].includes("Plan Mode On"));
 	} finally {
 		cleanup(cwd);
 	}
@@ -175,6 +176,22 @@ test("plan permissions allow reads and exact plan file writes only", () => {
 		assert.equal(shouldAllowToolCall({ toolName: "bash", toolCallId: "5", input: { command: "git status --short" } }, planFilePath, cwd).allowed, true);
 		assert.equal(shouldAllowToolCall({ toolName: "bash", toolCallId: "6", input: { command: "npm install" } }, planFilePath, cwd).allowed, false);
 		assert.equal(shouldAllowToolCall({ toolName: "mcpWrite", toolCallId: "7", input: {} }, planFilePath, cwd).allowed, false);
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("SDK plan permission uses strict active-plan path when supplied", async () => {
+	const cwd = createTempProject();
+	try {
+		const planFilePath = join(cwd, ".plans", "active.md");
+		const check = createPlanModeCanUseTool(cwd, { planFilePath });
+		const event = (path: string) => ({
+			toolCallId: "call-1", toolName: "write", requestedToolName: "write",
+			input: { path }, rawInput: { path },
+		});
+		assert.equal((await check(event(planFilePath))).decision, "allow");
+		assert.equal((await check(event(join(cwd, "other.md")))).decision, "deny");
 	} finally {
 		cleanup(cwd);
 	}

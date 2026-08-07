@@ -19,6 +19,8 @@ import type {
 } from "@catui/ai/types";
 import type { streamSimple } from "@catui/ai/stream";
 import type { Static, TSchema } from "@catui/ai/schema";
+import type { AgentToolPolicy } from "./tool-policy.js";
+import type { CheckpointStore } from "./run-checkpoint.js";
 
 /** Stream function - can return sync or Promise for async config lookup */
 export type StreamFn = (
@@ -36,6 +38,7 @@ export type AgentLoopTransition =
 	| { reason: "start" }
 	| { reason: "tool_result"; toolCallCount: number }
 	| { reason: "follow_up" }
+	| { reason: "livelock_detected"; fingerprint: string; repeatCount: number }
 	| { reason: "max_turns_reached"; maxTurns: number; turnCount: number }
 	| {
 			reason: "tool_call_limit_reached";
@@ -87,6 +90,7 @@ export interface AgentRunPolicy {
 	maxToolResultBatchSizeChars?: number;
 	maxTurnsPerPrompt?: number;
 	maxToolCallsPerPrompt?: number;
+	loopProgress?: { repetitionThreshold: number; historySize?: number };
 }
 
 export function normalizeAgentLoopFramework(
@@ -212,6 +216,13 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 		tool: AgentTool<any>;
 	}) => Promise<AgentToolPermissionDecision> | AgentToolPermissionDecision;
 
+	/** Ordered host policies evaluated before the legacy canUseTool adapter. */
+	toolPolicies?: readonly AgentToolPolicy[];
+
+	/** Optional persistence port used when a tool policy pauses for approval. */
+	checkpointStore?: CheckpointStore;
+	checkpointTtlMs?: number;
+
 	/**
 	 * Optional in-loop model error recovery hook.
 	 *
@@ -262,6 +273,9 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * emits a controlled assistant error message.
 	 */
 	maxToolCallsPerPrompt?: number;
+
+	/** Optional no-progress detector. Disabled unless explicitly configured. */
+	loopProgress?: { repetitionThreshold: number; historySize?: number };
 
 	/**
 	 * Maximum concurrency for one batch of concurrency-safe tool calls in the
