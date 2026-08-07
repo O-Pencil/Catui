@@ -44,10 +44,10 @@ export class ToolRuntimeController {
       options.customTools,
     );
 
-    const toolRegistry = new Map(options.baseTools);
-    for (const tool of wrappedExtensionTools) {
-      toolRegistry.set(tool.name, tool);
-    }
+    const allTools = [
+      ...options.baseTools.values(),
+      ...wrappedExtensionTools,
+    ];
 
     const activeToolNameSet = this._resolveActiveToolNames(
       options.baseToolsOverride,
@@ -62,21 +62,18 @@ export class ToolRuntimeController {
     );
 
     if (options.extensionRunner) {
-      const wrappedActiveTools = wrapToolsWithExtensions(
-        activeTools,
-        options.extensionRunner,
-      ) as AgentTool[];
       const wrappedAllTools = wrapToolsWithExtensions(
-        Array.from(toolRegistry.values()),
+        allTools,
         options.extensionRunner,
       ) as AgentTool[];
+      const activeToolNames = activeTools.map((tool) => tool.name);
       this.orchestrator.replaceTools(
         wrappedAllTools,
-        wrappedActiveTools.map((tool) => tool.name),
+        activeToolNames,
       );
       this.orchestrator.setCustomTools(options.customTools);
       return {
-        activeTools: wrappedActiveTools,
+        activeTools: this.orchestrator.setActiveToolsByName(activeToolNames).tools,
         systemPromptToolNames: this._systemPromptToolNames(
           activeToolNameSet,
           options.baseTools,
@@ -85,12 +82,14 @@ export class ToolRuntimeController {
     }
 
     this.orchestrator.replaceTools(
-      toolRegistry.values(),
+      allTools,
       activeTools.map((tool) => tool.name),
     );
     this.orchestrator.setCustomTools(options.customTools);
     return {
-      activeTools,
+      activeTools: this.orchestrator.setActiveToolsByName(
+        activeTools.map((tool) => tool.name),
+      ).tools,
       systemPromptToolNames: this._systemPromptToolNames(
         activeToolNameSet,
         options.baseTools,

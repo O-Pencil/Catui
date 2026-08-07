@@ -385,17 +385,15 @@ export class ExtensionRunner {
 		return this.extensions.map((e) => e.path);
 	}
 
-	/** Get all registered tools from all extensions (first registration per name wins). */
+	/** Get every registered tool so the runtime registry can detect cross-extension collisions. */
 	getAllRegisteredTools(): RegisteredTool[] {
-		const toolsByName = new Map<string, RegisteredTool>();
+		const tools: RegisteredTool[] = [];
 		for (const ext of this.extensions) {
 			for (const tool of ext.tools.values()) {
-				if (!toolsByName.has(tool.definition.name)) {
-					toolsByName.set(tool.definition.name, tool);
-				}
+				tools.push(tool);
 			}
 		}
-		return Array.from(toolsByName.values());
+		return tools;
 	}
 
 	/** Get a tool definition by name. Returns undefined if not found. */
