@@ -21,3 +21,4 @@ export * from "./tool-policy.js";
 export * from "./loop-progress.js";
 export * from "./run-checkpoint.js";
 export * from "./run-trace.js";
+export * from "./run-trace-recorder.js";
