@@ -11,6 +11,10 @@ export interface AgentRunCheckpoint {
 	createdAt: number;
 	expiresAt?: number;
 	policyId: string;
+	/** Index of the next policy to evaluate after this checkpoint is approved. */
+	resumePolicyIndex?: number;
+	sessionId?: string;
+	conversationBoundary?: { messageCount: number; assistantTimestamp?: number };
 	toolCall: {
 		id: string;
 		name: string;
@@ -21,7 +25,11 @@ export interface AgentRunCheckpoint {
 
 export interface CheckpointStore {
 	save(checkpoint: AgentRunCheckpoint): Promise<void>;
-	consume(id: string, now?: number): Promise<AgentRunCheckpoint | undefined>;
+	consume(
+		id: string,
+		now?: number,
+		validate?: (checkpoint: AgentRunCheckpoint) => boolean,
+	): Promise<AgentRunCheckpoint | undefined>;
 	delete(id: string): Promise<boolean>;
 }
 
@@ -48,15 +56,25 @@ export class InMemoryCheckpointStore implements CheckpointStore {
 
 	async save(checkpoint: AgentRunCheckpoint): Promise<void> {
 		if (checkpoint.version !== 1) throw new Error(`Unsupported checkpoint version: ${String(checkpoint.version)}`);
+		if (checkpoint.expiresAt !== undefined && !Number.isFinite(checkpoint.expiresAt)) throw new Error("Checkpoint expiry must be finite");
 		this.#checkpoints.set(checkpoint.id, structuredClone(checkpoint));
 	}
 
-	async consume(id: string, now = Date.now()): Promise<AgentRunCheckpoint | undefined> {
+	async consume(
+		id: string,
+		now = Date.now(),
+		validate?: (checkpoint: AgentRunCheckpoint) => boolean,
+	): Promise<AgentRunCheckpoint | undefined> {
 		const checkpoint = this.#checkpoints.get(id);
 		if (!checkpoint) return undefined;
+		if (checkpoint.expiresAt !== undefined && checkpoint.expiresAt <= now) {
+			this.#checkpoints.delete(id);
+			return undefined;
+		}
+		const copy = structuredClone(checkpoint);
+		if (validate && !validate(copy)) return undefined;
 		this.#checkpoints.delete(id);
-		if (checkpoint.expiresAt !== undefined && checkpoint.expiresAt <= now) return undefined;
-		return structuredClone(checkpoint);
+		return copy;
 	}
 
 	async delete(id: string): Promise<boolean> {

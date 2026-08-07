@@ -1333,17 +1333,25 @@ describe("agentLoop with AgentMessage", () => {
 			async execute() { executed = true; return { content: [{ type: "text", text: "done" }], details: {} }; },
 		};
 		const store = new InMemoryCheckpointStore();
-		const context: AgentContext = { systemPrompt: "", messages: [], tools: [tool] };
+		let followupExecuted = false;
+		const followup: AgentTool<typeof schema, { command: string }> = {
+			name: "followup", label: "Followup", description: "Must be skipped", parameters: schema,
+			async execute() { followupExecuted = true; return { content: [{ type: "text", text: "bad" }], details: {} }; },
+		};
+		const context: AgentContext = { systemPrompt: "", messages: [], tools: [tool, followup] };
 		let streamCalls = 0;
 		const stream = agentLoop([createUserMessage("deploy")], context, {
 			model: createModel(), convertToLlm: identityConverter, checkpointStore: store,
-			toolPolicies: [{ id: "approval", beforeTool: () => ({ decision: "pause", reason: "approve deploy" }) }],
+			toolPolicies: [{ id: "approval", beforeTool: (event) => event.toolName === "deploy" ? ({ decision: "pause", reason: "approve deploy" }) : ({ decision: "allow" }) }],
 		}, undefined, () => {
 			streamCalls++;
 			const mockStream = new MockAssistantStream();
 			queueMicrotask(() => mockStream.push(streamCalls === 1 ? {
 				type: "done", reason: "toolUse",
-				message: createAssistantMessage([{ type: "toolCall", id: "deploy-1", name: "deploy", arguments: { command: "prod" } }], "toolUse"),
+				message: createAssistantMessage([
+					{ type: "toolCall", id: "deploy-1", name: "deploy", arguments: { command: "prod" } },
+					{ type: "toolCall", id: "followup-1", name: "followup", arguments: { command: "must-not-run" } },
+				], "toolUse"),
 			} : {
 				type: "done", reason: "stop", message: createAssistantMessage([{ type: "text", text: "waiting" }]),
 			}));
@@ -1356,9 +1364,13 @@ describe("agentLoop with AgentMessage", () => {
 		);
 		const checkpointId = (paused?.result.details as { checkpointId?: string } | undefined)?.checkpointId;
 		expect(executed).toBe(false);
+		expect(followupExecuted).toBe(false);
 		expect((paused?.result.details as { errorType?: string } | undefined)?.errorType).toBe("approval_required");
 		expect(checkpointId).toBeTypeOf("string");
 		expect(await store.consume(checkpointId!)).toMatchObject({ policyId: "approval", toolCall: { name: "deploy" } });
+		const runResult = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> => event.type === "agent_result");
+		expect(runResult?.errorSubtype).toBe("approval_required");
+		expect(runResult?.checkpointId).toBe(checkpointId);
 	});
 
 	it("should inject queued messages and skip remaining tool calls", async () => {

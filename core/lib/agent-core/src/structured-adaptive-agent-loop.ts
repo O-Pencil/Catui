@@ -106,6 +106,7 @@ interface QueryLoopState {
 	finalStopReason?: string;
 	finalErrorMessage?: string;
 	finalErrorSubtype?: string;
+	finalCheckpointId?: string;
 }
 
 export function structuredAdaptiveAgentLoop(
@@ -282,6 +283,8 @@ async function runStructuredAdaptiveQueryLoop(
 			config.toolPolicies,
 			config.checkpointStore,
 			config.checkpointTtlMs,
+			config.sessionId,
+			currentContext.messages.length + 1,
 		);
 		timing.turnCount++;
 		const responseStartMessageCount = newMessages.length;
@@ -522,6 +525,8 @@ async function runStructuredAdaptiveQueryLoop(
 						config.toolPolicies,
 						config.checkpointStore,
 						config.checkpointTtlMs,
+						config.sessionId,
+						currentContext.messages.length,
 					);
 		const toolResults = enforceToolResultBatchSize(
 			toolExecution.toolResults,
@@ -535,7 +540,19 @@ async function runStructuredAdaptiveQueryLoop(
 			stream.push({ type: "message_start", message: result });
 			stream.push({ type: "message_end", message: result });
 		}
+		if (toolExecution.approvalRequired) {
+			const { checkpointId, policyId } = toolExecution.approvalRequired;
+			stream.push({ type: "turn_end", message, toolResults });
+			recordTransition(state, { reason: "approval_required", checkpointId, policyId });
+			state.finalStopReason = "approval_required";
+			state.finalErrorMessage = `Approval required before tool execution. Checkpoint: ${checkpointId}`;
+			state.finalErrorSubtype = "approval_required";
+			state.finalCheckpointId = checkpointId;
+			finish(stream, newMessages, state);
+			return;
+		}
 		let livelock: ReturnType<LoopProgressTracker["observe"]>;
+		const progressMarker = await config.getProgressMarker?.();
 		if (progressTracker) {
 			for (let index = 0; index < toolResults.length; index++) {
 				const result = toolResults[index];
@@ -547,7 +564,9 @@ async function runStructuredAdaptiveQueryLoop(
 				livelock = progressTracker.observe({
 					toolName: toolCall.name,
 					input: toolCall.arguments,
+					output: { content: result.content, details: result.details },
 					outcome: !result.isError ? "success" : errorType === "permission_denied" || errorType === "approval_required" ? "denied" : "error",
+					progressMarker,
 				});
 				if (livelock) break;
 			}
@@ -586,9 +605,11 @@ async function runStructuredAdaptiveQueryLoop(
 		stream.push({ type: "turn_end", message, toolResults });
 
 		if (toolExecution.steeringMessages && toolExecution.steeringMessages.length > 0) {
+			progressTracker?.reset();
 			state.pendingMessages = toolExecution.steeringMessages;
 		} else {
 			state.pendingMessages = (await config.getSteeringMessages?.()) || [];
+			if (state.pendingMessages.length > 0) progressTracker?.reset();
 		}
 		recordTransition(state, { reason: "tool_result", toolCallCount: toolCalls.length });
 	}
@@ -898,6 +919,7 @@ function finish(
 		lastTransition: state.transition,
 		errorMessage: state.finalErrorMessage,
 		errorSubtype: state.finalErrorSubtype,
+		checkpointId: state.finalCheckpointId,
 	});
 	_tlog(`loop_finished stopReason=${state.finalStopReason ?? inferStopReason(newMessages)} turns=${state.turnCount} tools=${state.toolCallCount} duration=${Date.now() - state.startedAt}ms`);
 	stream.push({ type: "agent_end", messages: newMessages });

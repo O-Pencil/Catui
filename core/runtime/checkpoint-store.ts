@@ -24,6 +24,18 @@ function isCheckpoint(value: unknown): value is AgentRunCheckpoint {
 		&& typeof record.id === "string"
 		&& typeof record.createdAt === "number"
 		&& typeof record.policyId === "string"
+		&& (record.resumePolicyIndex === undefined || (
+			typeof record.resumePolicyIndex === "number"
+			&& Number.isInteger(record.resumePolicyIndex)
+			&& record.resumePolicyIndex >= 0
+		))
+		&& (record.expiresAt === undefined || (typeof record.expiresAt === "number" && Number.isFinite(record.expiresAt)))
+		&& (record.sessionId === undefined || typeof record.sessionId === "string")
+		&& (record.conversationBoundary === undefined || (
+			typeof record.conversationBoundary === "object"
+			&& record.conversationBoundary !== null
+			&& Number.isInteger((record.conversationBoundary as Record<string, unknown>).messageCount)
+		))
 		&& !!toolCall
 		&& typeof toolCall === "object"
 		&& typeof (toolCall as Record<string, unknown>).id === "string"
@@ -35,6 +47,7 @@ export class FileCheckpointStore implements CheckpointStore {
 
 	async save(checkpoint: AgentRunCheckpoint): Promise<void> {
 		assertSafeId(checkpoint.id);
+		if (checkpoint.expiresAt !== undefined && !Number.isFinite(checkpoint.expiresAt)) throw new Error("Checkpoint expiry must be finite");
 		await mkdir(this.directory, { recursive: true });
 		const destination = this.pathFor(checkpoint.id);
 		const temporary = join(this.directory, `.${checkpoint.id}.${randomUUID()}.tmp`);
@@ -42,7 +55,11 @@ export class FileCheckpointStore implements CheckpointStore {
 		await rename(temporary, destination);
 	}
 
-	async consume(id: string, now = Date.now()): Promise<AgentRunCheckpoint | undefined> {
+	async consume(
+		id: string,
+		now = Date.now(),
+		validate?: (checkpoint: AgentRunCheckpoint) => boolean,
+	): Promise<AgentRunCheckpoint | undefined> {
 		assertSafeId(id);
 		await mkdir(this.directory, { recursive: true });
 		const claimed = join(this.directory, `.${id}.${randomUUID()}.consuming`);
@@ -52,13 +69,19 @@ export class FileCheckpointStore implements CheckpointStore {
 			if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
 			throw error;
 		}
+		let restored = false;
 		try {
 			const parsed: unknown = JSON.parse(await readFile(claimed, "utf8"));
 			if (!isCheckpoint(parsed) || parsed.id !== id) throw new Error("Invalid checkpoint payload");
 			if (parsed.expiresAt !== undefined && parsed.expiresAt <= now) return undefined;
+			if (validate && !validate(parsed)) {
+				await rename(claimed, this.pathFor(id));
+				restored = true;
+				return undefined;
+			}
 			return parsed;
 		} finally {
-			await unlink(claimed).catch(() => undefined);
+			if (!restored) await unlink(claimed).catch(() => undefined);
 		}
 	}
 

@@ -22,6 +22,7 @@ import type {
 } from "./types.js";
 import {
 	buildToolMap,
+	extractApprovalRequired,
 	isStructuredAdaptiveToolCallConcurrencySafe,
 	resolveStructuredAdaptiveToolInterruptBehavior,
 	runStructuredAdaptiveToolUse,
@@ -50,6 +51,7 @@ export class StructuredAdaptiveStreamingToolExecutor {
 	private discardedReason: string | undefined;
 	private parentAborted = false;
 	private parentAbortReason: unknown;
+	private approvalRequired: StructuredAdaptiveToolRunResult["approvalRequired"];
 
 	constructor(
 		tools: AgentTool<any>[] | undefined,
@@ -60,9 +62,13 @@ export class StructuredAdaptiveStreamingToolExecutor {
 		private readonly toolPolicies?: AgentLoopConfig["toolPolicies"],
 		private readonly checkpointStore?: AgentLoopConfig["checkpointStore"],
 		private readonly checkpointTtlMs?: number,
+		private readonly sessionId?: string,
+		private readonly messageCount = 0,
 	) {
 		this.toolByName = buildToolMap(tools);
-		this.maxConcurrency = Math.max(1, Math.floor(maxConcurrency));
+		this.maxConcurrency = toolPolicies?.some((policy) => policy.mayPause !== false)
+			? 1
+			: Math.max(1, Math.floor(maxConcurrency));
 		if (signal?.aborted) {
 			this.parentAborted = true;
 			this.parentAbortReason = signal.reason;
@@ -104,6 +110,10 @@ export class StructuredAdaptiveStreamingToolExecutor {
 			abortController,
 			contextMessages: [],
 		});
+		if (this.approvalRequired) {
+			this.completeAsDeferred(this.records[this.records.length - 1]!);
+			return;
+		}
 		this.processQueue();
 	}
 
@@ -121,11 +131,14 @@ export class StructuredAdaptiveStreamingToolExecutor {
 			this.processQueue();
 		}
 
-		const toolResults = this.records.map((record) => record.toolResult!);
+		const toolResults = this.records
+			.map((record) => record.toolResult)
+			.filter((result): result is ToolResultMessage => !!result && !extractApprovalRequired(result));
 		return {
 			toolResults,
 			contextMessages: this.records.flatMap((record) => record.contextMessages),
 			permissionDenials: extractPermissionDenials(toolResults),
+			approvalRequired: this.approvalRequired,
 		};
 	}
 
@@ -152,6 +165,10 @@ export class StructuredAdaptiveStreamingToolExecutor {
 	private processQueue(): void {
 		for (const record of this.records) {
 			if (record.status !== "queued") continue;
+			if (this.approvalRequired) {
+				this.completeAsDeferred(record);
+				continue;
+			}
 			if (this.discardedReason) {
 				this.completeWithSyntheticError(record, this.discardedReason);
 				continue;
@@ -186,14 +203,28 @@ export class StructuredAdaptiveStreamingToolExecutor {
 			this.toolPolicies,
 			this.checkpointStore,
 			this.checkpointTtlMs,
+			this.sessionId,
+			this.messageCount,
 		)
 			.then((result) => {
 				record.toolResult = result.toolResult;
 				record.contextMessages = result.contextMessages;
+				const approval = extractApprovalRequired(result.toolResult);
+				if (approval) {
+					this.approvalRequired = approval;
+					for (const queued of this.records) {
+						if (queued.status === "queued") this.completeAsDeferred(queued);
+					}
+				}
 			})
 			.finally(() => {
 				record.status = "completed";
 			});
+	}
+
+	private completeAsDeferred(record: StreamingToolRecord): void {
+		record.status = "completed";
+		record.contextMessages = [];
 	}
 
 	private completeWithSyntheticError(record: StreamingToolRecord, reason: string): void {

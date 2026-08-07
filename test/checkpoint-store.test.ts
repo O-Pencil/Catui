@@ -34,3 +34,18 @@ test("filesystem checkpoint store rejects unsafe ids", async () => {
 		rmSync(directory, { recursive: true, force: true });
 	}
 });
+
+test("filesystem checkpoint store preserves a conditionally rejected claim", async () => {
+	const directory = mkdtempSync(join(tmpdir(), "catui-checkpoints-"));
+	try {
+		const store = new FileCheckpointStore(directory);
+		await store.save({
+			version: 1, id: "guarded", createdAt: 100, policyId: "approval",
+			toolCall: { id: "call-1", name: "bash", input: {} },
+		});
+		assert.equal(await store.consume("guarded", 101, () => false), undefined);
+		assert.equal((await store.consume("guarded", 101, () => true))?.id, "guarded");
+	} finally {
+		rmSync(directory, { recursive: true, force: true });
+	}
+});

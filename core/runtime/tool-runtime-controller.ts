@@ -17,7 +17,6 @@ import type {
 } from "../extensions-host/types.js";
 import {
   wrapRegisteredTools,
-  wrapToolsWithExtensions,
 } from "../extensions-host/wrapper.js";
 import type { ToolOrchestrator } from "../tools/orchestrator.js";
 
@@ -60,26 +59,6 @@ export class ToolRuntimeController {
       options.baseTools,
       wrappedExtensionTools,
     );
-
-    if (options.extensionRunner) {
-      const wrappedAllTools = wrapToolsWithExtensions(
-        allTools,
-        options.extensionRunner,
-      ) as AgentTool[];
-      const activeToolNames = activeTools.map((tool) => tool.name);
-      this.orchestrator.replaceTools(
-        wrappedAllTools,
-        activeToolNames,
-      );
-      this.orchestrator.setCustomTools(options.customTools);
-      return {
-        activeTools: this.orchestrator.setActiveToolsByName(activeToolNames).tools,
-        systemPromptToolNames: this._systemPromptToolNames(
-          activeToolNameSet,
-          options.baseTools,
-        ),
-      };
-    }
 
     this.orchestrator.replaceTools(
       allTools,

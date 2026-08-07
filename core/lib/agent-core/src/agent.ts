@@ -17,12 +17,15 @@ import {
 	type TextContent,
 	type ThinkingBudgets,
 	type Transport,
+	type ToolResultMessage,
 } from "@catui/ai/types";
 import { getModel } from "@catui/ai/models";
 import { streamSimple } from "@catui/ai/stream";
 import { agentLoop, agentLoopContinue } from "./agent-loop.js";
 import { structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue } from "./structured-adaptive-agent-loop.js";
+import { InMemoryCheckpointStore } from "./run-checkpoint.js";
 import { normalizeAgentLoopFramework } from "./types.js";
+import { ToolPolicyPipeline } from "./tool-policy.js";
 import type {
 	AgentContext,
 	AgentEvent,
@@ -155,6 +158,7 @@ export interface AgentOptions {
 
 	/** Optional no-progress detector. */
 	loopProgress?: AgentLoopConfig["loopProgress"];
+	getProgressMarker?: AgentLoopConfig["getProgressMarker"];
 
 	/** Ordered tool policies evaluated before canUseTool. */
 	toolPolicies?: AgentLoopConfig["toolPolicies"];
@@ -177,6 +181,7 @@ export type AgentLoopPolicyOptions = Pick<
 	| "maxTurnsPerPrompt"
 	| "maxToolCallsPerPrompt"
 	| "loopProgress"
+	| "getProgressMarker"
 	| "toolPolicies"
 	| "checkpointStore"
 	| "checkpointTtlMs"
@@ -226,9 +231,11 @@ export class Agent {
 	private maxTurnsPerPrompt?: number;
 	private maxToolCallsPerPrompt?: number;
 	private loopProgress?: AgentLoopConfig["loopProgress"];
+	private getProgressMarker?: AgentLoopConfig["getProgressMarker"];
 	private toolPolicies?: AgentLoopConfig["toolPolicies"];
 	private checkpointStore?: AgentLoopConfig["checkpointStore"];
 	private checkpointTtlMs?: number;
+	private checkpointResumeInProgress = false;
 
 	constructor(opts: AgentOptions = {}) {
 		this._state = { ...this._state, ...opts.initialState };
@@ -256,8 +263,9 @@ export class Agent {
 		this.maxTurnsPerPrompt = opts.maxTurnsPerPrompt;
 		this.maxToolCallsPerPrompt = opts.maxToolCallsPerPrompt;
 		this.loopProgress = opts.loopProgress;
+		this.getProgressMarker = opts.getProgressMarker;
 		this.toolPolicies = opts.toolPolicies;
-		this.checkpointStore = opts.checkpointStore;
+		this.checkpointStore = opts.checkpointStore ?? new InMemoryCheckpointStore();
 		this.checkpointTtlMs = opts.checkpointTtlMs;
 	}
 
@@ -389,8 +397,9 @@ export class Agent {
 		if ("maxTurnsPerPrompt" in options) this.maxTurnsPerPrompt = options.maxTurnsPerPrompt;
 		if ("maxToolCallsPerPrompt" in options) this.maxToolCallsPerPrompt = options.maxToolCallsPerPrompt;
 		if ("loopProgress" in options) this.loopProgress = options.loopProgress;
+		if ("getProgressMarker" in options) this.getProgressMarker = options.getProgressMarker;
 		if ("toolPolicies" in options) this.toolPolicies = options.toolPolicies;
-		if ("checkpointStore" in options) this.checkpointStore = options.checkpointStore;
+		if ("checkpointStore" in options) this.checkpointStore = options.checkpointStore ?? new InMemoryCheckpointStore();
 		if ("checkpointTtlMs" in options) this.checkpointTtlMs = options.checkpointTtlMs;
 	}
 
@@ -497,7 +506,7 @@ export class Agent {
 	async prompt(message: AgentMessage | AgentMessage[]): Promise<void>;
 	async prompt(input: string, images?: ImageContent[]): Promise<void>;
 	async prompt(input: string | AgentMessage | AgentMessage[], images?: ImageContent[]) {
-		if (this._state.isStreaming) {
+		if (this._state.isStreaming || this.checkpointResumeInProgress) {
 			throw new Error(
 				"Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for completion.",
 			);
@@ -533,7 +542,7 @@ export class Agent {
 	 * Continue from current context (used for retries and resuming queued messages).
 	 */
 	async continue() {
-		if (this._state.isStreaming) {
+		if (this._state.isStreaming || this.checkpointResumeInProgress) {
 			throw new Error("Agent is already processing. Wait for completion before continuing.");
 		}
 
@@ -557,6 +566,158 @@ export class Agent {
 			throw new Error("Cannot continue from message role: assistant");
 		}
 
+		await this._runLoop(undefined);
+	}
+
+	/** Resolve a durable approval checkpoint, pair every pending tool call, and continue the loop. */
+	async resumeCheckpoint(checkpointId: string, decision: "approve" | "deny"): Promise<void> {
+		if (this._state.isStreaming || this.checkpointResumeInProgress) throw new Error("Agent is already processing. Wait for completion before resuming.");
+		this.checkpointResumeInProgress = true;
+		try {
+			await this.resumeCheckpointUnlocked(checkpointId, decision);
+		} finally {
+			this.checkpointResumeInProgress = false;
+		}
+	}
+
+	private async resumeCheckpointUnlocked(checkpointId: string, decision: "approve" | "deny"): Promise<void> {
+		if (!this.checkpointStore) throw new Error("No checkpoint store configured");
+		const locateCheckpoint = (candidate: {
+			sessionId?: string;
+			conversationBoundary?: { messageCount: number };
+			toolCall: { id: string; name: string };
+		}) => {
+			if (candidate.sessionId && candidate.sessionId !== this._sessionId) return undefined;
+			let assistantIndex = -1;
+			for (let index = this._state.messages.length - 1; index >= 0; index--) {
+				const message = this._state.messages[index];
+				if (message?.role === "assistant" && message.content.some((part) => part.type === "toolCall" && part.id === candidate.toolCall.id)) {
+					assistantIndex = index;
+					break;
+				}
+			}
+			if (assistantIndex < 0) return undefined;
+			if (candidate.conversationBoundary && assistantIndex + 1 !== candidate.conversationBoundary.messageCount) return undefined;
+			const assistant = this._state.messages[assistantIndex];
+			if (!assistant || assistant.role !== "assistant") return undefined;
+			const siblingIds = new Set(assistant.content.flatMap((part) => part.type === "toolCall" ? [part.id] : []));
+			const tail = this._state.messages.slice(assistantIndex + 1);
+			if (tail.some((message) => message.role !== "toolResult" || !siblingIds.has(message.toolCallId))) return undefined;
+			const alreadyPaired = tail.some(
+				(message) => message.role === "toolResult" && message.toolCallId === candidate.toolCall.id,
+			);
+			if (alreadyPaired) return undefined;
+			const tool = this._state.tools.find((item) => item.name === candidate.toolCall.name || item.aliases?.includes(candidate.toolCall.name));
+			return tool ? { assistantIndex, assistant, tool } : undefined;
+		};
+		const checkpoint = await this.checkpointStore.consume(checkpointId, Date.now(), (candidate) => !!locateCheckpoint(candidate));
+		if (!checkpoint) throw new Error(`Checkpoint unavailable or already consumed: ${checkpointId}`);
+		const located = locateCheckpoint(checkpoint);
+		if (!located) throw new Error("Checkpoint conversation boundary is no longer available");
+		const { assistantIndex, assistant, tool } = located;
+
+		let content: ToolResultMessage["content"];
+		let details: unknown;
+		let isError = false;
+		if (decision === "approve") {
+			let input = checkpoint.toolCall.input;
+			const validationMessage = await tool.validateInput?.(input as never);
+			if (typeof validationMessage === "string" && validationMessage.trim()) {
+				content = [{ type: "text", text: validationMessage }];
+				details = { errorType: "validation_failed" };
+				isError = true;
+			} else {
+				const policyOffset = checkpoint.resumePolicyIndex ?? 0;
+				const remainingPolicies = this.toolPolicies?.slice(policyOffset) ?? [];
+				const permission = remainingPolicies.length
+					? await new ToolPolicyPipeline(remainingPolicies, {
+						checkpointStore: this.checkpointStore,
+						checkpointTtlMs: this.checkpointTtlMs,
+						sessionId: this._sessionId,
+						conversationBoundary: checkpoint.conversationBoundary,
+						policyIndexOffset: policyOffset,
+					}).evaluateBefore({
+						toolCallId: checkpoint.toolCall.id,
+						toolName: tool.name,
+						requestedToolName: checkpoint.toolCall.name,
+						input,
+						rawInput: checkpoint.toolCall.input,
+					})
+					: { decision: "allow" as const, input };
+				if (permission.decision === "allow" && permission.input !== undefined) input = permission.input;
+				const legacyPermission = permission.decision === "allow" ? await this.canUseTool?.({
+					toolCallId: checkpoint.toolCall.id,
+					toolName: tool.name,
+					requestedToolName: checkpoint.toolCall.name,
+					input,
+					rawInput: checkpoint.toolCall.input,
+					tool,
+				}) : undefined;
+				const denied = permission.decision !== "allow" ? permission : legacyPermission;
+				if (denied?.decision === "pause") {
+					throw new Error(`Approval required: ${denied.checkpointId ?? "new checkpoint unavailable"}`);
+				}
+				if (denied?.decision === "deny") {
+					content = [{ type: "text", text: denied.reason?.trim() || `Permission denied for ${tool.name}` }];
+					details = { errorType: "permission_denied", reason: denied.reason };
+					isError = true;
+				} else {
+					let result;
+					try {
+						result = await tool.execute(checkpoint.toolCall.id, input as never, undefined, () => undefined);
+					} catch (error) {
+						result = { content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }], details: {} };
+						isError = true;
+					}
+					if (this.toolPolicies?.length) {
+						const evaluated = await new ToolPolicyPipeline(this.toolPolicies).evaluateAfter({
+							toolCallId: checkpoint.toolCall.id,
+							toolName: tool.name,
+							requestedToolName: checkpoint.toolCall.name,
+							input,
+							rawInput: checkpoint.toolCall.input,
+							result,
+							isError,
+						});
+						result = evaluated.result;
+						isError = evaluated.isError;
+					}
+					content = result.content;
+					details = result.details;
+				}
+			}
+		} else {
+			content = [{ type: "text", text: "Human denied the pending tool call." }];
+			details = { errorType: "permission_denied", policyId: checkpoint.policyId };
+			isError = true;
+		}
+
+		const timestamp = Date.now();
+		this.appendMessage({
+			role: "toolResult",
+			toolCallId: checkpoint.toolCall.id,
+			toolName: checkpoint.toolCall.name,
+			content,
+			details,
+			isError,
+			timestamp,
+		});
+		const pairedToolCallIds = new Set(this._state.messages.slice(assistantIndex + 1).flatMap(
+			(message) => message.role === "toolResult" ? [message.toolCallId] : [],
+		));
+		for (const part of assistant.content) {
+			if (part.type !== "toolCall" || part.id === checkpoint.toolCall.id) continue;
+			if (pairedToolCallIds.has(part.id)) continue;
+			this.appendMessage({
+				role: "toolResult",
+				toolCallId: part.id,
+				toolName: part.name,
+				content: [{ type: "text", text: "Skipped because the tool batch paused for human approval." }],
+				details: { errorType: "approval_sibling_skipped", checkpointId },
+				isError: true,
+				timestamp,
+			});
+		}
 		await this._runLoop(undefined);
 	}
 
@@ -613,6 +774,7 @@ export class Agent {
 			maxTurnsPerPrompt: this.maxTurnsPerPrompt,
 			maxToolCallsPerPrompt: this.maxToolCallsPerPrompt,
 			loopProgress: this.loopProgress,
+			getProgressMarker: this.getProgressMarker,
 			toolPolicies: this.toolPolicies,
 			checkpointStore: this.checkpointStore,
 			checkpointTtlMs: this.checkpointTtlMs,
@@ -692,6 +854,7 @@ export class Agent {
 							lastTransition: event.lastTransition,
 							errorMessage: event.errorMessage,
 							errorSubtype: event.errorSubtype,
+							checkpointId: event.checkpointId,
 						};
 						break;
 

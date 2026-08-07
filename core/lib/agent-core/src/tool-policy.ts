@@ -24,8 +24,15 @@ export type AgentToolPolicyDecision =
 
 export interface AgentToolPolicy {
 	id: string;
+	/** Set false only when the policy is guaranteed never to return pause. */
+	mayPause?: boolean;
 	beforeTool?(event: AgentToolPolicyEvent): AgentToolPolicyDecision | void | Promise<AgentToolPolicyDecision | void>;
-	afterTool?(event: AgentToolPolicyResultEvent): { result: AgentToolResult<unknown> } | void | Promise<{ result: AgentToolResult<unknown> } | void>;
+	afterTool?(event: AgentToolPolicyResultEvent): AgentToolPolicyResultDecision | void | Promise<AgentToolPolicyResultDecision | void>;
+}
+
+export interface AgentToolPolicyResultDecision {
+	result: AgentToolResult<unknown>;
+	isError?: boolean;
 }
 
 export interface AgentToolPolicyResultEvent extends AgentToolPolicyEvent {
@@ -54,7 +61,8 @@ export class ToolPolicyPipeline {
 
 	async evaluateBefore(event: AgentToolPolicyEvent): Promise<AgentToolPolicyDecision> {
 		let input = event.input;
-		for (const policy of this.#policies) {
+		for (let policyIndex = 0; policyIndex < this.#policies.length; policyIndex++) {
+			const policy = this.#policies[policyIndex];
 			if (!policy.beforeTool) continue;
 			let decision: AgentToolPolicyDecision | void;
 			try {
@@ -69,15 +77,25 @@ export class ToolPolicyPipeline {
 				continue;
 			}
 			const policyId = decision.policyId ?? policy.id;
+			if (decision.decision === "pause" && !this.#options.checkpointStore) {
+				return { decision: "deny", policyId, reason: "Cannot pause without a checkpoint store" };
+			}
 			if (decision.decision === "pause" && this.#options.checkpointStore) {
 				const now = this.#options.now?.() ?? Date.now();
+				const ttl = this.#options.checkpointTtlMs;
+				if (ttl !== undefined && (!Number.isFinite(ttl) || ttl <= 0)) {
+					return { decision: "deny", policyId, reason: "Checkpoint TTL must be a positive finite number" };
+				}
 				const checkpointId = this.#options.createCheckpointId?.() ?? randomUUID();
 				await this.#options.checkpointStore.save({
 					version: 1,
 					id: checkpointId,
 					createdAt: now,
-					expiresAt: this.#options.checkpointTtlMs === undefined ? undefined : now + this.#options.checkpointTtlMs,
+					expiresAt: ttl === undefined ? undefined : now + ttl,
 					policyId,
+					resumePolicyIndex: (this.#options.policyIndexOffset ?? 0) + policyIndex + 1,
+					sessionId: this.#options.sessionId,
+					conversationBoundary: this.#options.conversationBoundary,
 					toolCall: { id: event.toolCallId, name: event.toolName, input },
 					metadata: decision.metadata,
 				});
@@ -88,29 +106,37 @@ export class ToolPolicyPipeline {
 		return { decision: "allow", input };
 	}
 
-	async evaluateAfter(event: AgentToolPolicyResultEvent): Promise<AgentToolResult<unknown>> {
+	async evaluateAfter(event: AgentToolPolicyResultEvent): Promise<Required<AgentToolPolicyResultDecision>> {
 		let result = event.result;
+		let isError = event.isError;
 		for (const policy of this.#policies) {
 			if (!policy.afterTool) continue;
 			try {
-				const decision = await policy.afterTool({ ...event, result });
-				if (decision) result = decision.result;
+				const decision = await policy.afterTool({ ...event, result, isError });
+				if (decision) {
+					result = decision.result;
+					if (decision.isError !== undefined) isError = decision.isError;
+				}
 			} catch (error) {
 				if (isAbortError(error)) throw error;
 				const message = error instanceof Error ? error.message : String(error);
-				return {
+				return { result: {
 					content: [{ type: "text", text: `Result policy ${policy.id} failed: ${message}` }],
 					details: { errorType: "result_policy_failed", policyId: policy.id },
-				};
+				}, isError: true };
 			}
 		}
-		return result;
+		return { result, isError };
 	}
 }
 
 export interface ToolPolicyPipelineOptions {
 	checkpointStore?: CheckpointStore;
 	checkpointTtlMs?: number;
+	sessionId?: string;
+	conversationBoundary?: { messageCount: number; assistantTimestamp?: number };
 	createCheckpointId?: () => string;
 	now?: () => number;
+	/** Absolute index represented by policies[0], used when resuming mid-pipeline. */
+	policyIndexOffset?: number;
 }

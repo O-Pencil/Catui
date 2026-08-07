@@ -8,6 +8,7 @@ import { join } from "node:path";
 import {
   Agent,
   type AgentLoopFrameworkInput,
+  type AgentLoopConfig,
   type AgentLoopPolicyOptions,
   type AgentMessage,
   type AgentToolPermissionDecision,
@@ -34,7 +35,7 @@ import { findInitialModel } from "../model-resolver.js";
 import type { ResourceLoader } from "../platform/config/resource-loader.js";
 import { DefaultResourceLoader } from "../platform/config/resource-loader.js";
 import { getBuiltinExtensionPaths } from "../../builtin-extensions.js";
-import { createPlanModeCanUseTool, composePlanModeCanUseTool } from "./plan-mode-permissions.js";
+import { createPlanModeCanUseTool } from "./plan-mode-permissions.js";
 import { SessionManager } from "../session/session-manager.js";
 import { SettingsManager } from "../platform/config/settings-manager.js";
 import { AgentDirContext, defaultAgentDirContext } from "../agent-dir/agent-dir-context.js";
@@ -159,6 +160,8 @@ export interface CreateAgentSessionOptions extends SoulOptionsContract {
   maxStopHookContinuations?: number;
   /** Stop repeated no-progress tool cycles before the coarse turn cap. */
   loopProgress?: AgentLoopPolicyOptions["loopProgress"];
+  /** Optional semantic progress marker used to reset livelock tracking. */
+  getProgressMarker?: AgentLoopConfig["getProgressMarker"];
   /** Ordered pre-execution policies. */
   toolPolicies?: readonly AgentToolPolicy[];
   /** Persistence port for policy pause checkpoints. */
@@ -419,48 +422,73 @@ function getDefaultAgentDir(): string {
  * Build the composite canUseTool function from session options.
  * Chains: allowedTools/disallowedTools filter → plan-mode check → user's canUseTool.
  */
-function buildCanUseTool(
+function buildRuntimeToolPolicies(
   options: CreateAgentSessionOptions,
   cwd: string,
-): ((event: any) => any) | undefined {
-  const { allowedTools, disallowedTools, permissionMode, canUseTool: userCanUseTool } = options;
-
-  // If no filtering options and no plan mode, pass through directly
-  if (!allowedTools && !disallowedTools && permissionMode !== "plan") {
-    return userCanUseTool as any;
-  }
-
-  // Build the composite function
-  const toolFilter = (event: { toolName: string; requestedToolName: string }) => {
-    const name = event.toolName ?? event.requestedToolName;
-    if (disallowedTools?.includes(name)) {
-      return { decision: "deny" as const, reason: `Tool '${name}' is disallowed` };
-    }
-    if (allowedTools && !allowedTools.includes(name)) {
-      return { decision: "deny" as const, reason: `Tool '${name}' is not in the allowed tools list` };
-    }
-    return undefined; // not filtered — pass through to next check
-  };
-
-  if (permissionMode === "plan") {
-    const planCheck = createPlanModeCanUseTool(cwd, { planFilePath: options.planFilePath });
-    return composePlanModeCanUseTool(
-      planCheck,
-      async (event: any) => {
-        const filtered = toolFilter(event);
-        if (filtered) return filtered;
-        if (userCanUseTool) return userCanUseTool(event);
-        return { decision: "allow" as const };
+  extensionRunnerRef: { current?: ExtensionRunner },
+): AgentToolPolicy[] {
+  const policies: AgentToolPolicy[] = [];
+  if (options.allowedTools || options.disallowedTools) {
+    policies.push({
+      id: "sdk:tool-filter",
+      mayPause: false,
+      beforeTool(event) {
+        const name = event.toolName || event.requestedToolName;
+        if (options.disallowedTools?.includes(name)) return { decision: "deny", reason: `Tool '${name}' is disallowed` };
+        if (options.allowedTools && !options.allowedTools.includes(name)) return { decision: "deny", reason: `Tool '${name}' is not in the allowed tools list` };
+        return { decision: "allow" };
       },
-    ) as any;
+    });
   }
+  if (options.permissionMode === "plan") {
+    const planCheck = createPlanModeCanUseTool(cwd, { planFilePath: options.planFilePath });
+    policies.push({ id: "plan-mode", mayPause: false, beforeTool: (event) => planCheck(event) });
+  }
+  policies.push({
+    id: "extensions:tool-hooks",
+    mayPause: false,
+    async beforeTool(event) {
+      const runner = extensionRunnerRef.current;
+      if (!runner?.hasHandlers("tool_call")) return { decision: "allow" };
+      const result = await runner.emitToolCall({
+        type: "tool_call", toolName: event.toolName, toolCallId: event.toolCallId,
+        input: event.input as Record<string, unknown>,
+      });
+      if (result?.block) return { decision: "deny", reason: result.reason ?? "Tool execution was blocked by an extension" };
+      return { decision: "allow", input: result?.input ?? event.input };
+    },
+    async afterTool(event) {
+      const runner = extensionRunnerRef.current;
+      if (!runner?.hasHandlers("tool_result")) return;
+      const result = await runner.emitToolResult({
+        type: "tool_result", toolName: event.toolName, toolCallId: event.toolCallId,
+        input: event.input as Record<string, unknown>, content: event.result.content,
+        details: event.result.details, isError: event.isError,
+      });
+      return result ? {
+        result: {
+          ...event.result,
+          content: result.content ?? event.result.content,
+          details: result.details ?? event.result.details,
+        },
+        isError: result.isError,
+      } : undefined;
+    },
+  });
+  policies.push(...(options.toolPolicies ?? []));
+  return policies;
+}
 
-  return (async (event: any) => {
-    const filtered = toolFilter(event);
-    if (filtered) return filtered;
-    if (userCanUseTool) return userCanUseTool(event);
-    return { decision: "allow" as const };
-  }) as any;
+function buildCanUseTool(options: CreateAgentSessionOptions): AgentLoopConfig["canUseTool"] {
+  return options.canUseTool
+    ? (event) => options.canUseTool!({
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        requestedToolName: event.requestedToolName,
+        input: event.input,
+        rawInput: event.rawInput,
+      })
+    : undefined;
 }
 
 export async function createAgentSession(
@@ -676,9 +704,10 @@ export async function createAgentSession(
     maxModelErrorRecoveryAttempts:
       options.maxModelErrorRecoveryAttempts ?? options.loopPolicy?.maxModelErrorRecoveryAttempts,
     maxStopHookContinuations: options.maxStopHookContinuations ?? options.loopPolicy?.maxStopHookContinuations,
-    canUseTool: buildCanUseTool(options, cwd),
+    canUseTool: buildCanUseTool(options),
     loopProgress: options.loopProgress ?? options.loopPolicy?.loopProgress,
-    toolPolicies: options.toolPolicies,
+    getProgressMarker: options.getProgressMarker,
+    toolPolicies: buildRuntimeToolPolicies(options, cwd, extensionRunnerRef),
     checkpointStore: options.checkpointStore,
     checkpointTtlMs: options.checkpointTtlMs,
     getApiKey: async (provider) => {

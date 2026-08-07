@@ -50,6 +50,7 @@ export interface StructuredAdaptiveToolRunResult {
 	contextMessages: AgentMessage[];
 	steeringMessages?: AgentMessage[];
 	permissionDenials: AgentToolPermissionDenial[];
+	approvalRequired?: { checkpointId: string; policyId?: string };
 }
 
 interface StructuredAdaptiveToolUseResult {
@@ -68,11 +69,35 @@ export async function runStructuredAdaptiveTools(
 	toolPolicies?: AgentLoopConfig["toolPolicies"],
 	checkpointStore?: AgentLoopConfig["checkpointStore"],
 	checkpointTtlMs?: number,
+	sessionId?: string,
+	messageCount = 0,
 ): Promise<StructuredAdaptiveToolRunResult> {
 	const results: ToolResultMessage[] = [];
 	const contextMessages: AgentMessage[] = [];
 	const permissionDenials: AgentToolPermissionDenial[] = [];
 	const toolByName = buildToolMap(tools);
+	if (toolPolicies?.some((policy) => policy.mayPause !== false)) {
+		for (const toolCall of toolCalls) {
+			const use = await runStructuredAdaptiveToolUse(
+				toolCall,
+				toolByName.get(toolCall.name),
+				signal,
+				stream,
+				canUseTool,
+				toolPolicies,
+				checkpointStore,
+				checkpointTtlMs,
+				sessionId,
+				messageCount,
+			);
+			const approval = extractApprovalRequired(use.toolResult);
+			if (approval) return { toolResults: results, contextMessages, permissionDenials, approvalRequired: approval };
+			results.push(use.toolResult);
+			contextMessages.push(...use.contextMessages);
+			permissionDenials.push(...extractPermissionDenials([use.toolResult]));
+		}
+		return { toolResults: results, contextMessages, permissionDenials };
+	}
 	const batches = partitionStructuredAdaptiveToolCalls(toolCalls, toolByName);
 
 	let consumed = 0;
@@ -89,6 +114,8 @@ export async function runStructuredAdaptiveTools(
 					toolPolicies,
 					checkpointStore,
 					checkpointTtlMs,
+					sessionId,
+					messageCount,
 			),
 			maxConcurrency,
 		);
@@ -231,6 +258,8 @@ export async function runStructuredAdaptiveToolUse(
 	toolPolicies?: AgentLoopConfig["toolPolicies"],
 	checkpointStore?: AgentLoopConfig["checkpointStore"],
 	checkpointTtlMs?: number,
+	sessionId?: string,
+	messageCount = 0,
 ): Promise<StructuredAdaptiveToolUseResult> {
 	const startedAt = Date.now();
 	stream.push({
@@ -242,6 +271,8 @@ export async function runStructuredAdaptiveToolUse(
 
 	let result: AgentToolResult<any>;
 	let isError = false;
+	let executedInput: unknown = toolCall.arguments;
+	let didExecute = false;
 
 	try {
 		if (!tool) throw new ToolNotFoundError(toolCall.name);
@@ -251,7 +282,12 @@ export async function runStructuredAdaptiveToolUse(
 			throw new Error(validationMessage);
 		}
 		const policyDecision = toolPolicies?.length
-			? await new ToolPolicyPipeline(toolPolicies, { checkpointStore, checkpointTtlMs }).evaluateBefore({
+			? await new ToolPolicyPipeline(toolPolicies, {
+				checkpointStore,
+				checkpointTtlMs,
+				sessionId,
+				conversationBoundary: { messageCount },
+			}).evaluateBefore({
 				toolCallId: toolCall.id,
 				toolName: tool.name,
 				requestedToolName: toolCall.name,
@@ -260,6 +296,7 @@ export async function runStructuredAdaptiveToolUse(
 			})
 			: undefined;
 		if (policyDecision?.decision === "allow" && policyDecision.input !== undefined) validatedArgs = policyDecision.input;
+		executedInput = validatedArgs;
 		const permission = policyDecision && policyDecision.decision !== "allow" ? policyDecision : await canUseTool?.({
 			toolCallId: toolCall.id,
 			toolName: tool.name,
@@ -287,6 +324,7 @@ export async function runStructuredAdaptiveToolUse(
 			};
 			isError = true;
 		} else {
+			didExecute = true;
 			result = await tool.execute(toolCall.id, validatedArgs, signal, (partialResult) => {
 				stream.push({
 					type: "tool_execution_update",
@@ -315,17 +353,18 @@ export async function runStructuredAdaptiveToolUse(
 		};
 		isError = true;
 	}
-	if (tool && toolPolicies?.length) {
-		result = await new ToolPolicyPipeline(toolPolicies).evaluateAfter({
+	if (tool && didExecute && toolPolicies?.length) {
+		const evaluated = await new ToolPolicyPipeline(toolPolicies).evaluateAfter({
 			toolCallId: toolCall.id,
 			toolName: tool.name,
 			requestedToolName: toolCall.name,
-			input: toolCall.arguments,
+			input: executedInput,
 			rawInput: toolCall.arguments,
 			result,
 			isError,
 		});
-		if (result.details && typeof result.details === "object" && (result.details as { errorType?: unknown }).errorType === "result_policy_failed") isError = true;
+		result = evaluated.result;
+		isError = evaluated.isError;
 	}
 
 	stream.push({
@@ -371,6 +410,16 @@ function extractPermissionDenials(toolResults: ToolResultMessage[]): AgentToolPe
 		});
 	}
 	return denials;
+}
+
+export function extractApprovalRequired(result: ToolResultMessage): { checkpointId: string; policyId?: string } | undefined {
+	if (!result.details || typeof result.details !== "object") return undefined;
+	const details = result.details as { errorType?: unknown; checkpointId?: unknown; policyId?: unknown };
+	if (details.errorType !== "approval_required" || typeof details.checkpointId !== "string") return undefined;
+	return {
+		checkpointId: details.checkpointId,
+		policyId: typeof details.policyId === "string" ? details.policyId : undefined,
+	};
 }
 
 function enforceMaxResultSize<T>(

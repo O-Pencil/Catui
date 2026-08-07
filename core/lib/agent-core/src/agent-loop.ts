@@ -97,6 +97,7 @@ type StandardLoopFinishOptions = {
 	lastTransition?: AgentLoopTransition;
 	errorMessage?: string;
 	errorSubtype?: string;
+	checkpointId?: string;
 };
 
 type StandardLoopAbortFinishOptions = Omit<
@@ -520,12 +521,16 @@ async function runLoop(
 					progressTracker,
 					config.checkpointStore,
 					config.checkpointTtlMs,
+					config.sessionId,
+					currentContext.messages.length,
+					await config.getProgressMarker?.(),
 				);
 				toolResults.push(
 					...enforceToolResultBatchSize(toolExecution.toolResults, config.maxToolResultBatchSizeChars),
 				);
 				permissionDenials.push(...collectPermissionDenials(toolExecution.toolResults));
 				steeringAfterTools = toolExecution.steeringMessages ?? null;
+				if (steeringAfterTools?.length) progressTracker?.reset();
 				for (const result of toolResults) {
 					currentContext.messages.push(result);
 					newMessages.push(result);
@@ -537,6 +542,18 @@ async function runLoop(
 					newMessages.push(contextMessage);
 					stream.push({ type: "message_start", message: contextMessage });
 					stream.push({ type: "message_end", message: contextMessage });
+				}
+				if (toolExecution.approvalRequired) {
+					const { checkpointId, policyId } = toolExecution.approvalRequired;
+					stream.push({ type: "turn_end", message, toolResults });
+					finishStandardLoop(stream, newMessages, {
+						config, turnCount, toolCallCount, startedAt, usage, permissionDenials,
+						stopReason: "approval_required", transitions, checkpointId,
+						lastTransition: recordTransition({ reason: "approval_required", checkpointId, policyId }),
+						errorMessage: `Approval required before tool execution. Checkpoint: ${checkpointId}`,
+						errorSubtype: "approval_required",
+					});
+					return;
 				}
 				if (toolExecution.livelock) {
 					const limitMessage = createLoopLimitMessage(config, `Stopped after detecting a repeated no-progress tool cycle (${toolExecution.livelock.repeatCount} repeats).`);
@@ -957,6 +974,7 @@ function finishStandardLoop(
 		lastTransition: options.lastTransition,
 		errorMessage: options.errorMessage,
 		errorSubtype: options.errorSubtype,
+		checkpointId: options.checkpointId,
 	});
 	_tlog(`loop_finished stopReason=${options.stopReason ?? inferStopReason(newMessages)} turns=${options.turnCount} tools=${options.toolCallCount} duration=${Date.now() - options.startedAt}ms`);
 	stream.push({ type: "agent_end", messages: newMessages });
@@ -1027,13 +1045,17 @@ async function executeToolCalls(
 	progressTracker?: LoopProgressTracker,
 	checkpointStore?: AgentLoopConfig["checkpointStore"],
 	checkpointTtlMs?: number,
-): Promise<{ toolResults: ToolResultMessage[]; contextMessages: AgentMessage[]; steeringMessages?: AgentMessage[]; livelock?: LivelockDetection }> {
+	sessionId?: string,
+	messageCount = 0,
+	progressMarker?: string,
+): Promise<{ toolResults: ToolResultMessage[]; contextMessages: AgentMessage[]; steeringMessages?: AgentMessage[]; livelock?: LivelockDetection; approvalRequired?: { checkpointId: string; policyId?: string } }> {
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
 	const toolByName = buildToolMap(tools);
 	const results: ToolResultMessage[] = [];
 	const contextMessages: AgentMessage[] = [];
 	let steeringMessages: AgentMessage[] | undefined;
 	let livelock: LivelockDetection | undefined;
+	let approvalRequired: { checkpointId: string; policyId?: string } | undefined;
 
 	for (let index = 0; index < toolCalls.length; index++) {
 		const toolCall = toolCalls[index];
@@ -1050,6 +1072,8 @@ async function executeToolCalls(
 
 		let result: AgentToolResult<any>;
 		let isError = false;
+		let executedInput: unknown = toolCall.arguments;
+		let didExecute = false;
 
 		try {
 			if (!tool) throw new ToolNotFoundError(toolCall.name);
@@ -1060,7 +1084,12 @@ async function executeToolCalls(
 				throw new Error(validationMessage);
 			}
 			const policyDecision = toolPolicies?.length
-				? await new ToolPolicyPipeline(toolPolicies, { checkpointStore, checkpointTtlMs }).evaluateBefore({
+				? await new ToolPolicyPipeline(toolPolicies, {
+					checkpointStore,
+					checkpointTtlMs,
+					sessionId,
+					conversationBoundary: { messageCount, assistantTimestamp: assistantMessage.timestamp },
+				}).evaluateBefore({
 					toolCallId: toolCall.id,
 					toolName: tool.name,
 					requestedToolName: toolCall.name,
@@ -1069,6 +1098,7 @@ async function executeToolCalls(
 				})
 				: undefined;
 			if (policyDecision?.decision === "allow" && policyDecision.input !== undefined) validatedArgs = policyDecision.input;
+			executedInput = validatedArgs;
 			const permission = policyDecision && policyDecision.decision !== "allow" ? policyDecision : await canUseTool?.({
 				toolCallId: toolCall.id,
 				toolName: tool.name,
@@ -1096,6 +1126,7 @@ async function executeToolCalls(
 				};
 				isError = true;
 			} else {
+				didExecute = true;
 				result = await tool.execute(toolCall.id, validatedArgs, signal, (partialResult) => {
 					stream.push({
 						type: "tool_execution_update",
@@ -1124,17 +1155,18 @@ async function executeToolCalls(
 			};
 			isError = true;
 		}
-		if (tool && toolPolicies?.length) {
-			result = await new ToolPolicyPipeline(toolPolicies).evaluateAfter({
+		if (tool && didExecute && toolPolicies?.length) {
+			const evaluated = await new ToolPolicyPipeline(toolPolicies).evaluateAfter({
 				toolCallId: toolCall.id,
 				toolName: tool.name,
 				requestedToolName: toolCall.name,
-				input: toolCall.arguments,
+				input: executedInput,
 				rawInput: toolCall.arguments,
 				result,
 				isError,
 			});
-			if (result.details && typeof result.details === "object" && (result.details as { errorType?: unknown }).errorType === "result_policy_failed") isError = true;
+			result = evaluated.result;
+			isError = evaluated.isError;
 		}
 
 		const toolDurationMs = Date.now() - startedAt;
@@ -1161,11 +1193,24 @@ async function executeToolCalls(
 		livelock = progressTracker?.observe({
 			toolName: toolCall.name,
 			input: toolCall.arguments,
+			output: { content: result.content, details: result.details },
 			outcome: !isError ? "success" : errorType === "permission_denied" || errorType === "approval_required" ? "denied" : "error",
+			progressMarker,
 		});
 
 		results.push(toolResultMessage);
 		contextMessages.push(...(result.contextMessages ?? []));
+		if (errorType === "approval_required") {
+			const details = result.details as { checkpointId?: unknown; policyId?: unknown };
+			if (typeof details.checkpointId === "string") {
+				approvalRequired = {
+					checkpointId: details.checkpointId,
+					policyId: typeof details.policyId === "string" ? details.policyId : undefined,
+				};
+				results.pop();
+				break;
+			}
+		}
 		if (livelock) {
 			for (const skipped of toolCalls.slice(index + 1)) {
 				results.push(skipToolCall(skipped, stream, "Skipped because a repeated no-progress cycle was detected.", { errorType: "livelock_detected" }));
@@ -1187,7 +1232,7 @@ async function executeToolCalls(
 		}
 	}
 
-	return { toolResults: results, contextMessages, steeringMessages, livelock };
+	return { toolResults: results, contextMessages, steeringMessages, livelock, approvalRequired };
 }
 
 function buildToolMap(tools: AgentTool<any>[] | undefined): Map<string, AgentTool<any>> {

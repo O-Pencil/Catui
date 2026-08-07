@@ -54,6 +54,8 @@ export function formatLoopTransitionSummary(transition: AgentLoopTransition): st
 			return "follow_up";
 		case "livelock_detected":
 			return `livelock_detected (${transition.repeatCount} repeats, ${transition.fingerprint})`;
+		case "approval_required":
+			return `approval_required (${transition.checkpointId})`;
 		case "max_turns_reached":
 			return `max_turns_reached (${transition.turnCount}/${transition.maxTurns} turns)`;
 		case "tool_call_limit_reached":

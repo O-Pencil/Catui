@@ -14,6 +14,7 @@ export interface LoopProgressEvidence {
 	toolName: string;
 	input: unknown;
 	outcome: "success" | "error" | "denied";
+	output?: unknown;
 	progressMarker?: string;
 }
 
@@ -34,7 +35,7 @@ function canonicalize(value: unknown, seen = new WeakSet<object>()): string {
 }
 
 export function fingerprintProgressEvidence(evidence: LoopProgressEvidence): string {
-	return `${evidence.toolName}:${canonicalize(evidence.input)}:${evidence.outcome}`;
+	return `${evidence.toolName}:${canonicalize(evidence.input)}:${evidence.outcome}:${canonicalize(evidence.output)}`;
 }
 
 export class LoopProgressTracker {
@@ -49,30 +50,47 @@ export class LoopProgressTracker {
 			throw new Error("repetitionThreshold must be an integer of at least 2");
 		}
 		this.#threshold = options.repetitionThreshold;
-		this.#historySize = Math.max(options.historySize ?? options.repetitionThreshold, options.repetitionThreshold);
+		this.#historySize = Math.max(options.historySize ?? options.repetitionThreshold * 4, options.repetitionThreshold);
+	}
+
+	reset(): void {
+		this.#history = [];
+		this.#lastMarker = undefined;
+		this.stagnationCount = 0;
 	}
 
 	observe(evidence: LoopProgressEvidence): LivelockDetection | undefined {
 		const fingerprint = fingerprintProgressEvidence(evidence);
 		const markerChanged = evidence.progressMarker !== undefined && evidence.progressMarker !== this.#lastMarker;
-		const isNovelSuccess = evidence.outcome === "success" && this.#history.at(-1) !== fingerprint;
-		if (markerChanged || isNovelSuccess) {
-			this.stagnationCount = 0;
-			this.#history = [fingerprint];
+		if (markerChanged) {
+			this.reset();
 			if (evidence.progressMarker !== undefined) this.#lastMarker = evidence.progressMarker;
+			this.#history.push(fingerprint);
 			return undefined;
 		}
 		if (evidence.progressMarker !== undefined) this.#lastMarker = evidence.progressMarker;
+		if (evidence.outcome === "success" && !this.#history.includes(fingerprint)) {
+			this.#history = [fingerprint];
+			this.stagnationCount = 0;
+			return undefined;
+		}
 		this.#history.push(fingerprint);
 		if (this.#history.length > this.#historySize) this.#history.shift();
 
-		let trailingMatches = 0;
-		for (let index = this.#history.length - 1; index >= 0 && this.#history[index] === fingerprint; index--) {
-			trailingMatches++;
-		}
-		this.stagnationCount = trailingMatches;
-		if (this.stagnationCount >= this.#threshold && evidence.outcome !== "success") {
-			return { fingerprint, repeatCount: this.stagnationCount };
+		this.stagnationCount = 0;
+		for (let period = 1; period * this.#threshold <= this.#history.length; period++) {
+			const pattern = this.#history.slice(-period);
+			let repeated = true;
+			for (let repeat = 2; repeat <= this.#threshold && repeated; repeat++) {
+				const start = this.#history.length - period * repeat;
+				for (let offset = 0; offset < period; offset++) {
+					if (this.#history[start + offset] !== pattern[offset]) { repeated = false; break; }
+				}
+			}
+			if (repeated) {
+				this.stagnationCount = this.#threshold;
+				return { fingerprint: `cycle:${pattern.join("|")}`, repeatCount: this.#threshold };
+			}
 		}
 		return undefined;
 	}

@@ -39,6 +39,7 @@ export type AgentLoopTransition =
 	| { reason: "tool_result"; toolCallCount: number }
 	| { reason: "follow_up" }
 	| { reason: "livelock_detected"; fingerprint: string; repeatCount: number }
+	| { reason: "approval_required"; checkpointId: string; policyId?: string }
 	| { reason: "max_turns_reached"; maxTurns: number; turnCount: number }
 	| {
 			reason: "tool_call_limit_reached";
@@ -75,6 +76,7 @@ export interface AgentRunResult {
 	lastTransition?: AgentLoopTransition;
 	errorMessage?: string;
 	errorSubtype?: string;
+	checkpointId?: string;
 }
 
 export interface AgentRunPolicy {
@@ -276,6 +278,7 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 
 	/** Optional no-progress detector. Disabled unless explicitly configured. */
 	loopProgress?: { repetitionThreshold: number; historySize?: number };
+	getProgressMarker?: () => string | undefined | Promise<string | undefined>;
 
 	/**
 	 * Maximum concurrency for one batch of concurrency-safe tool calls in the
