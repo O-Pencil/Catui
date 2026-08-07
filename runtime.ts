@@ -18,3 +18,4 @@ export {
 } from "./core/runtime/agent-session.js";
 export { createEventBus, type EventBus, type EventBusController } from "./core/runtime/event-bus.js";
 export { convertToLlm } from "./core/messages.js";
+export { JsonlRunTraceSink, readRunTraceJsonl, type RunTraceJsonlLimits } from "./core/runtime/run-trace-jsonl.js";
