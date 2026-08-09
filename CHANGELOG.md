@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.7] - 2026-08-09
+
+### Added
+- feat(evolution): add guarded harness refinement
+- feat(evolution): verify and approve candidates
+- feat(evolution): load promoted declarative resources
+- feat(evolution): add controlled refine workflow
+- feat(evolution): enforce candidate evidence gates
+- feat(evolution): add versioned atomic store
+- feat(evolution): validate declarative candidates
+
+### Fixed
+- fix(evolution): reject leaf symlinks and credential variants
+- fix(evolution): close review security findings
+- fix(evolution): harden activation boundaries
+- fix(evolution): preserve safe skill reloads
+- fix(evolution): require promotion evidence
+
+### Documentation
+- docs(evolution): record security review closure
+- docs(harness): plan self-evolution delivery
+- docs(harness): design controlled self-evolution
+
 ## [1.2.6] - 2026-08-07
 
 ### Added
