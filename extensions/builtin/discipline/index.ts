@@ -1,17 +1,14 @@
 /**
- * [WHO]: disciplineExtension - registers skill tool, Catui engineering discipline skills, and lightweight bootstrap prompt
+ * [WHO]: disciplineExtension - registers Catui engineering discipline skills and a lightweight bootstrap prompt
  * [FROM]: Depends on node:path, node:url, node:fs, core/extensions-host/types
  * [TO]: Auto-loaded by builtin-extensions.ts as a default extension; consumed by ResourceLoader via resources_discover
  * [HERE]: extensions/builtin/discipline/index.ts - default engineering workflow discipline package
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Type, type Static } from "@sinclair/typebox";
-import type { AgentToolResult } from "@catui/agent-core";
-import type { ExtensionAPI, ExtensionContext } from "../../../core/extensions-host/types.js";
-import { stripFrontmatter } from "../../../utils/frontmatter.js";
+import type { ExtensionAPI } from "../../../core/extensions-host/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SKILLS_DIR = join(__dirname, "skills");
@@ -47,88 +44,7 @@ const BOOTSTRAP_PROMPT = [
 	"User instructions still define the goal and may override workflow details. If a skill conflicts with explicit user direction, follow the user and state the trade-off.",
 ].join("\n");
 
-const SkillToolInputSchema = Type.Object(
-	{
-		name: Type.Optional(Type.String({ description: "Exact skill name to load. Omit to list available skills." })),
-	},
-	{ additionalProperties: false },
-);
-
-type SkillToolInput = Static<typeof SkillToolInputSchema>;
-
-function createSkillTool() {
-	return {
-		name: "skill",
-		label: "Load Skill",
-		description:
-			"List or load currently available Catui skills. Call this before acting when a skill description matches the task.",
-		parameters: SkillToolInputSchema,
-		isConcurrencySafe: true,
-		guidance:
-			"Use skill to inspect available workflow instructions. Call with no name to list skills, or with an exact name to load the full skill content.",
-
-		async execute(
-			_toolCallId: string,
-			params: SkillToolInput,
-			_signal: AbortSignal | undefined,
-			_onUpdate: undefined,
-			ctx: ExtensionContext,
-		): Promise<AgentToolResult<unknown>> {
-			const skills = [...ctx.getSkills()].sort((a, b) => a.name.localeCompare(b.name));
-			const name = params.name?.trim();
-
-			if (!name) {
-				const lines = [
-					`Available skills (${skills.length}):`,
-					"",
-					...skills.map((skill) => `- ${skill.name}: ${skill.description}`),
-				];
-				return {
-					content: [{ type: "text", text: lines.join("\n") }],
-					details: { skills: skills.map(({ name, description, filePath, source }) => ({ name, description, filePath, source })) },
-				};
-			}
-
-			const skill = skills.find((candidate) => candidate.name === name);
-			if (!skill) {
-				return {
-					content: [
-						{
-							type: "text",
-							text: `Skill not found: ${name}\n\nCall skill with no name to list available skills.`,
-						},
-					],
-					details: { error: "not_found", name },
-				};
-			}
-
-			try {
-				const body = stripFrontmatter(readFileSync(skill.filePath, "utf-8")).trim();
-				const text = [
-					`<skill name="${skill.name}" location="${skill.filePath}">`,
-					`References are relative to ${skill.baseDir}.`,
-					"",
-					body,
-					"</skill>",
-				].join("\n");
-				return {
-					content: [{ type: "text", text }],
-					details: { name: skill.name, filePath: skill.filePath, source: skill.source },
-				};
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				return {
-					content: [{ type: "text", text: `Failed to load skill "${skill.name}": ${message}` }],
-					details: { error: message, name: skill.name, filePath: skill.filePath },
-				};
-			}
-		},
-	};
-}
-
 export default async function disciplineExtension(api: ExtensionAPI): Promise<void> {
-	api.registerTool(createSkillTool());
-
 	api.on("resources_discover", () => {
 		if (!existsSync(SKILLS_DIR)) {
 			return;
