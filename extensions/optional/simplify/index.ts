@@ -235,7 +235,7 @@ async function simplifyWithLLM(
 	// If no model available, try common fallbacks
 	if (!model || !apiKey) {
 		// Try anthropic
-		const anthropicModel = getModel("anthropic", "claude-sonnet-4-5");
+		const anthropicModel = getModel("anthropic", "claude-sonnet-4-6");
 		if (anthropicModel) {
 			const key = await ctx.modelRegistry.getApiKey(anthropicModel);
 			if (key) {
@@ -245,7 +245,7 @@ async function simplifyWithLLM(
 		}
 		// Try openai
 		if (!model || !apiKey) {
-			const openaiModel = getModel("openai", "gpt-4o");
+			const openaiModel = getModel("openai", "gpt-5-chat-latest");
 			if (openaiModel) {
 				const key = await ctx.modelRegistry.getApiKey(openaiModel);
 				if (key) {
