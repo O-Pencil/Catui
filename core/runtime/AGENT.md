@@ -6,7 +6,7 @@ Member List
 event-bus.ts: EventBus interface, EventBusController, createEventBus(), typed event emission system for extension hooks, key methods: emit(), on() returns unsubscribe function
 event-bridge.ts: ExtensionEventBridge, ExtensionEventBridgeDeps, owns AgentEvent-to-extension-event mapping and extension turn indexing; AgentSession keeps public subscribe, persistence, retry/compaction, and Soul ordering
 sdk.ts: createAgentSession(options) factory, creates all services with dependency injection, wires up extensions, applies loop framework/policy overrides, consumed by all run modes (interactive/print/rpc)
-agent-session.ts: AgentSession class, central session lifecycle manager, wraps Agent from agent-core, coordinates compaction, in-loop recovery and recoverable error-tail pruning, forwards agent_result telemetry to extensions, exposes runtime loop policy updates, emits events, handles model switching, all modes delegate to this class
+agent-session.ts: AgentSession class, central session lifecycle manager, wraps Agent from agent-core, captures the latest semantic Run Trace, coordinates compaction, in-loop recovery and recoverable error-tail pruning, forwards agent_result telemetry to extensions, exposes runtime loop policy updates, emits events, handles model switching, all modes delegate to this class
 turn-context.ts: Generic per-turn hint bus on globalThis, TURN_CONTEXT_GLOBAL_KEY, TurnContext interface (currently structuralAnchor), setTurnContext/getTurnContext/resetTurnContext; producer-side API for SAL→mem-core decoupling (mem-core has read-only mirror at packages/mem-core/src/turn-context.ts using same global key)
 catui-agent.ts: CatuiAgent helper class wrapping Agent core
 retry-coordinator.ts: Retry coordination for transient failures
@@ -19,7 +19,7 @@ session-lifecycle-controller.ts: SessionLifecycleController — owns new/switch/
 tool-runtime-controller.ts: ToolRuntimeController, ToolRuntimeBuildOptions, ToolRuntimeBuildResult, owns runtime tool source merge, extension-tool context adaptation, active tool resolution, and ToolOrchestrator registry updates; lifecycle interception is composed by sdk.ts policies
 prompt-assembly.ts: buildRuntimeSystemPrompt(), getActiveBaseToolNames(), owns runtime prompt resource assembly and base-tool filtering; Soul injection state remains in AgentSession
 default-tools.ts: createDefaultRuntimeTools(), default read/bash/edit/write/time tool wiring with settings-aware image/shell/write-boundary configuration
-extension-core-bindings.ts: bindExtensionCore(), adapts AgentSession host capabilities into ExtensionRunner action/context APIs
+extension-core-bindings.ts: bindExtensionCore(), adapts AgentSession host capabilities into ExtensionRunner action/context APIs, including lazy deterministic replay and isolated Harness Eval
 slash-command-catalog.ts: buildSessionSlashCommands(), buildExtensionSlashCommands(), shared slash command catalog assembly for runtime and extension views
 export-bridge.ts: exportSessionHtml(), getLastAssistantText(), owns HTML export wiring and last assistant text extraction; Theme remains injected through AgentSessionConfig
 plan-mode-permissions.ts: createPlanModeCanUseTool(), composePlanModeCanUseTool(), SDK-level plan mode tool permission enforcement; explicit planFilePath enables strict single-file writes while omitted paths preserve the legacy markdown profile; consumed by sdk.ts when permissionMode === 'plan'
