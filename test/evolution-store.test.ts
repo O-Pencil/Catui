@@ -140,6 +140,22 @@ test("refuses promotion when hard replay and effectiveness evidence is absent", 
 	assert.equal(await store.getCurrent("workspace"), undefined);
 });
 
+test("refuses promotion after an immutable human rejection even when automated gates pass", async () => {
+	const { store } = await createStore();
+	await store.createCandidate("workspace", proposal("candidate-rejected", null));
+	await writePassingEvidence(store, "candidate-rejected");
+	await store.writeEvidence("workspace", "candidate-rejected", {
+		schemaVersion: 1,
+		gate: "reviewer",
+		passed: false,
+		createdAt: "2026-08-09T00:02:00.000Z",
+		summary: "Rejected by human",
+		details: { actor: "human", reason: "insufficient evidence" },
+	});
+	await assert.rejects(() => store.promote("workspace", "candidate-rejected"), /rejected/i);
+	assert.equal(await store.getCurrent("workspace"), undefined);
+});
+
 test("restores the previous pointer when history append fails", async () => {
 	const { store } = await createStore();
 	await store.createCandidate("workspace", proposal("candidate-a", null));

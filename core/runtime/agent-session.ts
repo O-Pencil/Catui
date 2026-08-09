@@ -1,9 +1,10 @@
 /**
- * [WHO]: AgentSession class, session lifecycle, event emission, in-loop recovery adapter, pruneRecoverableErrorTail()
+ * [WHO]: AgentSession class, session lifecycle, semantic Run Trace capture, event emission, in-loop recovery adapter, pruneRecoverableErrorTail()
  * [FROM]: Depends on agent-core, ai, core/tools/*, core/session/*, core/platform/config/*
  * [TO]: Consumed by core/index.ts, core/runtime/sdk.ts, modes/interactive/interactive-mode.ts, modes/print-mode.ts, modes/rpc/rpc-mode.ts, modes/acp/acp-mode.ts, modes/rpc/rpc-types.ts, modes/rpc/rpc-client.ts, modes/interactive/components/footer.ts, modes/interactive/components/skill-invocation-message.ts
  * [HERE]: Central runtime hub; all modes delegate to this class
  */
+import { randomUUID } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -19,6 +20,7 @@ import type {
   AgentTool,
   ThinkingLevel,
 } from "@catui/agent-core";
+import { InMemoryRunTraceSink, RunTraceRecorder, type RunTraceEventV1 } from "@catui/agent-core";
 import type {
   AssistantMessage,
   DocumentContent,
@@ -738,6 +740,9 @@ export class AgentSession {
   // Track last assistant message for auto-compaction check
   private _lastAssistantMessage: AssistantMessage | undefined = undefined;
 
+  // Latest completed semantic trace; extension consumers receive snapshots only.
+  private _lastRunTrace: RunTraceEventV1[] | undefined;
+
   /** Internal handler for agent events - shared by subscribe and reconnect */
   private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
     // When a user message starts, check if it's from either queue and remove it BEFORE emitting
@@ -983,6 +988,11 @@ export class AgentSession {
   /** Shared Soul manager used by this session, if Soul is enabled. */
   get soulManager(): unknown | undefined {
     return this._soulManager;
+  }
+
+  /** Latest completed semantic run trace, returned as an isolated snapshot. */
+  getLastRunTrace(): readonly RunTraceEventV1[] | undefined {
+    return this._lastRunTrace === undefined ? undefined : structuredClone(this._lastRunTrace);
   }
 
   /** Current retry attempt (0 if not retrying) */
@@ -1287,10 +1297,28 @@ export class AgentSession {
       this.agent.setSystemPrompt(this._baseSystemPrompt);
     }
 
-    this._dbg(`calling agent.prompt with ${messages.length} message(s)`);
-    await this.agent.prompt(messages);
-    this._dbg(`agent.prompt returned (${(performance.now() - _promptStart).toFixed(0)}ms)`);
-    await this.waitForRetry();
+    const traceSink = new InMemoryRunTraceSink();
+    const traceRecorder = new RunTraceRecorder({
+      runId: `run-${randomUUID()}`,
+      sessionId: this.sessionManager.getSessionId(),
+      sink: traceSink,
+      failureMode: "best_effort",
+    });
+    this.agent.setRunTrace(traceRecorder);
+    try {
+      this._dbg(`calling agent.prompt with ${messages.length} message(s)`);
+      await this.agent.prompt(messages);
+      this._dbg(`agent.prompt returned (${(performance.now() - _promptStart).toFixed(0)}ms)`);
+      await this.waitForRetry();
+    } finally {
+      try {
+        await traceRecorder.flush();
+        this._lastRunTrace = traceSink.snapshot();
+      } catch (error: unknown) {
+        this._logger.warn("[run-trace] failed to finalize semantic trace", { error });
+      }
+      this.agent.setRunTrace(undefined);
+    }
   }
 
   /**
@@ -2312,6 +2340,7 @@ export class AgentSession {
       },
       getContextUsage: () => this.getContextUsage(),
       compact: (customInstructions) => this.compact(customInstructions),
+      getLastRunTrace: () => this.getLastRunTrace(),
     });
   }
 

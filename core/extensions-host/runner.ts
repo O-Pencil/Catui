@@ -243,6 +243,9 @@ export class ExtensionRunner {
 	private getSoulManagerFn: () => unknown | undefined = () => undefined;
 	private getSettingsFn: () => import("../platform/config/settings-manager.js").Settings = () => ({});
 	private getSkillsFn: () => readonly import("../skills.js").Skill[] = () => [];
+	private getLastRunTraceFn: () => readonly unknown[] | undefined = () => undefined;
+	private replayRunTraceFn: ExtensionContextActions["replayRunTrace"] = undefined;
+	private runHarnessEvalFn: ExtensionContextActions["runHarnessEval"] = undefined;
 	private newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
 	private forkHandler: ForkHandler = async () => ({ cancelled: false });
 	private navigateTreeHandler: NavigateTreeHandler = async () => ({ cancelled: false });
@@ -339,6 +342,9 @@ export class ExtensionRunner {
 		this.getSoulManagerFn = contextActions.getSoulManager;
 		this.getSettingsFn = contextActions.getSettings;
 		this.getSkillsFn = contextActions.getSkills;
+		this.getLastRunTraceFn = contextActions.getLastRunTrace ?? (() => undefined);
+		this.replayRunTraceFn = contextActions.replayRunTrace;
+		this.runHarnessEvalFn = contextActions.runHarnessEval;
 
 		// Process provider registrations queued during extension loading
 		for (const { name, config } of this.runtime.pendingProviderRegistrations) {
@@ -813,6 +819,13 @@ export class ExtensionRunner {
 			getSoulManager: () => this.getSoulManagerFn(),
 			getSettings: () => this.getSettingsFn(),
 			getSkills: () => this.getSkillsFn(),
+			getLastRunTrace: () => this.getLastRunTraceFn(),
+			replayRunTrace: this.replayRunTraceFn
+				? (events) => this.replayRunTraceFn!(events)
+				: undefined,
+			runHarnessEval: this.runHarnessEvalFn
+				? () => this.runHarnessEvalFn!()
+				: undefined,
 		};
 	}
 

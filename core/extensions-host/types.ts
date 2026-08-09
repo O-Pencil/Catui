@@ -281,6 +281,32 @@ export interface CompletionResult {
 	usage: Usage;
 }
 
+/** Read-only semantic replay result exposed to extensions without leaking runtime internals. */
+export type ExtensionRunTraceReplayResult =
+	| {
+		ok: true;
+		summary: {
+			runId: string;
+			stopReason: string;
+			turnCount: number;
+			toolCallCount: number;
+			checkpointCount: number;
+		};
+	}
+	| { ok: false; divergence: { message: string } };
+
+/** Deterministic built-in harness regression report available to opt-in extensions. */
+export interface ExtensionHarnessEvalReport {
+	passed: boolean;
+	scenarioIds: string[];
+	metrics: {
+		passRate: number;
+		replayDivergences: number;
+		policyViolations: number;
+		unpairedToolCalls: number;
+	};
+}
+
 /**
  * Context passed to extension event handlers.
  */
@@ -344,6 +370,15 @@ export interface ExtensionContext {
 
 	/** Get currently loaded skills after user/project/default resource precedence is applied. */
 	getSkills(): readonly Skill[];
+
+	/** Return the latest completed semantic run trace, if runtime tracing has produced one. */
+	getLastRunTrace?(): readonly unknown[] | undefined;
+
+	/** Deterministically validate a semantic run trace without executing side effects. */
+	replayRunTrace?(events: readonly unknown[]): ExtensionRunTraceReplayResult;
+
+	/** Run the isolated, network-disabled built-in harness regression corpus. */
+	runHarnessEval?(): Promise<ExtensionHarnessEvalReport>;
 }
 
 /**
@@ -1416,6 +1451,9 @@ export interface ExtensionContextActions {
 	getSoulManager: () => unknown | undefined;
 	getSettings: () => import("../platform/config/settings-manager.js").Settings;
 	getSkills: () => readonly Skill[];
+	getLastRunTrace?: () => readonly unknown[] | undefined;
+	replayRunTrace?: (events: readonly unknown[]) => ExtensionRunTraceReplayResult;
+	runHarnessEval?: () => Promise<ExtensionHarnessEvalReport>;
 }
 
 /**

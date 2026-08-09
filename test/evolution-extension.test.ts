@@ -96,6 +96,9 @@ function context(options: {
 	notifications?: string[];
 	reloads?: { count: number };
 	reloadError?: Error;
+	lastRunTrace?: readonly unknown[];
+	replayResult?: { ok: true; summary: { runId: string; stopReason: string; turnCount: number; toolCallCount: number; checkpointCount: number } } | { ok: false; divergence: { message: string } };
+	harnessEval?: { passed: boolean; scenarioIds: string[]; metrics: { passRate: number; replayDivergences: number; policyViolations: number; unpairedToolCalls: number } };
 } = {}): ExtensionCommandContext {
 	const notifications = options.notifications ?? [];
 	const reloads = options.reloads ?? { count: 0 };
@@ -115,6 +118,16 @@ function context(options: {
 			}],
 		} as never,
 		completeJson: options.completeJson,
+		getLastRunTrace: () => options.lastRunTrace,
+		replayRunTrace: () => options.replayResult ?? {
+			ok: true,
+			summary: { runId: "run-1", stopReason: "stop", turnCount: 1, toolCallCount: 0, checkpointCount: 0 },
+		},
+		runHarnessEval: async () => options.harnessEval ?? {
+			passed: true,
+			scenarioIds: ["policy-ordering", "approval-checkpoint"],
+			metrics: { passRate: 1, replayDivergences: 0, policyViolations: 0, unpairedToolCalls: 0 },
+		},
 		async reload() { reloads.count += 1; if (options.reloadError) throw options.reloadError; },
 	} as unknown as ExtensionCommandContext;
 }
@@ -249,4 +262,70 @@ test("reload failure restores a prior no-active-revision state", async () => {
 	await commands.get("refine")!(`rollback ${orphan.revisionId} --scope workspace`, ctx);
 	assert.equal(await store.getCurrent("workspace"), undefined);
 	assert.match(notifications.join(" "), /restored/i);
+});
+
+test("verify records real replay and harness eval evidence before explicit approval promotes", async () => {
+	const { commands, agentDir, cwd } = await harness();
+	const store = new EvolutionStore({ agentDir, cwd, sessionId: "session-1" });
+	await store.createCandidate("workspace", proposal("verified", null, "Use verified evidence."));
+	await store.writeEvidence("workspace", "verified", {
+		schemaVersion: 1,
+		gate: "static",
+		passed: true,
+		createdAt: "2026-08-09T00:01:00.000Z",
+		summary: "static passed",
+		details: {},
+	});
+	const notifications: string[] = [];
+	const reloads = { count: 0 };
+	const ctx = context({ notifications, reloads, lastRunTrace: [{ version: 1, kind: "run.started" }] });
+	ctx.cwd = cwd;
+	ctx.agentDir = agentDir;
+
+	await commands.get("refine")!("verify verified --scope workspace", ctx);
+	assert.equal(await store.getCurrent("workspace"), undefined);
+	assert.match(notifications.join(" "), /verified.*pending.*approval/i);
+
+	await commands.get("refine")!("approve verified --scope workspace", ctx);
+	assert.equal(reloads.count, 1);
+	assert.equal((await store.readActiveManifest("workspace"))?.candidateId, "verified");
+	assert.match(notifications.join(" "), /promoted/i);
+});
+
+test("verify fails closed without a completed runtime trace", async () => {
+	const { commands, agentDir, cwd } = await harness();
+	const store = new EvolutionStore({ agentDir, cwd, sessionId: "session-1" });
+	await store.createCandidate("workspace", proposal("no-trace", null, "Remain inactive."));
+	await store.writeEvidence("workspace", "no-trace", {
+		schemaVersion: 1,
+		gate: "static",
+		passed: true,
+		createdAt: "2026-08-09T00:01:00.000Z",
+		summary: "static passed",
+		details: {},
+	});
+	const notifications: string[] = [];
+	const ctx = context({ notifications });
+	ctx.cwd = cwd;
+	ctx.agentDir = agentDir;
+
+	await commands.get("refine")!("verify no-trace --scope workspace", ctx);
+	assert.equal(await store.getCurrent("workspace"), undefined);
+	assert.match(notifications.join(" "), /no completed run trace/i);
+});
+
+test("reject writes a durable decision that blocks later approval", async () => {
+	const { commands, agentDir, cwd } = await harness();
+	const store = new EvolutionStore({ agentDir, cwd, sessionId: "session-1" });
+	await store.createCandidate("workspace", proposal("rejected", null, "Do not activate."));
+	await writePassingEvidence(store, "rejected");
+	const notifications: string[] = [];
+	const ctx = context({ notifications });
+	ctx.cwd = cwd;
+	ctx.agentDir = agentDir;
+
+	await commands.get("refine")!("reject rejected insufficient-evidence --scope workspace", ctx);
+	await commands.get("refine")!("approve rejected --scope workspace", ctx);
+	assert.equal(await store.getCurrent("workspace"), undefined);
+	assert.match(notifications.join(" "), /rejected/i);
 });

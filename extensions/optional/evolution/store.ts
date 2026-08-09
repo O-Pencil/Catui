@@ -193,6 +193,7 @@ export class EvolutionStore {
 		const manualOverride = reviewerGate?.passed === true
 			&& reviewerGate.details.actor === "human"
 			&& reviewerGate.details.overrideMissingEffectiveness === true;
+		if (reviewerGate?.passed === false) throw new Error("Candidate was explicitly rejected and cannot be promoted");
 		if (!evalPassed && !manualOverride) throw new Error("Promotion evidence is missing candidate-specific effectiveness proof or an explicit human override");
 		if (scope === "global" && reviewerGate?.passed !== true) throw new Error("Global promotion evidence requires explicit human approval");
 	}

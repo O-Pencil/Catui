@@ -142,6 +142,86 @@ async function handleNewProposal(args: string, ctx: ExtensionCommandContext): Pr
 	ctx.ui.notify(`Evolution candidate ${id} is statically validated and inactive; replay/eval evidence is required before promotion.`, "info");
 }
 
+async function verifyCandidate(scope: EvolutionScope, candidateId: string, ctx: ExtensionCommandContext): Promise<void> {
+	const store = storeFor(ctx);
+	await store.readProposal(scope, candidateId);
+	const trace = ctx.getLastRunTrace?.();
+	if (!trace || trace.length === 0) throw new Error("No completed run trace is available for deterministic verification");
+	if (trace.length > 4_096) throw new Error("The completed run trace exceeds the verification event budget");
+	if (!ctx.replayRunTrace) throw new Error("Deterministic run replay is unavailable in this runtime");
+	const replay = ctx.replayRunTrace(trace);
+	await store.writeEvidence(scope, candidateId, {
+		schemaVersion: 1,
+		gate: "replay",
+		passed: replay.ok,
+		createdAt: new Date().toISOString(),
+		summary: replay.ok ? "The latest semantic run trace replayed without divergence" : replay.divergence.message,
+		details: {
+			lifecyclePreserved: replay.ok,
+			toolPairsPreserved: replay.ok,
+			policyPreserved: replay.ok,
+			eventCount: trace.length,
+			trace: structuredClone(trace),
+			...(replay.ok ? { replaySummary: replay.summary } : { divergence: replay.divergence }),
+		},
+	});
+	if (!replay.ok) throw new Error(`Run trace replay failed: ${replay.divergence.message}`);
+	if (!ctx.runHarnessEval) throw new Error("Harness evaluation is unavailable in this runtime");
+	const report = await ctx.runHarnessEval();
+	await store.writeEvidence(scope, candidateId, {
+		schemaVersion: 1,
+		gate: "eval",
+		passed: report.passed,
+		createdAt: new Date().toISOString(),
+		summary: report.passed
+			? "Built-in deterministic harness regressions passed; candidate-specific improvement remains unproven"
+			: "Built-in deterministic harness regressions failed",
+		details: {
+			matchedScenarios: report.scenarioIds,
+			nonInferior: report.passed,
+			improvement: false,
+			metrics: report.metrics,
+		},
+	});
+	if (!report.passed) throw new Error("Harness evaluation failed; the candidate remains inactive");
+	ctx.ui.notify(`Evolution candidate ${candidateId} verified for safety; effectiveness is pending explicit human approval.`, "info");
+}
+
+async function approveCandidate(scope: EvolutionScope, candidateId: string, reason: string, ctx: ExtensionCommandContext): Promise<void> {
+	const store = storeFor(ctx);
+	await store.readProposal(scope, candidateId);
+	await store.writeEvidence(scope, candidateId, {
+		schemaVersion: 1,
+		gate: "reviewer",
+		passed: true,
+		createdAt: new Date().toISOString(),
+		summary: reason || "Explicit human approval",
+		details: { actor: "human", overrideMissingEffectiveness: true, reason: reason || "explicit-command" },
+	});
+	const result = await store.promote(scope, candidateId);
+	try {
+		await ctx.reload();
+	} catch (error: unknown) {
+		await store.restoreActivation(scope, result.revisionId, result.previousRevisionId);
+		throw new Error(`Resource reload failed; activation was restored: ${error instanceof Error ? error.message : String(error)}`);
+	}
+	ctx.ui.notify(`Evolution candidate ${candidateId} promoted as ${result.revisionId}.`, "info");
+}
+
+async function rejectCandidate(scope: EvolutionScope, candidateId: string, reason: string, ctx: ExtensionCommandContext): Promise<void> {
+	const store = storeFor(ctx);
+	await store.readProposal(scope, candidateId);
+	await store.writeEvidence(scope, candidateId, {
+		schemaVersion: 1,
+		gate: "reviewer",
+		passed: false,
+		createdAt: new Date().toISOString(),
+		summary: reason || "Explicit human rejection",
+		details: { actor: "human", reason: reason || "explicit-command" },
+	});
+	ctx.ui.notify(`Evolution candidate ${candidateId} was rejected and remains inactive.`, "warning");
+}
+
 async function handleCommand(args: string, ctx: ExtensionCommandContext): Promise<void> {
 	try {
 		const scope = parseScope(args);
@@ -171,8 +251,23 @@ async function handleCommand(args: string, ctx: ExtensionCommandContext): Promis
 			ctx.ui.notify(`Evolution ${scope} rolled back to ${result.revisionId}.`, "info");
 			return;
 		}
-		if (action === "approve" || action === "reject" || action === "mode") {
-			ctx.ui.notify(`Refine ${action} is unavailable in the manual-candidate slice; no active state changed.`, "warning");
+		if (action === "verify") {
+			if (!tokens[1]) throw new Error("Usage: /refine verify <candidate-id> [--scope ...]");
+			await verifyCandidate(scope, tokens[1], ctx);
+			return;
+		}
+		if (action === "approve") {
+			if (!tokens[1]) throw new Error("Usage: /refine approve <candidate-id> [reason] [--scope ...]");
+			await approveCandidate(scope, tokens[1], tokens.slice(2).join(" "), ctx);
+			return;
+		}
+		if (action === "reject") {
+			if (!tokens[1]) throw new Error("Usage: /refine reject <candidate-id> [reason] [--scope ...]");
+			await rejectCandidate(scope, tokens[1], tokens.slice(2).join(" "), ctx);
+			return;
+		}
+		if (action === "mode") {
+			ctx.ui.notify("Refine mode control is unavailable until the shadow automation slice; no active state changed.", "warning");
 			return;
 		}
 		await handleNewProposal(args, ctx);

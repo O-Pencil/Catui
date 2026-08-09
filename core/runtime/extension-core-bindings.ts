@@ -1,5 +1,5 @@
 /**
- * [WHO]: Provides bindExtensionCore() — wires AgentSession host methods to ExtensionRunner APIs, including LLM call telemetry (every ctx.completeSimple / completeSimpleWithUsage / completeJson emits one ext_llm_calls row)
+ * [WHO]: Provides bindExtensionCore() — wires AgentSession host methods, read-only replay/eval evidence, and LLM call telemetry to ExtensionRunner APIs
  * [FROM]: Depends on ExtensionRunner, model/session/resource abstractions, slash command metadata, core/platform/telemetry (getExtCallerContext for caller attribution + LlmCallEventInput shape)
  * [TO]: Consumed by AgentSession when initializing extension runtime capabilities
  * [HERE]: core/runtime/extension-core-bindings.ts - the LLM-call instrumentation point; reads AsyncLocalStorage context pushed by runner.invokeCommand (user-initiated=true) or runner.invokeHookHandler (user-initiated=false) to attribute each call. is_user_initiated=false rows grouped by extension_name + caller_context are the idle-thinking bug detector.
@@ -14,7 +14,7 @@ import type {
 } from "@catui/ai/types";
 import type { TSchema } from "@catui/ai/schema";
 import { completeSimple } from "@catui/ai/stream";
-import type { ThinkingLevel } from "@catui/agent-core";
+import { replayRunTrace, type ThinkingLevel } from "@catui/agent-core";
 import type { SettingsManager } from "../platform/config/settings-manager.js";
 import type { ResourceLoader } from "../platform/config/resource-loader.js";
 import type {
@@ -91,6 +91,20 @@ export interface ExtensionCoreBindingHost {
 	clearFollowUpQueue(): void;
 	getContextUsage(): ContextUsage | undefined;
 	compact(customInstructions?: string): Promise<CompactionResult>;
+	getLastRunTrace(): readonly unknown[] | undefined;
+}
+
+async function runBuiltInHarnessEval() {
+	const [{ runHarnessEval }, { BUILTIN_HARNESS_EVAL_FIXTURES, BUILTIN_HARNESS_EVAL_MANIFEST }] = await Promise.all([
+		import("../harness-eval/runner.js"),
+		import("../harness-eval/scenarios.js"),
+	]);
+	const report = await runHarnessEval(BUILTIN_HARNESS_EVAL_MANIFEST, BUILTIN_HARNESS_EVAL_FIXTURES);
+	return {
+		passed: report.passed,
+		scenarioIds: [...new Set(report.results.map((result) => result.scenarioId))],
+		metrics: report.metrics,
+	};
 }
 
 /**
@@ -334,6 +348,9 @@ export function bindExtensionCore(runner: ExtensionRunner, host: ExtensionCoreBi
 			getSystemPrompt: () => host.systemPrompt,
 			getSoulManager: () => host.soulManager,
 			getSkills: () => host.resourceLoader.getSkills().skills,
+			getLastRunTrace: () => host.getLastRunTrace(),
+			replayRunTrace: (events) => replayRunTrace(events),
+			runHarnessEval: () => runBuiltInHarnessEval(),
 		} satisfies ExtensionContextActions,
 	);
 }
