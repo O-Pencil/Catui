@@ -202,6 +202,16 @@ test("resource discovery exposes promoted skill manifests but never candidates o
 	const loaded = loadSkillsFromDir({ dir: result.skillPaths![0]!, source: "evolution-test" });
 	assert.deepEqual(loaded.diagnostics, []);
 	assert.equal(loaded.skills[0]?.name, "evolved-skill-manifest-verify-workflow");
+	const reloaded = await discover(
+		{ type: "resources_discover", cwd, reason: "reload" },
+		{
+			...context(),
+			cwd,
+			agentDir,
+			getSkills: () => [{ ...loaded.skills[0]!, source: "evolution-test" }],
+		} as ExtensionContext,
+	) as { skillPaths?: string[] };
+	assert.deepEqual(reloaded.skillPaths, result.skillPaths);
 });
 
 test("rollback switches to an existing revision and reloads resources", async () => {

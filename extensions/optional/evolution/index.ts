@@ -5,6 +5,7 @@
  * [HERE]: extensions/optional/evolution/index.ts - manual refinement and active-resource orchestration
  */
 import { randomUUID } from "node:crypto";
+import { isAbsolute, relative } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../../../core/extensions-host/types.js";
 import { boundedSessionEvidence, buildRefinementPrompt, PROPOSAL_DRAFT_SCHEMA } from "./prompts.js";
 import { validateProposal } from "./schema.js";
@@ -203,14 +204,21 @@ export default async function evolutionExtension(api: ExtensionAPI): Promise<voi
 		handler: handleCommand,
 	});
 	api.on("resources_discover", async (_event, ctx) => {
-		const existing = new Set(ctx.getSkills().map((skill) => skill.name));
+		const existing = new Map(ctx.getSkills().map((skill) => [skill.name, skill]));
+		const selected = new Set<string>();
 		const skillPaths: string[] = [];
 		const store = storeFor(ctx);
 		for (const scope of ["global", "workspace", "session"] as const) {
 			try {
 				for (const skill of await store.activeSkillPaths(scope)) {
-					if (!existing.has(skill.name)) {
-						existing.add(skill.name);
+					const collision = existing.get(skill.name);
+					const collisionPath = collision?.filePath;
+					const relativeCollision = collisionPath ? relative(skill.path, collisionPath) : undefined;
+					const isSameGeneratedSkill = relativeCollision !== undefined
+						&& !relativeCollision.startsWith("..")
+						&& !isAbsolute(relativeCollision);
+					if ((!collision || isSameGeneratedSkill) && !selected.has(skill.name)) {
+						selected.add(skill.name);
 						skillPaths.push(skill.path);
 					}
 				}

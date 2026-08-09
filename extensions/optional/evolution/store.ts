@@ -38,7 +38,7 @@ function artifactFileName(id: string): string {
 }
 
 export function skillDirectoryName(id: string): string {
-	return id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").replace(/-+/g, "-").slice(0, 64);
+	return id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").replace(/-+/g, "-").slice(0, 64).replace(/-+$/g, "");
 }
 
 function skillMarkdown(artifact: EvolutionArtifact): string {

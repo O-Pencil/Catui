@@ -47,8 +47,9 @@ function validateArtifact(value: unknown, index: number, proposal: EvolutionProp
 	if (value.schemaVersion !== 1) issues.push(`${path}.schemaVersion must be 1`);
 	if (!ARTIFACT_KINDS.includes(value.kind as ArtifactKind)) issues.push(`${path}.kind is not a supported declarative kind`);
 	const kind = value.kind as string;
-	if (!isNonEmptyString(value.id) || !value.id.startsWith(`evolved:${kind}:`)) {
-		issues.push(`${path}.id must start with evolved:${kind}:`);
+	const idPattern = new RegExp(`^evolved:${kind}:[a-z0-9][a-z0-9._-]{0,79}$`);
+	if (!isNonEmptyString(value.id) || !idPattern.test(value.id)) {
+		issues.push(`${path}.id must match evolved:${kind}:<lowercase-safe-id>`);
 	}
 	if (!isNonEmptyString(value.title)) issues.push(`${path}.title is required`);
 	if (!isNonEmptyString(value.content)) issues.push(`${path}.content is required`);

@@ -61,6 +61,16 @@ test("rejects artifact ids outside the evolved namespace", () => {
 	if (!result.ok) assert.match(result.issues.join(" "), /evolved:prompt_note:/);
 });
 
+test("rejects malformed or ambiguous evolved id suffixes", () => {
+	for (const id of ["evolved:prompt_note:a:b", "evolved:prompt_note:../escape", "evolved:prompt_note:Upper Case"]) {
+		const input = proposal();
+		input.artifacts[0] = { ...input.artifacts[0]!, id };
+		const result = validateProposal(input);
+		assert.equal(result.ok, false, id);
+		if (!result.ok) assert.match(result.issues.join(" "), /id/i);
+	}
+});
+
 test("rejects executable, network, secret-like, and path-bearing content", () => {
 	for (const content of [
 		"command: npm install unsafe-package",
