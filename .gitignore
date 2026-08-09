@@ -16,10 +16,16 @@ coverage/
 .catui/dev-loop/
 # token-save runtime cache (per-shell capture log + history; daemon regenerates)
 .catui/token-save/
+# Per-session task queue (regenerable)
+.catui/tasks/
+# Local agent-registry scratch (regenerable)
+.catui/agent-registry.json
 # Daily pencil-on-pencil self-study runtime artifacts (task prompts + outputs)
 .pencil-self-study/
 # grub harness state (per-task progress logs + run state — regenerable via /grub)
 .grub/
+# Reasonix local experiment runtime (attachments + topic metadata)
+.reasonix/
 # scripts/self-diagnosis/ per-run artifacts (task + output + analysis, gitkeep stays)
 scripts/self-diagnosis/runs/*
 !scripts/self-diagnosis/runs/.gitkeep
