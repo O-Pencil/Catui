@@ -112,6 +112,7 @@ export interface Settings {
 	quietStartup?: boolean;
 	shellCommandPrefix?: string; // Prefix prepended to every bash command (e.g., "shopt -s expand_aliases" for alias support)
 	collapseChangelog?: boolean; // Show condensed changelog after update (use /changelog for full)
+	bashApproval?: boolean; // Pre-execution approval gate for bash tool (default: false — fast-path, no selector). See ADR bash-pre-execution-approval-decision.
 	packages?: PackageSource[]; // Array of npm/git package sources (string or object with filtering)
 	extensions?: string[]; // Array of local extension file paths or directories
 	skills?: string[]; // Array of local skill file paths or directories
@@ -1002,6 +1003,16 @@ export class SettingsManager {
 	setCollapseChangelog(collapse: boolean): void {
 		this.globalSettings.collapseChangelog = collapse;
 		this.markModified("collapseChangelog");
+		this.save();
+	}
+
+	getBashApproval(): boolean {
+		return this.settings.bashApproval ?? false;
+	}
+
+	setBashApproval(enabled: boolean): void {
+		this.globalSettings.bashApproval = enabled;
+		this.markModified("bashApproval");
 		this.save();
 	}
 

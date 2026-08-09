@@ -286,6 +286,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - feat(evolution): validate declarative candidates
 
 ### Fixed
+- fix(bash-tool): disable Layer 2 pre-execution approval by default (opt-in via settings.bashApproval)
 - fix(evolution): reject leaf symlinks and credential variants
 - fix(evolution): close review security findings
 - fix(evolution): harden activation boundaries

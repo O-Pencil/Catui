@@ -983,7 +983,8 @@ export async function main(args: string[]) {
 	// selector (ApprovalSelectorComponent) is the polished layer-3 surface and
 	// stays unmounted in this commit — see ADR §D6 "session persistence" + the
 	// "out of scope" list in commit 93cd746.
-	if (isInteractive && isCatuiProductApp) {
+	// Default: OFF. Users opt back in via settings.bashApproval = true.
+	if (isInteractive && isCatuiProductApp && settingsManager.getBashApproval()) {
 		sessionOptions.baseToolsOverride = {
 			bash: createBashTool(parsedCwd, {
 				commandPrefix: settingsManager.getShellCommandPrefix(),
