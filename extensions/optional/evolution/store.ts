@@ -1,0 +1,250 @@
+/**
+ * [WHO]: Immutable candidate/revision persistence, optimistic atomic activation, history, and rollback
+ * [FROM]: Depends on Node crypto/fs/path, local evolution paths, schema, and types
+ * [TO]: Consumed by the evolution workflow and extension entry
+ * [HERE]: extensions/optional/evolution/store.ts - durable evolution ledger owner
+ */
+import { createHash, randomUUID } from "node:crypto";
+import { appendFile, mkdir, open, readFile, rename, stat, unlink } from "node:fs/promises";
+import { join } from "node:path";
+import { resolveScopePaths, type ScopePaths, workspaceKeyForPath } from "./paths.js";
+import { validateProposal } from "./schema.js";
+import type {
+	CurrentPointer,
+	EvolutionArtifact,
+	EvolutionProposal,
+	EvolutionScope,
+	GateEvidence,
+	RevisionManifest,
+} from "./types.js";
+
+export { workspaceKeyForPath };
+
+const ARTIFACT_DIRS: Record<EvolutionArtifact["kind"], string> = {
+	prompt_note: "prompt-notes",
+	memory: "memories",
+	skill_manifest: "skills",
+	subagent_spec: "subagents",
+	tool_spec: "tool-specs",
+};
+
+function safeSegment(value: string, label: string): string {
+	if (!/^[A-Za-z0-9._-]{1,200}$/.test(value)) throw new Error(`${label} is unsafe for evolution storage`);
+	return value;
+}
+
+function artifactFileName(id: string): string {
+	return `${id.replace(/[^A-Za-z0-9._-]/g, "_")}.json`;
+}
+
+function json(value: unknown): string {
+	return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function sha256(value: unknown): string {
+	return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+async function writeExclusive(path: string, value: unknown): Promise<void> {
+	try {
+		const handle = await open(path, "wx", 0o600);
+		try {
+			await handle.writeFile(json(value), "utf8");
+		} finally {
+			await handle.close();
+		}
+	} catch (error: unknown) {
+		if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error(`Evolution file already exists: ${path}`);
+		throw error;
+	}
+}
+
+async function readJson<T>(path: string): Promise<T> {
+	const metadata = await stat(path);
+	if (!metadata.isFile() || metadata.size > 1_000_000) throw new Error(`Evolution JSON is invalid or oversized: ${path}`);
+	return JSON.parse(await readFile(path, "utf8")) as T;
+}
+
+async function exists(path: string): Promise<boolean> {
+	try {
+		await stat(path);
+		return true;
+	} catch (error: unknown) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+		throw error;
+	}
+}
+
+export interface EvolutionStoreOptions {
+	agentDir: string;
+	cwd: string;
+	sessionId: string;
+}
+
+export interface ActivationResult {
+	revisionId: string;
+	previousRevisionId: string | null;
+}
+
+export class EvolutionStore {
+	private readonly paths = new Map<EvolutionScope, ScopePaths>();
+
+	constructor(private readonly options: EvolutionStoreOptions) {}
+
+	async scopePaths(scope: EvolutionScope): Promise<ScopePaths> {
+		const cached = this.paths.get(scope);
+		if (cached) return cached;
+		const resolved = await resolveScopePaths(this.options.agentDir, this.options.cwd, this.options.sessionId, scope);
+		this.paths.set(scope, resolved);
+		return resolved;
+	}
+
+	private async ensureScope(scope: EvolutionScope): Promise<ScopePaths> {
+		const paths = await this.scopePaths(scope);
+		await mkdir(paths.root, { recursive: true, mode: 0o700 });
+		return paths;
+	}
+
+	async createCandidate(scope: EvolutionScope, proposal: EvolutionProposal): Promise<string> {
+		if (proposal.scope !== scope) throw new Error("Candidate scope does not match proposal scope");
+		const validation = validateProposal(proposal);
+		if (!validation.ok) throw new Error(`Candidate validation failed: ${validation.issues.join("; ")}`);
+		const paths = await this.ensureScope(scope);
+		await mkdir(paths.candidatesDir, { recursive: true, mode: 0o700 });
+		const candidateDir = join(paths.candidatesDir, safeSegment(proposal.id, "Candidate id"));
+		try {
+			await mkdir(candidateDir, { mode: 0o700 });
+		} catch (error: unknown) {
+			if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error(`Candidate already exists: ${proposal.id}`);
+			throw error;
+		}
+		for (const artifact of proposal.artifacts) {
+			const kindDir = join(candidateDir, "artifacts", ARTIFACT_DIRS[artifact.kind]);
+			await mkdir(kindDir, { recursive: true, mode: 0o700 });
+			await writeExclusive(join(kindDir, artifactFileName(artifact.id)), artifact);
+		}
+		await writeExclusive(join(candidateDir, "proposal.json"), proposal);
+		return candidateDir;
+	}
+
+	async writeEvidence(scope: EvolutionScope, candidateId: string, evidence: GateEvidence): Promise<void> {
+		const paths = await this.scopePaths(scope);
+		const candidateDir = join(paths.candidatesDir, safeSegment(candidateId, "Candidate id"));
+		if (!(await exists(join(candidateDir, "proposal.json")))) throw new Error(`Candidate not found: ${candidateId}`);
+		const evidenceDir = join(candidateDir, "evidence");
+		await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
+		await writeExclusive(join(evidenceDir, `${evidence.gate}-validation.json`), evidence);
+	}
+
+	async readProposal(scope: EvolutionScope, candidateId: string): Promise<EvolutionProposal> {
+		const paths = await this.scopePaths(scope);
+		return readJson<EvolutionProposal>(join(paths.candidatesDir, safeSegment(candidateId, "Candidate id"), "proposal.json"));
+	}
+
+	async getCurrent(scope: EvolutionScope): Promise<CurrentPointer | undefined> {
+		const paths = await this.scopePaths(scope);
+		if (!(await exists(paths.currentPath))) return undefined;
+		const pointer = await readJson<CurrentPointer>(paths.currentPath);
+		if (pointer.schemaVersion !== 1 || !safeSegment(pointer.revisionId, "Revision id")) throw new Error("Active evolution pointer is invalid");
+		return pointer;
+	}
+
+	private async writePointer(paths: ScopePaths, pointer: CurrentPointer): Promise<void> {
+		const tempPath = join(paths.root, `.current.${process.pid}.${randomUUID()}.tmp`);
+		await writeExclusive(tempPath, pointer);
+		await rename(tempPath, paths.currentPath);
+	}
+
+	private async appendHistory(paths: ScopePaths, event: Record<string, unknown>): Promise<void> {
+		await appendFile(paths.historyPath, `${JSON.stringify({ schemaVersion: 1, ...event })}\n`, { encoding: "utf8", mode: 0o600 });
+	}
+
+	private async withActivationLock<T>(scope: EvolutionScope, action: (paths: ScopePaths) => Promise<T>): Promise<T> {
+		const paths = await this.ensureScope(scope);
+		let handle;
+		try {
+			handle = await open(paths.lockPath, "wx", 0o600);
+		} catch (error: unknown) {
+			if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error("Evolution activation is already in progress");
+			throw error;
+		}
+		try {
+			return await action(paths);
+		} finally {
+			await handle.close();
+			await unlink(paths.lockPath).catch(() => undefined);
+		}
+	}
+
+	async promote(scope: EvolutionScope, candidateId: string): Promise<ActivationResult> {
+		return this.withActivationLock(scope, async (paths) => {
+			const proposal = await this.readProposal(scope, candidateId);
+			const validation = validateProposal(proposal);
+			if (!validation.ok) throw new Error(`Candidate validation failed: ${validation.issues.join("; ")}`);
+			const current = await this.getCurrent(scope);
+			if ((current?.revisionId ?? null) !== proposal.baselineRevisionId) throw new Error("Candidate baseline revision is stale");
+			const digest = sha256({ candidateId: proposal.id, artifacts: proposal.artifacts });
+			const revisionId = `rev_${digest.slice(0, 32)}`;
+			const revisionDir = join(paths.revisionsDir, revisionId);
+			await mkdir(paths.revisionsDir, { recursive: true, mode: 0o700 });
+			try {
+				await mkdir(revisionDir, { mode: 0o700 });
+			} catch (error: unknown) {
+				if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error(`Revision already exists: ${revisionId}`);
+				throw error;
+			}
+			for (const artifact of proposal.artifacts) {
+				const kindDir = join(revisionDir, "artifacts", ARTIFACT_DIRS[artifact.kind]);
+				await mkdir(kindDir, { recursive: true, mode: 0o700 });
+				await writeExclusive(join(kindDir, artifactFileName(artifact.id)), artifact);
+			}
+			const manifest: RevisionManifest = {
+				schemaVersion: 1,
+				revisionId,
+				candidateId: proposal.id,
+				scope,
+				createdAt: new Date().toISOString(),
+				previousRevisionId: current?.revisionId ?? null,
+				contentHash: `sha256:${sha256(proposal.artifacts)}`,
+				artifacts: proposal.artifacts,
+			};
+			await writeExclusive(join(revisionDir, "manifest.json"), manifest);
+			await this.writePointer(paths, {
+				schemaVersion: 1,
+				revisionId,
+				previousRevisionId: current?.revisionId ?? null,
+				updatedAt: new Date().toISOString(),
+			});
+			await this.appendHistory(paths, { event: "promoted", candidateId, revisionId, previousRevisionId: current?.revisionId ?? null, createdAt: new Date().toISOString() });
+			return { revisionId, previousRevisionId: current?.revisionId ?? null };
+		});
+	}
+
+	async rollback(scope: EvolutionScope, revisionId: string): Promise<ActivationResult> {
+		return this.withActivationLock(scope, async (paths) => {
+			const target = safeSegment(revisionId, "Revision id");
+			await readJson<RevisionManifest>(join(paths.revisionsDir, target, "manifest.json"));
+			const current = await this.getCurrent(scope);
+			if (current?.revisionId === target) return { revisionId: target, previousRevisionId: current.previousRevisionId };
+			await this.writePointer(paths, {
+				schemaVersion: 1,
+				revisionId: target,
+				previousRevisionId: current?.revisionId ?? null,
+				updatedAt: new Date().toISOString(),
+			});
+			await this.appendHistory(paths, { event: "rolled_back", revisionId: target, previousRevisionId: current?.revisionId ?? null, createdAt: new Date().toISOString() });
+			return { revisionId: target, previousRevisionId: current?.revisionId ?? null };
+		});
+	}
+
+	async readActiveManifest(scope: EvolutionScope): Promise<RevisionManifest | undefined> {
+		const current = await this.getCurrent(scope);
+		if (!current) return undefined;
+		const paths = await this.scopePaths(scope);
+		const manifest = await readJson<RevisionManifest>(join(paths.revisionsDir, current.revisionId, "manifest.json"));
+		if (manifest.revisionId !== current.revisionId || manifest.contentHash !== `sha256:${sha256(manifest.artifacts)}`) {
+			throw new Error("Active evolution revision failed integrity validation");
+		}
+		return manifest;
+	}
+}
