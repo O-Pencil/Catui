@@ -32,6 +32,7 @@ export const PROPOSAL_DRAFT_SCHEMA: Record<string, unknown> = {
 					promptTokenBudget: { type: "integer", minimum: 0, maximum: 4_096 },
 					dependencies: { type: "array", items: { type: "string", minLength: 1 } },
 					expectedOutcome: { type: "string", minLength: 1, maxLength: 1_000 },
+					overrides: { type: "string", pattern: "^evolved:" },
 				},
 			},
 		},
@@ -51,7 +52,11 @@ export function redactEvolutionEvidence(value: string, privatePaths: readonly st
 	for (const path of [...privatePaths].sort((a, b) => b.length - a.length)) {
 		if (path.length > 0) redacted = redacted.split(path).join("[REDACTED_PATH]");
 	}
-	redacted = redacted.replace(/\b(?:api[_-]?key|token|secret|password|authorization)\s*[:=]\s*[^\s"']+/gi, "[REDACTED_SECRET]");
+	redacted = redacted.replace(/-----BEGIN [^-\n]*PRIVATE KEY-----[\s\S]*?-----END [^-\n]*PRIVATE KEY-----/gi, "[REDACTED_SECRET]");
+	redacted = redacted.replace(/\bauthorization\s*:\s*bearer\s+\S+/gi, "[REDACTED_SECRET]");
+	redacted = redacted.replace(/\b(?:sk-(?:proj-)?|gh[pousr]_|xox[baprs]-|AIza)[A-Za-z0-9._-]{8,}/g, "[REDACTED_SECRET]");
+	redacted = redacted.replace(/["']?(?:client_secret|private_key|access_token|refresh_token)["']?\s*:\s*["'][\s\S]*?["']/gi, "[REDACTED_SECRET]");
+	redacted = redacted.replace(/\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*(?:["'][\s\S]*?["']|\S+)/gi, "[REDACTED_SECRET]");
 	redacted = redacted.replace(/(?:\/Users\/|\/home\/)[^\s"']+/g, "[REDACTED_PATH]");
 	return redacted;
 }

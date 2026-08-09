@@ -4,7 +4,7 @@
  * [TO]: Consumed by manual and automatic refinement orchestration
  * [HERE]: extensions/optional/evolution/workflow.ts - promotion policy authority
  */
-import type { CandidateRecord, GateEvidence } from "./types.js";
+import type { CandidateRecord, EvolutionArtifact, EvolutionScope, GateEvidence } from "./types.js";
 
 export type CandidateEvent =
 	| { type: "static_checked"; evidence: GateEvidence }
@@ -99,4 +99,19 @@ export function advanceCandidate(record: CandidateRecord, event: CandidateEvent)
 			return { ...record, state: "promoted", pendingReason: undefined };
 		}
 	}
+}
+
+export function mergeScopedArtifacts(
+	scoped: ReadonlyArray<{ scope: EvolutionScope; artifacts: readonly EvolutionArtifact[] }>,
+	keyFor: (artifact: EvolutionArtifact) => string = (artifact) => artifact.id,
+): EvolutionArtifact[] {
+	const selected = new Map<string, EvolutionArtifact>();
+	for (const group of scoped) {
+		for (const artifact of group.artifacts) {
+			const key = keyFor(artifact);
+			const current = selected.get(key);
+			if (!current || artifact.overrides === current.id) selected.set(key, artifact);
+		}
+	}
+	return [...selected.values()];
 }

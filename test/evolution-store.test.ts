@@ -5,7 +5,7 @@
  * [HERE]: test/evolution-store.test.ts - durable self-evolution store coverage
  */
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -86,6 +86,15 @@ test("creates candidates lazily with private immutable proposal and artifact fil
 	await assert.rejects(() => stat(join(agentDir, "evolution", "v1", "global")));
 });
 
+test("rejects a symlinked evolution root instead of escaping agentDir", async () => {
+	const { store, agentDir } = await createStore();
+	const outside = await mkdtemp(join(tmpdir(), "catui-evolution-outside-"));
+	await mkdir(agentDir, { recursive: true });
+	await symlink(outside, join(agentDir, "evolution"));
+	await assert.rejects(() => store.createCandidate("workspace", proposal("candidate-a", null)), /symlink/i);
+	await assert.rejects(() => stat(join(outside, "v1")));
+});
+
 test("writes each evidence gate once", async () => {
 	const { store } = await createStore();
 	await store.createCandidate("workspace", proposal("candidate-a", null));
@@ -120,6 +129,25 @@ test("refuses promotion when hard replay and effectiveness evidence is absent", 
 	await store.createCandidate("workspace", proposal("candidate-a", null));
 	await assert.rejects(() => store.promote("workspace", "candidate-a"), /evidence/i);
 	assert.equal(await store.getCurrent("workspace"), undefined);
+});
+
+test("restores the previous pointer when history append fails", async () => {
+	const { store } = await createStore();
+	await store.createCandidate("workspace", proposal("candidate-a", null));
+	await writePassingEvidence(store, "candidate-a");
+	const paths = await store.scopePaths("workspace");
+	await mkdir(paths.historyPath, { recursive: true });
+	await assert.rejects(() => store.promote("workspace", "candidate-a"));
+	assert.equal(await store.getCurrent("workspace"), undefined);
+});
+
+test("recovers an activation lock owned by a dead process", async () => {
+	const { store } = await createStore();
+	await store.createCandidate("workspace", proposal("candidate-a", null));
+	await writePassingEvidence(store, "candidate-a");
+	const paths = await store.scopePaths("workspace");
+	await writeFile(paths.lockPath, "99999999\n", { mode: 0o600 });
+	assert.match((await store.promote("workspace", "candidate-a")).revisionId, /^rev_/);
 });
 
 test("rejects stale baselines and preserves the champion", async () => {

@@ -7,8 +7,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { appendFile, mkdir, open, readFile, rename, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { resolveScopePaths, type ScopePaths, workspaceKeyForPath } from "./paths.js";
-import { validateProposal } from "./schema.js";
+import { assertNoSymlinkComponents, resolveScopePaths, type ScopePaths, workspaceKeyForPath } from "./paths.js";
+import { normalizedSkillName, validateProposal } from "./schema.js";
 import type {
 	CurrentPointer,
 	EvolutionArtifact,
@@ -38,7 +38,7 @@ function artifactFileName(id: string): string {
 }
 
 export function skillDirectoryName(id: string): string {
-	return id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").replace(/-+/g, "-").slice(0, 64).replace(/-+$/g, "");
+	return normalizedSkillName(id);
 }
 
 function skillMarkdown(artifact: EvolutionArtifact): string {
@@ -110,6 +110,7 @@ export class EvolutionStore {
 
 	private async ensureScope(scope: EvolutionScope): Promise<ScopePaths> {
 		const paths = await this.scopePaths(scope);
+		await assertNoSymlinkComponents(this.options.agentDir, paths.root);
 		await mkdir(paths.root, { recursive: true, mode: 0o700 });
 		return paths;
 	}
@@ -209,15 +210,30 @@ export class EvolutionStore {
 		try {
 			handle = await open(paths.lockPath, "wx", 0o600);
 		} catch (error: unknown) {
-			if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error("Evolution activation is already in progress");
-			throw error;
+			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+			const owner = Number.parseInt((await readFile(paths.lockPath, "utf8")).trim(), 10);
+			let stale = !Number.isInteger(owner) || owner <= 0;
+			if (!stale) {
+				try { process.kill(owner, 0); } catch (probeError: unknown) { stale = (probeError as NodeJS.ErrnoException).code === "ESRCH"; }
+			}
+			if (!stale) throw new Error("Evolution activation is already in progress");
+			await unlink(paths.lockPath);
+			handle = await open(paths.lockPath, "wx", 0o600);
 		}
 		try {
+			await handle.writeFile(`${process.pid}\n`, "utf8");
 			return await action(paths);
 		} finally {
 			await handle.close();
 			await unlink(paths.lockPath).catch(() => undefined);
 		}
+	}
+
+	private async restorePointer(paths: ScopePaths, previous: CurrentPointer | undefined): Promise<void> {
+		if (previous) await this.writePointer(paths, previous);
+		else await unlink(paths.currentPath).catch((error: unknown) => {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		});
 	}
 
 	async promote(scope: EvolutionScope, candidateId: string): Promise<ActivationResult> {
@@ -270,7 +286,12 @@ export class EvolutionStore {
 				previousRevisionId: current?.revisionId ?? null,
 				updatedAt: new Date().toISOString(),
 			});
-			await this.appendHistory(paths, { event: "promoted", candidateId, revisionId, previousRevisionId: current?.revisionId ?? null, createdAt: new Date().toISOString() });
+			try {
+				await this.appendHistory(paths, { event: "promoted", candidateId, revisionId, previousRevisionId: current?.revisionId ?? null, createdAt: new Date().toISOString() });
+			} catch (error: unknown) {
+				await this.restorePointer(paths, current);
+				throw error;
+			}
 			return { revisionId, previousRevisionId: current?.revisionId ?? null };
 		});
 	}
@@ -287,8 +308,30 @@ export class EvolutionStore {
 				previousRevisionId: current?.revisionId ?? null,
 				updatedAt: new Date().toISOString(),
 			});
-			await this.appendHistory(paths, { event: "rolled_back", revisionId: target, previousRevisionId: current?.revisionId ?? null, createdAt: new Date().toISOString() });
+			try {
+				await this.appendHistory(paths, { event: "rolled_back", revisionId: target, previousRevisionId: current?.revisionId ?? null, createdAt: new Date().toISOString() });
+			} catch (error: unknown) {
+				await this.restorePointer(paths, current);
+				throw error;
+			}
 			return { revisionId: target, previousRevisionId: current?.revisionId ?? null };
+		});
+	}
+
+	async restoreActivation(scope: EvolutionScope, expectedRevisionId: string, previousRevisionId: string | null): Promise<void> {
+		await this.withActivationLock(scope, async (paths) => {
+			const current = await this.getCurrent(scope);
+			if (current?.revisionId !== expectedRevisionId) throw new Error("Cannot restore evolution activation because the pointer changed");
+			const previous = previousRevisionId === null
+				? undefined
+				: {
+					schemaVersion: 1 as const,
+					revisionId: previousRevisionId,
+					previousRevisionId: null,
+					updatedAt: new Date().toISOString(),
+				};
+			await this.appendHistory(paths, { event: "reload_failed_rollback", revisionId: expectedRevisionId, restoredRevisionId: previousRevisionId, createdAt: new Date().toISOString() });
+			await this.restorePointer(paths, previous);
 		});
 	}
 
@@ -303,7 +346,7 @@ export class EvolutionStore {
 		return manifest;
 	}
 
-	async activeSkillPaths(scope: EvolutionScope): Promise<Array<{ name: string; path: string }>> {
+	async activeSkillPaths(scope: EvolutionScope): Promise<Array<{ name: string; path: string; artifact: EvolutionArtifact }>> {
 		const manifest = await this.readActiveManifest(scope);
 		if (!manifest) return [];
 		const paths = await this.scopePaths(scope);
@@ -311,7 +354,7 @@ export class EvolutionStore {
 			.filter((artifact) => artifact.kind === "skill_manifest")
 			.map((artifact) => {
 				const name = skillDirectoryName(artifact.id);
-				return { name, path: join(paths.revisionsDir, manifest.revisionId, "artifacts", "skills", name) };
+				return { name, path: join(paths.revisionsDir, manifest.revisionId, "artifacts", "skills", name), artifact };
 			});
 	}
 }

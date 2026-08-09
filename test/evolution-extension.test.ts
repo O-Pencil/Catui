@@ -5,7 +5,7 @@
  * [HERE]: test/evolution-extension.test.ts - user-facing self-evolution vertical slice coverage
  */
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -95,6 +95,7 @@ function context(options: {
 	completeJson?: ExtensionCommandContext["completeJson"];
 	notifications?: string[];
 	reloads?: { count: number };
+	reloadError?: Error;
 } = {}): ExtensionCommandContext {
 	const notifications = options.notifications ?? [];
 	const reloads = options.reloads ?? { count: 0 };
@@ -114,7 +115,7 @@ function context(options: {
 			}],
 		} as never,
 		completeJson: options.completeJson,
-		async reload() { reloads.count += 1; },
+		async reload() { reloads.count += 1; if (options.reloadError) throw options.reloadError; },
 	} as unknown as ExtensionCommandContext;
 }
 
@@ -232,4 +233,20 @@ test("rollback switches to an existing revision and reloads resources", async ()
 	assert.equal(reloads.count, 1);
 	assert.equal((await store.getCurrent("workspace"))?.revisionId, first.revisionId);
 	assert.match(notifications.join(" "), /rolled back/i);
+});
+
+test("reload failure restores a prior no-active-revision state", async () => {
+	const { commands, agentDir, cwd } = await harness();
+	const store = new EvolutionStore({ agentDir, cwd, sessionId: "session-1" });
+	await store.createCandidate("workspace", proposal("orphan", null, "Orphan revision"));
+	await writePassingEvidence(store, "orphan");
+	const orphan = await store.promote("workspace", "orphan");
+	await unlink((await store.scopePaths("workspace")).currentPath);
+	const notifications: string[] = [];
+	const ctx = context({ notifications, reloadError: new Error("reload broke") });
+	ctx.cwd = cwd;
+	ctx.agentDir = agentDir;
+	await commands.get("refine")!(`rollback ${orphan.revisionId} --scope workspace`, ctx);
+	assert.equal(await store.getCurrent("workspace"), undefined);
+	assert.match(notifications.join(" "), /restored/i);
 });

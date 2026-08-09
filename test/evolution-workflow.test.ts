@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { advanceCandidate } from "../extensions/optional/evolution/workflow.ts";
+import { advanceCandidate, mergeScopedArtifacts } from "../extensions/optional/evolution/workflow.ts";
 import type { CandidateRecord, EvolutionProposal, GateEvidence } from "../extensions/optional/evolution/types.ts";
 
 function proposal(scope: EvolutionProposal["scope"] = "workspace"): EvolutionProposal {
@@ -103,4 +103,32 @@ test("manual approval can override missing effectiveness evidence but not safety
 	current = advanceCandidate(current, { type: "approve", actor: "human", overrideMissingEffectiveness: true });
 	assert.equal(advanceCandidate(current, { type: "promote" }).state, "promoted");
 	assert.throws(() => advanceCandidate(advanceCandidate(record(), { type: "static_checked", evidence: evidence("static", false) }), { type: "approve", actor: "human" }), /cannot transition/i);
+});
+
+test("higher evolved scopes override only through explicit provenance", () => {
+	const base = {
+		...proposal("global").artifacts[0],
+		schemaVersion: 1 as const,
+		id: "evolved:memory:rule",
+		kind: "memory" as const,
+		title: "Rule",
+		content: "global",
+		scope: "global" as const,
+		version: 1,
+		createdAt: "2026-08-09T00:00:00.000Z",
+		applicability: ["always"],
+		nonApplicability: ["never"],
+		promptTokenBudget: 10,
+		dependencies: [],
+		expectedOutcome: "rule applies",
+		provenance: { sourceCandidateId: "a", trigger: "manual", traceRefs: ["t"] },
+	};
+	const ignoredWorkspace = { ...base, scope: "workspace" as const, content: "undeclared" };
+	const overridingSession = { ...base, scope: "session" as const, content: "session", overrides: base.id };
+	const merged = mergeScopedArtifacts([
+		{ scope: "global", artifacts: [base] },
+		{ scope: "workspace", artifacts: [ignoredWorkspace] },
+		{ scope: "session", artifacts: [overridingSession] },
+	]);
+	assert.equal(merged[0]?.content, "session");
 });

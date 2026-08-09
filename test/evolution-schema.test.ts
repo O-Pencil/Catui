@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { validateProposal } from "../extensions/optional/evolution/schema.ts";
+import { redactEvolutionEvidence } from "../extensions/optional/evolution/prompts.ts";
 import type { EvolutionProposal } from "../extensions/optional/evolution/types.ts";
 
 function proposal(overrides: Partial<EvolutionProposal> = {}): EvolutionProposal {
@@ -76,6 +77,9 @@ test("rejects executable, network, secret-like, and path-bearing content", () =>
 		"command: npm install unsafe-package",
 		"Call https://example.invalid/tool",
 		"Use API_KEY=sk-secret-value",
+		"Authorization: Bearer supersecret",
+		"token sk-proj-1234567890abcdefgh",
+		"-----BEGIN PRIVATE KEY----- secret -----END PRIVATE KEY-----",
 		"Write /Users/alice/project/tool.ts",
 	]) {
 		const input = proposal();
@@ -83,6 +87,25 @@ test("rejects executable, network, secret-like, and path-bearing content", () =>
 		const result = validateProposal(input);
 		assert.equal(result.ok, false, content);
 	}
+});
+
+test("redacts bearer, raw provider keys, PEM blocks, JSON credentials, and paths", () => {
+	const redacted = redactEvolutionEvidence(
+		'Authorization: Bearer supersecret sk-proj-1234567890abcdefgh {"client_secret":"quoted secret"}\n-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY----- /Users/alice/work',
+		[],
+	);
+	assert.doesNotMatch(redacted, /supersecret|sk-proj|quoted secret|BEGIN PRIVATE|\/Users\/alice/);
+});
+
+test("rejects skill ids that normalize to the same resource name", () => {
+	const input = proposal();
+	input.artifacts = [
+		{ ...input.artifacts[0]!, id: "evolved:skill_manifest:a_b", kind: "skill_manifest" },
+		{ ...input.artifacts[0]!, id: "evolved:skill_manifest:a-b", kind: "skill_manifest" },
+	];
+	const result = validateProposal(input);
+	assert.equal(result.ok, false);
+	if (!result.ok) assert.match(result.issues.join(" "), /skill name collision/i);
 });
 
 test("rejects unknown kinds, duplicate ids, and excessive content", () => {

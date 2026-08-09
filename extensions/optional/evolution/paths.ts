@@ -5,8 +5,8 @@
  * [HERE]: extensions/optional/evolution/paths.ts - runtime data location authority
  */
 import { createHash } from "node:crypto";
-import { realpath } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { lstat, realpath } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { EvolutionScope } from "./types.js";
 
 export interface ScopePaths {
@@ -29,6 +29,22 @@ function confined(base: string, child: string): string {
 	const rel = relative(base, resolved);
 	if (rel.startsWith("..") || isAbsolute(rel)) throw new Error("Evolution path escaped its runtime root");
 	return resolved;
+}
+
+export async function assertNoSymlinkComponents(agentDir: string, target: string): Promise<void> {
+	const base = resolve(agentDir);
+	const rel = relative(base, resolve(target));
+	if (rel.startsWith("..") || isAbsolute(rel)) throw new Error("Evolution path escaped agentDir");
+	let current = base;
+	for (const segment of rel.split(sep).filter(Boolean)) {
+		current = join(current, segment);
+		try {
+			if ((await lstat(current)).isSymbolicLink()) throw new Error(`Evolution storage rejects symlink component: ${current}`);
+		} catch (error: unknown) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+			throw error;
+		}
+	}
 }
 
 function safeSessionId(sessionId: string): string {

@@ -9,8 +9,9 @@ import { isAbsolute, relative } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../../../core/extensions-host/types.js";
 import { boundedSessionEvidence, buildRefinementPrompt, PROPOSAL_DRAFT_SCHEMA } from "./prompts.js";
 import { validateProposal } from "./schema.js";
-import { EvolutionStore } from "./store.js";
+import { EvolutionStore, skillDirectoryName } from "./store.js";
 import type { ArtifactKind, EvolutionArtifact, EvolutionProposal, EvolutionScope, GateEvidence } from "./types.js";
+import { mergeScopedArtifacts } from "./workflow.js";
 
 interface ProposalDraftArtifact {
 	id: string;
@@ -22,6 +23,7 @@ interface ProposalDraftArtifact {
 	promptTokenBudget: number;
 	dependencies: string[];
 	expectedOutcome: string;
+	overrides?: string;
 }
 
 interface ProposalDraft {
@@ -79,6 +81,7 @@ function buildProposal(draft: ProposalDraft, input: {
 		promptTokenBudget: artifact.promptTokenBudget,
 		dependencies: artifact.dependencies,
 		expectedOutcome: artifact.expectedOutcome,
+		...(artifact.overrides ? { overrides: artifact.overrides } : {}),
 		provenance: { sourceCandidateId: input.id, trigger: "manual", traceRefs: input.traceRefs },
 	}));
 	return {
@@ -162,7 +165,7 @@ async function handleCommand(args: string, ctx: ExtensionCommandContext): Promis
 			try {
 				await ctx.reload();
 			} catch (error: unknown) {
-				if (result.previousRevisionId) await store.rollback(scope, result.previousRevisionId);
+				await store.restoreActivation(scope, result.revisionId, result.previousRevisionId);
 				throw new Error(`Resource reload failed; activation was restored: ${error instanceof Error ? error.message : String(error)}`);
 			}
 			ctx.ui.notify(`Evolution ${scope} rolled back to ${result.revisionId}.`, "info");
@@ -181,18 +184,19 @@ async function handleCommand(args: string, ctx: ExtensionCommandContext): Promis
 async function activePrompt(ctx: ExtensionContext): Promise<string | undefined> {
 	const store = storeFor(ctx);
 	const sections: string[] = [];
+	const scoped: Array<{ scope: EvolutionScope; artifacts: EvolutionArtifact[] }> = [];
 	for (const scope of ["global", "workspace", "session"] as const) {
 		try {
 			const manifest = await store.readActiveManifest(scope);
 			if (!manifest) continue;
-			for (const artifact of manifest.artifacts) {
-				if (artifact.kind !== "prompt_note" && artifact.kind !== "memory") continue;
-				const bounded = artifact.content.slice(0, artifact.promptTokenBudget * 4);
-				sections.push(`[${artifact.id} | ${scope}]\n${bounded}`);
-			}
+			scoped.push({ scope, artifacts: manifest.artifacts.filter((artifact) => artifact.kind === "prompt_note" || artifact.kind === "memory") });
 		} catch {
 			// A corrupt evolution scope disables only that scope; normal sessions continue.
 		}
+	}
+	for (const artifact of mergeScopedArtifacts(scoped)) {
+		const bounded = artifact.content.slice(0, artifact.promptTokenBudget * 4);
+		sections.push(`[${artifact.id} | ${artifact.scope}]\n${bounded}`);
 	}
 	if (sections.length === 0) return undefined;
 	return `# Promoted Evolved Context\nSupplementary only; explicit user/project resources and built-in safety rules take precedence.\n\n${sections.join("\n\n")}`;
@@ -205,26 +209,27 @@ export default async function evolutionExtension(api: ExtensionAPI): Promise<voi
 	});
 	api.on("resources_discover", async (_event, ctx) => {
 		const existing = new Map(ctx.getSkills().map((skill) => [skill.name, skill]));
-		const selected = new Set<string>();
 		const skillPaths: string[] = [];
 		const store = storeFor(ctx);
+		const scoped: Array<{ scope: EvolutionScope; artifacts: EvolutionArtifact[] }> = [];
+		const pathsByScopeAndId = new Map<string, string>();
 		for (const scope of ["global", "workspace", "session"] as const) {
 			try {
 				for (const skill of await store.activeSkillPaths(scope)) {
-					const collision = existing.get(skill.name);
-					const collisionPath = collision?.filePath;
-					const relativeCollision = collisionPath ? relative(skill.path, collisionPath) : undefined;
-					const isSameGeneratedSkill = relativeCollision !== undefined
-						&& !relativeCollision.startsWith("..")
-						&& !isAbsolute(relativeCollision);
-					if ((!collision || isSameGeneratedSkill) && !selected.has(skill.name)) {
-						selected.add(skill.name);
-						skillPaths.push(skill.path);
-					}
+					pathsByScopeAndId.set(`${scope}:${skill.artifact.id}`, skill.path);
+					scoped.push({ scope, artifacts: [skill.artifact] });
 				}
 			} catch {
 				// Invalid generated resources disable only the affected scope.
 			}
+		}
+		for (const artifact of mergeScopedArtifacts(scoped, (item) => skillDirectoryName(item.id))) {
+			const path = pathsByScopeAndId.get(`${artifact.scope}:${artifact.id}`);
+			if (!path) continue;
+			const name = skillDirectoryName(artifact.id);
+			const collisionPath = existing.get(name)?.filePath;
+			const rel = collisionPath ? relative(path, collisionPath) : undefined;
+			if (!collisionPath || (rel !== undefined && !rel.startsWith("..") && !isAbsolute(rel))) skillPaths.push(path);
 		}
 		return skillPaths.length > 0 ? { skillPaths } : undefined;
 	});

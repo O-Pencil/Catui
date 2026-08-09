@@ -23,7 +23,13 @@ const EXECUTABLE_PATTERNS = [
 	/\b(?:mcp[_ -]?server|registerTool|child_process|execSync|spawnSync)\b/i,
 ];
 const NETWORK_PATTERN = /\b(?:https?|wss?):\/\/\S+/i;
-const SECRET_PATTERN = /\b(?:api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+/i;
+const SECRET_PATTERNS = [
+	/-----BEGIN [^-\n]*PRIVATE KEY-----/i,
+	/\bauthorization\s*:\s*bearer\s+\S+/i,
+	/\b(?:sk-(?:proj-)?|gh[pousr]_|xox[baprs]-|AIza)[A-Za-z0-9._-]{8,}/,
+	/["']?(?:client_secret|private_key|access_token|refresh_token)["']?\s*:/i,
+	/\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+/i,
+];
 const ABSOLUTE_PATH_PATTERN = /(?:^|[\s"'`])(?:\/[A-Za-z0-9._-]+){2,}(?:\/[A-Za-z0-9._-]+)?/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -64,6 +70,9 @@ function validateArtifact(value: unknown, index: number, proposal: EvolutionProp
 	}
 	if (!isStringArray(value.dependencies)) issues.push(`${path}.dependencies must be a string array`);
 	if (!isNonEmptyString(value.expectedOutcome)) issues.push(`${path}.expectedOutcome is required`);
+	if (value.overrides !== undefined && (!isNonEmptyString(value.overrides) || !value.overrides.startsWith(`evolved:${kind}:`))) {
+		issues.push(`${path}.overrides must target an evolved:${kind}: id`);
+	}
 	if (!isRecord(value.provenance)) {
 		issues.push(`${path}.provenance is required`);
 	} else {
@@ -76,7 +85,7 @@ function validateArtifact(value: unknown, index: number, proposal: EvolutionProp
 		if (content.length > MAX_ARTIFACT_CONTENT) issues.push(`${path}.content exceeds 20,000 characters`);
 		if (EXECUTABLE_PATTERNS.some((pattern) => pattern.test(content))) issues.push(`${path}.content declares executable behavior`);
 		if (NETWORK_PATTERN.test(content)) issues.push(`${path}.content declares a network endpoint`);
-		if (SECRET_PATTERN.test(content)) issues.push(`${path}.content contains secret-like material`);
+		if (SECRET_PATTERNS.some((pattern) => pattern.test(content))) issues.push(`${path}.content contains secret-like material`);
 		if (ABSOLUTE_PATH_PATTERN.test(content)) issues.push(`${path}.content contains an absolute path`);
 	}
 }
@@ -107,10 +116,20 @@ export function validateProposal(value: unknown): ProposalValidation {
 		for (const id of new Set(ids)) {
 			if (ids.filter((candidate) => candidate === id).length > 1) issues.push(`duplicate artifact id: ${id}`);
 		}
+		const skillNames = value.artifacts
+			.filter((artifact) => isRecord(artifact) && artifact.kind === "skill_manifest" && typeof artifact.id === "string")
+			.map((artifact) => normalizedSkillName((artifact as Record<string, unknown>).id as string));
+		for (const name of new Set(skillNames)) {
+			if (skillNames.filter((candidate) => candidate === name).length > 1) issues.push(`skill name collision after normalization: ${name}`);
+		}
 		const totalContent = value.artifacts.reduce((sum, artifact) => sum + (isRecord(artifact) && typeof artifact.content === "string" ? artifact.content.length : 0), 0);
 		if (totalContent > MAX_TOTAL_CONTENT) issues.push(`artifact content exceeds aggregate ${MAX_TOTAL_CONTENT} character limit`);
 	}
 	return issues.length > 0 ? { ok: false, issues } : { ok: true, proposal: value as unknown as EvolutionProposal };
+}
+
+export function normalizedSkillName(id: string): string {
+	return id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").replace(/-+/g, "-").slice(0, 64).replace(/-+$/g, "");
 }
 
 export function artifactKindFor(value: EvolutionArtifact): ArtifactKind {

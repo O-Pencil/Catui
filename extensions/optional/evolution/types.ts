@@ -48,6 +48,7 @@ export interface EvolutionArtifact {
 	provenance: EvolutionProvenance;
 	predecessorRevisionId?: string;
 	rollbackRevisionId?: string;
+	overrides?: string;
 }
 
 export interface ProposalProvenance {
