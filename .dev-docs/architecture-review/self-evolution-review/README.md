@@ -1,51 +1,98 @@
-# Self-Evolution Architecture Review
+# Self Evolution Review
 
-```yaml
-review_id: self-evolution-review
-issue: HAP-45
-scope: extensions/optional/evolution and runtime data below agentDir/evolution/v1
-status: implementation
-created_at: 2026-08-09
-owner: optional evolution extension
-```
+status: active
+scope: `extensions/optional/evolution/` controlled harness evolution
 
 ## Decision
 
-Catui's continual harness refinement is an opt-in extension, not core runtime business logic. The extension may create and activate only declarative `prompt_note`, `memory`, `skill_manifest`, `subagent_spec`, and non-executable `tool_spec` artifacts in v1.
+Self-evolution lands as an opt-in extension. The extension owns `/refine`,
+`evolution_refine`, `evolved_tool`, deterministic `turn_end` observation,
+candidate state, immutable revisions, validation, activation, rollback, and prompt
+injection. Core runtime remains a host capability provider only.
 
-Generated data has distinct provenance and trust. It lives only below `<agentDir>/evolution/v1`, never under built-in extension/tool directories, explicit user resource directories, or the current workspace. Candidates are inactive and immutable. A complete immutable revision becomes active only through an atomic `current.json` pointer update after validation.
+## Boundaries
 
-## Dependency Direction
-
-```text
-ExtensionAPI
-  -> evolution command/hooks
-     -> pure schema + workflow
-     -> evolution filesystem store
-
-core runtime <- unchanged
-mem-core/soul-core private stores <- never written
-```
-
-The entry point alone consumes `core/extensions-host/types.ts`. Extension-local modules use Node primitives and local types. No evolution type enters `catui-protocol` until a published or external consumer exists.
+- No business logic in `core/runtime/agent-session.ts`.
+- Generated artifacts live under `<agentDir>/evolution/v1/`.
+- Candidates may carry `predictions`: falsifiable metric/direction/target records
+  that are copied onto promoted revisions. This is the first decision
+  observability slice for later post-hoc attribution and auto-revert policy.
+- Post-hoc attribution records compare later gate metrics against revision
+  predictions and classify each prediction as `kept`, `falsified`, or
+  `inconclusive`. Attribution is stored beside the revision and does not mutate
+  the immutable revision manifest.
+- Conservative auto-rollback may move `current.json` from the current revision to
+  its predecessor when post-hoc attribution falsifies at least one prediction. It
+  is pointer-only, never deletes revisions, never targets non-current revisions,
+  and refuses to act when no predecessor exists.
+- First slice permits declarative `prompt_note`, `memory`, `skill_manifest`,
+  `subagent_spec`, `tool_spec`, and `eval_fixture` records only.
+- First slice never generates or activates source code, shell commands, packages,
+  MCP servers, network endpoints, or permission changes.
+- Promoted `tool_spec` artifacts may carry declarative `metadata.inputs`,
+  `metadata.steps`, and `metadata.usesExistingTools`. `evolved_tool` validates
+  declared inputs and returns a structured plan, but it still does not execute
+  generated code or bypass existing tool permissions.
+- Session/workspace declarative artifacts may auto-promote when requested by the
+  model-facing tool or structured turn-end proposal.
+- Global auto-promotion is bounded to low-risk `prompt_note`, `memory`, and
+  declarative `tool_spec` artifacts with explicit applicability and short
+  content. Global `tool_spec` artifacts also require explicit non-applicability.
+  Broader global artifacts are written as inactive candidates for human review.
+- Automatic promotion is gated by deterministic harness eval. Projects may provide
+  `.catui/evolution/eval-manifest.json` plus declarative
+  `.catui/evolution/eval-fixtures.json`; when absent, the built-in corpus is used.
+  Passing gate reports are persisted on revisions; failed gates leave candidates
+  inactive with failure evidence.
+- Harness eval supports AgentStream-style stream manifests: `isolated`,
+  `sequential`, and `interleaved` streams. Isolated stream cases get independent
+  workspaces, while sequential/interleaved streams share a deterministic stream
+  workspace so evolution can be evaluated under task-flow contamination pressure.
+- Evolution gate reports preserve stream summaries (`id`, `mode`, pass/fail, and
+  metrics), so promoted revisions and failed candidates retain evidence about
+  which task-flow setting validated or rejected the change.
+- The model-facing refine tool can propose workspace `eval_fixture` artifacts from
+  validated local run trace JSONL files. `tracePath: "latest"` resolves to the
+  newest `.jsonl` file under workspace `.catui/traces/`. These fixtures are
+  inactive until promoted, then participate in future automatic promotion gates.
+- The refine tool can also sweep recent workspace `.catui/traces/*.jsonl` files
+  into multiple inactive `eval_fixture` candidates in one call. Sweep output is
+  deduplicated by fixture content and never auto-promoted by the sweep itself.
+- Duplicate `eval_fixture` content is rejected per scope across proposed/promoted
+  candidates and revisions so repeated traces do not accumulate indefinitely.
+- Active `eval_fixture` participation is bounded by pointer: the newest three
+  promoted fixture artifacts remain active for future gates, older fixture ids are
+  archived without deleting immutable revision records.
+- Structured `turn_end` `catui_evolution` output may also propose workspace
+  `eval_fixture` candidates from `tracePath: "latest"`. Requested auto-promotion
+  is allowed only after the current harness gate passes and the candidate fixture
+  itself replays without divergence.
 
 ## Acceptance
 
-- No candidate or quarantine path is injectable or returned from resource discovery.
-- No v1 schema represents executable code, commands, package installation, network endpoints, MCP servers, or permission elevation.
-- Promotion rejects stale baselines and atomically swaps only a complete, hash-verified revision.
-- Global promotion always requires explicit human approval.
-- Reload failure restores the previous pointer.
-- Disabled/manual mode causes no automatic LLM calls.
-- Evolution failure cannot break a normal Catui session.
-
-## Findings
-
-| Finding | Decision | Status |
-|---|---|---|
-| [SE01](./findings/SE01-trust-boundary.md) | Extension-owned declarative trust boundary | accepted |
-| [SE02](./findings/SE02-persistence-and-concurrency.md) | Immutable revisions plus optimistic atomic pointer | accepted |
-
-## Deferred Boundary
-
-Executable artifacts, unattended global promotion, cross-device synchronization, destructive pruning, and model-weight training require separate reviews.
+- Candidate writes are inactive until promotion.
+- Promotion writes an immutable revision and atomically updates `current.json`.
+- Promotion preserves candidate predictions on the immutable revision so later
+  outcome attribution can verify or falsify the edit contract.
+- Attribution records preserve later gate evidence and expose a revision-level
+  summary for inspection without changing active pointers.
+- Rollback only moves `current.json` to an existing revision.
+- Auto-rollback has the same pointer-only semantics and is limited to the active
+  revision with a predecessor.
+- Invalid active revisions are quarantined into an auditable ledger record and
+  removed from active prompt/tool consumption.
+- Prompt injection includes only active `prompt_note` and `memory` artifacts.
+- `evolved_tool` lists/invokes only promoted declarative `tool_spec` records,
+  validates declared inputs, returns structured non-executable plans, and never
+  executes generated code.
+- Bounded global `tool_spec` artifacts can be promoted automatically only after
+  validation and deterministic gate success, then become reusable through
+  `evolved_tool`.
+- Tests cover storage confinement, executable-content rejection, promotion,
+  rollback, model-created artifacts, structured turn-end proposals, eval-gated
+  promotion, project eval corpora, trace-derived and turn-end eval fixtures,
+  bounded trace sweeps, stream eval scenarios, stream-aware gate evidence,
+  prediction manifest persistence, post-hoc prediction
+  attribution, conservative auto-rollback, global auto-promotion bounds, fixture
+  dedupe, fixture active retention, and extension
+  registration/injection.

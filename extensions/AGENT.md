@@ -251,6 +251,38 @@ Extensions that must be explicitly enabled.
 
 Optional extensions are not returned by `getBuiltinExtensionPaths()`; load them through explicit extension configuration or CLI extension paths.
 
+#### evolution/ — Controlled Self-Evolution
+
+**P3 Contract:**
+`index.ts`: - [WHO]: Extension with /refine command, evolution_refine, evolved_tool, before_agent_start prompt injection, and turn_end observation
+    - [FROM]: core/extensions-host/types and local evolution helpers
+    - [HERE]: evolution extension entry
+
+`evolution-store.ts`: Scoped global/workspace/session candidate ledger, immutable revision store, current pointer, active eval fixture pointer, prediction manifests, post-hoc attribution records, conservative auto-rollback, validation, bounded global auto-promotion, quarantine, and rollback
+
+`evolution-fixture.ts`: Non-executable trace path discovery/resolution and `eval_fixture` content construction from validated workspace run trace JSONL
+
+`evolution-refiner.ts`: LLM proposal prompt, prediction normalization, and JSON normalization for untrusted model output
+
+`evolution-refine-tool.ts`: Model-callable non-executable artifact creation; session/workspace auto-promotion; low-risk global prompt_note/memory and bounded tool_spec auto-promotion; single-trace and bounded trace-sweep eval_fixture proposal
+
+`evolution-gate.ts`: Deterministic harness eval gate using project JSON corpora, active evolved eval_fixture artifacts, or built-in fixtures; preserves stream summaries on gate reports
+
+`evolution-tool.ts`: Promoted declarative tool_spec reuse through evolved_tool; validates declared inputs and returns structured non-executable plans without executing generated code
+
+`evolution-auto.ts`: Deterministic `turn_end` auto-observer for explicit reusable-lesson candidates and structured `catui_evolution` JSON proposals with scope gates
+
+`evolution-format.ts`: Human-readable status/inspection/result text, prediction/attribution summaries, and prompt append formatting
+
+`evolution-types.ts`: Local evolution contracts for artifacts, predictions, attributions, stream-aware gate reports, candidates, revisions, current pointers, active fixture pointers, and quarantines; kept out of protocol until external consumers exist
+
+**Design Principle:**
+- Self-evolution is opt-in extension behavior, not core runtime behavior.
+- Generated artifacts are untrusted data. Prompt notes, memories, bounded tool specs, and eval fixtures can evolve under deterministic gates; tool specs may define input contracts and ordered reuse steps, but executable code, package installs, endpoints, permission changes, and runtime tool creation remain approval-gated or rejected.
+- Candidate predictions are falsifiable decision-observability records copied onto promoted revisions; post-hoc attribution records compare later gate metrics with prediction targets without mutating immutable revision manifests.
+- Conservative auto-rollback can move `current.json` from the current falsified revision to its predecessor; it never deletes revisions, never rolls back non-current revisions, and does nothing when no predecessor exists.
+- Active eval fixtures are bounded by pointer: newest fixtures stay active, older fixtures are archived without deleting immutable revisions.
+
 #### simplify/ — Simplification Extension
 
 **P3 Contract:**

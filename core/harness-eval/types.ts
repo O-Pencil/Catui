@@ -1,5 +1,5 @@
 /**
- * [WHO]: Harness eval manifests, fixtures, contexts, metrics, and reports
+ * [WHO]: Harness eval manifests, stream scenarios, fixtures, contexts, metrics, and reports
  * [FROM]: Depends on agent-core framework and trace types
  * [TO]: Consumed by the eval runner, built-in corpus, CLI, and tests
  * [HERE]: core/harness-eval/types.ts - deterministic eval contracts
@@ -19,15 +19,27 @@ export interface HarnessEvalScenarioManifest {
 	frameworks?: "both" | readonly AgentLoopFramework[];
 }
 
+export type HarnessEvalStreamMode = "isolated" | "sequential" | "interleaved";
+
+export interface HarnessEvalStreamManifest {
+	id: string;
+	mode: HarnessEvalStreamMode;
+	scenarios: readonly string[];
+}
+
 export interface HarnessEvalManifest {
 	version: 1;
 	thresholds: HarnessEvalThresholds;
 	scenarios: readonly HarnessEvalScenarioManifest[];
+	streams?: readonly HarnessEvalStreamManifest[];
 }
 
 export interface HarnessEvalContext {
 	scenarioId: string;
 	framework: AgentLoopFramework;
+	streamId?: string;
+	streamMode?: HarnessEvalStreamMode;
+	streamPosition?: number;
 	workspace: string;
 	networkEnabled: false;
 	now(): number;
@@ -46,11 +58,22 @@ export type HarnessEvalFixture = (context: HarnessEvalContext) => Promise<Harnes
 export interface HarnessEvalResult {
 	scenarioId: string;
 	framework: AgentLoopFramework;
+	streamId?: string;
+	streamMode?: HarnessEvalStreamMode;
+	streamPosition?: number;
 	passed: boolean;
 	failure?: string;
 	divergence?: ReplayDivergence;
 	policyViolations: number;
 	unpairedToolCalls: number;
+}
+
+export interface HarnessEvalStreamReport {
+	id: string;
+	mode: HarnessEvalStreamMode;
+	results: HarnessEvalResult[];
+	metrics: HarnessEvalReport["metrics"];
+	passed: boolean;
 }
 
 export interface HarnessEvalReport {
@@ -63,4 +86,5 @@ export interface HarnessEvalReport {
 		unpairedToolCalls: number;
 	};
 	results: HarnessEvalResult[];
+	streams?: HarnessEvalStreamReport[];
 }

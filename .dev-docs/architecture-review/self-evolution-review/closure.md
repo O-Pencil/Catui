@@ -1,13 +1,42 @@
-# Self-Evolution Review Closure
+# Self Evolution Review Closure
 
-**Status:** closed — S0–S6 controlled declarative evolution implemented
+status: implemented controlled autonomous slice
 
-SE01 now has regression evidence for declarative-only validation, candidate inactivity, promoted-only prompt loading, and promoted-only skill discovery. SE02 has regression evidence for private immutable writes, write-once evidence, optimistic baselines, atomic pointers, append-only history, integrity checks, and rollback.
+## Implemented
 
-Independent review findings closed so far: descendant symlink rejection; bearer/basic/provider/AWS/JSON/PEM credential redaction; pointer restoration on history failure; fail-closed activation locking; reload rollback to an inactive baseline; explicit lower-scope override semantics; normalized skill-name collision rejection; and immutable rejection decisions.
+- Added `extensions/optional/evolution/` as the owner for controlled self-evolution.
+- Added `/refine` manual proposal, status, inspect, promote/approve, reject, and rollback commands.
+- Added `<agentDir>/evolution/v1/` scoped stores for global, workspace, and session evolution.
+- Added static validation that rejects unnamespaced, oversized, executable, package, command, server, and credential-like artifacts.
+- Added immutable revisions, `current.json` activation, append-only history, and pointer-only rollback.
+- Added prediction manifests so candidates can declare falsifiable metric/direction/target expectations, and promoted revisions preserve those predictions for later attribution.
+- Added post-hoc attribution records so later gate metrics classify revision predictions as kept, falsified, or inconclusive without mutating immutable revision manifests.
+- Added conservative auto-rollback so falsified attribution on the current revision can move `current.json` back to its predecessor without deleting revisions or touching non-current revisions.
+- Added quarantine records for invalid active revisions so corrupted or tampered artifacts stop injecting and remain auditable.
+- Added `before_agent_start` injection for promoted `prompt_note` and `memory` artifacts only.
+- Added `evolution_refine` so the model can create declarative artifacts and auto-promote scoped artifacts without installing code.
+- Added `evolved_tool` so promoted declarative `tool_spec` artifacts become reusable model-callable procedures without executable code; structured metadata can declare required inputs, ordered steps, and existing tool names, and invocation returns a non-executable plan.
+- Added deterministic `turn_end` observation for explicit reusable lessons and structured `catui_evolution` JSON proposals.
+- Added deterministic harness eval gating for automatic promotion; projects can provide declarative JSON corpora under `.catui/evolution/`, passing revisions persist gate reports, and failed gates leave candidates inactive with evidence.
+- Added AgentStream-style harness stream scenarios (`isolated`, `sequential`, `interleaved`) so future gates can evaluate task-flow reliability beyond independent single-task fixtures.
+- Added stream summaries to evolution gate reports so revisions and failed candidates preserve which stream mode produced the gate evidence.
+- Added trace-derived `eval_fixture` proposal from validated local run trace JSONL files, including `tracePath: "latest"` discovery under workspace `.catui/traces/`; model tool proposals stay inactive, structured turn-end proposals may auto-promote only after current gate plus candidate fixture replay, and promoted fixtures join future automatic promotion gates without executing project code.
+- Added bounded workspace trace sweep proposal so the model can mine recent `.catui/traces/*.jsonl` files into inactive `eval_fixture` candidates in one call; duplicate fixture content is skipped without failing the sweep.
+- Added per-scope `eval_fixture` content-hash dedupe across proposed/promoted candidates and revisions.
+- Added active `eval_fixture` retention: the newest three promoted fixture artifacts remain active for future gates, older fixture ids are archived by pointer while immutable revisions remain intact.
+- Added bounded global auto-promotion for low-risk `prompt_note`, `memory`, and declarative `tool_spec` artifacts with explicit applicability; global `tool_spec` artifacts also require explicit non-applicability; broader global artifacts remain inactive candidates.
+- Added focused tests for store safety, active revision quarantine, extension prompt consumption, prediction manifest persistence, post-hoc prediction attribution, conservative auto-rollback, model-created artifacts, eval-gated promotion, project eval corpora, stream eval scenarios, stream-aware gate evidence, trace-derived and turn-end eval fixtures, bounded trace sweeps, fixture dedupe, structured auto-observation, evolved tool reuse with input validation and structured plans, and global promotion bounds.
 
-The runtime exposes three narrow read-only extension capabilities: the latest completed semantic Run Trace snapshot, deterministic replay, and the isolated built-in Harness Eval corpus. `/refine verify` persists those real safety results; `/refine approve` and `/refine reject` persist one-time human decisions. Model-authored candidate comparison is advisory only. Guarded authority is a deterministic negative-applicability refinement proof: unchanged active content/contracts plus an exact user-authored exclusion directive that cannot overlap applicability, never a self-reported score. Promotion composes the override with every untouched champion artifact.
+## Deferred
 
-S4 consumes only applicable promoted prompt/memory/preferences plus planning-only subagent and tool specifications, under one aggregate injection budget and without changing registries or permissions. S5 adds idle-bound shadow scheduling, cooldown, deduplication, conservative daily budget reservations, cancellation on new work/shutdown, and final mode authorization under lock. S6 permits explicitly selected session/workspace guarded promotion only for the deterministic refinement class above; skill manifests, new behavior, content edits, and global scope remain manual-only. Transactional reload failures restore the prior activation pointer; corrupt pointers recover from fully verified history and materialized skills are integrity checked.
+- Richer fixture aging/compaction policies beyond active pointer retention and duplicate suppression.
+- Stream-aware rollback thresholds based on repeated falsified attributions across isolated/sequential/interleaved stream outcomes.
+- Richer project eval fixture formats beyond declarative recorded/observed trace JSON.
+- Executable generated skills, tools, extensions, or source patches.
+- Unattended global promotion for `skill_manifest`, `subagent_spec`, executable artifacts, permission changes, network endpoints, package installs, or source patches.
 
-Deferred beyond this safe first release: executable artifact generation, automatic skill/resource reload, unattended workspace/global activation, model-weight changes, cross-device synchronization, and destructive history pruning.
+## Reopen Conditions
+
+- The extension needs new host capabilities beyond `ExtensionContext`.
+- Any generated artifact becomes executable.
+- Evolution becomes default-enabled.

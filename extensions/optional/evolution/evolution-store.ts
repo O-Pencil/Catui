@@ -1,0 +1,727 @@
+/**
+ * [WHO]: Evolution ledger path resolution, validation, prediction manifests, post-hoc attribution, eval_fixture dedupe/retention, gated promotion, quarantine, rollback, and conservative auto-rollback
+ * [FROM]: Depends on node fs/path/crypto for owner-only runtime state below agentDir/evolution/v1
+ * [TO]: Consumed by optional evolution extension command handlers and tests
+ * [HERE]: extensions/optional/evolution/evolution-store.ts - durable store for controlled self-evolution
+ */
+
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync, appendFileSync } from "node:fs";
+import { basename, join, relative, resolve } from "node:path";
+import type {
+	EvolutionArtifact,
+	EvolutionArtifactKind,
+	EvolutionAttribution,
+	EvolutionCandidate,
+	EvolutionCandidateInput,
+	EvolutionActiveFixtures,
+	EvolutionCurrent,
+	EvolutionGateReport,
+	EvolutionInspection,
+	EvolutionQuarantine,
+	EvolutionRevision,
+	EvolutionScopeSelector,
+	EvolutionValidationReport,
+	EvolutionPrediction,
+	EvolutionPredictionAttribution,
+} from "./evolution-types.js";
+
+const EVOLUTION_SCHEMA_VERSION = 1;
+const MAX_ARTIFACTS_PER_CANDIDATE = 12;
+const MAX_PREDICTIONS_PER_CANDIDATE = 8;
+const MAX_CONTENT_CHARS = 4000;
+const MAX_GLOBAL_AUTO_PROMOTE_CONTENT_CHARS = 800;
+const MAX_TITLE_CHARS = 160;
+const MAX_ACTIVE_EVAL_FIXTURES = 3;
+const SAFE_FILE_MODE = 0o600;
+
+const ARTIFACT_KINDS: readonly EvolutionArtifactKind[] = [
+	"prompt_note",
+	"memory",
+	"skill_manifest",
+	"subagent_spec",
+	"tool_spec",
+	"eval_fixture",
+];
+
+const PREDICTION_DIRECTIONS = new Set(["increase", "decrease", "stay_at_or_above", "stay_at_or_below", "no_regression"]);
+
+const EXECUTABLE_PATTERNS: readonly RegExp[] = [
+	/\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|cargo|go|python|python3|node|npx|bash|sh|zsh)\s+(?:i|install|add|run|exec|-c|x)\b/i,
+	/\b(?:brew|apt|apt-get|apk|dnf|yum|pacman)\s+(?:install|add)\b/i,
+	/\b(?:docker|podman)\s+(?:run|compose|build|pull)\b/i,
+	/\bgit\s+(?:clone|pull|push|apply|merge|reset)\b/i,
+	/\b(?:curl|wget)\b.*\|\s*(?:sh|bash|zsh|python|node)\b/i,
+	/\b(?:sudo|chmod|chown|rm\s+-rf|dd\s+if=|mkfs|launchctl|osascript)\b/i,
+	/(?:^|\s)\.\/[A-Za-z0-9._/-]+/,
+	/\b(?:api[_-]?key|secret|token|credential|password|authorization)\b\s*[:=]/i,
+	/\bAuthorization\s*:\s*Bearer\b/i,
+	/\bsk-[A-Za-z0-9_-]{16,}\b/,
+	/\bhttps?:\/\/[^\s)]+/i,
+	/\bmcpServers\b|\bserverCommand\b|\bpackage\.json\b|\bserver\s+(?:endpoint|url|command)\b/i,
+];
+
+export interface EvolutionClockOptions {
+	now?: () => string;
+	id?: () => string;
+}
+
+export interface EvolutionPromotionOptions extends EvolutionClockOptions {
+	approvedBy?: string;
+	gateReport?: EvolutionGateReport;
+}
+
+export interface EvolutionRejectOptions extends EvolutionClockOptions {
+	rejectedBy?: string;
+}
+
+export interface EvolutionRollbackOptions extends EvolutionClockOptions {
+	requestedBy?: string;
+}
+
+export interface EvolutionGateFailureOptions extends EvolutionClockOptions {
+	gateReport: EvolutionGateReport;
+}
+
+export interface EvolutionAttributionOptions extends EvolutionClockOptions {
+	gateReport: EvolutionGateReport;
+	attributedBy?: string;
+}
+
+export interface EvolutionAutoRollbackOptions extends EvolutionAttributionOptions {
+	rollbackBy?: string;
+}
+
+function now(options?: EvolutionClockOptions): string {
+	return options?.now?.() ?? new Date().toISOString();
+}
+
+function nextId(prefix: string, options?: EvolutionClockOptions): string {
+	return options?.id?.() ?? `${prefix}-${randomUUID()}`;
+}
+
+function sha256(value: string): string {
+	return createHash("sha256").update(value).digest("hex");
+}
+
+function safeSegment(value: string): string {
+	return value.trim().replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120) || "unknown";
+}
+
+function assertInside(root: string, target: string): void {
+	const resolvedRoot = resolve(root);
+	const resolvedTarget = resolve(target);
+	const rel = relative(resolvedRoot, resolvedTarget);
+	if (rel.startsWith("..") || rel === "" || resolve(resolvedRoot, rel) !== resolvedTarget) {
+		throw new Error(`Evolution path escapes scope root: ${target}`);
+	}
+}
+
+export function getEvolutionScopeRoot(agentDir: string, selector: EvolutionScopeSelector): string {
+	const base = join(agentDir, "evolution", "v1");
+	if (selector.scope === "global") return join(base, "global");
+	if (selector.scope === "workspace") {
+		if (!selector.cwd) throw new Error("Workspace evolution requires cwd.");
+		return join(base, "workspaces", sha256(resolve(selector.cwd)).slice(0, 24));
+	}
+	if (!selector.sessionId) throw new Error("Session evolution requires sessionId.");
+	return join(base, "sessions", safeSegment(selector.sessionId));
+}
+
+function writeJsonAtomic(filePath: string, value: unknown, options: { overwrite?: boolean } = {}): void {
+	if (!options.overwrite && existsSync(filePath)) throw new Error(`Evolution record already exists: ${filePath}`);
+	const dir = resolve(filePath, "..");
+	mkdirSync(dir, { recursive: true, mode: 0o700 });
+	const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+	try {
+		writeFileSync(tempPath, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: SAFE_FILE_MODE });
+		renameSync(tempPath, filePath);
+	} finally {
+		if (existsSync(tempPath)) unlinkSync(tempPath);
+	}
+}
+
+function readJson<T>(filePath: string): T | undefined {
+	if (!existsSync(filePath)) return undefined;
+	const stats = statSync(filePath);
+	if (!stats.isFile()) throw new Error(`Evolution path is not a file: ${filePath}`);
+	return JSON.parse(readFileSync(filePath, "utf8")) as T;
+}
+
+function appendHistory(scopeRoot: string, event: Record<string, unknown>): void {
+	mkdirSync(scopeRoot, { recursive: true, mode: 0o700 });
+	appendFileSync(join(scopeRoot, "history.jsonl"), `${JSON.stringify(event)}\n`, { encoding: "utf8", mode: SAFE_FILE_MODE });
+}
+
+function candidatePath(scopeRoot: string, candidateId: string): string {
+	const path = join(scopeRoot, "candidates", safeSegment(candidateId), "proposal.json");
+	assertInside(scopeRoot, path);
+	return path;
+}
+
+function revisionPath(scopeRoot: string, revisionId: string): string {
+	const path = join(scopeRoot, "revisions", safeSegment(revisionId), "manifest.json");
+	assertInside(scopeRoot, path);
+	return path;
+}
+
+function attributionPath(scopeRoot: string, revisionId: string, attributionId: string): string {
+	const path = join(scopeRoot, "revisions", safeSegment(revisionId), "attributions", safeSegment(attributionId), "record.json");
+	assertInside(scopeRoot, path);
+	return path;
+}
+
+function currentPath(scopeRoot: string): string {
+	return join(scopeRoot, "current.json");
+}
+
+function activeFixturesPath(scopeRoot: string): string {
+	return join(scopeRoot, "active-fixtures.json");
+}
+
+function quarantinePath(scopeRoot: string, quarantineId: string): string {
+	const path = join(scopeRoot, "quarantines", safeSegment(quarantineId), "record.json");
+	assertInside(scopeRoot, path);
+	return path;
+}
+
+function loadActiveFixtures(scopeRoot: string): EvolutionActiveFixtures | undefined {
+	const active = readJson<EvolutionActiveFixtures>(activeFixturesPath(scopeRoot));
+	if (!active || active.schemaVersion !== EVOLUTION_SCHEMA_VERSION) return undefined;
+	return active;
+}
+
+function hasExecutableContent(artifact: EvolutionArtifact): boolean {
+	const text = [
+		artifact.title,
+		artifact.content,
+		artifact.applicability,
+		artifact.nonApplicability,
+		JSON.stringify(artifact.metadata ?? {}),
+	].join("\n");
+	return EXECUTABLE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function validateArtifact(artifact: EvolutionArtifact, seen: Set<string>): string[] {
+	const errors: string[] = [];
+	if (!ARTIFACT_KINDS.includes(artifact.kind)) errors.push(`unsupported artifact kind: ${String(artifact.kind)}`);
+	if (typeof artifact.id !== "string" || !artifact.id.startsWith(`evolved:${artifact.kind}:`)) {
+		errors.push(`artifact id must start with evolved:${artifact.kind}:`);
+	}
+	if (seen.has(artifact.id)) errors.push(`duplicate artifact id: ${artifact.id}`);
+	seen.add(artifact.id);
+	if (!artifact.title?.trim() || artifact.title.length > MAX_TITLE_CHARS) errors.push(`artifact ${artifact.id} title is invalid`);
+	const maxContentChars = artifact.kind === "eval_fixture" ? 128 * 1024 : MAX_CONTENT_CHARS;
+	if (!artifact.content?.trim() || artifact.content.length > maxContentChars) {
+		errors.push(`artifact ${artifact.id} content is invalid`);
+	}
+	if (artifact.tokenBudget !== undefined && (!Number.isInteger(artifact.tokenBudget) || artifact.tokenBudget < 1 || artifact.tokenBudget > 1200)) {
+		errors.push(`artifact ${artifact.id} tokenBudget is invalid`);
+	}
+	if (hasExecutableContent(artifact)) {
+		errors.push(`artifact ${artifact.id} contains executable command, package, credential, or server content`);
+	}
+	return errors;
+}
+
+function validatePredictions(input: EvolutionCandidateInput): string[] {
+	const errors: string[] = [];
+	if (input.predictions === undefined) return errors;
+	if (!Array.isArray(input.predictions)) return ["predictions must be an array"];
+	if (input.predictions.length > MAX_PREDICTIONS_PER_CANDIDATE) errors.push("too many predictions in one candidate");
+	const seen = new Set<string>();
+	for (const prediction of input.predictions) {
+		if (!prediction.id?.trim() || prediction.id.length > 120) errors.push("prediction id is invalid");
+		if (seen.has(prediction.id)) errors.push(`duplicate prediction id: ${prediction.id}`);
+		seen.add(prediction.id);
+		if (!prediction.metric?.trim() || prediction.metric.length > 160) errors.push(`prediction ${prediction.id} metric is invalid`);
+		if (!PREDICTION_DIRECTIONS.has(prediction.direction)) errors.push(`prediction ${prediction.id} direction is invalid`);
+		if (!prediction.target?.trim() || prediction.target.length > 160) errors.push(`prediction ${prediction.id} target is invalid`);
+		if (!prediction.rationale?.trim() || prediction.rationale.length > 1000) errors.push(`prediction ${prediction.id} rationale is invalid`);
+	}
+	return errors;
+}
+
+export function validateEvolutionCandidateInput(
+	input: EvolutionCandidateInput,
+	options?: EvolutionClockOptions,
+): EvolutionValidationReport {
+	const errors: string[] = [];
+	const warnings: string[] = [];
+	if (!["session", "workspace", "global"].includes(input.scope)) errors.push(`unsupported scope: ${String(input.scope)}`);
+	if (!input.summary?.trim()) errors.push("summary is required");
+	if (!input.rationale?.trim()) errors.push("rationale is required");
+	if (!input.expectedOutcome?.trim()) warnings.push("expectedOutcome is empty");
+	if (!Array.isArray(input.artifacts) || input.artifacts.length === 0) errors.push("at least one artifact is required");
+	if (input.artifacts.length > MAX_ARTIFACTS_PER_CANDIDATE) errors.push("too many artifacts in one candidate");
+	const seen = new Set<string>();
+	for (const artifact of input.artifacts ?? []) errors.push(...validateArtifact(artifact, seen));
+	errors.push(...validatePredictions(input));
+	return { passed: errors.length === 0, errors, warnings, validatedAt: now(options) };
+}
+
+export function canAutoPromoteGlobalEvolution(input: EvolutionCandidateInput): { allowed: boolean; reason?: string } {
+	const validation = validateEvolutionCandidateInput(input);
+	if (!validation.passed) return { allowed: false, reason: validation.errors.join("; ") };
+	if (input.scope !== "global") return { allowed: true };
+	for (const artifact of input.artifacts) {
+		if (artifact.kind !== "memory" && artifact.kind !== "prompt_note" && artifact.kind !== "tool_spec") {
+			return { allowed: false, reason: `global auto-promotion only allows memory, prompt_note, and bounded tool_spec artifacts, got ${artifact.kind}` };
+		}
+		if (!artifact.applicability?.trim()) {
+			return { allowed: false, reason: "global auto-promotion requires explicit applicability" };
+		}
+		if (artifact.kind === "tool_spec" && !artifact.nonApplicability?.trim()) {
+			return { allowed: false, reason: "global tool_spec auto-promotion requires explicit non-applicability" };
+		}
+		if (artifact.content.length > MAX_GLOBAL_AUTO_PROMOTE_CONTENT_CHARS) {
+			return { allowed: false, reason: `global auto-promotion content exceeds ${MAX_GLOBAL_AUTO_PROMOTE_CONTENT_CHARS} characters` };
+		}
+		if (artifact.metadata && Object.keys(artifact.metadata).length > 0) {
+			return { allowed: false, reason: "global auto-promotion does not allow metadata" };
+		}
+	}
+	return { allowed: true };
+}
+
+function assertValidInput(input: EvolutionCandidateInput, options?: EvolutionClockOptions): EvolutionValidationReport {
+	const validation = validateEvolutionCandidateInput(input, options);
+	if (!validation.passed) throw new Error(`Invalid evolution candidate: ${validation.errors.join("; ")}`);
+	return validation;
+}
+
+function evalFixtureContentHashes(artifacts: readonly EvolutionArtifact[]): string[] {
+	return artifacts
+		.filter((artifact) => artifact.kind === "eval_fixture")
+		.map((artifact) => sha256(artifact.content));
+}
+
+function evalFixtureArtifactIds(artifacts: readonly EvolutionArtifact[]): string[] {
+	return artifacts.filter((artifact) => artifact.kind === "eval_fixture").map((artifact) => artifact.id);
+}
+
+function updateActiveFixtures(scopeRoot: string, promoted: EvolutionRevision): void {
+	const newIds = evalFixtureArtifactIds(promoted.artifacts);
+	if (newIds.length === 0) return;
+	const previous = loadActiveFixtures(scopeRoot);
+	const allActive = [...(previous?.activeArtifactIds ?? []), ...newIds].filter((id, index, values) => values.indexOf(id) === index);
+	const activeArtifactIds = allActive.slice(-MAX_ACTIVE_EVAL_FIXTURES);
+	const archivedArtifactIds = [...(previous?.archivedArtifactIds ?? []), ...allActive.slice(0, Math.max(0, allActive.length - MAX_ACTIVE_EVAL_FIXTURES))]
+		.filter((id, index, values) => values.indexOf(id) === index && !activeArtifactIds.includes(id));
+	const pointer: EvolutionActiveFixtures = {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		activeArtifactIds,
+		archivedArtifactIds,
+		updatedAt: promoted.createdAt,
+		updatedBy: promoted.approvedBy,
+	};
+	writeJsonAtomic(activeFixturesPath(scopeRoot), pointer, { overwrite: true });
+	appendHistory(scopeRoot, {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		event: "active_fixtures_updated",
+		activeArtifactIds,
+		archivedArtifactIds,
+		at: pointer.updatedAt,
+		updatedBy: pointer.updatedBy,
+	});
+}
+
+function assertNoDuplicateEvalFixture(scopeRoot: string, input: EvolutionCandidateInput): void {
+	const incoming = new Set(evalFixtureContentHashes(input.artifacts));
+	if (incoming.size === 0) return;
+	const candidates = listJsonRecords<EvolutionCandidate>(join(scopeRoot, "candidates"), "proposal.json");
+	for (const candidate of candidates) {
+		if (candidate.status !== "proposed" && candidate.status !== "promoted") continue;
+		for (const hash of evalFixtureContentHashes(candidate.artifacts)) {
+			if (incoming.has(hash)) throw new Error(`Duplicate eval_fixture content already exists in candidate ${candidate.id}`);
+		}
+	}
+	const revisions = listJsonRecords<EvolutionRevision>(join(scopeRoot, "revisions"), "manifest.json");
+	for (const revision of revisions) {
+		for (const hash of evalFixtureContentHashes(revision.artifacts)) {
+			if (incoming.has(hash)) throw new Error(`Duplicate eval_fixture content already exists in revision ${revision.id}`);
+		}
+	}
+}
+
+export function createEvolutionCandidate(
+	scopeRoot: string,
+	input: EvolutionCandidateInput,
+	options?: EvolutionClockOptions,
+): EvolutionCandidate {
+	const validation = assertValidInput(input, options);
+	assertNoDuplicateEvalFixture(scopeRoot, input);
+	const id = nextId("candidate", options);
+	const createdAt = now(options);
+	const candidate: EvolutionCandidate = {
+		...input,
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		id,
+		status: "proposed",
+		createdAt,
+		updatedAt: createdAt,
+		validation,
+	};
+	writeJsonAtomic(candidatePath(scopeRoot, id), candidate);
+	appendHistory(scopeRoot, { schemaVersion: EVOLUTION_SCHEMA_VERSION, event: "candidate_created", candidateId: id, at: createdAt });
+	return candidate;
+}
+
+export function recordEvolutionGateFailure(
+	scopeRoot: string,
+	candidateId: string,
+	options: EvolutionGateFailureOptions,
+): EvolutionCandidate {
+	const candidate = loadCandidate(scopeRoot, candidateId);
+	if (candidate.status !== "proposed") throw new Error(`Evolution gate failure can only be recorded for proposed candidates: ${candidateId}`);
+	const updatedAt = now(options);
+	const updated: EvolutionCandidate = {
+		...candidate,
+		updatedAt,
+		evidence: {
+			...(candidate.evidence ?? {}),
+			gateReport: options.gateReport,
+		},
+	};
+	writeJsonAtomic(candidatePath(scopeRoot, candidateId), updated, { overwrite: true });
+	appendHistory(scopeRoot, {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		event: "auto_promotion_gate_failed",
+		candidateId,
+		gate: options.gateReport.name,
+		failure: options.gateReport.failure,
+		metrics: options.gateReport.metrics,
+		at: updatedAt,
+	});
+	return updated;
+}
+
+function loadCandidate(scopeRoot: string, candidateId: string): EvolutionCandidate {
+	const candidate = readJson<EvolutionCandidate>(candidatePath(scopeRoot, candidateId));
+	if (!candidate) throw new Error(`Evolution candidate not found: ${candidateId}`);
+	if (candidate.schemaVersion !== EVOLUTION_SCHEMA_VERSION) throw new Error(`Unsupported evolution candidate schema: ${candidate.schemaVersion}`);
+	return candidate;
+}
+
+function loadRevision(scopeRoot: string, revisionId: string): EvolutionRevision {
+	const revision = readJson<EvolutionRevision>(revisionPath(scopeRoot, revisionId));
+	if (!revision) throw new Error(`Evolution revision not found: ${revisionId}`);
+	if (revision.schemaVersion !== EVOLUTION_SCHEMA_VERSION) throw new Error(`Unsupported evolution revision schema: ${revision.schemaVersion}`);
+	const validation = validateEvolutionCandidateInput(revision);
+	if (!validation.passed) throw new Error(`Evolution revision failed validation: ${validation.errors.join("; ")}`);
+	const expectedHash = `sha256:${sha256(JSON.stringify(revision.artifacts))}`;
+	if (revision.contentHash !== expectedHash) throw new Error(`Evolution revision content hash mismatch: ${revisionId}`);
+	return revision;
+}
+
+function quarantineActiveRevision(scopeRoot: string, current: EvolutionCurrent | undefined, reason: string): void {
+	const revisionId = current?.revisionId;
+	const id = `active-${safeSegment(revisionId ?? "unknown")}-${sha256(reason).slice(0, 12)}`;
+	const path = quarantinePath(scopeRoot, id);
+	if (existsSync(path)) {
+		if (existsSync(currentPath(scopeRoot))) unlinkSync(currentPath(scopeRoot));
+		return;
+	}
+	const quarantinedAt = new Date().toISOString();
+	const record: EvolutionQuarantine = {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		id,
+		...(revisionId ? { revisionId } : {}),
+		reason,
+		quarantinedAt,
+		source: "active_revision",
+	};
+	writeJsonAtomic(path, record);
+	if (existsSync(currentPath(scopeRoot))) unlinkSync(currentPath(scopeRoot));
+	appendHistory(scopeRoot, {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		event: "active_revision_quarantined",
+		quarantineId: id,
+		revisionId,
+		reason,
+		at: quarantinedAt,
+	});
+}
+
+export function loadCurrentEvolution(scopeRoot: string): EvolutionCurrent | undefined {
+	let current: EvolutionCurrent | undefined;
+	try {
+		current = readJson<EvolutionCurrent>(currentPath(scopeRoot));
+		if (!current || current.schemaVersion !== EVOLUTION_SCHEMA_VERSION) return undefined;
+		loadRevision(scopeRoot, current.revisionId);
+		return current;
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		quarantineActiveRevision(scopeRoot, current, reason);
+		return undefined;
+	}
+}
+
+export function promoteEvolutionCandidate(
+	scopeRoot: string,
+	candidateId: string,
+	options?: EvolutionPromotionOptions,
+): EvolutionRevision {
+	const candidate = loadCandidate(scopeRoot, candidateId);
+	if (candidate.status === "rejected") throw new Error(`Evolution candidate is rejected: ${candidateId}`);
+	if (candidate.status === "quarantined") throw new Error(`Evolution candidate is quarantined: ${candidateId}`);
+	if (candidate.status === "promoted") throw new Error(`Evolution candidate is already promoted: ${candidateId}`);
+	const validation = validateEvolutionCandidateInput(candidate, options);
+	if (!validation.passed) throw new Error(`Evolution candidate failed validation: ${validation.errors.join("; ")}`);
+	const current = loadCurrentEvolution(scopeRoot);
+	const revisionId = nextId("revision", options);
+	const createdAt = now(options);
+	const contentHash = `sha256:${sha256(JSON.stringify(candidate.artifacts))}`;
+	const revision: EvolutionRevision = {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		id: revisionId,
+		candidateId: candidate.id,
+		scope: candidate.scope,
+		summary: candidate.summary,
+		rationale: candidate.rationale,
+		expectedOutcome: candidate.expectedOutcome,
+		artifacts: candidate.artifacts,
+		...(candidate.predictions ? { predictions: candidate.predictions } : {}),
+		contentHash,
+		...(options?.gateReport ? { gateReport: options.gateReport } : {}),
+		createdAt,
+		approvedBy: options?.approvedBy ?? "manual",
+		predecessorRevisionId: current?.revisionId,
+	};
+	writeJsonAtomic(revisionPath(scopeRoot, revisionId), revision);
+	const pointer: EvolutionCurrent = {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		revisionId,
+		activatedAt: createdAt,
+		activatedBy: revision.approvedBy,
+	};
+	writeJsonAtomic(currentPath(scopeRoot), pointer, { overwrite: true });
+	const promoted: EvolutionCandidate = {
+		...candidate,
+		status: "promoted",
+		updatedAt: createdAt,
+		promotedRevisionId: revisionId,
+		validation,
+	};
+	writeJsonAtomic(candidatePath(scopeRoot, candidateId), promoted, { overwrite: true });
+	appendHistory(scopeRoot, {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		event: "promoted",
+		candidateId,
+		revisionId,
+		predecessorRevisionId: current?.revisionId,
+		at: createdAt,
+		approvedBy: revision.approvedBy,
+	});
+	updateActiveFixtures(scopeRoot, revision);
+	return revision;
+}
+
+function metricValue(metric: string, report: EvolutionGateReport): number | undefined {
+	if (metric.endsWith("passRate")) return report.metrics.passRate;
+	if (metric.endsWith("replayDivergences")) return report.metrics.replayDivergences;
+	if (metric.endsWith("policyViolations")) return report.metrics.policyViolations;
+	if (metric.endsWith("unpairedToolCalls")) return report.metrics.unpairedToolCalls;
+	return undefined;
+}
+
+function numericTarget(target: string): number | undefined {
+	const match = target.trim().match(/^(?:[<>]=?|=)?\s*(-?\d+(?:\.\d+)?)$/);
+	return match ? Number(match[1]) : undefined;
+}
+
+function attributePrediction(prediction: EvolutionPrediction, report: EvolutionGateReport): EvolutionPredictionAttribution {
+	const observedValue = metricValue(prediction.metric, report);
+	const target = numericTarget(prediction.target);
+	if (observedValue === undefined || target === undefined) {
+		return {
+			predictionId: prediction.id,
+			metric: prediction.metric,
+			status: "inconclusive",
+			target: prediction.target,
+			reason: "Prediction metric or target is not directly comparable with the gate report.",
+		};
+	}
+	const kept =
+		prediction.direction === "increase" || prediction.direction === "stay_at_or_above"
+			? observedValue >= target
+			: prediction.direction === "decrease" || prediction.direction === "stay_at_or_below" || prediction.direction === "no_regression"
+				? observedValue <= target
+				: false;
+	return {
+		predictionId: prediction.id,
+		metric: prediction.metric,
+		status: kept ? "kept" : "falsified",
+		observedValue,
+		target: prediction.target,
+		reason: kept ? "Observed gate metric satisfied the prediction target." : "Observed gate metric violated the prediction target.",
+	};
+}
+
+export function recordEvolutionAttribution(
+	scopeRoot: string,
+	revisionId: string,
+	options: EvolutionAttributionOptions,
+): EvolutionAttribution {
+	const revision = loadRevision(scopeRoot, revisionId);
+	const attributedAt = now(options);
+	const attributionId = nextId("attribution", options);
+	const attribution: EvolutionAttribution = {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		id: attributionId,
+		revisionId,
+		gateReport: options.gateReport,
+		results: (revision.predictions ?? []).map((prediction) => attributePrediction(prediction, options.gateReport)),
+		attributedAt,
+		attributedBy: options.attributedBy ?? "system",
+	};
+	writeJsonAtomic(attributionPath(scopeRoot, revisionId, attributionId), attribution);
+	appendHistory(scopeRoot, {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		event: "prediction_attributed",
+		revisionId,
+		attributionId,
+		kept: attribution.results.filter((result) => result.status === "kept").length,
+		falsified: attribution.results.filter((result) => result.status === "falsified").length,
+		inconclusive: attribution.results.filter((result) => result.status === "inconclusive").length,
+		at: attributedAt,
+		attributedBy: attribution.attributedBy,
+	});
+	return attribution;
+}
+
+export function recordEvolutionAttributionAndMaybeRollback(
+	scopeRoot: string,
+	revisionId: string,
+	options: EvolutionAutoRollbackOptions,
+): { attribution: EvolutionAttribution; rollback?: EvolutionCurrent; reason?: string } {
+	const attribution = recordEvolutionAttribution(scopeRoot, revisionId, options);
+	const falsified = attribution.results.filter((result) => result.status === "falsified").length;
+	if (falsified === 0) return { attribution, reason: "no_falsified_predictions" };
+	const current = loadCurrentEvolution(scopeRoot);
+	if (current?.revisionId !== revisionId) return { attribution, reason: "revision_not_current" };
+	const revision = loadRevision(scopeRoot, revisionId);
+	if (!revision.predecessorRevisionId) return { attribution, reason: "no_predecessor_revision" };
+	const rollback = rollbackEvolution(scopeRoot, revision.predecessorRevisionId, {
+		now: options.now,
+		requestedBy: options.rollbackBy ?? "auto-attribution",
+	});
+	appendHistory(scopeRoot, {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		event: "auto_rolled_back",
+		revisionId,
+		rollbackToRevisionId: rollback.revisionId,
+		attributionId: attribution.id,
+		falsified,
+		at: rollback.activatedAt,
+		rollbackBy: rollback.activatedBy,
+	});
+	return { attribution, rollback };
+}
+
+export function rejectEvolutionCandidate(
+	scopeRoot: string,
+	candidateId: string,
+	reason: string,
+	options?: EvolutionRejectOptions,
+): EvolutionCandidate {
+	const candidate = loadCandidate(scopeRoot, candidateId);
+	if (candidate.status === "promoted") throw new Error(`Cannot reject promoted evolution candidate: ${candidateId}`);
+	const rejectedAt = now(options);
+	const rejected: EvolutionCandidate = {
+		...candidate,
+		status: "rejected",
+		updatedAt: rejectedAt,
+		rejectedAt,
+		rejectedBy: options?.rejectedBy ?? "manual",
+		rejectionReason: reason.trim() || "Rejected",
+	};
+	writeJsonAtomic(candidatePath(scopeRoot, candidateId), rejected, { overwrite: true });
+	appendHistory(scopeRoot, {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		event: "rejected",
+		candidateId,
+		reason: rejected.rejectionReason,
+		at: rejectedAt,
+		rejectedBy: rejected.rejectedBy,
+	});
+	return rejected;
+}
+
+export function rollbackEvolution(
+	scopeRoot: string,
+	revisionId: string,
+	options?: EvolutionRollbackOptions,
+): EvolutionCurrent {
+	loadRevision(scopeRoot, revisionId);
+	const previous = loadCurrentEvolution(scopeRoot);
+	const activatedAt = now(options);
+	const pointer: EvolutionCurrent = {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		revisionId,
+		activatedAt,
+		activatedBy: options?.requestedBy ?? "manual",
+		rollbackOf: previous?.revisionId,
+	};
+	writeJsonAtomic(currentPath(scopeRoot), pointer, { overwrite: true });
+	appendHistory(scopeRoot, {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		event: "rolled_back",
+		revisionId,
+		rollbackOf: previous?.revisionId,
+		at: activatedAt,
+		requestedBy: pointer.activatedBy,
+	});
+	return pointer;
+}
+
+export function loadActiveEvolutionArtifacts(scopeRoot: string): EvolutionArtifact[] {
+	const current = loadCurrentEvolution(scopeRoot);
+	if (!current) return [];
+	return loadRevision(scopeRoot, current.revisionId).artifacts;
+}
+
+export function loadActiveEvalFixtureArtifacts(scopeRoot: string): EvolutionArtifact[] {
+	const active = loadActiveFixtures(scopeRoot);
+	if (!active || active.activeArtifactIds.length === 0) return [];
+	const activeIds = new Set(active.activeArtifactIds);
+	return inspectEvolution(scopeRoot).revisions
+		.flatMap((revision) => revision.artifacts)
+		.filter((artifact) => artifact.kind === "eval_fixture" && activeIds.has(artifact.id));
+}
+
+function listJsonRecords<T>(dir: string, fileName: string): T[] {
+	if (!existsSync(dir)) return [];
+	return readdirSync(dir, { withFileTypes: true })
+		.filter((entry) => entry.isDirectory())
+		.map((entry) => join(dir, basename(entry.name), fileName))
+		.filter((filePath) => existsSync(filePath))
+		.map((filePath) => readJson<T>(filePath))
+		.filter((value): value is T => value !== undefined);
+}
+
+function listAttributions(scopeRoot: string, revisions: readonly EvolutionRevision[]): EvolutionAttribution[] {
+	return revisions
+		.flatMap((revision) => listJsonRecords<EvolutionAttribution>(join(scopeRoot, "revisions", safeSegment(revision.id), "attributions"), "record.json"))
+		.sort((a, b) => a.attributedAt.localeCompare(b.attributedAt));
+}
+
+export function inspectEvolution(scopeRoot: string): EvolutionInspection {
+	const candidates = listJsonRecords<EvolutionCandidate>(join(scopeRoot, "candidates"), "proposal.json").sort((a, b) =>
+		a.createdAt.localeCompare(b.createdAt),
+	);
+	const revisions = listJsonRecords<EvolutionRevision>(join(scopeRoot, "revisions"), "manifest.json").sort((a, b) =>
+		a.createdAt.localeCompare(b.createdAt),
+	);
+	const quarantines = listJsonRecords<EvolutionQuarantine>(join(scopeRoot, "quarantines"), "record.json").sort((a, b) =>
+		a.quarantinedAt.localeCompare(b.quarantinedAt),
+	);
+	const attributions = listAttributions(scopeRoot, revisions);
+	const latestAttributionByRevision = new Map<string, EvolutionAttribution>();
+	for (const attribution of attributions) latestAttributionByRevision.set(attribution.revisionId, attribution);
+	const enrichedRevisions = revisions.map((revision) => {
+		const attribution = latestAttributionByRevision.get(revision.id);
+		return attribution ? { ...revision, attribution } : revision;
+	});
+	return { current: loadCurrentEvolution(scopeRoot), activeFixtures: loadActiveFixtures(scopeRoot), candidates, revisions: enrichedRevisions, attributions, quarantines };
+}
