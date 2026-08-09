@@ -11,7 +11,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { builtInExtensions, getBuiltinExtensionPaths } from "../builtin-extensions.ts";
 import disciplineExtension from "../extensions/builtin/discipline/index.ts";
-import { loadSkillsFromDir } from "../core/skills.ts";
+import skillToolExtension from "../extensions/builtin/skill-tool/index.ts";
 import type {
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
@@ -65,11 +65,21 @@ test("builtin extensions include discipline metadata and load path", () => {
 	);
 });
 
+test("discipline composes with the builtin Skill tool without duplicate registration", async () => {
+	const { api, tools } = createApiHarness();
+	await disciplineExtension(api);
+	skillToolExtension(api);
+
+	const skillTools = tools.filter((tool) => tool.name.toLowerCase() === "skill");
+	assert.equal(skillTools.length, 1, "Expected one owner for the normalized functions.skill tool name.");
+	assert.equal(skillTools[0]?.name, "Skill", "Expected the established Skill tool contract to remain authoritative.");
+});
+
 test("discipline extension discovers bundled skills and injects bootstrap", async () => {
 	const { api, handlers, tools } = createApiHarness();
 	await disciplineExtension(api);
 
-	assert.ok(tools.some((tool) => tool.name === "skill"), "Expected skill tool registration.");
+	assert.equal(tools.length, 0, "Discipline must leave tool ownership to dedicated builtin extensions.");
 
 	const resourceHandler = handlers.get("resources_discover")?.[0];
 	assert.ok(resourceHandler, "Expected resources_discover handler.");
@@ -82,7 +92,7 @@ test("discipline extension discovers bundled skills and injects bootstrap", asyn
 	assert.equal(resources.skillPaths?.length, 1);
 	assert.ok(resources.skillPaths?.[0]?.endsWith(join("discipline", "skills")));
 	assert.ok(existsSync(join(resources.skillPaths![0], "systematic-debugging", "SKILL.md")));
-	assert.ok(existsSync(join(resources.skillPaths![0], "verification-before-completion", "SKILL.md")));
+	assert.ok(existsSync(join(resources.skillPaths![0], "domain-modeling", "SKILL.md")));
 
 	const beforeHandler = handlers.get("before_agent_start")?.[0];
 	assert.ok(beforeHandler, "Expected before_agent_start handler.");
@@ -98,35 +108,7 @@ test("discipline extension discovers bundled skills and injects bootstrap", asyn
 
 	assert.match(result.appendSystemPrompt ?? "", /Catui Engineering Discipline/);
 	assert.match(result.appendSystemPrompt ?? "", /systematic-debugging/);
-	assert.match(result.appendSystemPrompt ?? "", /verification-before-completion/);
 	assert.match(result.appendSystemPrompt ?? "", /Completion claims require fresh verification evidence/);
-});
-
-test("discipline skill tool lists and loads effective skills", async () => {
-	const { api, handlers, tools } = createApiHarness();
-	await disciplineExtension(api);
-
-	const resourceHandler = handlers.get("resources_discover")?.[0];
-	assert.ok(resourceHandler, "Expected resources_discover handler.");
-	const resources = resourceHandler(
-		{ type: "resources_discover", cwd: process.cwd(), reason: "startup" } satisfies ResourcesDiscoverEvent,
-		{} as ExtensionContext,
-	) as ResourcesDiscoverResult;
-	const skills = loadSkillsFromDir({ dir: resources.skillPaths![0], source: "test" }).skills;
-
-	const skillTool = tools.find((tool) => tool.name === "skill");
-	assert.ok(skillTool, "Expected skill tool registration.");
-
-	const ctx = { getSkills: () => skills } as ExtensionContext;
-	const listResult = await skillTool.execute("tool-1", {}, undefined, undefined, ctx);
-	const listText = listResult.content[0]?.type === "text" ? listResult.content[0].text : "";
-	assert.match(listText, /Available skills/);
-	assert.match(listText, /systematic-debugging/);
-
-	const loadResult = await skillTool.execute("tool-2", { name: "systematic-debugging" }, undefined, undefined, ctx);
-	const loadText = loadResult.content[0]?.type === "text" ? loadResult.content[0].text : "";
-	assert.match(loadText, /<skill name="systematic-debugging"/);
-	assert.match(loadText, /No fixes before root-cause investigation/);
 });
 
 type BeforeAgentStartResult = BeforeAgentStartEventResult & {
