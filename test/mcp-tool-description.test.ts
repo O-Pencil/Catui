@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createMCPTool } from "../core/mcp/mcp-adapter.js";
+import { ToolRegistry } from "../core/tools/tool-registry.js";
 import { inferScenariosFromSchema, renderSchemaInferences } from "../core/mcp/mcp-schema-inference.js";
 import {
 	getMcpServerHint,
@@ -111,6 +112,27 @@ describe("createMCPTool: output shape", () => {
 			"guidance should at least mention the server id");
 		assert.ok(tool.description.includes("made-up-server"),
 			"description should at least mention the server id");
+	});
+
+	it("produces registry-valid names for built-in MCP tools with long names", () => {
+		const rawToolNames = [
+			"filesystem/read_multiple_files",
+			"filesystem/list_directory_with_sizes",
+			"filesystem/list_allowed_directories",
+			"sequential-thinking/sequentialthinking",
+		];
+		const registry = new ToolRegistry();
+
+		for (const rawToolName of rawToolNames) {
+			const tool = createMCPTool(fakeClient, {
+				name: rawToolName,
+				description: `Tool ${rawToolName}`,
+				inputSchema: { type: "object" },
+			});
+			const result = registry.register(tool, `mcp:${rawToolName}`);
+
+			assert.equal(result.ok, true, result.error);
+		}
 	});
 });
 

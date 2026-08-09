@@ -11,7 +11,6 @@ export const BUILTIN_NAMESPACE = "functions" as const;
 const MCP_NAMESPACE_PREFIX = "mcp";
 const MAX_TOOL_NAME_LENGTH = 64;
 const MAX_NAMESPACE_LENGTH = 32;
-const MAX_LOCAL_NAME_LENGTH = 31;
 
 export interface ToolName {
 	readonly namespace: string;
@@ -93,10 +92,10 @@ function validateAndBuild(input: {
 	if (namespace.length > MAX_NAMESPACE_LENGTH) {
 		return { ok: false, error: `Namespace too long in tool name "${original}"` };
 	}
-	if (localName.length > MAX_LOCAL_NAME_LENGTH) {
-		return { ok: false, error: `Local name too long in tool name "${original}"` };
-	}
-	if (fullName.length > MAX_TOOL_NAME_LENGTH) {
+	// The provider sees AgentTool.name (`original`), not the internal canonical
+	// key. Do not charge the synthetic `functions.` namespace against the
+	// provider's 64-character tool-name budget.
+	if (original.length > MAX_TOOL_NAME_LENGTH) {
 		return { ok: false, error: `Tool name "${original}" is too long` };
 	}
 	return {
