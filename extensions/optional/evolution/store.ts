@@ -150,6 +150,41 @@ export class EvolutionStore {
 		return readJson<EvolutionProposal>(join(paths.candidatesDir, safeSegment(candidateId, "Candidate id"), "proposal.json"));
 	}
 
+	private async readEvidence(scope: EvolutionScope, candidateId: string, gate: GateEvidence["gate"]): Promise<GateEvidence | undefined> {
+		const paths = await this.scopePaths(scope);
+		const path = join(paths.candidatesDir, safeSegment(candidateId, "Candidate id"), "evidence", `${gate}-validation.json`);
+		return (await exists(path)) ? readJson<GateEvidence>(path) : undefined;
+	}
+
+	private async assertPromotionEvidence(scope: EvolutionScope, candidateId: string): Promise<void> {
+		const [staticGate, replayGate, evalGate, reviewerGate] = await Promise.all([
+			this.readEvidence(scope, candidateId, "static"),
+			this.readEvidence(scope, candidateId, "replay"),
+			this.readEvidence(scope, candidateId, "eval"),
+			this.readEvidence(scope, candidateId, "reviewer"),
+		]);
+		if (staticGate?.passed !== true) throw new Error("Promotion evidence is missing a passing static gate");
+		if (
+			replayGate?.passed !== true
+			|| replayGate.details.lifecyclePreserved !== true
+			|| replayGate.details.toolPairsPreserved !== true
+			|| replayGate.details.policyPreserved !== true
+		) {
+			throw new Error("Promotion evidence is missing a passing replay safety gate");
+		}
+		const scenarios = evalGate?.details.matchedScenarios;
+		const evalPassed = evalGate?.passed === true
+			&& Array.isArray(scenarios)
+			&& scenarios.length > 0
+			&& evalGate.details.nonInferior === true
+			&& evalGate.details.improvement === true;
+		const manualOverride = reviewerGate?.passed === true
+			&& reviewerGate.details.actor === "human"
+			&& reviewerGate.details.overrideMissingEffectiveness === true;
+		if (!evalPassed && !manualOverride) throw new Error("Promotion evidence is missing candidate-specific effectiveness proof or an explicit human override");
+		if (scope === "global" && reviewerGate?.passed !== true) throw new Error("Global promotion evidence requires explicit human approval");
+	}
+
 	async getCurrent(scope: EvolutionScope): Promise<CurrentPointer | undefined> {
 		const paths = await this.scopePaths(scope);
 		if (!(await exists(paths.currentPath))) return undefined;
@@ -190,6 +225,7 @@ export class EvolutionStore {
 			const proposal = await this.readProposal(scope, candidateId);
 			const validation = validateProposal(proposal);
 			if (!validation.ok) throw new Error(`Candidate validation failed: ${validation.issues.join("; ")}`);
+			await this.assertPromotionEvidence(scope, candidateId);
 			const current = await this.getCurrent(scope);
 			if ((current?.revisionId ?? null) !== proposal.baselineRevisionId) throw new Error("Candidate baseline revision is stale");
 			const digest = sha256({ candidateId: proposal.id, artifacts: proposal.artifacts });

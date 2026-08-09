@@ -49,6 +49,23 @@ async function createStore(): Promise<{ store: EvolutionStore; agentDir: string;
 	return { store: new EvolutionStore({ agentDir, cwd, sessionId: "session-1" }), agentDir, cwd };
 }
 
+async function writePassingEvidence(store: EvolutionStore, candidateId: string): Promise<void> {
+	for (const item of [
+		{ gate: "static", details: {} },
+		{ gate: "replay", details: { lifecyclePreserved: true, toolPairsPreserved: true, policyPreserved: true } },
+		{ gate: "eval", details: { matchedScenarios: ["verify-completion"], nonInferior: true, improvement: true } },
+	] as const) {
+		await store.writeEvidence("workspace", candidateId, {
+			schemaVersion: 1,
+			gate: item.gate,
+			passed: true,
+			createdAt: "2026-08-09T00:01:00.000Z",
+			summary: `${item.gate} passed`,
+			details: item.details,
+		});
+	}
+}
+
 test("workspace keys are deterministic, canonical, and do not disclose the raw path", async () => {
 	const { cwd } = await createStore();
 	const first = await workspaceKeyForPath(cwd);
@@ -87,6 +104,7 @@ test("writes each evidence gate once", async () => {
 test("promotes a complete content-addressed revision and appends history", async () => {
 	const { store } = await createStore();
 	await store.createCandidate("workspace", proposal("candidate-a", null));
+	await writePassingEvidence(store, "candidate-a");
 	const result = await store.promote("workspace", "candidate-a");
 	assert.match(result.revisionId, /^rev_[a-f0-9]{32}$/);
 	assert.equal(result.previousRevisionId, null);
@@ -97,11 +115,20 @@ test("promotes a complete content-addressed revision and appends history", async
 	assert.match(history, /"event":"promoted"/);
 });
 
+test("refuses promotion when hard replay and effectiveness evidence is absent", async () => {
+	const { store } = await createStore();
+	await store.createCandidate("workspace", proposal("candidate-a", null));
+	await assert.rejects(() => store.promote("workspace", "candidate-a"), /evidence/i);
+	assert.equal(await store.getCurrent("workspace"), undefined);
+});
+
 test("rejects stale baselines and preserves the champion", async () => {
 	const { store } = await createStore();
 	await store.createCandidate("workspace", proposal("candidate-a", null));
+	await writePassingEvidence(store, "candidate-a");
 	const first = await store.promote("workspace", "candidate-a");
 	await store.createCandidate("workspace", proposal("candidate-stale", null));
+	await writePassingEvidence(store, "candidate-stale");
 	await assert.rejects(() => store.promote("workspace", "candidate-stale"), /baseline/i);
 	assert.equal((await store.getCurrent("workspace"))?.revisionId, first.revisionId);
 });
@@ -109,8 +136,10 @@ test("rejects stale baselines and preserves the champion", async () => {
 test("rolls back by atomically activating an existing immutable revision", async () => {
 	const { store } = await createStore();
 	await store.createCandidate("workspace", proposal("candidate-a", null));
+	await writePassingEvidence(store, "candidate-a");
 	const first = await store.promote("workspace", "candidate-a");
 	await store.createCandidate("workspace", proposal("candidate-b", first.revisionId));
+	await writePassingEvidence(store, "candidate-b");
 	const second = await store.promote("workspace", "candidate-b");
 	const rolledBack = await store.rollback("workspace", first.revisionId);
 	assert.equal(rolledBack.revisionId, first.revisionId);

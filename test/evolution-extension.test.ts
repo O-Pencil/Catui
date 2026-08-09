@@ -74,6 +74,23 @@ function proposal(id: string, baselineRevisionId: string | null, content: string
 	};
 }
 
+async function writePassingEvidence(store: EvolutionStore, candidateId: string): Promise<void> {
+	for (const item of [
+		{ gate: "static", details: {} },
+		{ gate: "replay", details: { lifecyclePreserved: true, toolPairsPreserved: true, policyPreserved: true } },
+		{ gate: "eval", details: { matchedScenarios: ["verify-completion"], nonInferior: true, improvement: true } },
+	] as const) {
+		await store.writeEvidence("workspace", candidateId, {
+			schemaVersion: 1,
+			gate: item.gate,
+			passed: true,
+			createdAt: "2026-08-09T00:01:00.000Z",
+			summary: `${item.gate} passed`,
+			details: item.details,
+		});
+	}
+}
+
 function context(options: {
 	completeJson?: ExtensionCommandContext["completeJson"];
 	notifications?: string[];
@@ -148,6 +165,7 @@ test("before-agent hook loads only promoted prompt and memory artifacts", async 
 	const { handlers, agentDir, cwd } = await harness();
 	const store = new EvolutionStore({ agentDir, cwd, sessionId: "session-1" });
 	await store.createCandidate("workspace", proposal("active", null, "Always run verify:all before completion."));
+	await writePassingEvidence(store, "active");
 	await store.promote("workspace", "active");
 	await store.createCandidate("workspace", proposal("inactive", (await store.getCurrent("workspace"))!.revisionId, "Never inject this candidate."));
 	const before = handlers.get("before_agent_start")![0]!;
@@ -171,6 +189,7 @@ test("resource discovery exposes promoted skill manifests but never candidates o
 		content: "Run the repository verification gate and report exact evidence.",
 	}];
 	await store.createCandidate("workspace", input);
+	await writePassingEvidence(store, "skill");
 	await store.promote("workspace", "skill");
 	const discover = handlers.get("resources_discover")![0]!;
 	const result = await discover(
@@ -189,8 +208,10 @@ test("rollback switches to an existing revision and reloads resources", async ()
 	const { commands, agentDir, cwd } = await harness();
 	const store = new EvolutionStore({ agentDir, cwd, sessionId: "session-1" });
 	await store.createCandidate("workspace", proposal("first", null, "First revision"));
+	await writePassingEvidence(store, "first");
 	const first = await store.promote("workspace", "first");
 	await store.createCandidate("workspace", proposal("second", first.revisionId, "Second revision"));
+	await writePassingEvidence(store, "second");
 	await store.promote("workspace", "second");
 	const notifications: string[] = [];
 	const reloads = { count: 0 };
