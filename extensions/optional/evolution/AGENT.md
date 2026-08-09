@@ -4,6 +4,15 @@
 
 Member List
 index.ts: Optional evolution extension entry, registers /refine, evolution_refine, evolved_tool, before_agent_start prompt injection, and turn_end observation
+automation.ts: Earlier guarded automation policy, mode state, authorization reservation, and symlink safety helpers retained for compatibility tests
+consumers.ts: Earlier promoted prompt/resource rendering helpers retained for compatibility with v1 active artifact consumers
+evaluation.ts: Earlier candidate-vs-baseline session scenario evaluation helpers retained for compatibility checks
+paths.ts: Earlier confined evolution/v1 scope path resolution and workspace hashing helpers
+prompts.ts: Earlier bounded session evidence and refinement prompt builders
+schema.ts: Earlier declarative proposal validation and untrusted-content safety rules covered by evolution-schema tests
+store.ts: Earlier EvolutionStore class for immutable proposal/revision persistence and rollback compatibility
+types.ts: Earlier extension-local artifact, proposal, candidate, evidence, revision, and pointer contracts
+workflow.ts: Earlier candidate state transition, scope merge, and validation evidence helpers
 evolution-store.ts: Scope path resolution, candidate/revision/current/quarantine ledger IO, validation, prediction manifests, post-hoc attribution records, conservative auto-rollback, eval_fixture content-hash dedupe and active-fixture retention, bounded global auto-promotion policy for prompt_note/memory/tool_spec, promotion, rejection, rollback
 evolution-types.ts: Evolution artifact, prediction/attribution, stream-aware gate report, eval_fixture, candidate, revision, current pointer, active fixture pointer, quarantine, and command result contracts
 evolution-format.ts: Human-readable status, prediction/attribution inspection, command result, and prompt injection formatting
