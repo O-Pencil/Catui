@@ -25,9 +25,10 @@ const EXECUTABLE_PATTERNS = [
 const NETWORK_PATTERN = /\b(?:https?|wss?):\/\/\S+/i;
 const SECRET_PATTERNS = [
 	/-----BEGIN [^-\n]*PRIVATE KEY-----/i,
-	/\bauthorization\s*:\s*bearer\s+\S+/i,
+	/\bauthorization\s*:\s*(?:bearer|basic)\s+\S+/i,
 	/\b(?:sk-(?:proj-)?|gh[pousr]_|xox[baprs]-|AIza)[A-Za-z0-9._-]{8,}/,
-	/["']?(?:client_secret|private_key|access_token|refresh_token)["']?\s*:/i,
+	/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/,
+	/["']?(?:api_key|client_secret|private_key|access_token|refresh_token)["']?\s*:/i,
 	/\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+/i,
 ];
 const ABSOLUTE_PATH_PATTERN = /(?:^|[\s"'`])(?:\/[A-Za-z0-9._-]+){2,}(?:\/[A-Za-z0-9._-]+)?/;

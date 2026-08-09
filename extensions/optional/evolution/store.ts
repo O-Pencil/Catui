@@ -115,13 +115,19 @@ export class EvolutionStore {
 		return paths;
 	}
 
+	private async assertSafe(target: string): Promise<void> {
+		await assertNoSymlinkComponents(this.options.agentDir, target);
+	}
+
 	async createCandidate(scope: EvolutionScope, proposal: EvolutionProposal): Promise<string> {
 		if (proposal.scope !== scope) throw new Error("Candidate scope does not match proposal scope");
 		const validation = validateProposal(proposal);
 		if (!validation.ok) throw new Error(`Candidate validation failed: ${validation.issues.join("; ")}`);
 		const paths = await this.ensureScope(scope);
+		await this.assertSafe(paths.candidatesDir);
 		await mkdir(paths.candidatesDir, { recursive: true, mode: 0o700 });
 		const candidateDir = join(paths.candidatesDir, safeSegment(proposal.id, "Candidate id"));
+		await this.assertSafe(candidateDir);
 		try {
 			await mkdir(candidateDir, { mode: 0o700 });
 		} catch (error: unknown) {
@@ -140,20 +146,25 @@ export class EvolutionStore {
 	async writeEvidence(scope: EvolutionScope, candidateId: string, evidence: GateEvidence): Promise<void> {
 		const paths = await this.scopePaths(scope);
 		const candidateDir = join(paths.candidatesDir, safeSegment(candidateId, "Candidate id"));
+		await this.assertSafe(candidateDir);
 		if (!(await exists(join(candidateDir, "proposal.json")))) throw new Error(`Candidate not found: ${candidateId}`);
 		const evidenceDir = join(candidateDir, "evidence");
+		await this.assertSafe(evidenceDir);
 		await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
 		await writeExclusive(join(evidenceDir, `${evidence.gate}-validation.json`), evidence);
 	}
 
 	async readProposal(scope: EvolutionScope, candidateId: string): Promise<EvolutionProposal> {
 		const paths = await this.scopePaths(scope);
-		return readJson<EvolutionProposal>(join(paths.candidatesDir, safeSegment(candidateId, "Candidate id"), "proposal.json"));
+		const path = join(paths.candidatesDir, safeSegment(candidateId, "Candidate id"), "proposal.json");
+		await this.assertSafe(path);
+		return readJson<EvolutionProposal>(path);
 	}
 
 	private async readEvidence(scope: EvolutionScope, candidateId: string, gate: GateEvidence["gate"]): Promise<GateEvidence | undefined> {
 		const paths = await this.scopePaths(scope);
 		const path = join(paths.candidatesDir, safeSegment(candidateId, "Candidate id"), "evidence", `${gate}-validation.json`);
+		await this.assertSafe(path);
 		return (await exists(path)) ? readJson<GateEvidence>(path) : undefined;
 	}
 
@@ -189,36 +200,33 @@ export class EvolutionStore {
 	async getCurrent(scope: EvolutionScope): Promise<CurrentPointer | undefined> {
 		const paths = await this.scopePaths(scope);
 		if (!(await exists(paths.currentPath))) return undefined;
+		await this.assertSafe(paths.currentPath);
 		const pointer = await readJson<CurrentPointer>(paths.currentPath);
 		if (pointer.schemaVersion !== 1 || !safeSegment(pointer.revisionId, "Revision id")) throw new Error("Active evolution pointer is invalid");
 		return pointer;
 	}
 
 	private async writePointer(paths: ScopePaths, pointer: CurrentPointer): Promise<void> {
+		await this.assertSafe(paths.currentPath);
 		const tempPath = join(paths.root, `.current.${process.pid}.${randomUUID()}.tmp`);
 		await writeExclusive(tempPath, pointer);
 		await rename(tempPath, paths.currentPath);
 	}
 
 	private async appendHistory(paths: ScopePaths, event: Record<string, unknown>): Promise<void> {
+		await this.assertSafe(paths.historyPath);
 		await appendFile(paths.historyPath, `${JSON.stringify({ schemaVersion: 1, ...event })}\n`, { encoding: "utf8", mode: 0o600 });
 	}
 
 	private async withActivationLock<T>(scope: EvolutionScope, action: (paths: ScopePaths) => Promise<T>): Promise<T> {
 		const paths = await this.ensureScope(scope);
+		await this.assertSafe(paths.lockPath);
 		let handle;
 		try {
 			handle = await open(paths.lockPath, "wx", 0o600);
 		} catch (error: unknown) {
-			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-			const owner = Number.parseInt((await readFile(paths.lockPath, "utf8")).trim(), 10);
-			let stale = !Number.isInteger(owner) || owner <= 0;
-			if (!stale) {
-				try { process.kill(owner, 0); } catch (probeError: unknown) { stale = (probeError as NodeJS.ErrnoException).code === "ESRCH"; }
-			}
-			if (!stale) throw new Error("Evolution activation is already in progress");
-			await unlink(paths.lockPath);
-			handle = await open(paths.lockPath, "wx", 0o600);
+			if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error("Evolution activation is already in progress");
+			throw error;
 		}
 		try {
 			await handle.writeFile(`${process.pid}\n`, "utf8");
@@ -247,6 +255,8 @@ export class EvolutionStore {
 			const digest = sha256({ candidateId: proposal.id, artifacts: proposal.artifacts });
 			const revisionId = `rev_${digest.slice(0, 32)}`;
 			const revisionDir = join(paths.revisionsDir, revisionId);
+			await this.assertSafe(paths.revisionsDir);
+			await this.assertSafe(revisionDir);
 			await mkdir(paths.revisionsDir, { recursive: true, mode: 0o700 });
 			try {
 				await mkdir(revisionDir, { mode: 0o700 });
@@ -299,6 +309,7 @@ export class EvolutionStore {
 	async rollback(scope: EvolutionScope, revisionId: string): Promise<ActivationResult> {
 		return this.withActivationLock(scope, async (paths) => {
 			const target = safeSegment(revisionId, "Revision id");
+			await this.assertSafe(join(paths.revisionsDir, target));
 			await readJson<RevisionManifest>(join(paths.revisionsDir, target, "manifest.json"));
 			const current = await this.getCurrent(scope);
 			if (current?.revisionId === target) return { revisionId: target, previousRevisionId: current.previousRevisionId };
@@ -339,6 +350,7 @@ export class EvolutionStore {
 		const current = await this.getCurrent(scope);
 		if (!current) return undefined;
 		const paths = await this.scopePaths(scope);
+		await this.assertSafe(join(paths.revisionsDir, current.revisionId));
 		const manifest = await readJson<RevisionManifest>(join(paths.revisionsDir, current.revisionId, "manifest.json"));
 		if (manifest.revisionId !== current.revisionId || manifest.contentHash !== `sha256:${sha256(manifest.artifacts)}`) {
 			throw new Error("Active evolution revision failed integrity validation");
@@ -350,11 +362,13 @@ export class EvolutionStore {
 		const manifest = await this.readActiveManifest(scope);
 		if (!manifest) return [];
 		const paths = await this.scopePaths(scope);
-		return manifest.artifacts
+		const skills = manifest.artifacts
 			.filter((artifact) => artifact.kind === "skill_manifest")
 			.map((artifact) => {
 				const name = skillDirectoryName(artifact.id);
 				return { name, path: join(paths.revisionsDir, manifest.revisionId, "artifacts", "skills", name), artifact };
 			});
+		for (const skill of skills) await this.assertSafe(skill.path);
+		return skills;
 	}
 }

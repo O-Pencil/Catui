@@ -95,6 +95,15 @@ test("rejects a symlinked evolution root instead of escaping agentDir", async ()
 	await assert.rejects(() => stat(join(outside, "v1")));
 });
 
+test("rejects symlinked scope descendants", async () => {
+	const { store } = await createStore();
+	const outside = await mkdtemp(join(tmpdir(), "catui-evolution-descendant-"));
+	const paths = await store.scopePaths("workspace");
+	await mkdir(paths.root, { recursive: true });
+	await symlink(outside, paths.candidatesDir);
+	await assert.rejects(() => store.createCandidate("workspace", proposal("candidate-a", null)), /symlink/i);
+});
+
 test("writes each evidence gate once", async () => {
 	const { store } = await createStore();
 	await store.createCandidate("workspace", proposal("candidate-a", null));
@@ -141,13 +150,14 @@ test("restores the previous pointer when history append fails", async () => {
 	assert.equal(await store.getCurrent("workspace"), undefined);
 });
 
-test("recovers an activation lock owned by a dead process", async () => {
+test("fails closed on a pre-existing activation lock", async () => {
 	const { store } = await createStore();
 	await store.createCandidate("workspace", proposal("candidate-a", null));
 	await writePassingEvidence(store, "candidate-a");
 	const paths = await store.scopePaths("workspace");
 	await writeFile(paths.lockPath, "99999999\n", { mode: 0o600 });
-	assert.match((await store.promote("workspace", "candidate-a")).revisionId, /^rev_/);
+	await assert.rejects(() => store.promote("workspace", "candidate-a"), /already in progress/i);
+	assert.equal(await store.getCurrent("workspace"), undefined);
 });
 
 test("rejects stale baselines and preserves the champion", async () => {

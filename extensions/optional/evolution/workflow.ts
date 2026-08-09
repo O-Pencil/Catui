@@ -109,8 +109,14 @@ export function mergeScopedArtifacts(
 	for (const group of scoped) {
 		for (const artifact of group.artifacts) {
 			const key = keyFor(artifact);
-			const current = selected.get(key);
-			if (!current || artifact.overrides === current.id) selected.set(key, artifact);
+			if (artifact.overrides) {
+				const targetEntry = [...selected.entries()].find(([, current]) => current.id === artifact.overrides);
+				if (!targetEntry) continue;
+				selected.delete(targetEntry[0]);
+				selected.set(key, artifact);
+				continue;
+			}
+			if (!selected.has(key)) selected.set(key, artifact);
 		}
 	}
 	return [...selected.values()];

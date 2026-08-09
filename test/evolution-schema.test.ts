@@ -91,10 +91,10 @@ test("rejects executable, network, secret-like, and path-bearing content", () =>
 
 test("redacts bearer, raw provider keys, PEM blocks, JSON credentials, and paths", () => {
 	const redacted = redactEvolutionEvidence(
-		'Authorization: Bearer supersecret sk-proj-1234567890abcdefgh {"client_secret":"quoted secret"}\n-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY----- /Users/alice/work',
+		'Authorization: Bearer supersecret Authorization: Basic dXNlcjpwYXNz sk-proj-1234567890abcdefgh AKIAIOSFODNN7EXAMPLE {"client_secret":"quoted secret","api_key":"json secret"}\n-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY----- /Users/alice/work',
 		[],
 	);
-	assert.doesNotMatch(redacted, /supersecret|sk-proj|quoted secret|BEGIN PRIVATE|\/Users\/alice/);
+	assert.doesNotMatch(redacted, /supersecret|Basic|sk-proj|AKIA|quoted secret|json secret|BEGIN PRIVATE|\/Users\/alice/);
 });
 
 test("rejects skill ids that normalize to the same resource name", () => {
