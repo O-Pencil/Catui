@@ -4,7 +4,7 @@
  * [TO]: Loaded explicitly by Catui users as the self-evolving harness surface
  * [HERE]: extensions/optional/evolution/index.ts - manual refinement and active-resource orchestration
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute, relative } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../../../core/extensions-host/types.js";
 import { boundedSessionEvidence, buildRefinementPrompt, PROPOSAL_DRAFT_SCHEMA } from "./prompts.js";
@@ -12,6 +12,18 @@ import { validateProposal } from "./schema.js";
 import { EvolutionStore, skillDirectoryName } from "./store.js";
 import type { ArtifactKind, EvolutionArtifact, EvolutionProposal, EvolutionScope, GateEvidence } from "./types.js";
 import { mergeScopedArtifacts } from "./workflow.js";
+import { evaluateCandidateEffectiveness } from "./evaluation.js";
+import { evolvedActivePrompt } from "./consumers.js";
+import {
+	DEFAULT_AUTOMATION_POLICY,
+	EVOLUTION_MODES,
+	loadAutomationState,
+	reserveAutomationReview,
+	runWithGuardedAuthorization,
+	updateAutomationState,
+	type AutomationTrigger,
+	type EvolutionMode,
+} from "./automation.js";
 
 interface ProposalDraftArtifact {
 	id: string;
@@ -66,6 +78,7 @@ function buildProposal(draft: ProposalDraft, input: {
 	sessionId: string;
 	traceRefs: string[];
 	createdAt: string;
+	trigger: string;
 }): EvolutionProposal {
 	const artifacts: EvolutionArtifact[] = draft.artifacts.map((artifact) => ({
 		schemaVersion: 1,
@@ -82,7 +95,7 @@ function buildProposal(draft: ProposalDraft, input: {
 		dependencies: artifact.dependencies,
 		expectedOutcome: artifact.expectedOutcome,
 		...(artifact.overrides ? { overrides: artifact.overrides } : {}),
-		provenance: { sourceCandidateId: input.id, trigger: "manual", traceRefs: input.traceRefs },
+		provenance: { sourceCandidateId: input.id, trigger: input.trigger, traceRefs: input.traceRefs },
 	}));
 	return {
 		schemaVersion: 1,
@@ -92,12 +105,16 @@ function buildProposal(draft: ProposalDraft, input: {
 		summary: draft.summary,
 		expectedOutcome: draft.expectedOutcome,
 		createdAt: input.createdAt,
-		provenance: { trigger: "manual", sessionId: input.sessionId, traceRefs: input.traceRefs },
+		provenance: { trigger: input.trigger, sessionId: input.sessionId, traceRefs: input.traceRefs },
 		artifacts,
 	};
 }
 
-async function handleNewProposal(args: string, ctx: ExtensionCommandContext): Promise<void> {
+async function handleNewProposal(
+	args: string,
+	ctx: ExtensionContext,
+	options: { trigger?: string; notify?: boolean } = {},
+): Promise<string> {
 	if (!ctx.completeJson) throw new Error("The current model does not support structured refinement");
 	const scope = parseScope(args);
 	const store = storeFor(ctx);
@@ -126,6 +143,7 @@ async function handleNewProposal(args: string, ctx: ExtensionCommandContext): Pr
 		sessionId,
 		traceRefs,
 		createdAt: new Date().toISOString(),
+		trigger: options.trigger ?? "manual",
 	});
 	const validation = validateProposal(proposal);
 	if (!validation.ok) throw new Error(`Refinement proposal rejected: ${validation.issues.join("; ")}`);
@@ -139,52 +157,91 @@ async function handleNewProposal(args: string, ctx: ExtensionCommandContext): Pr
 		details: { issueCount: 0 },
 	};
 	await store.writeEvidence(scope, id, staticEvidence);
-	ctx.ui.notify(`Evolution candidate ${id} is statically validated and inactive; replay/eval evidence is required before promotion.`, "info");
+	if (options.notify !== false) {
+		ctx.ui.notify(`Evolution candidate ${id} is statically validated and inactive; replay/eval evidence is required before promotion.`, "info");
+	}
+	return id;
 }
 
-async function verifyCandidate(scope: EvolutionScope, candidateId: string, ctx: ExtensionCommandContext): Promise<void> {
+function automationFingerprint(kind: string, value: unknown): string {
+	let serialized: string;
+	try {
+		serialized = JSON.stringify(value);
+	} catch {
+		serialized = String(value);
+	}
+	return createHash("sha256").update(`${kind}:${serialized.slice(0, 8_000)}`).digest("hex");
+}
+
+async function runAutomaticReview(trigger: AutomationTrigger, ctx: ExtensionContext, isCurrent: () => boolean): Promise<void> {
+	const now = Date.now();
+	const reservation = await reserveAutomationReview(ctx.agentDir, trigger, DEFAULT_AUTOMATION_POLICY, now);
+	if (!reservation.reserved) return;
+	const scope = reservation.state.promotionScope;
+	const candidateId = await handleNewProposal(`--scope ${scope}`, ctx, { trigger: `automatic:${trigger.type}`, notify: false });
+	if (!isCurrent()) return;
+	await verifyCandidate(scope, candidateId, ctx, { notify: false });
+	if (!isCurrent()) return;
+	const improved = await evaluateCandidateEffectiveness(scope, candidateId, storeFor(ctx), ctx);
+	if (!improved || !isCurrent()) return;
+	const store = storeFor(ctx);
+	const proposal = await store.readProposal(scope, candidateId);
+	// Generated skills require a resource reload, which is intentionally reserved for explicit commands.
+	if (proposal.artifacts.some((artifact) => artifact.kind === "skill_manifest")) return;
+	await runWithGuardedAuthorization(ctx.agentDir, scope, async () => {
+		if (!isCurrent()) return;
+		await store.promote(scope, candidateId, {
+			beforeActivate: () => {
+				if (!isCurrent()) throw new Error("Automatic promotion was cancelled before activation");
+			},
+		});
+	});
+}
+
+async function verifyCandidate(
+	scope: EvolutionScope,
+	candidateId: string,
+	ctx: ExtensionContext,
+	options: { notify?: boolean } = {},
+): Promise<void> {
 	const store = storeFor(ctx);
 	await store.readProposal(scope, candidateId);
 	const trace = ctx.getLastRunTrace?.();
 	if (!trace || trace.length === 0) throw new Error("No completed run trace is available for deterministic verification");
 	if (trace.length > 4_096) throw new Error("The completed run trace exceeds the verification event budget");
+	if (Buffer.byteLength(JSON.stringify(trace), "utf8") > 512 * 1_024) {
+		throw new Error("The completed run trace exceeds the verification byte budget");
+	}
 	if (!ctx.replayRunTrace) throw new Error("Deterministic run replay is unavailable in this runtime");
 	const replay = ctx.replayRunTrace(trace);
+	if (!ctx.runHarnessEval) throw new Error("Harness evaluation is unavailable in this runtime");
+	const report = await ctx.runHarnessEval();
+	const passed = replay.ok && report.passed;
 	await store.writeEvidence(scope, candidateId, {
 		schemaVersion: 1,
 		gate: "replay",
-		passed: replay.ok,
+		passed,
 		createdAt: new Date().toISOString(),
-		summary: replay.ok ? "The latest semantic run trace replayed without divergence" : replay.divergence.message,
+		summary: !replay.ok
+			? replay.divergence.message
+			: report.passed ? "Semantic replay and built-in deterministic harness regressions passed" : "Built-in deterministic harness regressions failed",
 		details: {
 			lifecyclePreserved: replay.ok,
 			toolPairsPreserved: replay.ok,
 			policyPreserved: replay.ok,
+			harnessEvalPassed: report.passed,
+			harnessScenarios: report.scenarioIds,
+			harnessMetrics: report.metrics,
 			eventCount: trace.length,
 			trace: structuredClone(trace),
 			...(replay.ok ? { replaySummary: replay.summary } : { divergence: replay.divergence }),
 		},
 	});
 	if (!replay.ok) throw new Error(`Run trace replay failed: ${replay.divergence.message}`);
-	if (!ctx.runHarnessEval) throw new Error("Harness evaluation is unavailable in this runtime");
-	const report = await ctx.runHarnessEval();
-	await store.writeEvidence(scope, candidateId, {
-		schemaVersion: 1,
-		gate: "eval",
-		passed: report.passed,
-		createdAt: new Date().toISOString(),
-		summary: report.passed
-			? "Built-in deterministic harness regressions passed; candidate-specific improvement remains unproven"
-			: "Built-in deterministic harness regressions failed",
-		details: {
-			matchedScenarios: report.scenarioIds,
-			nonInferior: report.passed,
-			improvement: false,
-			metrics: report.metrics,
-		},
-	});
 	if (!report.passed) throw new Error("Harness evaluation failed; the candidate remains inactive");
-	ctx.ui.notify(`Evolution candidate ${candidateId} verified for safety; effectiveness is pending explicit human approval.`, "info");
+	if (options.notify !== false) {
+		ctx.ui.notify(`Evolution candidate ${candidateId} verified for safety; effectiveness is pending explicit human approval.`, "info");
+	}
 }
 
 async function approveCandidate(scope: EvolutionScope, candidateId: string, reason: string, ctx: ExtensionCommandContext): Promise<void> {
@@ -230,7 +287,10 @@ async function handleCommand(args: string, ctx: ExtensionCommandContext): Promis
 		const store = storeFor(ctx);
 		if (action === "status") {
 			const current = await store.getCurrent(scope);
-			ctx.ui.notify(current ? `Evolution ${scope} active revision: ${current.revisionId}` : `Evolution ${scope} has no active revision.`, "info");
+			const inventory = await store.inventory(scope);
+			const automation = await loadAutomationState(ctx.agentDir);
+			const active = current ? `active revision ${current.revisionId}` : "no active revision";
+			ctx.ui.notify(`Evolution ${scope}: ${active}; ${inventory.pendingCandidates} pending, ${inventory.quarantined} quarantined, ${inventory.revisions} revision(s); mode=${automation.mode}; automation scope=${automation.promotionScope}; daily budget ${automation.tokensUsed}/${DEFAULT_AUTOMATION_POLICY.dailyTokenBudget} estimated tokens and $${automation.costUsedUsd.toFixed(2)}/$${DEFAULT_AUTOMATION_POLICY.dailyCostBudgetUsd.toFixed(2)}.`, "info");
 			return;
 		}
 		if (action === "inspect") {
@@ -267,7 +327,17 @@ async function handleCommand(args: string, ctx: ExtensionCommandContext): Promis
 			return;
 		}
 		if (action === "mode") {
-			ctx.ui.notify("Refine mode control is unavailable until the shadow automation slice; no active state changed.", "warning");
+			const requested = tokens[1];
+			if (!requested || !EVOLUTION_MODES.includes(requested as EvolutionMode)) {
+				throw new Error("Usage: /refine mode off|manual|shadow|guarded");
+			}
+			if (scope === "global") throw new Error("Automatic global evolution is prohibited; choose --scope session or workspace");
+			await updateAutomationState(ctx.agentDir, (automation) => ({
+				...automation,
+				mode: requested as EvolutionMode,
+				promotionScope: scope,
+			}));
+			ctx.ui.notify(`Evolution automation mode set to ${requested} for ${scope}.`, "info");
 			return;
 		}
 		await handleNewProposal(args, ctx);
@@ -276,28 +346,16 @@ async function handleCommand(args: string, ctx: ExtensionCommandContext): Promis
 	}
 }
 
-async function activePrompt(ctx: ExtensionContext): Promise<string | undefined> {
-	const store = storeFor(ctx);
-	const sections: string[] = [];
-	const scoped: Array<{ scope: EvolutionScope; artifacts: EvolutionArtifact[] }> = [];
-	for (const scope of ["global", "workspace", "session"] as const) {
-		try {
-			const manifest = await store.readActiveManifest(scope);
-			if (!manifest) continue;
-			scoped.push({ scope, artifacts: manifest.artifacts.filter((artifact) => artifact.kind === "prompt_note" || artifact.kind === "memory") });
-		} catch {
-			// A corrupt evolution scope disables only that scope; normal sessions continue.
-		}
-	}
-	for (const artifact of mergeScopedArtifacts(scoped)) {
-		const bounded = artifact.content.slice(0, artifact.promptTokenBudget * 4);
-		sections.push(`[${artifact.id} | ${artifact.scope}]\n${bounded}`);
-	}
-	if (sections.length === 0) return undefined;
-	return `# Promoted Evolved Context\nSupplementary only; explicit user/project resources and built-in safety rules take precedence.\n\n${sections.join("\n\n")}`;
-}
-
 export default async function evolutionExtension(api: ExtensionAPI): Promise<void> {
+	let automationTail: Promise<void> = Promise.resolve();
+	let pendingTurnTrigger: AutomationTrigger | undefined;
+	let automationGeneration = 0;
+	const enqueueAutomation = (trigger: AutomationTrigger, ctx: ExtensionContext): void => {
+		const generation = automationGeneration;
+		automationTail = automationTail
+			.then(() => runAutomaticReview(trigger, ctx, () => automationGeneration === generation))
+			.catch(() => undefined);
+	};
 	api.registerCommand("refine", {
 		description: "Propose, inspect, or roll back controlled declarative harness evolution",
 		handler: handleCommand,
@@ -328,8 +386,29 @@ export default async function evolutionExtension(api: ExtensionAPI): Promise<voi
 		}
 		return skillPaths.length > 0 ? { skillPaths } : undefined;
 	});
-	api.on("before_agent_start", async (_event, ctx) => {
-		const appendSystemPrompt = await activePrompt(ctx);
+	api.on("before_agent_start", async (event, ctx) => {
+		automationGeneration += 1;
+		const appendSystemPrompt = await evolvedActivePrompt(ctx, event.prompt);
 		return appendSystemPrompt ? { appendSystemPrompt } : undefined;
+	});
+	api.on("turn_end", (event, ctx) => {
+		pendingTurnTrigger = {
+			type: "turn",
+			turnIndex: event.turnIndex,
+			fingerprint: automationFingerprint("turn", { turnIndex: event.turnIndex, message: event.message, toolResults: event.toolResults }),
+		};
+	});
+	api.on("agent_end", (_event, ctx) => {
+		if (!pendingTurnTrigger) return;
+		const trigger = pendingTurnTrigger;
+		pendingTurnTrigger = undefined;
+		enqueueAutomation(trigger, ctx);
+	});
+	api.on("session_compact", (event, ctx) => {
+		enqueueAutomation({ type: "compaction", fingerprint: automationFingerprint("compaction", event.compactionEntry) }, ctx);
+	});
+	api.on("session_shutdown", () => {
+		automationGeneration += 1;
+		pendingTurnTrigger = undefined;
 	});
 }

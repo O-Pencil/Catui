@@ -52,7 +52,7 @@ async function createStore(): Promise<{ store: EvolutionStore; agentDir: string;
 async function writePassingEvidence(store: EvolutionStore, candidateId: string): Promise<void> {
 	for (const item of [
 		{ gate: "static", details: {} },
-		{ gate: "replay", details: { lifecyclePreserved: true, toolPairsPreserved: true, policyPreserved: true } },
+		{ gate: "replay", details: { lifecyclePreserved: true, toolPairsPreserved: true, policyPreserved: true, harnessEvalPassed: true } },
 		{ gate: "eval", details: { matchedScenarios: ["verify-completion"], nonInferior: true, improvement: true } },
 	] as const) {
 		await store.writeEvidence("workspace", candidateId, {
@@ -131,6 +131,44 @@ test("promotes a complete content-addressed revision and appends history", async
 	assert.equal(manifest?.candidateId, "candidate-a");
 	const history = await readFile((await store.scopePaths("workspace")).historyPath, "utf8");
 	assert.match(history, /"event":"promoted"/);
+});
+
+test("recovers a corrupt active pointer from the newest fully verified history revision", async () => {
+	const { store } = await createStore();
+	await store.createCandidate("workspace", proposal("candidate-a", null));
+	await writePassingEvidence(store, "candidate-a");
+	const active = await store.promote("workspace", "candidate-a");
+	await writeFile((await store.scopePaths("workspace")).currentPath, "{broken-json\n", { mode: 0o600 });
+	assert.equal((await store.getCurrent("workspace"))?.revisionId, active.revisionId);
+	assert.equal((await store.readActiveManifest("workspace"))?.candidateId, "candidate-a");
+});
+
+test("corrupt-pointer recovery honors the newest rollback to no active revision", async () => {
+	const { store } = await createStore();
+	await store.createCandidate("workspace", proposal("candidate-a", null));
+	await writePassingEvidence(store, "candidate-a");
+	const active = await store.promote("workspace", "candidate-a");
+	await store.restoreActivation("workspace", active.revisionId, null);
+	await writeFile((await store.scopePaths("workspace")).currentPath, "{broken-json\n", { mode: 0o600 });
+	assert.equal(await store.getCurrent("workspace"), undefined);
+	assert.equal(await store.readActiveManifest("workspace"), undefined);
+});
+
+test("rejects a modified materialized skill instead of discovering it", async () => {
+	const { store } = await createStore();
+	const input = proposal("skill-a", null);
+	input.artifacts = [{
+		...input.artifacts[0]!,
+		id: "evolved:skill_manifest:skill-a",
+		kind: "skill_manifest",
+		content: "Follow the verified workflow.",
+	}];
+	await store.createCandidate("workspace", input);
+	await writePassingEvidence(store, "skill-a");
+	await store.promote("workspace", "skill-a");
+	const [skill] = await store.activeSkillPaths("workspace");
+	await writeFile(join(skill!.path, "SKILL.md"), "tampered\n", { mode: 0o600 });
+	await assert.rejects(() => store.activeSkillPaths("workspace"), /integrity/i);
 });
 
 test("refuses promotion when hard replay and effectiveness evidence is absent", async () => {

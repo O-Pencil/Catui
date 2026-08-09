@@ -11,6 +11,9 @@ evolution/paths.ts: Confined evolution/v1 scope paths and canonical workspace ha
 evolution/store.ts: Immutable candidate/revision persistence, atomic activation, history, and rollback
 evolution/workflow.ts: Pure candidate state transitions and validation evidence gates
 evolution/prompts.ts: Bounded/redacted refinement prompts and structured proposal schema
+evolution/automation.ts: Deterministic off/manual/shadow/guarded trigger policy, conservative budgets, and atomic automation state
+evolution/evaluation.ts: Candidate-vs-baseline effect evaluation grounded only in bounded session scenarios
+evolution/consumers.ts: Promoted prompt, memory, delegation, and non-executable tool-planning context rendering
 evolution/index.ts: Opt-in /refine propose/verify/approve/reject/rollback workflow plus promoted prompt/resource consumption hooks
 evolution/README.md: Operator guide for modes, inspection, approval, and rollback
 
