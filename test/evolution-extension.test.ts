@@ -12,6 +12,7 @@ import test from "node:test";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "../core/extensions-host/types.ts";
 import evolutionExtension from "../extensions/optional/evolution/index.ts";
 import { EvolutionStore } from "../extensions/optional/evolution/store.ts";
+import { loadSkillsFromDir } from "../core/skills.ts";
 import type { EvolutionProposal } from "../extensions/optional/evolution/types.ts";
 
 type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
@@ -156,6 +157,32 @@ test("before-agent hook loads only promoted prompt and memory artifacts", async 
 	) as { appendSystemPrompt?: string };
 	assert.match(result.appendSystemPrompt ?? "", /Always run verify:all/);
 	assert.doesNotMatch(result.appendSystemPrompt ?? "", /Never inject/);
+});
+
+test("resource discovery exposes promoted skill manifests but never candidates or quarantine", async () => {
+	const { handlers, agentDir, cwd } = await harness();
+	const store = new EvolutionStore({ agentDir, cwd, sessionId: "session-1" });
+	const input = proposal("skill", null, "placeholder");
+	input.artifacts = [{
+		...input.artifacts[0]!,
+		id: "evolved:skill_manifest:verify-workflow",
+		kind: "skill_manifest",
+		title: "Verify workflow",
+		content: "Run the repository verification gate and report exact evidence.",
+	}];
+	await store.createCandidate("workspace", input);
+	await store.promote("workspace", "skill");
+	const discover = handlers.get("resources_discover")![0]!;
+	const result = await discover(
+		{ type: "resources_discover", cwd, reason: "startup" },
+		{ ...context(), cwd, agentDir, getSkills: () => [] } as ExtensionContext,
+	) as { skillPaths?: string[] };
+	assert.equal(result.skillPaths?.length, 1);
+	assert.match(result.skillPaths![0]!, /revisions/);
+	assert.doesNotMatch(result.skillPaths![0]!, /candidates|quarantine/);
+	const loaded = loadSkillsFromDir({ dir: result.skillPaths![0]!, source: "evolution-test" });
+	assert.deepEqual(loaded.diagnostics, []);
+	assert.equal(loaded.skills[0]?.name, "evolved-skill-manifest-verify-workflow");
 });
 
 test("rollback switches to an existing revision and reloads resources", async () => {

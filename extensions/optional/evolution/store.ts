@@ -37,6 +37,15 @@ function artifactFileName(id: string): string {
 	return `${id.replace(/[^A-Za-z0-9._-]/g, "_")}.json`;
 }
 
+export function skillDirectoryName(id: string): string {
+	return id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").replace(/-+/g, "-").slice(0, 64);
+}
+
+function skillMarkdown(artifact: EvolutionArtifact): string {
+	const name = skillDirectoryName(artifact.id);
+	return `---\nname: ${name}\ndescription: ${JSON.stringify(artifact.title)}\n---\n\n# ${artifact.title}\n\n${artifact.content}\n`;
+}
+
 function json(value: unknown): string {
 	return `${JSON.stringify(value, null, 2)}\n`;
 }
@@ -197,6 +206,16 @@ export class EvolutionStore {
 				const kindDir = join(revisionDir, "artifacts", ARTIFACT_DIRS[artifact.kind]);
 				await mkdir(kindDir, { recursive: true, mode: 0o700 });
 				await writeExclusive(join(kindDir, artifactFileName(artifact.id)), artifact);
+				if (artifact.kind === "skill_manifest") {
+					const skillDir = join(kindDir, skillDirectoryName(artifact.id));
+					await mkdir(skillDir, { mode: 0o700 });
+					const handle = await open(join(skillDir, "SKILL.md"), "wx", 0o600);
+					try {
+						await handle.writeFile(skillMarkdown(artifact), "utf8");
+					} finally {
+						await handle.close();
+					}
+				}
 			}
 			const manifest: RevisionManifest = {
 				schemaVersion: 1,
@@ -246,5 +265,17 @@ export class EvolutionStore {
 			throw new Error("Active evolution revision failed integrity validation");
 		}
 		return manifest;
+	}
+
+	async activeSkillPaths(scope: EvolutionScope): Promise<Array<{ name: string; path: string }>> {
+		const manifest = await this.readActiveManifest(scope);
+		if (!manifest) return [];
+		const paths = await this.scopePaths(scope);
+		return manifest.artifacts
+			.filter((artifact) => artifact.kind === "skill_manifest")
+			.map((artifact) => {
+				const name = skillDirectoryName(artifact.id);
+				return { name, path: join(paths.revisionsDir, manifest.revisionId, "artifacts", "skills", name) };
+			});
 	}
 }

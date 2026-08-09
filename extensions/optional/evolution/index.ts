@@ -202,7 +202,24 @@ export default async function evolutionExtension(api: ExtensionAPI): Promise<voi
 		description: "Propose, inspect, or roll back controlled declarative harness evolution",
 		handler: handleCommand,
 	});
-	api.on("resources_discover", () => undefined);
+	api.on("resources_discover", async (_event, ctx) => {
+		const existing = new Set(ctx.getSkills().map((skill) => skill.name));
+		const skillPaths: string[] = [];
+		const store = storeFor(ctx);
+		for (const scope of ["global", "workspace", "session"] as const) {
+			try {
+				for (const skill of await store.activeSkillPaths(scope)) {
+					if (!existing.has(skill.name)) {
+						existing.add(skill.name);
+						skillPaths.push(skill.path);
+					}
+				}
+			} catch {
+				// Invalid generated resources disable only the affected scope.
+			}
+		}
+		return skillPaths.length > 0 ? { skillPaths } : undefined;
+	});
 	api.on("before_agent_start", async (_event, ctx) => {
 		const appendSystemPrompt = await activePrompt(ctx);
 		return appendSystemPrompt ? { appendSystemPrompt } : undefined;
