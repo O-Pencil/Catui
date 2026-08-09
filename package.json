@@ -38,6 +38,10 @@
     "./skills": {
       "import": "./dist/skills.js",
       "types": "./dist/skills.d.ts"
+    },
+    "./extensions": {
+      "import": "./dist/extensions.js",
+      "types": "./dist/extensions.d.ts"
     }
   },
   "files": [
