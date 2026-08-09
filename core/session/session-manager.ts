@@ -10,6 +10,7 @@ import { randomUUID } from "crypto";
 import {
 	appendFileSync,
 	closeSync,
+	createReadStream,
 	existsSync,
 	mkdirSync,
 	openSync,
@@ -21,6 +22,7 @@ import {
 } from "fs";
 import { readdir, readFile, stat } from "fs/promises";
 import { basename, join, resolve } from "path";
+import { createInterface } from "readline";
 import { getAgentDir as getDefaultAgentDir, getSessionsDir } from "../../config.js";
 import { defaultAgentDirContext, type AgentDirContext } from "../agent-dir/agent-dir-context.js";
 import {
@@ -32,6 +34,11 @@ import {
 } from "../messages.js";
 
 export const CURRENT_SESSION_VERSION = 3;
+const SESSION_LIST_CONCURRENCY = 2;
+const SESSION_SEARCH_TEXT_MAX_CHARS = 8 * 1024;
+const SESSION_SEARCH_TEXT_HEAD_CHARS = SESSION_SEARCH_TEXT_MAX_CHARS / 2;
+const SESSION_SEARCH_TEXT_TAIL_CHARS = SESSION_SEARCH_TEXT_MAX_CHARS / 2;
+const SESSION_FIRST_MESSAGE_MAX_CHARS = 512;
 
 export interface SessionHeader {
 	type: "session";
@@ -514,47 +521,81 @@ function isMessageWithContent(message: AgentMessage): message is Message {
 	return typeof (message as Message).role === "string" && "content" in message;
 }
 
-function extractTextContent(message: Message): string {
+function getMessageTextParts(message: Message): string[] {
 	const content = message.content;
-	if (typeof content === "string") {
-		return content;
-	}
+	if (typeof content === "string") return content ? [content] : [];
 	return content
 		.filter((block): block is TextContent => block.type === "text")
 		.map((block) => block.text)
-		.join(" ");
+		.filter(Boolean);
 }
 
-function getLastActivityTime(entries: FileEntry[]): number | undefined {
-	let lastActivityTime: number | undefined;
+function copyStringSlice(value: string, start: number, end?: number): string {
+	return Array.from(value.slice(start, end)).join("");
+}
 
-	for (const entry of entries) {
-		if (entry.type !== "message") continue;
+interface SessionSearchTextBuilder {
+	full: string | null;
+	head: string;
+	tail: string;
+	hasText: boolean;
+}
 
-		const message = (entry as SessionMessageEntry).message;
-		if (!isMessageWithContent(message)) continue;
-		if (message.role !== "user" && message.role !== "assistant") continue;
+function appendSessionSearchText(builder: SessionSearchTextBuilder, text: string): void {
+	if (!text) return;
+	const separator = builder.hasText ? " " : "";
+	const fragmentLength = separator.length + text.length;
+	builder.hasText = true;
 
-		const msgTimestamp = (message as { timestamp?: number }).timestamp;
-		if (typeof msgTimestamp === "number") {
-			lastActivityTime = Math.max(lastActivityTime ?? 0, msgTimestamp);
-			continue;
-		}
-
-		const entryTimestamp = (entry as SessionEntryBase).timestamp;
-		if (typeof entryTimestamp === "string") {
-			const t = new Date(entryTimestamp).getTime();
-			if (!Number.isNaN(t)) {
-				lastActivityTime = Math.max(lastActivityTime ?? 0, t);
-			}
+	if (builder.full !== null) {
+		if (builder.full.length + fragmentLength <= SESSION_SEARCH_TEXT_MAX_CHARS) {
+			builder.full += `${separator}${text}`;
+		} else {
+			builder.full = null;
 		}
 	}
 
-	return lastActivityTime;
+	if (builder.head.length < SESSION_SEARCH_TEXT_HEAD_CHARS) {
+		const remaining = SESSION_SEARCH_TEXT_HEAD_CHARS - builder.head.length;
+		if (separator && remaining > 0) {
+			builder.head += separator;
+		}
+		const textRemaining = SESSION_SEARCH_TEXT_HEAD_CHARS - builder.head.length;
+		if (textRemaining > 0) {
+			builder.head += copyStringSlice(text, 0, textRemaining);
+		}
+	}
+
+	if (fragmentLength >= SESSION_SEARCH_TEXT_TAIL_CHARS) {
+		builder.tail = copyStringSlice(text, -SESSION_SEARCH_TEXT_TAIL_CHARS);
+		return;
+	}
+	const nextTail = `${builder.tail}${separator}${text}`;
+	builder.tail = nextTail.length <= SESSION_SEARCH_TEXT_TAIL_CHARS
+		? nextTail
+		: copyStringSlice(nextTail, -SESSION_SEARCH_TEXT_TAIL_CHARS);
 }
 
-function getSessionModifiedDate(entries: FileEntry[], header: SessionHeader, statsMtime: Date): Date {
-	const lastActivityTime = getLastActivityTime(entries);
+function getSessionSearchText(builder: SessionSearchTextBuilder): string {
+	return builder.full ?? `${builder.head}${builder.tail}`;
+}
+
+function getFirstMessageText(message: Message): string {
+	let firstMessage = "";
+	for (const part of getMessageTextParts(message)) {
+		const separator = firstMessage ? " " : "";
+		const remaining = SESSION_FIRST_MESSAGE_MAX_CHARS - firstMessage.length;
+		if (remaining <= 0) break;
+		firstMessage += `${separator}${copyStringSlice(part, 0, remaining - separator.length)}`;
+	}
+	return firstMessage;
+}
+
+function getSessionModifiedDate(
+	lastActivityTime: number | undefined,
+	header: SessionHeader,
+	statsMtime: Date,
+): Date {
 	if (typeof lastActivityTime === "number" && lastActivityTime > 0) {
 		return new Date(lastActivityTime);
 	}
@@ -565,30 +606,38 @@ function getSessionModifiedDate(entries: FileEntry[], header: SessionHeader, sta
 
 async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 	try {
-		const content = await readFile(filePath, "utf8");
-		const entries: FileEntry[] = [];
-		const lines = content.trim().split("\n");
-
-		for (const line of lines) {
-			if (!line.trim()) continue;
-			try {
-				entries.push(JSON.parse(line) as FileEntry);
-			} catch {
-				// Skip malformed lines
-			}
-		}
-
-		if (entries.length === 0) return null;
-		const header = entries[0];
-		if (!isSessionHeader(header)) return null;
-
 		const stats = await stat(filePath);
+		let header: SessionHeader | undefined;
 		let messageCount = 0;
 		let firstMessage = "";
-		const allMessages: string[] = [];
 		let name: string | undefined;
+		let lastActivityTime: number | undefined;
+		const searchText: SessionSearchTextBuilder = {
+			full: "",
+			head: "",
+			tail: "",
+			hasText: false,
+		};
+		const lineReader = createInterface({
+			input: createReadStream(filePath, { encoding: "utf8" }),
+			crlfDelay: Infinity,
+		});
 
-		for (const entry of entries) {
+		for await (const line of lineReader) {
+			if (!line.trim()) continue;
+			let entry: FileEntry;
+			try {
+				entry = JSON.parse(line) as FileEntry;
+			} catch {
+				continue;
+			}
+
+			if (!header) {
+				if (!isSessionHeader(entry)) return null;
+				header = entry;
+				continue;
+			}
+
 			// Extract session name (use latest)
 			if (entry.type === "session_info") {
 				const infoEntry = entry as SessionInfoEntry;
@@ -604,19 +653,29 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 			if (!isMessageWithContent(message)) continue;
 			if (message.role !== "user" && message.role !== "assistant") continue;
 
-			const textContent = extractTextContent(message);
-			if (!textContent) continue;
+			const msgTimestamp = (message as { timestamp?: number }).timestamp;
+			if (typeof msgTimestamp === "number") {
+				lastActivityTime = Math.max(lastActivityTime ?? 0, msgTimestamp);
+			} else if (typeof entry.timestamp === "string") {
+				const entryTime = new Date(entry.timestamp).getTime();
+				if (!Number.isNaN(entryTime)) {
+					lastActivityTime = Math.max(lastActivityTime ?? 0, entryTime);
+				}
+			}
 
-			allMessages.push(textContent);
 			if (!firstMessage && message.role === "user") {
-				firstMessage = textContent;
+				firstMessage = getFirstMessageText(message);
+			}
+			for (const textPart of getMessageTextParts(message)) {
+				appendSessionSearchText(searchText, textPart);
 			}
 		}
+		if (!header) return null;
 
 		const cwd = typeof header.cwd === "string" ? header.cwd : "";
 		const parentSessionPath = header.parentSession;
 
-		const modified = getSessionModifiedDate(entries, header, stats.mtime);
+		const modified = getSessionModifiedDate(lastActivityTime, header, stats.mtime);
 
 		return {
 			path: filePath,
@@ -628,7 +687,7 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 			modified,
 			messageCount,
 			firstMessage: firstMessage || "(no messages)",
-			allMessagesText: allMessages.join(" "),
+			allMessagesText: getSessionSearchText(searchText),
 		};
 	} catch {
 		return null;
@@ -654,13 +713,15 @@ async function listSessionsFromDir(
 		const total = progressTotal ?? files.length;
 
 		let loaded = 0;
-		const results = await Promise.all(
-			files.map(async (file) => {
+		const results = await runWithConcurrency(
+			files,
+			SESSION_LIST_CONCURRENCY,
+			async (file) => {
 				const info = await buildSessionInfo(file);
 				loaded++;
 				onProgress?.(progressOffset + loaded, total);
 				return info;
-			}),
+			},
 		);
 		for (const info of results) {
 			if (info) {
@@ -1455,13 +1516,15 @@ export class SessionManager {
 			const sessions: SessionInfo[] = [];
 			const allFiles = dirFiles.flat();
 
-			const results = await Promise.all(
-				allFiles.map(async (file) => {
+			const results = await runWithConcurrency(
+				allFiles,
+				SESSION_LIST_CONCURRENCY,
+				async (file) => {
 					const info = await buildSessionInfo(file);
 					loaded++;
 					onProgress?.(loaded, totalFiles);
 					return info;
-				}),
+				},
 			);
 
 			for (const info of results) {

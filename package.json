@@ -55,7 +55,7 @@
   ],
   "scripts": {
     "dev": "tsx cli.ts",
-    "test": "npm run test:dev-loop && npm run test:security && npm run test:commands && npm run test:tools && npm run test:mcp && npm run test:release",
+    "test": "npm run test:dev-loop && npm run test:security && npm run test:commands && npm run test:tools && npm run test:mcp && npm run test:sessions && npm run test:release",
     "build": "npm run clean:dist && npm run build:deps && tsc -p tsconfig.build.json && npm run copy:internal-libs && npm run copy:theme:json && npm run copy:assets && npm run build:meta && npm run minify:dist",
     "build:meta": "node scripts/generate-build-meta.js",
     "minify:dist": "node scripts/minify-dist.js",
@@ -101,6 +101,7 @@
     "test:tools": "node --test --import tsx test/workspace-write-guard.test.ts test/read-tool.test.ts test/tool-window-validation.test.ts test/bash-sandbox.test.ts test/task-status-panel.test.ts test/task-store-polling.test.ts test/stream-render-task-panel.test.ts",
     "test:presence": "node --test --import tsx test/presence-opening.test.ts",
     "test:interactive-memory-notify": "node --test --import tsx test/interactive-memory-notify.test.ts test/session-manager-header.test.ts",
+    "test:sessions": "node --test --import tsx test/interactive-memory-notify.test.ts test/session-manager-header.test.ts test/session-listing-memory.test.ts",
     "start": "npx cross-env NODE_ENV=production node --no-deprecation dist/cli.js",
     "prepare": "git config core.hooksPath .githooks || true",
     "postinstall": "node -e \"import('fs').then(({chmodSync}) => { try { chmodSync('dist/cli.js', 0o755); } catch (e) { /* dev install before build: no dist yet, skip silently */ } })\"",

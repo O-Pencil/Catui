@@ -117,6 +117,27 @@ describe("ToolRegistry", () => {
 			const result = parseToolName("a.b.c");
 			expect(result.ok).toBe(false);
 		});
+
+		it("accepts a 64-character model-facing name without charging the internal namespace", () => {
+			const name = `tool_${"a".repeat(59)}`;
+			const result = parseToolName(name);
+
+			expect(name).toHaveLength(64);
+			expect(result.ok).toBe(true);
+			if (result.ok) {
+				expect(result.value.localName).toBe(name);
+				expect(result.value.fullName).toBe(`functions.${name}`);
+			}
+		});
+
+		it("rejects a model-facing name longer than 64 characters", () => {
+			const result = parseToolName(`tool_${"a".repeat(60)}`);
+
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error).toContain("too long");
+			}
+		});
 	});
 
 	describe("normalizeToolName", () => {
