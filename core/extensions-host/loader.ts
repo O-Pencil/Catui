@@ -222,6 +222,15 @@ function createExtensionAPI(
 		},
 
 		registerTool(tool: ToolDefinition): void {
+			const existing = extension.tools.get(tool.name);
+			if (existing) {
+				if (existing.definition.description === tool.description) {
+					return;
+				}
+				throw new Error(
+					`Tool collision in extension "${extension.path}": "${tool.name}" has conflicting descriptions`,
+				);
+			}
 			extension.tools.set(tool.name, {
 				definition: tool,
 				extensionPath: extension.path,

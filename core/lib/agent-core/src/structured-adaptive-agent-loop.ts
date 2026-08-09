@@ -50,12 +50,14 @@ import {
 	startToolUseSummary,
 } from "./agent-loop-tool-summaries.js";
 import { buildAgentRunPolicy, resolveAgentRunLoopFramework } from "./agent-run-result.js";
+import { LoopProgressTracker } from "./loop-progress.js";
 import {
 	waitForAbortableOperation,
 	waitForAssistantStream,
 	waitForAssistantStreamEvent,
 	type AssistantStreamNext,
 } from "./agent-loop-stream-events.js";
+import { traceModelRequested, traceModelResponded, traceRunCompleted, traceRunStarted, traceToolBatch, traceTurnCompleted, traceTurnStarted } from "./run-trace-context.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 256;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 512;
@@ -105,6 +107,7 @@ interface QueryLoopState {
 	finalStopReason?: string;
 	finalErrorMessage?: string;
 	finalErrorSubtype?: string;
+	finalCheckpointId?: string;
 }
 
 export function structuredAdaptiveAgentLoop(
@@ -218,11 +221,13 @@ async function runStructuredAdaptiveQueryLoop(
 		usage: emptyUsage(),
 		permissionDenials: [],
 	};
+	await traceRunStarted(config.runTrace, "weak-model-compatible", currentContext.messages);
 	if (initialSteeringMessages.type === "aborted") {
 		finishStructuredAdaptiveWithAbortedTurn(stream, currentContext, newMessages, state);
 		return;
 	}
 	let firstTurn = true;
+	const progressTracker = config.loopProgress ? new LoopProgressTracker(config.loopProgress) : undefined;
 
 	while (true) {
 		if (!firstTurn) {
@@ -249,6 +254,7 @@ async function runStructuredAdaptiveQueryLoop(
 		}
 
 		state.turnCount += 1;
+		await traceTurnStarted(config.runTrace, state.turnCount);
 		if (state.turnCount > maxTurns) {
 			const limitMessage = createLoopLimitMessage(
 				config,
@@ -277,8 +283,14 @@ async function runStructuredAdaptiveQueryLoop(
 			stream,
 			resolveMaxToolConcurrency(config.maxToolConcurrency),
 			config.canUseTool,
+			config.toolPolicies,
+			config.checkpointStore,
+			config.checkpointTtlMs,
+			config.sessionId,
+			currentContext.messages.length + 1,
 		);
 		timing.turnCount++;
+		await traceModelRequested(config.runTrace, state.turnCount, currentContext.messages);
 		const responseStartMessageCount = newMessages.length;
 		const message = await streamAssistantResponse(
 			currentContext,
@@ -291,6 +303,7 @@ async function runStructuredAdaptiveQueryLoop(
 			timing,
 		);
 		newMessages.push(message);
+		await traceModelResponded(config.runTrace, state.turnCount, message);
 		addUsage(state.usage, message.usage);
 		state.maxOutputTokensOverride = undefined;
 
@@ -371,6 +384,7 @@ async function runStructuredAdaptiveQueryLoop(
 		const toolCalls = message.content.filter((c) => c.type === "toolCall");
 		if (toolCalls.length === 0) {
 			stream.push({ type: "turn_end", message, toolResults: [] });
+			await traceTurnCompleted(config.runTrace, state.turnCount, message);
 
 			if (
 				message.stopReason === "length" &&
@@ -514,11 +528,17 @@ async function runStructuredAdaptiveQueryLoop(
 						config.getSteeringMessages,
 						config.maxToolConcurrency,
 						config.canUseTool,
+						config.toolPolicies,
+						config.checkpointStore,
+						config.checkpointTtlMs,
+						config.sessionId,
+						currentContext.messages.length,
 					);
 		const toolResults = enforceToolResultBatchSize(
 			toolExecution.toolResults,
 			config.maxToolResultBatchSizeChars,
 		);
+		await traceToolBatch(config.runTrace, toolCalls, toolResults, Boolean(config.toolPolicies?.length || config.canUseTool));
 		state.permissionDenials.push(...toolExecution.permissionDenials);
 
 		for (const result of toolResults) {
@@ -526,6 +546,53 @@ async function runStructuredAdaptiveQueryLoop(
 			newMessages.push(result);
 			stream.push({ type: "message_start", message: result });
 			stream.push({ type: "message_end", message: result });
+		}
+		if (toolExecution.approvalRequired) {
+			const { checkpointId, policyId } = toolExecution.approvalRequired;
+			stream.push({ type: "turn_end", message, toolResults });
+			await traceTurnCompleted(config.runTrace, state.turnCount, message);
+			recordTransition(state, { reason: "approval_required", checkpointId, policyId });
+			state.finalStopReason = "approval_required";
+			state.finalErrorMessage = `Approval required before tool execution. Checkpoint: ${checkpointId}`;
+			state.finalErrorSubtype = "approval_required";
+			state.finalCheckpointId = checkpointId;
+			finish(stream, newMessages, state);
+			return;
+		}
+		let livelock: ReturnType<LoopProgressTracker["observe"]>;
+		const progressMarker = await config.getProgressMarker?.();
+		if (progressTracker) {
+			for (let index = 0; index < toolResults.length; index++) {
+				const result = toolResults[index];
+				const toolCall = toolCalls[index];
+				if (!result || !toolCall) continue;
+				const errorType = result.details && typeof result.details === "object"
+					? (result.details as { errorType?: unknown }).errorType
+					: undefined;
+				livelock = progressTracker.observe({
+					toolName: toolCall.name,
+					input: toolCall.arguments,
+					output: { content: result.content, details: result.details },
+					outcome: !result.isError ? "success" : errorType === "permission_denied" || errorType === "approval_required" ? "denied" : "error",
+					progressMarker,
+				});
+				if (livelock) break;
+			}
+		}
+		if (livelock) {
+			const limitMessage = createLoopLimitMessage(config, `livelock_detected: stopped after a repeated no-progress tool cycle (${livelock.repeatCount} repeats).`);
+			currentContext.messages.push(limitMessage);
+			newMessages.push(limitMessage);
+			stream.push({ type: "message_start", message: { ...limitMessage } });
+			stream.push({ type: "message_end", message: limitMessage });
+			stream.push({ type: "turn_end", message: limitMessage, toolResults });
+			await traceTurnCompleted(config.runTrace, state.turnCount, limitMessage);
+			recordTransition(state, { reason: "livelock_detected", ...livelock });
+			state.finalStopReason = "error";
+			state.finalErrorMessage = limitMessage.errorMessage;
+			state.finalErrorSubtype = "livelock_detected";
+			finish(stream, newMessages, state);
+			return;
 		}
 		for (const contextMessage of toolExecution.contextMessages) {
 			currentContext.messages.push(contextMessage);
@@ -545,11 +612,14 @@ async function runStructuredAdaptiveQueryLoop(
 		}
 
 		stream.push({ type: "turn_end", message, toolResults });
+		await traceTurnCompleted(config.runTrace, state.turnCount, message);
 
 		if (toolExecution.steeringMessages && toolExecution.steeringMessages.length > 0) {
+			progressTracker?.reset();
 			state.pendingMessages = toolExecution.steeringMessages;
 		} else {
 			state.pendingMessages = (await config.getSteeringMessages?.()) || [];
+			if (state.pendingMessages.length > 0) progressTracker?.reset();
 		}
 		recordTransition(state, { reason: "tool_result", toolCallCount: toolCalls.length });
 	}
@@ -844,9 +914,10 @@ function finish(
 	newMessages: AgentMessage[],
 	state: QueryLoopState,
 ): void {
+	const stopReason = state.finalStopReason ?? inferStopReason(newMessages);
 	stream.push({
 		type: "agent_result",
-		stopReason: state.finalStopReason ?? inferStopReason(newMessages),
+		stopReason,
 		loopFramework: resolveAgentRunLoopFramework(state.config),
 		loopPolicy: buildAgentRunPolicy(state.config),
 		turnCount: state.turnCount,
@@ -859,10 +930,29 @@ function finish(
 		lastTransition: state.transition,
 		errorMessage: state.finalErrorMessage,
 		errorSubtype: state.finalErrorSubtype,
+		checkpointId: state.finalCheckpointId,
 	});
 	_tlog(`loop_finished stopReason=${state.finalStopReason ?? inferStopReason(newMessages)} turns=${state.turnCount} tools=${state.toolCallCount} duration=${Date.now() - state.startedAt}ms`);
-	stream.push({ type: "agent_end", messages: newMessages });
-	stream.end(newMessages);
+	const end = () => {
+		stream.push({ type: "agent_end", messages: newMessages });
+		stream.end(newMessages);
+	};
+	if (!state.config.runTrace) {
+		end();
+		return;
+	}
+	void traceRunCompleted(state.config.runTrace, {
+		stopReason,
+		turnCount: state.turnCount,
+		toolCallCount: state.toolCallCount,
+		messages: newMessages,
+	}).then(end, (error: unknown) => {
+		const traceError = createLoopLimitMessage(state.config, `Required run trace failed: ${error instanceof Error ? error.message : String(error)}`);
+		newMessages.push(traceError);
+		stream.push({ type: "message_start", message: { ...traceError } });
+		stream.push({ type: "message_end", message: traceError });
+		end();
+	});
 }
 
 function recordTransition(state: QueryLoopState, transition: AgentLoopTransition): void {

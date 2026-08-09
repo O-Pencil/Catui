@@ -131,6 +131,16 @@ export class ToolNotFoundError extends ToolExecutionError {
 	}
 }
 
+export class ToolPermissionDeniedError extends ToolExecutionError {
+	public readonly policyId?: string;
+
+	constructor(message: string, toolName: string, toolCallId?: string, policyId?: string) {
+		super(message, toolName, toolCallId);
+		this.name = "ToolPermissionDeniedError";
+		this.policyId = policyId;
+	}
+}
+
 // =============================================================================
 // Validation Errors (non-retriable)
 // =============================================================================

@@ -17,3 +17,10 @@ export * from "./proxy.js";
 export * from "./types.js";
 // Errors
 export * from "./errors.js";
+export * from "./tool-policy.js";
+export * from "./loop-progress.js";
+export * from "./run-checkpoint.js";
+export * from "./run-trace.js";
+export * from "./run-trace-recorder.js";
+export * from "./run-replay.js";
+export * from "./run-trace-context.js";

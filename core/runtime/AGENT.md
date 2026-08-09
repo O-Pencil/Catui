@@ -16,13 +16,15 @@ model-controller.ts: ModelController, CycleModelError, ModelCycleResult, owns mo
 compaction-controller.ts: CompactionController — owns manual + auto compaction flows and their abort slots (AS04); reads session via narrow CompactionControllerContext (lifecycle disconnect/reconnect/abort as capabilities); AgentSession remains the facade and loop continuation host
 session-tree-controller.ts: SessionTreeController — owns navigateTree() + branch summarization + the branch-summary abort slot (AS10); reads session via narrow SessionTreeControllerContext; after this slice AgentSession holds no abort slots
 session-lifecycle-controller.ts: SessionLifecycleController — owns new/switch/fork session identity-change choreography (AS08/AS11); reads session through SessionLifecycleControllerContext; reload/tree/teardown remain separate owners
-tool-runtime-controller.ts: ToolRuntimeController, ToolRuntimeBuildOptions, ToolRuntimeBuildResult, owns runtime tool source merge, extension wrapping, active tool resolution, and ToolOrchestrator registry updates
+tool-runtime-controller.ts: ToolRuntimeController, ToolRuntimeBuildOptions, ToolRuntimeBuildResult, owns runtime tool source merge, extension-tool context adaptation, active tool resolution, and ToolOrchestrator registry updates; lifecycle interception is composed by sdk.ts policies
 prompt-assembly.ts: buildRuntimeSystemPrompt(), getActiveBaseToolNames(), owns runtime prompt resource assembly and base-tool filtering; Soul injection state remains in AgentSession
 default-tools.ts: createDefaultRuntimeTools(), default read/bash/edit/write/time tool wiring with settings-aware image/shell/write-boundary configuration
 extension-core-bindings.ts: bindExtensionCore(), adapts AgentSession host capabilities into ExtensionRunner action/context APIs
 slash-command-catalog.ts: buildSessionSlashCommands(), buildExtensionSlashCommands(), shared slash command catalog assembly for runtime and extension views
 export-bridge.ts: exportSessionHtml(), getLastAssistantText(), owns HTML export wiring and last assistant text extraction; Theme remains injected through AgentSessionConfig
-plan-mode-permissions.ts: createPlanModeCanUseTool(), composePlanModeCanUseTool(), SDK-level plan mode tool permission enforcement; read-only tools allowed, Write/Edit restricted to .md files, Bash read-only whitelist; consumed by sdk.ts when permissionMode === 'plan'
+plan-mode-permissions.ts: createPlanModeCanUseTool(), composePlanModeCanUseTool(), SDK-level plan mode tool permission enforcement; explicit planFilePath enables strict single-file writes while omitted paths preserve the legacy markdown profile; consumed by sdk.ts when permissionMode === 'plan'
+checkpoint-store.ts: FileCheckpointStore, path-confined atomic JSON persistence with cross-process at-most-once checkpoint consumption
+run-trace-jsonl.ts: JsonlRunTraceSink and readRunTraceJsonl, owner-only bounded JSONL persistence for versioned semantic run traces
 thinking-levels.ts: pure thinking-level logic extracted from AgentSession (P4.2) — THINKING_LEVELS(_WITH_XHIGH), modelSupportsThinking/Xhigh, availableThinkingLevels, clampThinkingLevel, nextThinkingLevel; no session state, reusable by rpc/print
 model-cycle.ts: pure model-cycle decisions extracted from AgentSession (P4.2) — pickThinkingLevelOnModelChange, nextCyclicIndex; side effects are owned by model-controller.ts
 
@@ -40,12 +42,13 @@ model-cycle.ts: pure model-cycle decisions extracted from AgentSession (P4.2) �
 | manual + auto compaction (+ abort slots) | `compaction-controller.ts` | `CompactionControllerContext` | [AS04](../../.dev-docs/architecture-review/runtime-session-review/findings/AS04-compaction-coordinator-placeholder.md) |
 | session-tree navigation + branch summary | `session-tree-controller.ts` | `SessionTreeControllerContext` | [AS10](../../.dev-docs/architecture-review/runtime-session-review/findings/AS10-tree-navigation-boundary.md) |
 | session new/switch/fork (identity change) | `session-lifecycle-controller.ts` | `SessionLifecycleControllerContext` | [AS08](../../.dev-docs/architecture-review/runtime-session-review/findings/AS08-session-lifecycle-boundary.md), [AS11](../../.dev-docs/architecture-review/runtime-session-review/findings/AS11-session-fork-boundary.md) |
-| tool runtime merge/wrap/active/registry | `tool-runtime-controller.ts` | `ToolRuntimeBuildOptions/Result` | [AS05](../../.dev-docs/architecture-review/runtime-session-review/findings/AS05-tool-runtime-controller-boundary.md) |
+| tool runtime merge/adapt/active/registry | `tool-runtime-controller.ts` | `ToolRuntimeBuildOptions/Result` | [AS05](../../.dev-docs/architecture-review/runtime-session-review/findings/AS05-tool-runtime-controller-boundary.md) |
 | extension event mapping + turn indexing | `event-bridge.ts` | `ExtensionEventBridgeDeps` | [AS07](../../.dev-docs/architecture-review/runtime-session-review/findings/AS07-event-bridge-boundary.md) |
 | bash execution + pending-message queue | `bash-runner.ts` | closure deps (`BashRunnerDeps`) | P4.1 |
 | runtime prompt resource assembly | `prompt-assembly.ts` | function deps | P4 |
 | HTML export + last assistant text | `export-bridge.ts` | function deps | P4 |
 | retry coordination | `retry-coordinator.ts` | `RetryCoordinatorHost` | pre-existing |
+| semantic run trace persistence | `run-trace-jsonl.ts` | `RunTraceSink` + validated JSONL reader | versioned offline replay and audit boundary |
 | pure thinking-level / model-cycle logic | `thinking-levels.ts`, `model-cycle.ts` | pure functions (no session state) | P4.2 |
 | cancellation slot / listener registry (primitives) | `../platform/abort-slot.ts`, `../platform/listeners.ts` | reusable primitives | P4.2 |
 | composition root: state, facade, loop continuation, teardown | `agent-session.ts` | — (owns adapters + orchestration) | [AS06](../../.dev-docs/architecture-review/runtime-session-review/findings/AS06-agent-session-public-facade.md); reload [AS09 deferred], teardown [AS12 rejected] |

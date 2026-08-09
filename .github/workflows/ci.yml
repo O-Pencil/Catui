@@ -69,6 +69,11 @@ jobs:
         env:
           CI: true
 
+      - name: Run deterministic harness eval gate
+        run: npm run eval:harness
+        env:
+          CI: true
+
   # Optional: Run package-specific tests
   packages-test:
     name: Test Packages

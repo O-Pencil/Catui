@@ -5,6 +5,7 @@
  * [HERE]: core/runtime/plan-mode-permissions.ts — standalone plan mode tool gating for SDK consumers
  */
 
+import { resolve } from "node:path";
 import type { AgentToolPermissionDecision } from "@catui/agent-core";
 
 // ============================================================================
@@ -24,8 +25,6 @@ const READ_ONLY_TOOLS = new Set([
   "WebFetch",
   "GetGoal",
 ]);
-
-const PLAN_TOOLS = new Set(["ExitPlanMode", "EnterPlanMode"]);
 
 const PLAN_SAFE_AGENT_TYPES = new Set(["Explore", "Plan", "explore", "plan"]);
 
@@ -127,6 +126,12 @@ function isMarkdownFile(input: unknown): boolean {
   return /\.md$/i.test(path);
 }
 
+function targetsPlanFile(input: unknown, planFilePath: string, cwd: string): boolean {
+  if (!input || typeof input !== "object") return false;
+  const path = (input as Record<string, unknown>).file_path ?? (input as Record<string, unknown>).path;
+  return typeof path === "string" && resolve(cwd, path) === resolve(cwd, planFilePath);
+}
+
 function isPlanSafeAgent(input: unknown): boolean {
   if (!input || typeof input !== "object") return false;
   const inp = input as Record<string, unknown>;
@@ -148,7 +153,7 @@ function isPlanSafeAgent(input: unknown): boolean {
 // Public API
 // ============================================================================
 
-type CanUseToolEvent = {
+export type PlanModeToolCall = {
   toolCallId: string;
   toolName: string;
   requestedToolName: string;
@@ -156,7 +161,57 @@ type CanUseToolEvent = {
   rawInput: unknown;
 };
 
-type CanUseToolFn = (event: CanUseToolEvent) => Promise<AgentToolPermissionDecision> | AgentToolPermissionDecision;
+type CanUseToolFn = (event: PlanModeToolCall) => Promise<AgentToolPermissionDecision> | AgentToolPermissionDecision;
+
+export function evaluatePlanModeToolCall(
+  event: PlanModeToolCall,
+  cwd: string,
+  options: { planFilePath?: string } = {},
+): AgentToolPermissionDecision {
+  const { toolName, input } = event;
+
+  if (toolName === "ExitPlanMode") return { decision: "allow" };
+  if (toolName === "EnterPlanMode") {
+    if (input && typeof input === "object") {
+      const record = input as Record<string, unknown>;
+      if (typeof record.agentId === "string" || typeof record.parentAgentId === "string") {
+        return { decision: "deny", reason: "EnterPlanMode is not allowed from agent contexts." };
+      }
+    }
+    return { decision: "allow" };
+  }
+  if (READ_ONLY_TOOLS.has(toolName)) return { decision: "allow" };
+
+  if (toolName === "write" || toolName === "Write" || toolName === "edit" || toolName === "Edit") {
+    const allowed = options.planFilePath
+      ? targetsPlanFile(input, options.planFilePath, cwd)
+      : isMarkdownFile(input);
+    return allowed
+      ? { decision: "allow" }
+      : {
+          decision: "deny",
+          reason: options.planFilePath
+            ? `In plan mode, ${toolName} is only allowed for the plan file: ${options.planFilePath}`
+            : `In plan mode, ${toolName} is only allowed for .md files.`,
+        };
+  }
+
+  if (toolName === "bash" || toolName === "Bash") {
+    const command = input && typeof input === "object" ? (input as Record<string, unknown>).command : undefined;
+    if (typeof command === "string" && isReadOnlyBashCommand(command)) return { decision: "allow" };
+    const preview = typeof command === "string" ? command.slice(0, 80) : String(command);
+    return { decision: "deny", reason: `In plan mode, only read-only bash commands are allowed. Command "${preview}${typeof command === "string" && command.length > 80 ? "..." : ""}" is not permitted.` };
+  }
+
+  if (toolName === "Agent" || toolName === "Task" || toolName === "TaskCreate") {
+    return isPlanSafeAgent(input)
+      ? { decision: "allow" }
+      : { decision: "deny", reason: "In plan mode, Agent/Task is only allowed for read-only Explore or Plan agents." };
+  }
+
+  if (ALWAYS_BLOCKED_TOOLS.has(toolName)) return { decision: "deny", reason: `${toolName} is not allowed in plan mode.` };
+  return { decision: "deny", reason: `In plan mode, tool "${toolName}" is blocked. Only read-only tools are allowed.` };
+}
 
 /**
  * Create a canUseTool function that enforces plan mode restrictions.
@@ -169,69 +224,11 @@ type CanUseToolFn = (event: CanUseToolEvent) => Promise<AgentToolPermissionDecis
  * - Agent/Task: only allowed for Explore/Plan types
  * - Everything else: denied
  */
-export function createPlanModeCanUseTool(_cwd: string): CanUseToolFn {
-  return (event: CanUseToolEvent): AgentToolPermissionDecision => {
-    const { toolName, input } = event;
-
-    // Plan tools always allowed
-    if (PLAN_TOOLS.has(toolName)) {
-      return { decision: "allow" };
-    }
-
-    // Read-only tools always allowed
-    if (READ_ONLY_TOOLS.has(toolName)) {
-      return { decision: "allow" };
-    }
-
-    // Write/Edit: only .md files
-    if (toolName === "write" || toolName === "Write" || toolName === "edit" || toolName === "Edit") {
-      if (isMarkdownFile(input)) {
-        return { decision: "allow" };
-      }
-      return {
-        decision: "deny",
-        reason: `In plan mode, ${toolName} is only allowed for .md files.`,
-      };
-    }
-
-    // Bash: read-only only
-    if (toolName === "bash" || toolName === "Bash") {
-      const command = (input as Record<string, unknown>)?.command;
-      if (typeof command === "string" && isReadOnlyBashCommand(command)) {
-        return { decision: "allow" };
-      }
-      const preview = typeof command === "string" ? command.slice(0, 80) : String(command);
-      return {
-        decision: "deny",
-        reason: `In plan mode, only read-only bash commands are allowed. Command "${preview}${(command as string)?.length > 80 ? "..." : ""}" is not permitted.`,
-      };
-    }
-
-    // Agent/Task: Explore/Plan only
-    if (toolName === "Agent" || toolName === "Task" || toolName === "TaskCreate") {
-      if (isPlanSafeAgent(input)) {
-        return { decision: "allow" };
-      }
-      return {
-        decision: "deny",
-        reason: "In plan mode, Agent/Task is only allowed for read-only Explore or Plan agents.",
-      };
-    }
-
-    // Always blocked tools
-    if (ALWAYS_BLOCKED_TOOLS.has(toolName)) {
-      return {
-        decision: "deny",
-        reason: `${toolName} is not allowed in plan mode.`,
-      };
-    }
-
-    // Unknown tools: deny by default
-    return {
-      decision: "deny",
-      reason: `In plan mode, tool "${toolName}" is blocked. Only read-only tools are allowed.`,
-    };
-  };
+export function createPlanModeCanUseTool(
+  cwd: string,
+  options: { planFilePath?: string } = {},
+): CanUseToolFn {
+  return (event: PlanModeToolCall): AgentToolPermissionDecision => evaluatePlanModeToolCall(event, cwd, options);
 }
 
 /**
@@ -243,7 +240,7 @@ export function composePlanModeCanUseTool(
   userCheck?: CanUseToolFn,
 ): CanUseToolFn {
   if (!userCheck) return planModeCheck;
-  return async (event: CanUseToolEvent): Promise<AgentToolPermissionDecision> => {
+  return async (event: PlanModeToolCall): Promise<AgentToolPermissionDecision> => {
     const planResult = await planModeCheck(event);
     if (planResult.decision === "deny") return planResult;
     return userCheck(event);

@@ -3,7 +3,7 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
-agent.ts: Agent class, AgentOptions, AgentLoopPolicyOptions, main agent with message loop, coordinates with agent-loop for execution, stores last run result including transition history, runtime-settable loop policy plumbing
+agent.ts: Agent class, AgentOptions, AgentLoopPolicyOptions, main agent with message loop, coordinates execution, resumes durable approval checkpoints with paired tool results, stores last run result including transition history, runtime-settable loop policy plumbing
 agent-loop.ts: agentLoop and agentLoopContinue, agent execution loop and state machine, transforms to Message[] at LLM boundary, emits request/result telemetry with transition history, recovers model/output errors, tombstones recovered error turns, enforces standard tool lifecycle and tool-result budget gates
 agent-loop-continuations.ts: computeRecoveryMaxTokens, createOutputTokenRecoveryMessage, createTokenBudgetContinuation, shared output continuation policy for agent loops
 agent-loop-stream-events.ts: waitForAssistantStreamEvent, shared abortable assistant-stream iterator utility for agent loops
@@ -13,6 +13,9 @@ agent-run-result.ts: resolveAgentRunLoopFramework(), buildAgentRunPolicy(), shar
 structured-adaptive-agent-loop.ts: structuredAdaptiveAgentLoop and structuredAdaptiveAgentLoopContinue, weak-model-compatible loop with ordered tool results, transition history telemetry, concurrency-safe tool batching, recovered-error tombstoning, and aggregate tool-result budget enforcement
 structured-adaptive-tool-orchestration.ts: runStructuredAdaptiveTools and partitionStructuredAdaptiveToolCalls, weak-model-compatible tool batching/execution layer with ordered tool_result pairing
 structured-adaptive-streaming-tool-executor.ts: StructuredAdaptiveStreamingToolExecutor, starts complete streamed tool calls before assistant done while preserving ordered tool_result emission
+tool-policy.ts: ToolPolicyPipeline, deterministic fail-closed pre-execution policy evaluation with typed allow/deny/pause decisions and input transforms
+loop-progress.ts: LoopProgressTracker, bounded canonical tool-evidence fingerprinting and livelock detection primitive
+run-checkpoint.ts: AgentRunCheckpoint with session/conversation boundary, CheckpointStore, resolveRunCheckpoint, and InMemoryCheckpointStore versioned at-most-once pause/resume primitives
 index.ts: agent-core barrel exports, entry point for package, exports Agent, agentLoop, proxy utilities, types
 proxy.ts: ProxyStreamOptions and streamProxy, proxy stream for apps routing LLM calls through server, manages auth isolation
 types.ts: AgentLoopConfig, AgentRunResult transition history, AgentRunPolicy, CustomAgentMessages, AgentState, AgentToolResult, AgentTool, loop limits/budgets, agent-related type definitions, foundational for all modules

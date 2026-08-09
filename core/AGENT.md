@@ -50,6 +50,10 @@ The `core/` module contains the central business logic for Catui. It orchestrate
 
 `orchestrator.ts`: Tool execution ordering and dependency resolution
 
+`tool-registry.ts`: Namespace-aware tool registry with strict collision detection, registers tools from builtin/MCP/extensions
+
+`tool-name.ts`: Internal canonical tool-name parsing and namespace normalization
+
 ### Extension System (`core/extensions-host/`)
 
 `loader.ts`: Discovers extensions from npm packages, local paths, workspace config
@@ -172,6 +176,8 @@ The `core/` module contains the central business logic for Catui. It orchestrate
 `tui/`: Private workspace library for terminal UI components (`@catui/tui`)
 
 ### Other Modules
+
+`harness-eval/`: Deterministic manifest runner, isolated fixture contracts, and required offline regression corpus
 
 `theme-contract.ts`: Theme/ThemeColor/ThemeBg/ColorMode structural contract (U2 seam); modes Theme class implements it so core never imports the modes UI layer for the type
 `messages.ts`: Message handling and formatting

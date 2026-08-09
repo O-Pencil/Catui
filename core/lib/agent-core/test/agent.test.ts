@@ -56,6 +56,101 @@ function createToolUseMessage(content: AssistantMessage["content"]): AssistantMe
 }
 
 describe("Agent", () => {
+	it.each(["standard", "weak-model-compatible"] as const)("resumes an approved checkpoint exactly once in %s and pairs skipped siblings", async (framework) => {
+		const schema = Type.Object({ value: Type.String() });
+		let deployExecutions = 0;
+		let siblingExecutions = 0;
+		let safeExecutions = 0;
+		let postApprovalChecks = 0;
+		let deployedValue: string | undefined;
+		const safe: AgentTool<typeof schema, { value: string }> = {
+			name: "safe", label: "Safe", description: "Safe", parameters: schema,
+			async execute() { safeExecutions++; return { content: [{ type: "text", text: "safe" }], details: {} }; },
+		};
+		const deploy: AgentTool<typeof schema, { value: string }> = {
+			name: "deploy", label: "Deploy", description: "Deploy", parameters: schema,
+			async execute(_id, params) { deployExecutions++; deployedValue = params.value; return { content: [{ type: "text", text: "deployed" }], details: {} }; },
+		};
+		const sibling: AgentTool<typeof schema, { value: string }> = {
+			name: "sibling", label: "Sibling", description: "Sibling", parameters: schema,
+			async execute() { siblingExecutions++; return { content: [{ type: "text", text: "ran" }], details: {} }; },
+		};
+		let calls = 0;
+		const agent = new Agent({
+			initialState: { model: getModel("openai", "gpt-4o-mini"), tools: [safe, deploy, sibling] },
+			sessionId: "session-1",
+			agentLoopFramework: framework,
+			toolPolicies: [
+				{ id: "approval", beforeTool: (event) => event.toolName === "deploy"
+					? { decision: "pause", reason: "approval required" }
+					: { decision: "allow" } },
+				{ id: "post-approval", beforeTool: (event) => {
+					if (event.toolName !== "deploy") return { decision: "allow" };
+					postApprovalChecks++;
+					return { decision: "allow", input: { value: "reviewed" } };
+				} },
+			],
+			canUseTool: (event) => event.toolName === "deploy" && (event.input as { value?: string }).value !== "reviewed"
+				? { decision: "deny", reason: "post-approval transform missing" }
+				: { decision: "allow" },
+			streamFn: () => {
+				calls++;
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => stream.push(calls === 1 ? {
+					type: "done", reason: "toolUse",
+					message: createToolUseMessage([
+						{ type: "toolCall", id: "safe-1", name: "safe", arguments: { value: "read" } },
+						{ type: "toolCall", id: "deploy-1", name: "deploy", arguments: { value: "prod" } },
+						{ type: "toolCall", id: "sibling-1", name: "sibling", arguments: { value: "unsafe" } },
+					]),
+				} : { type: "done", reason: "stop", message: createAssistantMessage("resumed") }));
+				return stream;
+			},
+		});
+
+		await agent.prompt("deploy");
+		const checkpointId = agent.state.lastResult?.checkpointId;
+		expect(agent.state.lastResult?.stopReason).toBe("approval_required");
+		expect(checkpointId).toBeTypeOf("string");
+		expect(deployExecutions).toBe(0);
+		expect(siblingExecutions).toBe(0);
+		expect(safeExecutions).toBe(1);
+
+		await agent.resumeCheckpoint(checkpointId!, "approve");
+		expect(deployExecutions).toBe(1);
+		expect(deployedValue).toBe("reviewed");
+		expect(postApprovalChecks).toBe(1);
+		expect(siblingExecutions).toBe(0);
+		expect(agent.state.messages.filter((message) => message.role === "toolResult").map((message) => message.toolCallId)).toEqual(["safe-1", "deploy-1", "sibling-1"]);
+		await expect(agent.resumeCheckpoint(checkpointId!, "approve")).rejects.toThrow(/unavailable|consumed/);
+	});
+
+	it("turns a resumed tool exception into a paired error result", async () => {
+		const schema = Type.Object({ value: Type.String() });
+		const exploding: AgentTool<typeof schema> = {
+			name: "explode", label: "Explode", description: "Explode", parameters: schema,
+			async execute() { throw new Error("resume boom"); },
+		};
+		let calls = 0;
+		const agent = new Agent({
+			initialState: { model: getModel("openai", "gpt-4o-mini"), tools: [exploding] },
+			toolPolicies: [{ id: "approval", beforeTool: () => ({ decision: "pause", reason: "approve" }) }],
+			streamFn: () => {
+				calls++;
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => stream.push(calls === 1 ? {
+					type: "done", reason: "toolUse",
+					message: createToolUseMessage([{ type: "toolCall", id: "explode-1", name: "explode", arguments: { value: "x" } }]),
+				} : { type: "done", reason: "stop", message: createAssistantMessage("handled") }));
+				return stream;
+			},
+		});
+		await agent.prompt("explode");
+		await agent.resumeCheckpoint(agent.state.lastResult?.checkpointId ?? "missing", "approve");
+		const result = agent.state.messages.find((message) => message.role === "toolResult" && message.toolCallId === "explode-1");
+		expect(result).toMatchObject({ isError: true, content: [{ type: "text", text: "resume boom" }] });
+	});
+
 	it("should create an agent instance with default state", () => {
 		const agent = new Agent();
 

@@ -266,7 +266,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 				options?.headers,
 				copilotDynamicHeaders,
 			);
-			const params = buildParams(model, context, isOAuthToken, options);
+			const params = buildAnthropicPayload(model, context, isOAuthToken, options);
 			options?.onPayload?.(params);
 			const anthropicStream = client.messages.stream({ ...params, stream: true }, { signal: options?.signal });
 			stream.push({ type: "start", partial: output });
@@ -627,7 +627,8 @@ function createClient(
 	return { client, isOAuthToken: false };
 }
 
-function buildParams(
+/** Build the Anthropic request payload without performing network I/O. */
+export function buildAnthropicPayload(
 	model: Model<"anthropic-messages">,
 	context: Context,
 	isOAuthToken: boolean,

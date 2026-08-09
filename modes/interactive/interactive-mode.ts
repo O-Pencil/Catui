@@ -429,6 +429,7 @@ export class InteractiveMode {
         showError: (message) => this.showError(message),
         promptInput: (title, placeholder, opts) =>
           this.promptHost.input(title, placeholder, opts),
+        pickOption: (title, options) => this.promptHost.selector(title, options),
         requestRender: () => this.ui.requestRender(),
         getUi: () => this.ui,
         getEditorContainer: () => this.editorContainer,

@@ -245,6 +245,7 @@ Catui is built on three pillars:
 - [MCP Guide](docs/MCP集成指南.md)
 - [Keybindings](docs/KEYBINDINGS.md)
 - [Extensions](docs/EXTENSIONS.md)
+- [Run Trace, Replay, and Harness Eval](docs/run-trace-and-replay.md)
 
 ---
 

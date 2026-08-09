@@ -32,7 +32,7 @@ import type {
 	AgentToolResult,
 	StreamFn,
 } from "./types.js";
-import { ToolNotFoundError, ToolExecutionError, ValidationError } from "./errors.js";
+import { ToolNotFoundError, ToolExecutionError, ToolPermissionDeniedError, ValidationError } from "./errors.js";
 import {
 	computeRecoveryMaxTokens,
 	createOutputTokenRecoveryMessage,
@@ -49,12 +49,15 @@ import {
 	startToolUseSummary,
 } from "./agent-loop-tool-summaries.js";
 import { buildAgentRunPolicy, resolveAgentRunLoopFramework } from "./agent-run-result.js";
+import { ToolPolicyPipeline } from "./tool-policy.js";
+import { LoopProgressTracker, type LivelockDetection } from "./loop-progress.js";
 import {
 	waitForAbortableOperation,
 	waitForAssistantStream,
 	waitForAssistantStreamEvent,
 	type AssistantStreamNext,
 } from "./agent-loop-stream-events.js";
+import { traceModelRequested, traceModelResponded, traceRunCompleted, traceRunStarted, traceToolBatch, traceTurnCompleted, traceTurnStarted } from "./run-trace-context.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 256;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 512;
@@ -95,6 +98,7 @@ type StandardLoopFinishOptions = {
 	lastTransition?: AgentLoopTransition;
 	errorMessage?: string;
 	errorSubtype?: string;
+	checkpointId?: string;
 };
 
 type StandardLoopAbortFinishOptions = Omit<
@@ -260,6 +264,7 @@ async function runLoop(
 	_tlog(`run_loop start`);
 	const usage = emptyUsage();
 	const permissionDenials: AgentToolPermissionDenial[] = [];
+	const progressTracker = config.loopProgress ? new LoopProgressTracker(config.loopProgress) : undefined;
 	const maxTurns = config.maxTurnsPerPrompt ?? DEFAULT_MAX_TURNS_PER_PROMPT;
 	const maxToolCalls = config.maxToolCallsPerPrompt ?? DEFAULT_MAX_TOOL_CALLS_PER_PROMPT;
 	const maxStopHookContinuations = config.maxStopHookContinuations ?? DEFAULT_MAX_STOP_HOOK_CONTINUATIONS;
@@ -273,6 +278,7 @@ async function runLoop(
 	let maxOutputTokensOverride: number | undefined;
 	let lastTransition: AgentLoopTransition = { reason: "start" };
 	const transitions: AgentLoopTransition[] = [];
+	await traceRunStarted(config.runTrace, "standard", currentContext.messages);
 	const recordTransition = (transition: AgentLoopTransition): AgentLoopTransition => {
 		lastTransition = transition;
 		transitions.push(transition);
@@ -333,6 +339,7 @@ async function runLoop(
 			}
 
 			turnCount++;
+			await traceTurnStarted(config.runTrace, turnCount);
 			// Overthinking guard: warn agent to wrap up before hitting hard limit
 			if (!turnWarningInjected && turnCount > maxTurns * 0.8) {
 				turnWarningInjected = true;
@@ -375,6 +382,7 @@ async function runLoop(
 
 			// Stream assistant response
 			timing.turnCount++;
+			await traceModelRequested(config.runTrace, turnCount, currentContext.messages);
 			const responseStartMessageCount = newMessages.length;
 			const message = await streamAssistantResponse(
 				currentContext,
@@ -388,6 +396,7 @@ async function runLoop(
 			addUsage(usage, message.usage);
 			maxOutputTokensOverride = undefined;
 			newMessages.push(message);
+			await traceModelResponded(config.runTrace, turnCount, message);
 
 			if (message.stopReason === "error" || message.stopReason === "aborted") {
 				const errorSubtype =
@@ -513,13 +522,21 @@ async function runLoop(
 					stream,
 					config.getSteeringMessages,
 					config.canUseTool,
+					config.toolPolicies,
+					progressTracker,
+					config.checkpointStore,
+					config.checkpointTtlMs,
+					config.sessionId,
+					currentContext.messages.length,
+					await config.getProgressMarker?.(),
 				);
+				await traceToolBatch(config.runTrace, toolCalls, toolExecution.toolResults, Boolean(config.toolPolicies?.length || config.canUseTool));
 				toolResults.push(
 					...enforceToolResultBatchSize(toolExecution.toolResults, config.maxToolResultBatchSizeChars),
 				);
 				permissionDenials.push(...collectPermissionDenials(toolExecution.toolResults));
 				steeringAfterTools = toolExecution.steeringMessages ?? null;
-
+				if (steeringAfterTools?.length) progressTracker?.reset();
 				for (const result of toolResults) {
 					currentContext.messages.push(result);
 					newMessages.push(result);
@@ -531,6 +548,35 @@ async function runLoop(
 					newMessages.push(contextMessage);
 					stream.push({ type: "message_start", message: contextMessage });
 					stream.push({ type: "message_end", message: contextMessage });
+				}
+				if (toolExecution.approvalRequired) {
+					const { checkpointId, policyId } = toolExecution.approvalRequired;
+					stream.push({ type: "turn_end", message, toolResults });
+					await traceTurnCompleted(config.runTrace, turnCount, message);
+					finishStandardLoop(stream, newMessages, {
+						config, turnCount, toolCallCount, startedAt, usage, permissionDenials,
+						stopReason: "approval_required", transitions, checkpointId,
+						lastTransition: recordTransition({ reason: "approval_required", checkpointId, policyId }),
+						errorMessage: `Approval required before tool execution. Checkpoint: ${checkpointId}`,
+						errorSubtype: "approval_required",
+					});
+					return;
+				}
+				if (toolExecution.livelock) {
+					const limitMessage = createLoopLimitMessage(config, `Stopped after detecting a repeated no-progress tool cycle (${toolExecution.livelock.repeatCount} repeats).`);
+					currentContext.messages.push(limitMessage);
+					newMessages.push(limitMessage);
+					stream.push({ type: "message_start", message: { ...limitMessage } });
+					stream.push({ type: "message_end", message: limitMessage });
+					stream.push({ type: "turn_end", message: limitMessage, toolResults });
+					await traceTurnCompleted(config.runTrace, turnCount, limitMessage);
+					finishStandardLoop(stream, newMessages, {
+						config, turnCount, toolCallCount, startedAt, usage, permissionDenials,
+						stopReason: limitMessage.stopReason, transitions,
+						lastTransition: recordTransition({ reason: "livelock_detected", ...toolExecution.livelock }),
+						errorMessage: limitMessage.errorMessage, errorSubtype: "livelock_detected",
+					});
+					return;
 				}
 				const pendingSummary = startToolUseSummary(config, {
 					assistantMessage: message,
@@ -545,6 +591,7 @@ async function runLoop(
 			}
 
 			stream.push({ type: "turn_end", message, toolResults });
+			await traceTurnCompleted(config.runTrace, turnCount, message);
 
 			if (
 				!hasMoreToolCalls &&
@@ -921,9 +968,10 @@ function finishStandardLoop(
 	newMessages: AgentMessage[],
 	options: StandardLoopFinishOptions,
 ): void {
+	const stopReason = options.stopReason ?? inferStopReason(newMessages);
 	stream.push({
 		type: "agent_result",
-		stopReason: options.stopReason ?? inferStopReason(newMessages),
+		stopReason,
 		loopFramework: resolveAgentRunLoopFramework(options.config),
 		loopPolicy: buildAgentRunPolicy(options.config),
 		turnCount: options.turnCount,
@@ -936,10 +984,29 @@ function finishStandardLoop(
 		lastTransition: options.lastTransition,
 		errorMessage: options.errorMessage,
 		errorSubtype: options.errorSubtype,
+		checkpointId: options.checkpointId,
 	});
 	_tlog(`loop_finished stopReason=${options.stopReason ?? inferStopReason(newMessages)} turns=${options.turnCount} tools=${options.toolCallCount} duration=${Date.now() - options.startedAt}ms`);
-	stream.push({ type: "agent_end", messages: newMessages });
-	stream.end(newMessages);
+	const end = () => {
+		stream.push({ type: "agent_end", messages: newMessages });
+		stream.end(newMessages);
+	};
+	if (!options.config.runTrace) {
+		end();
+		return;
+	}
+	void traceRunCompleted(options.config.runTrace, {
+		stopReason,
+		turnCount: options.turnCount,
+		toolCallCount: options.toolCallCount,
+		messages: newMessages,
+	}).then(end, (error: unknown) => {
+		const traceError = createLoopLimitMessage(options.config, `Required run trace failed: ${error instanceof Error ? error.message : String(error)}`);
+		newMessages.push(traceError);
+		stream.push({ type: "message_start", message: { ...traceError } });
+		stream.push({ type: "message_end", message: traceError });
+		end();
+	});
 }
 
 function emptyUsage(): Usage {
@@ -1002,12 +1069,21 @@ async function executeToolCalls(
 	stream: EventStream<AgentEvent, AgentMessage[]>,
 	getSteeringMessages?: AgentLoopConfig["getSteeringMessages"],
 	canUseTool?: AgentLoopConfig["canUseTool"],
-): Promise<{ toolResults: ToolResultMessage[]; contextMessages: AgentMessage[]; steeringMessages?: AgentMessage[] }> {
+	toolPolicies?: AgentLoopConfig["toolPolicies"],
+	progressTracker?: LoopProgressTracker,
+	checkpointStore?: AgentLoopConfig["checkpointStore"],
+	checkpointTtlMs?: number,
+	sessionId?: string,
+	messageCount = 0,
+	progressMarker?: string,
+): Promise<{ toolResults: ToolResultMessage[]; contextMessages: AgentMessage[]; steeringMessages?: AgentMessage[]; livelock?: LivelockDetection; approvalRequired?: { checkpointId: string; policyId?: string } }> {
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
 	const toolByName = buildToolMap(tools);
 	const results: ToolResultMessage[] = [];
 	const contextMessages: AgentMessage[] = [];
 	let steeringMessages: AgentMessage[] | undefined;
+	let livelock: LivelockDetection | undefined;
+	let approvalRequired: { checkpointId: string; policyId?: string } | undefined;
 
 	for (let index = 0; index < toolCalls.length; index++) {
 		const toolCall = toolCalls[index];
@@ -1024,16 +1100,34 @@ async function executeToolCalls(
 
 		let result: AgentToolResult<any>;
 		let isError = false;
+		let executedInput: unknown = toolCall.arguments;
+		let didExecute = false;
 
 		try {
 			if (!tool) throw new ToolNotFoundError(toolCall.name);
 
-			const validatedArgs = validateToolArguments(tool, toolCall);
+			let validatedArgs = validateToolArguments(tool, toolCall);
 			const validationMessage = await tool.validateInput?.(validatedArgs);
 			if (typeof validationMessage === "string" && validationMessage.trim()) {
 				throw new Error(validationMessage);
 			}
-			const permission = await canUseTool?.({
+			const policyDecision = toolPolicies?.length
+				? await new ToolPolicyPipeline(toolPolicies, {
+					checkpointStore,
+					checkpointTtlMs,
+					sessionId,
+					conversationBoundary: { messageCount, assistantTimestamp: assistantMessage.timestamp },
+				}).evaluateBefore({
+					toolCallId: toolCall.id,
+					toolName: tool.name,
+					requestedToolName: toolCall.name,
+					input: validatedArgs,
+					rawInput: toolCall.arguments,
+				})
+				: undefined;
+			if (policyDecision?.decision === "allow" && policyDecision.input !== undefined) validatedArgs = policyDecision.input;
+			executedInput = validatedArgs;
+			const permission = policyDecision && policyDecision.decision !== "allow" ? policyDecision : await canUseTool?.({
 				toolCallId: toolCall.id,
 				toolName: tool.name,
 				requestedToolName: toolCall.name,
@@ -1041,21 +1135,26 @@ async function executeToolCalls(
 				rawInput: toolCall.arguments,
 				tool,
 			});
-			if (permission?.decision === "deny") {
+			if (permission?.decision === "deny" || permission?.decision === "pause") {
 				const reason = permission.reason?.trim();
+				const policyId = "policyId" in permission ? permission.policyId : undefined;
+				const checkpointId = "checkpointId" in permission ? permission.checkpointId : undefined;
 				result = {
 					content: [
 						{ type: "text", text: reason ? `Permission denied: ${reason}` : `Permission denied for ${tool.name}` },
 					],
 					details: {
-						errorType: "permission_denied",
+						errorType: permission.decision === "pause" ? "approval_required" : "permission_denied",
 						reason,
+						policyId,
+						checkpointId,
 						toolName: tool.name,
 						toolCallId: toolCall.id,
 					},
 				};
 				isError = true;
 			} else {
+				didExecute = true;
 				result = await tool.execute(toolCall.id, validatedArgs, signal, (partialResult) => {
 					stream.push({
 						type: "tool_execution_update",
@@ -1069,18 +1168,33 @@ async function executeToolCalls(
 			}
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e);
+			const denied = e instanceof ToolPermissionDeniedError;
 			result = {
 				content: [{ type: "text", text: message }],
-				details: isPermissionDeniedMessage(message)
+				details: denied || isPermissionDeniedMessage(message)
 					? {
 							errorType: "permission_denied",
 							reason: message,
+							policyId: denied ? e.policyId : undefined,
 							toolName: tool?.name ?? toolCall.name,
 							toolCallId: toolCall.id,
 						}
 					: {},
 			};
 			isError = true;
+		}
+		if (tool && didExecute && toolPolicies?.length) {
+			const evaluated = await new ToolPolicyPipeline(toolPolicies).evaluateAfter({
+				toolCallId: toolCall.id,
+				toolName: tool.name,
+				requestedToolName: toolCall.name,
+				input: executedInput,
+				rawInput: toolCall.arguments,
+				result,
+				isError,
+			});
+			result = evaluated.result;
+			isError = evaluated.isError;
 		}
 
 		const toolDurationMs = Date.now() - startedAt;
@@ -1103,9 +1217,34 @@ async function executeToolCalls(
 			isError,
 			timestamp: Date.now(),
 		};
+		const errorType = result.details && typeof result.details === "object" ? (result.details as { errorType?: unknown }).errorType : undefined;
+		livelock = progressTracker?.observe({
+			toolName: toolCall.name,
+			input: toolCall.arguments,
+			output: { content: result.content, details: result.details },
+			outcome: !isError ? "success" : errorType === "permission_denied" || errorType === "approval_required" ? "denied" : "error",
+			progressMarker,
+		});
 
 		results.push(toolResultMessage);
 		contextMessages.push(...(result.contextMessages ?? []));
+		if (errorType === "approval_required") {
+			const details = result.details as { checkpointId?: unknown; policyId?: unknown };
+			if (typeof details.checkpointId === "string") {
+				approvalRequired = {
+					checkpointId: details.checkpointId,
+					policyId: typeof details.policyId === "string" ? details.policyId : undefined,
+				};
+				results.pop();
+				break;
+			}
+		}
+		if (livelock) {
+			for (const skipped of toolCalls.slice(index + 1)) {
+				results.push(skipToolCall(skipped, stream, "Skipped because a repeated no-progress cycle was detected.", { errorType: "livelock_detected" }));
+			}
+			break;
+		}
 
 		// Check for steering messages - skip remaining tools if user interrupted
 		if (getSteeringMessages) {
@@ -1121,7 +1260,7 @@ async function executeToolCalls(
 		}
 	}
 
-	return { toolResults: results, contextMessages, steeringMessages };
+	return { toolResults: results, contextMessages, steeringMessages, livelock, approvalRequired };
 }
 
 function buildToolMap(tools: AgentTool<any>[] | undefined): Map<string, AgentTool<any>> {
@@ -1188,10 +1327,12 @@ function enforceMaxResultSize<T>(
 function skipToolCall(
 	toolCall: Extract<AssistantMessage["content"][number], { type: "toolCall" }>,
 	stream: EventStream<AgentEvent, AgentMessage[]>,
+	reason = "Skipped due to queued user message.",
+	details: Record<string, unknown> = {},
 ): ToolResultMessage {
 	const result: AgentToolResult<any> = {
-		content: [{ type: "text", text: "Skipped due to queued user message." }],
-		details: {},
+		content: [{ type: "text", text: reason }],
+		details,
 	};
 
 	stream.push({
@@ -1213,7 +1354,7 @@ function skipToolCall(
 		toolCallId: toolCall.id,
 		toolName: toolCall.name,
 		content: result.content,
-		details: {},
+		details,
 		isError: true,
 		timestamp: Date.now(),
 	};

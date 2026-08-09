@@ -12,6 +12,7 @@ import { agentLoop, agentLoopContinue } from "../src/agent-loop.js";
 import { structuredAdaptiveAgentLoop } from "../src/structured-adaptive-agent-loop.js";
 import { buildToolMap, partitionStructuredAdaptiveToolCalls, type StructuredAdaptiveToolCall } from "../src/structured-adaptive-tool-orchestration.js";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, AgentTool } from "../src/types.js";
+import { InMemoryCheckpointStore } from "../src/run-checkpoint.js";
 
 // Mock stream for testing - mimics MockAssistantStream
 class MockAssistantStream extends EventStream<AssistantMessageEvent, AssistantMessage> {
@@ -1281,6 +1282,95 @@ describe("agentLoop with AgentMessage", () => {
 			maxTurns: 1,
 			turnCount: 2,
 		});
+	});
+
+	it.each([
+		["standard", agentLoop],
+		["weak-model-compatible", structuredAdaptiveAgentLoop],
+	] as const)("should stop %s loops after repeated no-progress failures", async (_framework, run) => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "stuck",
+			label: "Stuck",
+			description: "Always fails",
+			parameters: toolSchema,
+			async execute() {
+				throw new Error("still stuck");
+			},
+		};
+		const context: AgentContext = { systemPrompt: "", messages: [], tools: [tool] };
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			loopProgress: { repetitionThreshold: 3 },
+		};
+		let streamCalls = 0;
+		const stream = run([createUserMessage("loop")], context, config, undefined, () => {
+			streamCalls++;
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => mockStream.push({
+				type: "done",
+				reason: "toolUse",
+				message: createAssistantMessage([
+					{ type: "toolCall", id: `tool-${streamCalls}`, name: "stuck", arguments: { value: "same" } },
+				], "toolUse"),
+			}));
+			return mockStream;
+		});
+		const events: AgentEvent[] = [];
+		for await (const event of stream) events.push(event);
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> => event.type === "agent_result");
+		expect(streamCalls).toBe(3);
+		expect(result?.errorSubtype).toBe("livelock_detected");
+		expect(result?.lastTransition).toMatchObject({ reason: "livelock_detected", repeatCount: 3 });
+	});
+
+	it("should checkpoint a paused policy without executing the tool", async () => {
+		const schema = Type.Object({ command: Type.String() });
+		let executed = false;
+		const tool: AgentTool<typeof schema, { command: string }> = {
+			name: "deploy", label: "Deploy", description: "Deploy", parameters: schema,
+			async execute() { executed = true; return { content: [{ type: "text", text: "done" }], details: {} }; },
+		};
+		const store = new InMemoryCheckpointStore();
+		let followupExecuted = false;
+		const followup: AgentTool<typeof schema, { command: string }> = {
+			name: "followup", label: "Followup", description: "Must be skipped", parameters: schema,
+			async execute() { followupExecuted = true; return { content: [{ type: "text", text: "bad" }], details: {} }; },
+		};
+		const context: AgentContext = { systemPrompt: "", messages: [], tools: [tool, followup] };
+		let streamCalls = 0;
+		const stream = agentLoop([createUserMessage("deploy")], context, {
+			model: createModel(), convertToLlm: identityConverter, checkpointStore: store,
+			toolPolicies: [{ id: "approval", beforeTool: (event) => event.toolName === "deploy" ? ({ decision: "pause", reason: "approve deploy" }) : ({ decision: "allow" }) }],
+		}, undefined, () => {
+			streamCalls++;
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => mockStream.push(streamCalls === 1 ? {
+				type: "done", reason: "toolUse",
+				message: createAssistantMessage([
+					{ type: "toolCall", id: "deploy-1", name: "deploy", arguments: { command: "prod" } },
+					{ type: "toolCall", id: "followup-1", name: "followup", arguments: { command: "must-not-run" } },
+				], "toolUse"),
+			} : {
+				type: "done", reason: "stop", message: createAssistantMessage([{ type: "text", text: "waiting" }]),
+			}));
+			return mockStream;
+		});
+		const events: AgentEvent[] = [];
+		for await (const event of stream) events.push(event);
+		const paused = events.find((event): event is Extract<AgentEvent, { type: "tool_execution_end" }> =>
+			event.type === "tool_execution_end" && event.toolCallId === "deploy-1",
+		);
+		const checkpointId = (paused?.result.details as { checkpointId?: string } | undefined)?.checkpointId;
+		expect(executed).toBe(false);
+		expect(followupExecuted).toBe(false);
+		expect((paused?.result.details as { errorType?: string } | undefined)?.errorType).toBe("approval_required");
+		expect(checkpointId).toBeTypeOf("string");
+		expect(await store.consume(checkpointId!)).toMatchObject({ policyId: "approval", toolCall: { name: "deploy" } });
+		const runResult = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> => event.type === "agent_result");
+		expect(runResult?.errorSubtype).toBe("approval_required");
+		expect(runResult?.checkpointId).toBe(checkpointId);
 	});
 
 	it("should inject queued messages and skip remaining tool calls", async () => {
