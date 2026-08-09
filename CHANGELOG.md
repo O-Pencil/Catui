@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.8] - 2026-08-09
+
+### Fixed
+- fix(runtime): prevent the default discipline and Skill extensions from colliding on `functions.skill` during startup
+
 ## [1.2.7] - 2026-08-09
 
 ### Added
