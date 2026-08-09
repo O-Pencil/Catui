@@ -83,6 +83,12 @@ export interface CandidateRecord {
 	state: CandidateState;
 	proposal: EvolutionProposal;
 	evidence: Partial<Record<GateEvidence["gate"], GateEvidence>>;
+	pendingReason?: string;
+	approval?: {
+		actor: string;
+		approvedAt: string;
+		overrideMissingEffectiveness: boolean;
+	};
 }
 
 export interface RevisionManifest {
