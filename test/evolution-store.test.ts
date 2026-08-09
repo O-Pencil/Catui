@@ -5,7 +5,7 @@
  * [HERE]: test/evolution-store.test.ts - durable self-evolution store coverage
  */
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -183,4 +183,18 @@ test("rolls back by atomically activating an existing immutable revision", async
 	assert.equal(rolledBack.revisionId, first.revisionId);
 	assert.equal(rolledBack.previousRevisionId, second.revisionId);
 	assert.equal((await store.readActiveManifest("workspace"))?.candidateId, "candidate-a");
+});
+
+test("rejects symlinked active manifest leaf files", async () => {
+	const { store } = await createStore();
+	await store.createCandidate("workspace", proposal("candidate-a", null));
+	await writePassingEvidence(store, "candidate-a");
+	const active = await store.promote("workspace", "candidate-a");
+	const paths = await store.scopePaths("workspace");
+	const manifestPath = join(paths.revisionsDir, active.revisionId, "manifest.json");
+	const outside = join(await mkdtemp(join(tmpdir(), "catui-manifest-outside-")), "manifest.json");
+	await writeFile(outside, "{}\n");
+	await unlink(manifestPath);
+	await symlink(outside, manifestPath);
+	await assert.rejects(() => store.readActiveManifest("workspace"), /symlink/i);
 });

@@ -56,6 +56,7 @@ export function redactEvolutionEvidence(value: string, privatePaths: readonly st
 	redacted = redacted.replace(/\bauthorization\s*:\s*(?:bearer|basic)\s+\S+/gi, "[REDACTED_SECRET]");
 	redacted = redacted.replace(/\b(?:sk-(?:proj-)?|gh[pousr]_|xox[baprs]-|AIza)[A-Za-z0-9._-]{8,}/g, "[REDACTED_SECRET]");
 	redacted = redacted.replace(/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, "[REDACTED_SECRET]");
+	redacted = redacted.replace(/\bAWS_(?:SECRET_ACCESS_KEY|SESSION_TOKEN)\s*=\s*\S+/g, "[REDACTED_SECRET]");
 	redacted = redacted.replace(/["']?(?:api_key|client_secret|private_key|access_token|refresh_token)["']?\s*:\s*["'][\s\S]*?["']/gi, "[REDACTED_SECRET]");
 	redacted = redacted.replace(/\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*(?:["'][\s\S]*?["']|\S+)/gi, "[REDACTED_SECRET]");
 	redacted = redacted.replace(/(?:\/Users\/|\/home\/)[^\s"']+/g, "[REDACTED_PATH]");

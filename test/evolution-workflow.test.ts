@@ -139,4 +139,10 @@ test("higher evolved scopes override only through explicit provenance", () => {
 	assert.deepEqual(renamed.map((artifact) => artifact.id), ["evolved:memory:replacement"]);
 	const orphanOverride = { ...renamedOverride, overrides: "evolved:memory:missing" };
 	assert.deepEqual(mergeScopedArtifacts([{ scope: "session", artifacts: [orphanOverride] }]), []);
+	const occupiedReplacement = { ...base, id: renamedOverride.id, content: "existing new" };
+	const conflicting = mergeScopedArtifacts([
+		{ scope: "global", artifacts: [base, occupiedReplacement] },
+		{ scope: "session", artifacts: [renamedOverride] },
+	]);
+	assert.deepEqual(conflicting.map((artifact) => artifact.content), ["global", "existing new"]);
 });

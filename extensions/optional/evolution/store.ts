@@ -309,8 +309,9 @@ export class EvolutionStore {
 	async rollback(scope: EvolutionScope, revisionId: string): Promise<ActivationResult> {
 		return this.withActivationLock(scope, async (paths) => {
 			const target = safeSegment(revisionId, "Revision id");
-			await this.assertSafe(join(paths.revisionsDir, target));
-			await readJson<RevisionManifest>(join(paths.revisionsDir, target, "manifest.json"));
+			const manifestPath = join(paths.revisionsDir, target, "manifest.json");
+			await this.assertSafe(manifestPath);
+			await readJson<RevisionManifest>(manifestPath);
 			const current = await this.getCurrent(scope);
 			if (current?.revisionId === target) return { revisionId: target, previousRevisionId: current.previousRevisionId };
 			await this.writePointer(paths, {
@@ -350,8 +351,9 @@ export class EvolutionStore {
 		const current = await this.getCurrent(scope);
 		if (!current) return undefined;
 		const paths = await this.scopePaths(scope);
-		await this.assertSafe(join(paths.revisionsDir, current.revisionId));
-		const manifest = await readJson<RevisionManifest>(join(paths.revisionsDir, current.revisionId, "manifest.json"));
+		const manifestPath = join(paths.revisionsDir, current.revisionId, "manifest.json");
+		await this.assertSafe(manifestPath);
+		const manifest = await readJson<RevisionManifest>(manifestPath);
 		if (manifest.revisionId !== current.revisionId || manifest.contentHash !== `sha256:${sha256(manifest.artifacts)}`) {
 			throw new Error("Active evolution revision failed integrity validation");
 		}
@@ -368,7 +370,7 @@ export class EvolutionStore {
 				const name = skillDirectoryName(artifact.id);
 				return { name, path: join(paths.revisionsDir, manifest.revisionId, "artifacts", "skills", name), artifact };
 			});
-		for (const skill of skills) await this.assertSafe(skill.path);
+		for (const skill of skills) await this.assertSafe(join(skill.path, "SKILL.md"));
 		return skills;
 	}
 }

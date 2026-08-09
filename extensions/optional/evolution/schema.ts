@@ -28,6 +28,7 @@ const SECRET_PATTERNS = [
 	/\bauthorization\s*:\s*(?:bearer|basic)\s+\S+/i,
 	/\b(?:sk-(?:proj-)?|gh[pousr]_|xox[baprs]-|AIza)[A-Za-z0-9._-]{8,}/,
 	/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/,
+	/\bAWS_(?:SECRET_ACCESS_KEY|SESSION_TOKEN)\s*=\s*\S+/,
 	/["']?(?:api_key|client_secret|private_key|access_token|refresh_token)["']?\s*:/i,
 	/\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+/i,
 ];

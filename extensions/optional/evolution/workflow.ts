@@ -112,6 +112,7 @@ export function mergeScopedArtifacts(
 			if (artifact.overrides) {
 				const targetEntry = [...selected.entries()].find(([, current]) => current.id === artifact.overrides);
 				if (!targetEntry) continue;
+				if (selected.has(key) && key !== targetEntry[0]) continue;
 				selected.delete(targetEntry[0]);
 				selected.set(key, artifact);
 				continue;
