@@ -101,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - feat(teach): add guided knowledge teaching extension
 
 ### Fixed
+- fix(release): align simplify fallback models with generated catalog
 - fix(ci): build publishable workspace packages
 - fix(ci): synchronize workspace lockfile
 - fix(harness): make approval resume fail closed
