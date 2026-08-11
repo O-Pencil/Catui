@@ -15,8 +15,10 @@ import {
 	createEvolutionCandidate,
 	getEvolutionScopeRoot,
 	inspectEvolution,
+	loadActiveEvolutionSkillPaths,
 	loadActiveEvolutionArtifacts,
 	promoteEvolutionCandidate,
+	recordEvolutionFeedback,
 	rejectEvolutionCandidate,
 	recordEvolutionGateFailure,
 	rollbackEvolution,
@@ -27,6 +29,7 @@ import {
 	formatCreatedCandidate,
 	formatEvolutionChanges,
 	formatEvolutionStatus,
+	formatEvolutionUsefulnessReview,
 	formatRevision,
 } from "./evolution-format.js";
 import { planEvolutionCandidate } from "./evolution-refiner.js";
@@ -64,6 +67,12 @@ function rootFor(ctx: ExtensionContext, selector: EvolutionScopeSelector): strin
 
 function send(api: ExtensionAPI, content: string): void {
 	api.sendMessage({ customType: MESSAGE_TYPE, content, display: true });
+}
+
+function parseFeedbackOutcome(value: string | undefined): "useful" | "not_useful" {
+	if (value === "useful") return "useful";
+	if (value === "not_useful" || value === "not-useful") return "not_useful";
+	throw new Error("Usage: /refine feedback <usage-id> useful|not-useful [note]");
 }
 
 async function handleRefineCommand(args: string, ctx: ExtensionCommandContext, api: ExtensionAPI): Promise<void> {
@@ -108,6 +117,23 @@ async function handleRefineCommand(args: string, ctx: ExtensionCommandContext, a
 	}
 	if (subcommand === "changes") {
 		send(api, formatEvolutionChanges(inspectEvolution(root), tail[0]));
+		return;
+	}
+	if (subcommand === "review") {
+		send(api, formatEvolutionUsefulnessReview(inspectEvolution(root)));
+		return;
+	}
+	if (subcommand === "feedback") {
+		const usageId = tail[0];
+		if (!usageId) throw new Error("Usage: /refine feedback <usage-id> useful|not-useful [note]");
+		const feedback = recordEvolutionFeedback(root, {
+			usageId,
+			outcome: parseFeedbackOutcome(tail[1]),
+			note: tail.slice(2).join(" "),
+			recordedBy: "user",
+		});
+		api.appendEntry("catui.evolution.feedback", { scope: parsed.scope, usageId, feedbackId: feedback.id, outcome: feedback.outcome });
+		send(api, `Evolution usage feedback recorded: ${feedback.outcome} for ${feedback.usageId}.`);
 		return;
 	}
 	if (subcommand === "promote" || subcommand === "approve") {
@@ -170,6 +196,16 @@ function beforeAgentStart(ctx: ExtensionContext): BeforeAgentStartEventResult | 
 	return appendSystemPrompt ? { appendSystemPrompt } : undefined;
 }
 
+function discoverResources(ctx: ExtensionContext): { skillPaths?: string[] } | undefined {
+	const roots = [
+		rootFor(ctx, { scope: "global" }),
+		rootFor(ctx, { scope: "workspace", cwd: ctx.cwd }),
+		rootFor(ctx, { scope: "session", sessionId: ctx.sessionManager.getSessionId() }),
+	];
+	const skillPaths = roots.flatMap((root) => loadActiveEvolutionSkillPaths(root));
+	return skillPaths.length > 0 ? { skillPaths } : undefined;
+}
+
 export default async function evolutionExtension(api: ExtensionAPI): Promise<void> {
 	const autoObserver = new EvolutionAutoObserver();
 	api.registerTool(createEvolutionRefineTool());
@@ -178,7 +214,7 @@ export default async function evolutionExtension(api: ExtensionAPI): Promise<voi
 	api.registerCommand("refine", {
 		description: "Propose, inspect, promote, reject, or rollback controlled evolved harness artifacts.",
 		getArgumentCompletions: (prefix) => {
-			const values = ["status", "inspect", "changes", "promote", "approve", "reject", "rollback", "--session", "--workspace", "--global"];
+			const values = ["status", "inspect", "changes", "review", "feedback", "promote", "approve", "reject", "rollback", "--session", "--workspace", "--global"];
 			const normalized = prefix.trim();
 			return values
 				.filter((value) => value.startsWith(normalized))
@@ -186,6 +222,7 @@ export default async function evolutionExtension(api: ExtensionAPI): Promise<voi
 		},
 		handler: (args, ctx) => handleRefineCommand(args, ctx, api),
 	});
+	api.on("resources_discover", (_event, ctx) => discoverResources(ctx));
 	api.on("before_agent_start", (_event, ctx) => beforeAgentStart(ctx));
 	api.on("turn_end", async (event, ctx) => {
 		try {

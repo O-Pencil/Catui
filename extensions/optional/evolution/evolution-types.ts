@@ -13,6 +13,7 @@ export type EvolutionArtifactKind =
 	| "skill_manifest"
 	| "subagent_spec"
 	| "tool_spec"
+	| "workflow_spec"
 	| "executable_tool"
 	| "eval_fixture";
 
@@ -161,6 +162,34 @@ export interface EvolutionQuarantine {
 	source: "active_revision";
 }
 
+export interface EvolutionUsageRecord {
+	schemaVersion: 1;
+	id: string;
+	artifactId: string;
+	artifactKind: EvolutionArtifactKind;
+	revisionId?: string;
+	scope: EvolutionScope;
+	status: "success" | "error";
+	usedAt: string;
+	usedBy: string;
+	inputHash?: string;
+	resultSummary?: string;
+	error?: string;
+}
+
+export interface EvolutionFeedbackRecord {
+	schemaVersion: 1;
+	id: string;
+	usageId: string;
+	artifactId: string;
+	revisionId?: string;
+	scope: EvolutionScope;
+	outcome: "useful" | "not_useful";
+	note?: string;
+	recordedAt: string;
+	recordedBy: string;
+}
+
 export interface EvolutionScopeSelector {
 	scope: EvolutionScope;
 	sessionId?: string;
@@ -174,4 +203,6 @@ export interface EvolutionInspection {
 	revisions: EvolutionRevision[];
 	attributions: EvolutionAttribution[];
 	quarantines: EvolutionQuarantine[];
+	usages: EvolutionUsageRecord[];
+	feedbacks: EvolutionFeedbackRecord[];
 }

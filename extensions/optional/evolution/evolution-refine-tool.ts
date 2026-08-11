@@ -38,6 +38,7 @@ const EvolutionRefineInput = Type.Object({
 		Type.Literal("skill_manifest"),
 		Type.Literal("subagent_spec"),
 		Type.Literal("tool_spec"),
+		Type.Literal("workflow_spec"),
 		Type.Literal("executable_tool"),
 		Type.Literal("eval_fixture"),
 	], { description: "Artifact kind for create_artifact. Defaults to tool_spec for create_tool_spec." })),
@@ -92,6 +93,7 @@ function resolveKind(action: string, kind: string | undefined): EvolutionArtifac
 		kind === "skill_manifest" ||
 		kind === "subagent_spec" ||
 		kind === "tool_spec" ||
+		kind === "workflow_spec" ||
 		kind === "executable_tool" ||
 		kind === "eval_fixture"
 	) {

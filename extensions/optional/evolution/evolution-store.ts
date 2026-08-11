@@ -1,12 +1,12 @@
 /**
- * [WHO]: Evolution ledger path resolution, validation, prediction manifests, post-hoc attribution, eval_fixture dedupe/retention, gated promotion, quarantine, rollback, and conservative auto-rollback
+ * [WHO]: Evolution ledger path resolution, validation, no-IO executable DSL manifests, usage records, prediction manifests, post-hoc attribution, eval_fixture dedupe/retention, gated promotion, quarantine, rollback, and conservative auto-rollback
  * [FROM]: Depends on node fs/path/crypto for owner-only runtime state below agentDir/evolution/v1
  * [TO]: Consumed by optional evolution extension command handlers and tests
  * [HERE]: extensions/optional/evolution/evolution-store.ts - durable store for controlled self-evolution
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync, appendFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import type {
 	EvolutionArtifact,
@@ -25,6 +25,8 @@ import type {
 	EvolutionPrediction,
 	EvolutionPredictionAttribution,
 	EvolutionStreamAttribution,
+	EvolutionUsageRecord,
+	EvolutionFeedbackRecord,
 } from "./evolution-types.js";
 
 const EVOLUTION_SCHEMA_VERSION = 1;
@@ -34,6 +36,7 @@ const MAX_CONTENT_CHARS = 4000;
 const MAX_GLOBAL_AUTO_PROMOTE_CONTENT_CHARS = 800;
 const MAX_TITLE_CHARS = 160;
 const MAX_ACTIVE_EVAL_FIXTURES = 3;
+const MAX_EXECUTABLE_DSL_PATTERN_CHARS = 240;
 const SAFE_FILE_MODE = 0o600;
 
 const ARTIFACT_KINDS: readonly EvolutionArtifactKind[] = [
@@ -42,6 +45,7 @@ const ARTIFACT_KINDS: readonly EvolutionArtifactKind[] = [
 	"skill_manifest",
 	"subagent_spec",
 	"tool_spec",
+	"workflow_spec",
 	"executable_tool",
 	"eval_fixture",
 ];
@@ -62,6 +66,12 @@ const EXECUTABLE_PATTERNS: readonly RegExp[] = [
 	/\bsk-[A-Za-z0-9_-]{16,}\b/,
 	/\bhttps?:\/\/[^\s)]+/i,
 	/\bmcpServers\b|\bserverCommand\b|\bpackage\.json\b|\bserver\s+(?:endpoint|url|command)\b/i,
+];
+
+const SECRET_REDACTION_PATTERNS: readonly RegExp[] = [
+	/\bAuthorization\s*:\s*Bearer\s+[^\s,;)]+/gi,
+	/\b(?:api[_-]?key|secret|token|credential|password)\b\s*[:=]\s*[^\s,;)]+/gi,
+	/\bsk-[A-Za-z0-9_-]{16,}\b/g,
 ];
 
 export interface EvolutionClockOptions {
@@ -95,6 +105,24 @@ export interface EvolutionAutoRollbackOptions extends EvolutionAttributionOption
 	rollbackBy?: string;
 }
 
+export interface EvolutionUsageOptions extends EvolutionClockOptions {
+	artifact: EvolutionArtifact;
+	scope: EvolutionUsageRecord["scope"];
+	revisionId?: string;
+	status: EvolutionUsageRecord["status"];
+	usedBy?: string;
+	input?: Record<string, unknown>;
+	resultSummary?: string;
+	error?: string;
+}
+
+export interface EvolutionFeedbackOptions extends EvolutionClockOptions {
+	usageId: string;
+	outcome: EvolutionFeedbackRecord["outcome"];
+	note?: string;
+	recordedBy?: string;
+}
+
 function now(options?: EvolutionClockOptions): string {
 	return options?.now?.() ?? new Date().toISOString();
 }
@@ -109,6 +137,36 @@ function sha256(value: string): string {
 
 function safeSegment(value: string): string {
 	return value.trim().replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120) || "unknown";
+}
+
+function evolvedSkillName(artifactId: string): string {
+	const prefix = "evolved:skill_manifest:";
+	const raw = artifactId.startsWith(prefix) ? artifactId.slice(prefix.length) : artifactId;
+	return `evolved-${safeSegment(raw).toLowerCase()}`;
+}
+
+function skillMarkdown(artifact: EvolutionArtifact): string {
+	const applicability = artifact.applicability ? `\n\nApplicability: ${artifact.applicability}` : "";
+	const nonApplicability = artifact.nonApplicability ? `\n\nNon-applicability: ${artifact.nonApplicability}` : "";
+	return [
+		"---",
+		`name: ${evolvedSkillName(artifact.id)}`,
+		`description: ${JSON.stringify(artifact.title)}`,
+		"---",
+		"",
+		`# ${artifact.title}`,
+		"",
+		artifact.content,
+		applicability,
+		nonApplicability,
+		"",
+	].join("\n");
+}
+
+function redactSecretLikeText(value: string): string {
+	let redacted = value;
+	for (const pattern of SECRET_REDACTION_PATTERNS) redacted = redacted.replace(pattern, "[redacted-secret]");
+	return redacted;
 }
 
 function assertInside(root: string, target: string): void {
@@ -188,6 +246,18 @@ function quarantinePath(scopeRoot: string, quarantineId: string): string {
 	return path;
 }
 
+function usagePath(scopeRoot: string, usageId: string): string {
+	const path = join(scopeRoot, "usage", safeSegment(usageId), "record.json");
+	assertInside(scopeRoot, path);
+	return path;
+}
+
+function feedbackPath(scopeRoot: string, feedbackId: string): string {
+	const path = join(scopeRoot, "feedback", safeSegment(feedbackId), "record.json");
+	assertInside(scopeRoot, path);
+	return path;
+}
+
 function loadActiveFixtures(scopeRoot: string): EvolutionActiveFixtures | undefined {
 	const active = readJson<EvolutionActiveFixtures>(activeFixturesPath(scopeRoot));
 	if (!active || active.schemaVersion !== EVOLUTION_SCHEMA_VERSION) return undefined;
@@ -231,13 +301,49 @@ function validateExecutableToolManifest(artifact: EvolutionArtifact): string[] {
 				continue;
 			}
 			const record = step as Record<string, unknown>;
-			if (record.op !== "template") errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} uses unsupported op`);
 			if (typeof record.output !== "string" || !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(record.output)) {
 				errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} output is invalid`);
 			}
-			if (typeof record.template !== "string" || record.template.length > 1000) {
-				errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} template is invalid`);
+			if (record.op === "template") {
+				if (typeof record.template !== "string" || record.template.length > 1000) {
+					errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} template is invalid`);
+				}
+				continue;
 			}
+			if (record.op === "regex_extract") {
+				if (typeof record.source !== "string" || !/^(input|outputs)\.[a-zA-Z][a-zA-Z0-9_.]{0,127}$/.test(record.source)) {
+					errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} regex source is invalid`);
+				}
+				if (typeof record.pattern !== "string" || record.pattern.length === 0 || record.pattern.length > MAX_EXECUTABLE_DSL_PATTERN_CHARS) {
+					errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} regex pattern is invalid`);
+				} else {
+					try {
+						new RegExp(record.pattern);
+					} catch {
+						errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} regex pattern is invalid`);
+					}
+				}
+				if (record.flags !== undefined && (typeof record.flags !== "string" || !/^[imsu]*$/.test(record.flags))) {
+					errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} regex flags are invalid`);
+				}
+				if (record.group !== undefined && (!Number.isInteger(record.group) || Number(record.group) < 0 || Number(record.group) > 20)) {
+					errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} regex group is invalid`);
+				}
+				if (record.fallback !== undefined && (typeof record.fallback !== "string" || record.fallback.length > 1000)) {
+					errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} fallback is invalid`);
+				}
+				continue;
+			}
+			if (record.op === "json_path") {
+				if (typeof record.path !== "string" || !/^(input|outputs)\.[a-zA-Z][a-zA-Z0-9_.]{0,127}$/.test(record.path)) {
+					errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} json path is invalid`);
+				}
+				if (record.fallback !== undefined && (typeof record.fallback !== "string" || record.fallback.length > 1000)) {
+					errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} fallback is invalid`);
+				}
+				continue;
+			}
+			errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} uses unsupported op`);
 		}
 	}
 	const approvedHash = artifact.metadata?.approvedContentHash;
@@ -251,6 +357,49 @@ function validateExecutableToolManifest(artifact: EvolutionArtifact): string[] {
 		const record = permissions as Record<string, unknown>;
 		if (record.workspaceOnly !== true || record.network !== false || record.install !== false || record.write !== "none") {
 			errors.push(`artifact ${artifact.id} executable_tool permission manifest must be workspace-only with network=false, install=false, and write=none`);
+		}
+	}
+	return errors;
+}
+
+function validateWorkflowSpecMetadata(artifact: EvolutionArtifact): string[] {
+	const errors: string[] = [];
+	const metadata = artifact.metadata;
+	if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
+		return [`artifact ${artifact.id} workflow_spec metadata is required`];
+	}
+	const phases = metadata.phases;
+	if (!Array.isArray(phases) || phases.length === 0 || phases.length > 12) {
+		errors.push(`artifact ${artifact.id} workflow phases must contain 1-12 phases`);
+	} else {
+		for (const [index, phase] of phases.entries()) {
+			if (typeof phase !== "object" || phase === null || Array.isArray(phase)) {
+				errors.push(`artifact ${artifact.id} workflow phase ${index + 1} must be an object`);
+				continue;
+			}
+			const record = phase as Record<string, unknown>;
+			if (typeof record.name !== "string" || !record.name.trim() || record.name.length > 120) {
+				errors.push(`artifact ${artifact.id} workflow phase ${index + 1} name is invalid`);
+			}
+			if (!Array.isArray(record.checks) || record.checks.length === 0 || record.checks.length > 12) {
+				errors.push(`artifact ${artifact.id} workflow phase ${index + 1} checks must contain 1-12 checks`);
+			} else {
+				for (const [checkIndex, check] of record.checks.entries()) {
+					if (typeof check !== "string" || !check.trim() || check.length > 200) {
+						errors.push(`artifact ${artifact.id} workflow phase ${index + 1} check ${checkIndex + 1} is invalid`);
+					}
+				}
+			}
+		}
+	}
+	const successSignals = metadata.successSignals;
+	if (!Array.isArray(successSignals) || successSignals.length === 0 || successSignals.length > 12) {
+		errors.push(`artifact ${artifact.id} workflow successSignals must contain 1-12 signals`);
+	} else {
+		for (const [index, signal] of successSignals.entries()) {
+			if (typeof signal !== "string" || !signal.trim() || signal.length > 240) {
+				errors.push(`artifact ${artifact.id} workflow success signal ${index + 1} is invalid`);
+			}
 		}
 	}
 	return errors;
@@ -275,6 +424,7 @@ function validateArtifact(artifact: EvolutionArtifact, seen: Set<string>): strin
 	if (hasExecutableContent(artifact)) {
 		errors.push(`artifact ${artifact.id} contains executable command, package, credential, or server content`);
 	}
+	if (artifact.kind === "workflow_spec") errors.push(...validateWorkflowSpecMetadata(artifact));
 	if (artifact.kind === "executable_tool") errors.push(...validateExecutableToolManifest(artifact));
 	return errors;
 }
@@ -452,6 +602,72 @@ export function recordEvolutionGateFailure(
 		at: updatedAt,
 	});
 	return updated;
+}
+
+export function recordEvolutionUsage(scopeRoot: string, options: EvolutionUsageOptions): EvolutionUsageRecord {
+	const usedAt = now(options);
+	const usage: EvolutionUsageRecord = {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		id: nextId("usage", options),
+		artifactId: options.artifact.id,
+		artifactKind: options.artifact.kind,
+		...(options.revisionId ? { revisionId: options.revisionId } : {}),
+		scope: options.scope,
+		status: options.status,
+		usedAt,
+		usedBy: options.usedBy ?? "model-tool",
+		...(options.input ? { inputHash: `sha256:${sha256(JSON.stringify(options.input))}` } : {}),
+		...(options.resultSummary ? { resultSummary: options.resultSummary.slice(0, 500) } : {}),
+		...(options.error ? { error: options.error.slice(0, 500) } : {}),
+	};
+	writeJsonAtomic(usagePath(scopeRoot, usage.id), usage);
+	appendHistory(scopeRoot, {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		event: "artifact_used",
+		usageId: usage.id,
+		artifactId: usage.artifactId,
+		artifactKind: usage.artifactKind,
+		revisionId: usage.revisionId,
+		status: usage.status,
+		at: usage.usedAt,
+		usedBy: usage.usedBy,
+	});
+	return usage;
+}
+
+export function recordEvolutionFeedback(scopeRoot: string, options: EvolutionFeedbackOptions): EvolutionFeedbackRecord {
+	const usage = readJson<EvolutionUsageRecord>(usagePath(scopeRoot, options.usageId));
+	if (!usage || usage.schemaVersion !== EVOLUTION_SCHEMA_VERSION) throw new Error(`Evolution usage record not found: ${options.usageId}`);
+	const recordedAt = now(options);
+	const feedback: EvolutionFeedbackRecord = {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		id: nextId("feedback", options),
+		usageId: usage.id,
+		artifactId: usage.artifactId,
+		...(usage.revisionId ? { revisionId: usage.revisionId } : {}),
+		scope: usage.scope,
+		outcome: options.outcome,
+		...(options.note?.trim() ? { note: redactSecretLikeText(options.note.trim()).slice(0, 500) } : {}),
+		recordedAt,
+		recordedBy: options.recordedBy ?? "user",
+	};
+	writeJsonAtomic(feedbackPath(scopeRoot, feedback.id), feedback);
+	appendHistory(scopeRoot, {
+		schemaVersion: EVOLUTION_SCHEMA_VERSION,
+		event: "usage_feedback_recorded",
+		feedbackId: feedback.id,
+		usageId: feedback.usageId,
+		artifactId: feedback.artifactId,
+		revisionId: feedback.revisionId,
+		outcome: feedback.outcome,
+		at: feedback.recordedAt,
+		recordedBy: feedback.recordedBy,
+	});
+	return feedback;
+}
+
+export function currentEvolutionRevisionId(scopeRoot: string): string | undefined {
+	return loadCurrentEvolution(scopeRoot)?.revisionId;
 }
 
 function loadCandidate(scopeRoot: string, candidateId: string): EvolutionCandidate {
@@ -788,6 +1004,23 @@ export function loadActiveEvolutionArtifacts(scopeRoot: string): EvolutionArtifa
 	return loadRevision(scopeRoot, current.revisionId).artifacts;
 }
 
+export function loadActiveEvolutionSkillPaths(scopeRoot: string): string[] {
+	const current = loadCurrentEvolution(scopeRoot);
+	if (!current) return [];
+	const revision = loadRevision(scopeRoot, current.revisionId);
+	const skillArtifacts = revision.artifacts.filter((artifact) => artifact.kind === "skill_manifest");
+	if (skillArtifacts.length === 0) return [];
+	const skillRoot = join(scopeRoot, "resources", "skills", safeSegment(revision.id));
+	assertInside(scopeRoot, skillRoot);
+	for (const artifact of skillArtifacts) {
+		const skillDir = join(skillRoot, evolvedSkillName(artifact.id));
+		assertInside(scopeRoot, skillDir);
+		mkdirSync(skillDir, { recursive: true, mode: 0o700 });
+		writeFileSync(join(skillDir, "SKILL.md"), skillMarkdown(artifact), { encoding: "utf8", mode: SAFE_FILE_MODE });
+	}
+	return [skillRoot];
+}
+
 export function loadActiveEvalFixtureArtifacts(scopeRoot: string): EvolutionArtifact[] {
 	const active = loadActiveFixtures(scopeRoot);
 	if (!active || active.activeArtifactIds.length === 0) return [];
@@ -823,6 +1056,12 @@ export function inspectEvolution(scopeRoot: string): EvolutionInspection {
 	const quarantines = listJsonRecords<EvolutionQuarantine>(join(scopeRoot, "quarantines"), "record.json").sort((a, b) =>
 		a.quarantinedAt.localeCompare(b.quarantinedAt),
 	);
+	const usages = listJsonRecords<EvolutionUsageRecord>(join(scopeRoot, "usage"), "record.json").sort((a, b) =>
+		a.usedAt.localeCompare(b.usedAt),
+	);
+	const feedbacks = listJsonRecords<EvolutionFeedbackRecord>(join(scopeRoot, "feedback"), "record.json").sort((a, b) =>
+		a.recordedAt.localeCompare(b.recordedAt),
+	);
 	const attributions = listAttributions(scopeRoot, revisions);
 	const latestAttributionByRevision = new Map<string, EvolutionAttribution>();
 	for (const attribution of attributions) latestAttributionByRevision.set(attribution.revisionId, attribution);
@@ -830,5 +1069,5 @@ export function inspectEvolution(scopeRoot: string): EvolutionInspection {
 		const attribution = latestAttributionByRevision.get(revision.id);
 		return attribution ? { ...revision, attribution } : revision;
 	});
-	return { current: loadCurrentEvolution(scopeRoot), activeFixtures: loadActiveFixtures(scopeRoot), candidates, revisions: enrichedRevisions, attributions, quarantines };
+	return { current: loadCurrentEvolution(scopeRoot), activeFixtures: loadActiveFixtures(scopeRoot), candidates, revisions: enrichedRevisions, attributions, quarantines, usages, feedbacks };
 }

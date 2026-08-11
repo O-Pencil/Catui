@@ -22,6 +22,8 @@ import {
 	promoteEvolutionCandidate,
 	recordEvolutionAttribution,
 	recordEvolutionAttributionAndMaybeRollback,
+	recordEvolutionFeedback,
+	recordEvolutionUsage,
 	rejectEvolutionCandidate,
 	rollbackEvolution,
 } from "../extensions/optional/evolution/evolution-store.js";
@@ -108,6 +110,18 @@ function executableToolContent(): string {
 	});
 }
 
+function executableDslToolContent(): string {
+	return JSON.stringify({
+		schemaVersion: 1,
+		description: "Classify local failure evidence with safe in-memory DSL steps.",
+		steps: [
+			{ op: "regex_extract", output: "code", source: "input.log", pattern: "(TS\\d+)", group: 1, fallback: "unknown" },
+			{ op: "json_path", output: "owner", path: "input.context.owner", fallback: "unknown-owner" },
+			{ op: "template", output: "summary", template: "{{outputs.code}} belongs to {{outputs.owner}}." },
+		],
+	});
+}
+
 function executableToolInput(scope: EvolutionCandidateInput["scope"] = "workspace", content = executableToolContent()): EvolutionCandidateInput {
 	return {
 		scope,
@@ -130,6 +144,32 @@ function executableToolInput(scope: EvolutionCandidateInput["scope"] = "workspac
 						write: "none",
 					},
 				},
+			},
+		],
+	};
+}
+
+function workflowSpecInput(metadata: Record<string, unknown> = {
+	phases: [
+		{ name: "Verify", checks: ["focused tests", "DIP", "quality", "build"] },
+		{ name: "Publish", checks: ["push main", "npm publish"] },
+	],
+	successSignals: ["origin/main contains the version commit", "npm registry returns the released version"],
+}): EvolutionCandidateInput {
+	return {
+		scope: "workspace",
+		summary: "Promote a reusable release workflow",
+		rationale: "Release tasks require ordered verification and publish evidence.",
+		expectedOutcome: "Future turns can invoke the workflow through evolved_tool.",
+		artifacts: [
+			{
+				id: "evolved:workflow_spec:catui-release",
+				kind: "workflow_spec",
+				title: "Catui release workflow",
+				content: "Use this workflow when preparing a Catui release.",
+				applicability: "The user asks to release Catui.",
+				nonApplicability: "The user only asks for local code changes.",
+				metadata,
 			},
 		],
 	};
@@ -577,6 +617,38 @@ test("evolution accepts only workspace-scoped executable tools with approved has
 		assert.throws(() => createEvolutionCandidate(root, unsafe, { id: () => "candidate-unsafe-executable" }), /permission|network|install|write/i);
 	}));
 
+test("evolution accepts executable tools with safe DSL transforms and rejects unsupported DSL steps", () =>
+	withTempAgentDir((agentDir) => {
+		const root = getEvolutionScopeRoot(agentDir, { scope: "workspace", cwd: "/tmp/project-executable-dsl" });
+		const content = executableDslToolContent();
+		const candidate = createEvolutionCandidate(root, executableToolInput("workspace", content), { id: () => "candidate-executable-dsl" });
+		assert.equal(candidate.artifacts[0]?.kind, "executable_tool");
+
+		const unsupported = JSON.stringify({
+			schemaVersion: 1,
+			description: "Unsafe transform",
+			steps: [
+				{ op: "http_fetch", output: "result", url: "input.url" },
+			],
+		});
+		assert.throws(
+			() => createEvolutionCandidate(root, executableToolInput("workspace", unsupported), { id: () => "candidate-unsupported-dsl" }),
+			/unsupported op/i,
+		);
+
+		const unsafeFlags = JSON.stringify({
+			schemaVersion: 1,
+			description: "Unsafe regex flags",
+			steps: [
+				{ op: "regex_extract", output: "match", source: "input.log", pattern: "(TS\\d+)", flags: "gy" },
+			],
+		});
+		assert.throws(
+			() => createEvolutionCandidate(root, executableToolInput("workspace", unsafeFlags), { id: () => "candidate-unsafe-regex-flags" }),
+			/regex flags/i,
+		);
+	}));
+
 test("evolution global auto-promotion allows bounded declarative tool specs", () => {
 	const allowed = canAutoPromoteGlobalEvolution({
 		scope: "global",
@@ -596,6 +668,67 @@ test("evolution global auto-promotion allows bounded declarative tool specs", ()
 	});
 	assert.equal(allowed.allowed, true);
 });
+
+test("evolution accepts structured workflow specs and rejects unstructured workflow metadata", () =>
+	withTempAgentDir((agentDir) => {
+		const root = getEvolutionScopeRoot(agentDir, { scope: "workspace", cwd: "/tmp/project-workflow-spec" });
+		const candidate = createEvolutionCandidate(root, workflowSpecInput(), { id: () => "candidate-workflow" });
+		assert.equal(candidate.artifacts[0]?.kind, "workflow_spec");
+
+		assert.throws(
+			() => createEvolutionCandidate(root, workflowSpecInput({ phases: [], successSignals: ["done"] }), { id: () => "candidate-empty-workflow" }),
+			/workflow.*phases/i,
+		);
+		assert.throws(
+			() => createEvolutionCandidate(root, workflowSpecInput({ phases: [{ name: "Verify", checks: [] }], successSignals: ["done"] }), { id: () => "candidate-empty-checks" }),
+			/workflow.*checks/i,
+		);
+		assert.throws(
+			() => createEvolutionCandidate(root, workflowSpecInput({ phases: [{ name: "Verify", checks: ["build"] }], successSignals: [] }), { id: () => "candidate-empty-success" }),
+			/workflow.*success/i,
+		);
+	}));
+
+test("evolution feedback records redact secret-like note content", () =>
+	withTempAgentDir((agentDir) => {
+		const root = getEvolutionScopeRoot(agentDir, { scope: "workspace", cwd: "/tmp/project-feedback-redaction" });
+		createEvolutionCandidate(root, workflowSpecInput(), { id: () => "candidate-feedback-redaction" });
+		promoteEvolutionCandidate(root, "candidate-feedback-redaction", {
+			id: () => "revision-feedback-redaction",
+			approvedBy: "test",
+		});
+		const artifact = inspectEvolution(root).revisions[0]?.artifacts[0];
+		assert.ok(artifact);
+		const usage = recordEvolutionUsage(root, {
+			artifact,
+			scope: "workspace",
+			revisionId: "revision-feedback-redaction",
+			status: "success",
+			input: { request: "release" },
+		});
+		const feedback = recordEvolutionFeedback(root, {
+			usageId: usage.id,
+			outcome: "useful",
+			note: "Useful but saw token sk-1234567890abcdefghijklmnop in pasted output.",
+			id: () => "feedback-redacted",
+		});
+
+		assert.doesNotMatch(feedback.note ?? "", /sk-1234567890abcdefghijklmnop/);
+		assert.match(feedback.note ?? "", /\[redacted-secret\]/);
+		const persisted = readFileSync(join(root, "feedback", "feedback-redacted", "record.json"), "utf8");
+		assert.doesNotMatch(persisted, /sk-1234567890abcdefghijklmnop/);
+		assert.equal(inspectEvolution(root).feedbacks[0]?.note, feedback.note);
+	}));
+
+test("evolution feedback rejects unknown usage records", () =>
+	withTempAgentDir((agentDir) => {
+		const root = getEvolutionScopeRoot(agentDir, { scope: "workspace", cwd: "/tmp/project-feedback-missing-usage" });
+		assert.throws(
+			() => recordEvolutionFeedback(root, { usageId: "usage-missing", outcome: "not_useful" }),
+			/Evolution usage record not found: usage-missing/,
+		);
+		assert.equal(inspectEvolution(root).feedbacks.length, 0);
+	}));
 
 test("evolution rejects duplicate eval fixtures by content hash across candidates and revisions", () =>
 	withTempAgentDir((agentDir) => {

@@ -7,7 +7,7 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -23,10 +23,11 @@ import type {
 import evolutionExtension from "../extensions/optional/evolution/index.js";
 import {
 	createEvolutionCandidate,
-	getEvolutionScopeRoot,
 	inspectEvolution,
+	getEvolutionScopeRoot,
 	promoteEvolutionCandidate,
 } from "../extensions/optional/evolution/evolution-store.js";
+import { formatEvolutionChanges } from "../extensions/optional/evolution/evolution-format.js";
 import { createEvolutionRefineTool } from "../extensions/optional/evolution/evolution-refine-tool.js";
 
 function minimalTrace(outputFingerprint = "sha256:out"): RunTraceEventV1[] {
@@ -108,10 +109,27 @@ function executableToolContent(): string {
 	});
 }
 
+function executableDslToolContent(): string {
+	return JSON.stringify({
+		schemaVersion: 1,
+		description: "Classify local failure evidence with safe in-memory DSL steps.",
+		steps: [
+			{ op: "regex_extract", output: "code", source: "input.log", pattern: "(TS\\d+)", group: 1, fallback: "unknown" },
+			{ op: "json_path", output: "owner", path: "input.context.owner", fallback: "unknown-owner" },
+			{ op: "template", output: "summary", template: "{{outputs.code}} belongs to {{outputs.owner}}." },
+		],
+	});
+}
+
 type BeforeAgentStartHandler = (
 	event: BeforeAgentStartEvent,
 	ctx: ExtensionCommandContext,
 ) => BeforeAgentStartEventResult | Promise<BeforeAgentStartEventResult | void> | void;
+
+type ResourcesDiscoverHandler = (
+	event: { type: "resources_discover"; cwd: string; reason: "startup" | "reload" },
+	ctx: ExtensionCommandContext,
+) => { skillPaths?: string[] } | Promise<{ skillPaths?: string[] } | undefined> | undefined;
 
 function createHarness() {
 	const agentDir = mkdtempSync(join(tmpdir(), "catui-evolution-extension-"));
@@ -227,7 +245,9 @@ test("evolution extension exposes promoted tool specs through controlled evolved
 	try {
 		await evolutionExtension(harness.api);
 		const tool = harness.tools.get("evolved_tool");
+		const refineCommand = harness.commands.get("refine");
 		assert.ok(tool, "Expected evolved_tool to be registered.");
+		assert.ok(refineCommand, "Expected refine command to be registered.");
 
 		const scope = { scope: "session" as const, sessionId: "session-tool" };
 		const root = getEvolutionScopeRoot(harness.agentDir, scope);
@@ -260,9 +280,11 @@ test("evolution extension exposes promoted tool specs through controlled evolved
 			agentDir: harness.agentDir,
 			sessionManager: { getSessionId: () => "session-tool", getEntries: () => [] },
 			cwd: process.cwd(),
+			reload: async () => {},
+			ui: { notify: () => {} },
 		} as unknown as ExtensionCommandContext;
 		const inactive = await tool.execute("tool-call", { action: "list" }, undefined, undefined, ctx);
-		assert.match(inactive.content[0]?.type === "text" ? inactive.content[0].text : "", /No promoted evolved tool specs/);
+		assert.match(inactive.content[0]?.type === "text" ? inactive.content[0].text : "", /No promoted evolved tool or workflow specs/);
 
 		promoteEvolutionCandidate(root, "candidate-tool", { id: () => "revision-tool", approvedBy: "test" });
 		const listed = await tool.execute("tool-call", { action: "list" }, undefined, undefined, ctx);
@@ -292,7 +314,206 @@ test("evolution extension exposes promoted tool specs through controlled evolved
 		const details = invoked.details as { plan?: { inputs?: Record<string, unknown>; steps?: Array<{ name: string }> } };
 		assert.equal(details.plan?.inputs?.failure, "npm test failed");
 		assert.equal(details.plan?.steps?.[0]?.name, "Read failure output");
+		const usageInspection = inspectEvolution(root);
+		assert.equal(usageInspection.usages.length, 2);
+		assert.equal(usageInspection.usages[0]?.artifactId, "evolved:tool_spec:collect-failure-evidence");
+		assert.equal(usageInspection.usages[0]?.status, "success");
+		assert.equal(usageInspection.usages[1]?.status, "error");
+		assert.equal(usageInspection.usages[1]?.error, "missing_required_input");
+		const changes = formatEvolutionChanges(usageInspection);
+		assert.match(changes, /Usage:/);
+		assert.match(changes, /evolved:tool_spec:collect-failure-evidence: success/);
+		assert.match(changes, /missing_required_input/);
+
+		const usageId = usageInspection.usages[0]?.id ?? "";
+		await refineCommand(`--session feedback ${usageId} useful reduced repeated triage steps`, ctx);
+		assert.match(harness.messages.at(-1) ?? "", /feedback recorded/i);
+		const feedbackInspection = inspectEvolution(root);
+		assert.equal(feedbackInspection.feedbacks.length, 1);
+		assert.equal(feedbackInspection.feedbacks[0]?.usageId, usageId);
+		assert.equal(feedbackInspection.feedbacks[0]?.outcome, "useful");
+		assert.match(formatEvolutionChanges(feedbackInspection), /Feedback:/);
+		assert.match(formatEvolutionChanges(feedbackInspection), /useful/);
+
+		await refineCommand("--session review", ctx);
+		const review = harness.messages.at(-1) ?? "";
+		assert.match(review, /Evolution usefulness review/);
+		assert.match(review, /evolved:tool_spec:collect-failure-evidence/);
+		assert.match(review, /usage 2/);
+		assert.match(review, /useful 1/);
+		assert.match(review, /Recommendation: keep/);
+
+		const errorUsageId = usageInspection.usages[1]?.id ?? "";
+		await refineCommand(`--session feedback ${errorUsageId} not-useful missing required input interrupted reuse`, ctx);
+		await refineCommand("--session review", ctx);
+		const negativeReview = harness.messages.at(-1) ?? "";
+		assert.match(negativeReview, /not useful 1/);
+		assert.match(negativeReview, /Recommendation: review/);
 	} finally {
+		harness.cleanup();
+	}
+});
+
+test("evolution extension exposes promoted workflow specs through controlled evolved_tool", async () => {
+	const harness = createHarness();
+	try {
+		await evolutionExtension(harness.api);
+		const tool = harness.tools.get("evolved_tool");
+		assert.ok(tool, "Expected evolved_tool to be registered.");
+
+		const scope = { scope: "workspace" as const, cwd: process.cwd() };
+		const root = getEvolutionScopeRoot(harness.agentDir, scope);
+		createEvolutionCandidate(root, {
+			scope: "workspace",
+			summary: "Create reusable release workflow",
+			rationale: "Release turns repeatedly require the same ordered gates and publish checks.",
+			expectedOutcome: "Future release tasks can invoke a scoped workflow without source changes.",
+			artifacts: [
+				{
+					id: "evolved:workflow_spec:catui-release",
+					kind: "workflow_spec",
+					title: "Catui release workflow",
+					content: "Use this workflow when preparing a Catui npm release.",
+					applicability: "The user asks to release or publish Catui.",
+					nonApplicability: "The user only asks for local development changes.",
+					metadata: {
+						inputs: { versionIntent: "patch, minor, major, or explicit version" },
+						phases: [
+							{ name: "Verify", checks: ["focused tests", "DIP", "quality", "package-boundary", "build", "tsc"] },
+							{ name: "Publish", checks: ["push main", "npm publish", "npm view version"] },
+						],
+						successSignals: ["origin/main contains the version commit", "npm registry returns the released version"],
+						usesExistingTools: ["bash", "read"],
+					},
+				},
+			],
+		}, { id: () => "candidate-workflow" });
+		promoteEvolutionCandidate(root, "candidate-workflow", { id: () => "revision-workflow", approvedBy: "test" });
+
+		const ctx = {
+			agentDir: harness.agentDir,
+			sessionManager: { getSessionId: () => "session-workflow", getEntries: () => [] },
+			cwd: process.cwd(),
+		} as unknown as ExtensionCommandContext;
+		const listed = await tool.execute("tool-call", { action: "list" }, undefined, undefined, ctx);
+		assert.match(listed.content[0]?.type === "text" ? listed.content[0].text : "", /workflow_spec/);
+		assert.match(listed.content[0]?.type === "text" ? listed.content[0].text : "", /catui-release/);
+
+		const invoked = await tool.execute(
+			"tool-call",
+			{ action: "invoke", id: "evolved:workflow_spec:catui-release", input: { versionIntent: "patch" } },
+			undefined,
+			undefined,
+			ctx,
+		);
+		const text = invoked.content[0]?.type === "text" ? invoked.content[0].text : "";
+		assert.match(text, /Evolved workflow: Catui release workflow/);
+		assert.match(text, /Verify/);
+		assert.match(text, /focused tests/);
+		assert.match(text, /Success signals/);
+		const details = invoked.details as { plan?: { kind?: string; phases?: Array<{ name: string; checks: string[] }>; successSignals?: string[] } };
+		assert.equal(details.plan?.kind, "workflow_spec");
+		assert.equal(details.plan?.phases?.[0]?.name, "Verify");
+		assert.deepEqual(details.plan?.successSignals, ["origin/main contains the version commit", "npm registry returns the released version"]);
+
+		const refineCommand = harness.commands.get("refine");
+		assert.ok(refineCommand, "Expected refine command to be registered.");
+		await refineCommand("--workspace review", {
+			agentDir: harness.agentDir,
+			sessionManager: { getSessionId: () => "session-workflow", getEntries: () => [] },
+			cwd: process.cwd(),
+			reload: async () => {},
+			ui: { notify: () => {} },
+		} as unknown as ExtensionCommandContext);
+		const review = harness.messages.at(-1) ?? "";
+		assert.match(review, /evolved:workflow_spec:catui-release/);
+		assert.match(review, /usage 1/);
+
+		const unusedRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "workspace", cwd: `${process.cwd()}-unused-workflow-review` });
+		createEvolutionCandidate(unusedRoot, {
+			scope: "workspace",
+			summary: "Create unused workflow",
+			rationale: "Review should expose active but unused workflow assets.",
+			expectedOutcome: "The usefulness review flags the workflow as no-usage.",
+			artifacts: [
+				{
+					id: "evolved:workflow_spec:unused-release-check",
+					kind: "workflow_spec",
+					title: "Unused release check",
+					content: "A workflow that has not been invoked yet.",
+					applicability: "Review smoke.",
+					metadata: {
+						phases: [{ name: "Observe", checks: ["record no usage"] }],
+						successSignals: ["review shows no-usage"],
+					},
+				},
+			],
+		}, { id: () => "candidate-unused-workflow" });
+		promoteEvolutionCandidate(unusedRoot, "candidate-unused-workflow", { id: () => "revision-unused-workflow", approvedBy: "test" });
+		await refineCommand("--workspace review", {
+			agentDir: harness.agentDir,
+			sessionManager: { getSessionId: () => "session-workflow", getEntries: () => [] },
+			cwd: `${process.cwd()}-unused-workflow-review`,
+			reload: async () => {},
+			ui: { notify: () => {} },
+		} as unknown as ExtensionCommandContext);
+		const unusedReview = harness.messages.at(-1) ?? "";
+		assert.match(unusedReview, /evolved:workflow_spec:unused-release-check/);
+		assert.match(unusedReview, /usage 0/);
+		assert.match(unusedReview, /Recommendation: no-usage/);
+	} finally {
+		harness.cleanup();
+	}
+});
+
+test("evolution extension exposes promoted skill manifests as discoverable evolved skills", async () => {
+	const harness = createHarness();
+	const cwd = mkdtempSync(join(tmpdir(), "catui-evolution-skill-discovery-"));
+	try {
+		await evolutionExtension(harness.api);
+		const discover = harness.handlers.get("resources_discover")?.[0] as ResourcesDiscoverHandler | undefined;
+		assert.ok(discover, "Expected resources_discover to be registered.");
+		assert.equal(existsSync(join(harness.agentDir, "evolution")), false);
+
+		const idleCtx = {
+			agentDir: harness.agentDir,
+			sessionManager: { getSessionId: () => "idle-skill-session", getEntries: () => [] },
+			cwd,
+			ui: { notify: () => {} },
+		} as unknown as ExtensionCommandContext;
+		const idle = await discover({ type: "resources_discover", cwd, reason: "startup" }, idleCtx);
+		assert.deepEqual(idle?.skillPaths ?? [], []);
+		assert.equal(existsSync(join(harness.agentDir, "evolution")), false);
+
+		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "workspace", cwd });
+		createEvolutionCandidate(root, {
+			scope: "workspace",
+			summary: "Create release workflow skill",
+			rationale: "The project repeatedly follows the same release verification sequence.",
+			expectedOutcome: "Future release tasks can discover a scoped skill without changing source.",
+			artifacts: [
+				{
+					id: "evolved:skill_manifest:catui-release-workflow",
+					kind: "skill_manifest",
+					title: "Catui release workflow",
+					content: "Use focused evolution tests, DIP gates, build, package-boundary dist, push main, then publish.",
+					applicability: "The user asks to release Catui.",
+				},
+			],
+		}, { id: () => "candidate-skill" });
+		promoteEvolutionCandidate(root, "candidate-skill", { id: () => "revision-skill", approvedBy: "test" });
+
+		const active = await discover({ type: "resources_discover", cwd, reason: "reload" }, idleCtx);
+		assert.equal(active?.skillPaths?.length, 1);
+		const skillPath = active?.skillPaths?.[0] ?? "";
+		const skillFile = join(skillPath, "evolved-catui-release-workflow", "SKILL.md");
+		assert.ok(existsSync(skillFile), `Expected evolved skill at ${skillFile}`);
+		const skillMarkdown = readFileSync(skillFile, "utf8");
+		assert.match(skillMarkdown, /name: evolved-catui-release-workflow/);
+		assert.match(skillMarkdown, /description: "Catui release workflow"/);
+		assert.match(skillMarkdown, /Use focused evolution tests/);
+	} finally {
+		rmSync(cwd, { recursive: true, force: true });
 		harness.cleanup();
 	}
 });
@@ -363,6 +584,87 @@ test("evolution extension executes promoted workspace executable tools in a no-I
 		const text = invoked.content[0]?.type === "text" ? invoked.content[0].text : "";
 		assert.match(text, /Failure TS2345 belongs to evolution-store/);
 		assert.equal((invoked.details as { outputs?: { summary?: string } }).outputs?.summary, "Failure TS2345 belongs to evolution-store.");
+		const usageInspection = inspectEvolution(root);
+		assert.equal(usageInspection.usages.length, 1);
+		assert.equal(usageInspection.usages[0]?.artifactId, "evolved:executable_tool:failure-formatter");
+		assert.equal(usageInspection.usages[0]?.artifactKind, "executable_tool");
+		assert.equal(usageInspection.usages[0]?.status, "success");
+	} finally {
+		rmSync(cwd, { recursive: true, force: true });
+		harness.cleanup();
+	}
+});
+
+test("evolution extension executes promoted workspace executable tools with safe DSL transform steps", async () => {
+	const harness = createHarness();
+	const cwd = mkdtempSync(join(tmpdir(), "catui-evolution-executable-dsl-"));
+	try {
+		await evolutionExtension(harness.api);
+		const tool = harness.tools.get("evolved_executable_tool");
+		assert.ok(tool, "Expected evolved_executable_tool to be registered.");
+		const content = executableDslToolContent();
+		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "workspace", cwd });
+		createEvolutionCandidate(root, {
+			scope: "workspace",
+			summary: "Create executable failure classifier",
+			rationale: "Repeated local triage uses the same deterministic classification transform.",
+			expectedOutcome: "Future workspace turns can classify local failure text without IO access.",
+			artifacts: [
+				{
+					id: "evolved:executable_tool:failure-classifier",
+					kind: "executable_tool",
+					title: "Failure classifier",
+					content,
+					applicability: "Workspace-local failure triage classification.",
+					metadata: {
+						approvedContentHash: `sha256:${sha256(content)}`,
+						permissionManifest: {
+							workspaceOnly: true,
+							network: false,
+							install: false,
+							write: "none",
+						},
+					},
+				},
+			],
+		}, { id: () => "candidate-executable-dsl" });
+		promoteEvolutionCandidate(root, "candidate-executable-dsl", {
+			id: () => "revision-executable-dsl",
+			approvedBy: "test",
+			gateReport: {
+				name: "workspace-executable-dsl-gate",
+				passed: true,
+				checkedAt: "2026-08-12T03:10:00.000Z",
+				metrics: { passRate: 1, replayDivergences: 0, policyViolations: 0, unpairedToolCalls: 0 },
+			},
+		});
+
+		const ctx = {
+			agentDir: harness.agentDir,
+			sessionManager: { getSessionId: () => "session-executable-dsl", getEntries: () => [] },
+			cwd,
+		} as unknown as ExtensionCommandContext;
+		const invoked = await tool.execute(
+			"tool-call",
+			{
+				action: "invoke",
+				id: "evolved:executable_tool:failure-classifier",
+				input: {
+					log: "TypeScript failed with TS2345 in evolution-store.",
+					context: { owner: "evolution-store" },
+				},
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
+		const text = invoked.content[0]?.type === "text" ? invoked.content[0].text : "";
+		assert.match(text, /TS2345 belongs to evolution-store/);
+		assert.deepEqual((invoked.details as { outputs?: Record<string, string> }).outputs, {
+			code: "TS2345",
+			owner: "evolution-store",
+			summary: "TS2345 belongs to evolution-store.",
+		});
 	} finally {
 		rmSync(cwd, { recursive: true, force: true });
 		harness.cleanup();
@@ -487,6 +789,7 @@ test("refine status and changes show scoped active state and revision rationale"
 		assert.match(harness.messages.at(-1) ?? "", /Evolution workspace view/);
 		assert.match(harness.messages.at(-1) ?? "", /Current: revision-current/);
 		assert.match(harness.messages.at(-1) ?? "", /Active artifacts: 2/);
+		assert.match(harness.messages.at(-1) ?? "", /Usage: 0 recorded/);
 
 		await refineCommand("--workspace changes", ctx);
 		const changes = harness.messages.at(-1) ?? "";

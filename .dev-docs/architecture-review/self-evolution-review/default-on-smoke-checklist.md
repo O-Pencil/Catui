@@ -26,12 +26,27 @@ writes occur on unused startup.
 - Trace distillation: `sweep_workspace_traces` turns recent `.catui/traces/*.jsonl`
   files into inactive eval fixture candidates with cluster summaries and per-trace
   evidence slices.
+- Workflow reuse: promoted `workflow_spec` artifacts are discoverable through
+  `evolved_tool`, require structured phases/checks and success signals, and remain
+  declarative guidance rather than executable release/publish automation.
+- Usage ledger: invoking promoted tool/workflow/executable assets appends scoped
+  usage records with input hashes and bounded summaries, and `/refine status` /
+  `/refine changes` expose success/error usage evidence.
+- Usefulness feedback: `/refine feedback <usage-id> useful|not-useful [note]`
+  appends human feedback for usage evidence, and status/changes views expose
+  useful/not-useful counts and revision-level notes. Secret-like note fragments
+  are redacted before persistence.
+- Usefulness review: `/refine review` aggregates usage and feedback by evolved
+  asset, includes active assets with no usage, and emits
+  keep/watch/review/no-usage recommendations without mutating active pointers.
 - Stream rollback: workspace/global auto-rollback does not trigger on a single
   isolated falsification, does trigger on repeated stream falsification, and treats
   interleaved falsification as contamination-strength evidence.
 - Executable prototype: `create_executable_tool` creates only inactive workspace
   candidates; `/refine --workspace promote <candidate>` runs a gate first; invoked
-  tools re-check approved content hash and no-IO permissions.
+  tools re-check approved content hash and no-IO permissions, then run only
+  whitelisted in-memory safe DSL steps such as template rendering, bounded regex
+  extraction, and JSON path extraction.
 - Trust boundary: candidate validation rejects shell commands, package installs,
   network endpoints, server configuration, credentials, global executable tools,
   and executable tools with write/network/install permissions.
@@ -46,4 +61,5 @@ writes occur on unused startup.
 - Any smoke item becomes flaky or manual-only.
 - Default loading starts performing model calls, prompt injection, or ledger writes
   before user/model evolution activity exists.
-- The executable runtime expands beyond no-IO manifest interpretation.
+- The executable runtime expands beyond no-IO, in-memory, whitelist manifest
+  interpretation.
