@@ -10,6 +10,7 @@ import { relative, resolve } from "node:path";
 import { Type } from "@sinclair/typebox";
 import type { AgentToolResult } from "@catui/agent-core";
 import type { ExtensionContext, ToolDefinition } from "../../../core/extensions-host/types.js";
+import { distillWorkspaceTraceEvidence } from "./evolution-distillation.js";
 import { evalFixtureContent, workspaceTracePaths } from "./evolution-fixture.js";
 import { runEvolutionGate, type EvolutionGateRunner } from "./evolution-gate.js";
 import {
@@ -24,11 +25,12 @@ import type { EvolutionArtifactKind, EvolutionScope } from "./evolution-types.js
 const EvolutionRefineInput = Type.Object({
 	action: Type.Union([
 		Type.Literal("create_tool_spec"),
+		Type.Literal("create_executable_tool"),
 		Type.Literal("create_artifact"),
 		Type.Literal("propose_eval_fixture_from_trace"),
 		Type.Literal("sweep_workspace_traces"),
 	], {
-		description: "Create a scoped declarative artifact. create_tool_spec is a compatibility alias for create_artifact kind=tool_spec. propose_eval_fixture_from_trace creates one inactive eval_fixture candidate from a local trace JSONL file. sweep_workspace_traces creates inactive eval_fixture candidates from recent workspace traces.",
+		description: "Create a scoped declarative artifact. create_tool_spec is a compatibility alias for create_artifact kind=tool_spec. create_executable_tool creates an inactive workspace executable_tool candidate for explicit user review. propose_eval_fixture_from_trace creates one inactive eval_fixture candidate from a local trace JSONL file. sweep_workspace_traces creates inactive eval_fixture candidates from recent workspace traces.",
 	}),
 	kind: Type.Optional(Type.Union([
 		Type.Literal("prompt_note"),
@@ -36,6 +38,7 @@ const EvolutionRefineInput = Type.Object({
 		Type.Literal("skill_manifest"),
 		Type.Literal("subagent_spec"),
 		Type.Literal("tool_spec"),
+		Type.Literal("executable_tool"),
 		Type.Literal("eval_fixture"),
 	], { description: "Artifact kind for create_artifact. Defaults to tool_spec for create_tool_spec." })),
 	scope: Type.Optional(Type.Union([Type.Literal("session"), Type.Literal("workspace"), Type.Literal("global")], {
@@ -81,6 +84,7 @@ function slug(raw: string): string {
 
 function resolveKind(action: string, kind: string | undefined): EvolutionArtifactKind {
 	if (action === "create_tool_spec") return "tool_spec";
+	if (action === "create_executable_tool") return "executable_tool";
 	if (action === "sweep_workspace_traces") return "eval_fixture";
 	if (
 		kind === "prompt_note" ||
@@ -88,6 +92,7 @@ function resolveKind(action: string, kind: string | undefined): EvolutionArtifac
 		kind === "skill_manifest" ||
 		kind === "subagent_spec" ||
 		kind === "tool_spec" ||
+		kind === "executable_tool" ||
 		kind === "eval_fixture"
 	) {
 		return kind;
@@ -104,6 +109,7 @@ function resolveScope(scope: string | undefined): EvolutionScope {
 function assertKnownAction(action: string): void {
 	if (
 		action !== "create_tool_spec" &&
+		action !== "create_executable_tool" &&
 		action !== "create_artifact" &&
 		action !== "propose_eval_fixture_from_trace" &&
 		action !== "sweep_workspace_traces"
@@ -140,11 +146,13 @@ export function createEvolutionRefineTool(options: EvolutionRefineToolOptions = 
 				if (params.action === "sweep_workspace_traces") {
 					if (scope !== "workspace") throw new Error("Trace sweep must be workspace-scoped.");
 					const tracePaths = workspaceTracePaths(ctx.cwd, params.maxTraces ?? 10);
+					const evidenceSummary = await distillWorkspaceTraceEvidence(ctx.cwd, tracePaths);
 					let created = 0;
 					let skipped = 0;
 					const candidateIds: string[] = [];
 					for (const tracePath of tracePaths) {
 						const relTracePath = relative(resolve(ctx.cwd), tracePath);
+						const evidenceSlice = evidenceSummary.slicesByTracePath[relTracePath];
 						const title = `${params.title}: ${relTracePath}`;
 						const scenarioId = slug(`${params.scenarioId ?? "trace-sweep"}-${relTracePath}`);
 						const fixture = await evalFixtureContent(ctx.cwd, tracePath, params.observedOutputFingerprint);
@@ -170,6 +178,11 @@ export function createEvolutionRefineTool(options: EvolutionRefineToolOptions = 
 									createdBy: "evolution_refine",
 									tracePath: relTracePath,
 									sweep: true,
+									distilledEvidence: {
+										clusters: evidenceSummary.clusters,
+										...(evidenceSlice ? { slice: evidenceSlice } : {}),
+										slicesByTracePath: evidenceSummary.slicesByTracePath,
+									},
 								},
 							});
 							created += 1;
@@ -186,6 +199,7 @@ export function createEvolutionRefineTool(options: EvolutionRefineToolOptions = 
 						created,
 						skipped,
 						candidateIds,
+						evidenceSummary,
 					});
 				}
 				if (params.action === "propose_eval_fixture_from_trace") {
@@ -239,7 +253,20 @@ export function createEvolutionRefineTool(options: EvolutionRefineToolOptions = 
 							content: params.content,
 							...(params.applicability ? { applicability: params.applicability } : {}),
 							...(params.nonApplicability ? { nonApplicability: params.nonApplicability } : {}),
-							...(params.metadata ? { metadata: params.metadata } : {}),
+							...(kind === "executable_tool"
+								? {
+									metadata: {
+										approvedContentHash: `sha256:${createHash("sha256").update(params.content).digest("hex")}`,
+										permissionManifest: {
+											workspaceOnly: true,
+											network: false,
+											install: false,
+											write: "none",
+										},
+										...(params.metadata ?? {}),
+									},
+								}
+								: params.metadata ? { metadata: params.metadata } : {}),
 						},
 					],
 					evidence: {
@@ -247,7 +274,16 @@ export function createEvolutionRefineTool(options: EvolutionRefineToolOptions = 
 						createdBy: "evolution_refine",
 					},
 				};
+				if (kind === "executable_tool" && scope !== "workspace") {
+					throw new Error("Executable tool candidates must be workspace-scoped.");
+				}
 				const candidate = createEvolutionCandidate(root, input);
+				if (kind === "executable_tool") {
+					return textResult(
+						`Evolution workspace executable_tool candidate ${candidate.id} created. It is inactive and requires explicit user review through /refine --workspace promote.`,
+						{ candidateId: candidate.id, scope, kind, promoted: false },
+					);
+				}
 				if (!params.autoPromote) {
 					return textResult(`Evolution ${scope} ${kind} candidate ${candidate.id} created. It is inactive until promoted.`, {
 						candidateId: candidate.id,

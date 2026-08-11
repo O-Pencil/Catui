@@ -10,7 +10,7 @@ The `extensions/` module contains built-in extensions that extend Catui's capabi
 
 **Extension Categories:**
 - `builtin/`: first-party extension source; default-enabled entries are auto-loaded on startup
-- `optional/`: opt-in via configuration or flags
+- `optional/`: high-trust/extra source. Most entries are opt-in via configuration or flags; entries explicitly marked `defaultEnabled` in `builtInExtensions` are product-approved default loads.
 
 ---
 
@@ -247,14 +247,12 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 
 ### Optional Extensions (`extensions/optional/`)
 
-Extensions that must be explicitly enabled.
-
-Optional extensions are not returned by `getBuiltinExtensionPaths()`; load them through explicit extension configuration or CLI extension paths.
+High-trust or extra extension source. Most optional entries require explicit extension configuration or CLI paths. `evolution/` is the current exception: it remains physically under `extensions/optional/` but is product-approved for default loading through `getBuiltinExtensionPaths()`.
 
 #### evolution/ — Controlled Self-Evolution
 
 **P3 Contract:**
-`index.ts`: - [WHO]: Extension with /refine command, evolution_refine, evolved_tool, before_agent_start prompt injection, and turn_end observation
+`index.ts`: - [WHO]: Extension with /refine command, evolution_refine, evolved_tool, evolved_executable_tool, before_agent_start prompt injection, and turn_end observation
     - [FROM]: core/extensions-host/types and local evolution helpers
     - [HERE]: evolution extension entry
 
@@ -277,7 +275,8 @@ Optional extensions are not returned by `getBuiltinExtensionPaths()`; load them 
 `evolution-types.ts`: Local evolution contracts for artifacts, predictions, attributions, stream-aware gate reports, candidates, revisions, current pointers, active fixture pointers, and quarantines; kept out of protocol until external consumers exist
 
 **Design Principle:**
-- Self-evolution is opt-in extension behavior, not core runtime behavior.
+- Self-evolution is extension-owned default behavior, not core runtime behavior.
+- Default loading is idle by default: no model calls, prompt injection, or evolution ledger writes occur until a user/model action creates or promotes artifacts.
 - Generated artifacts are untrusted data. Prompt notes, memories, bounded tool specs, and eval fixtures can evolve under deterministic gates; tool specs may define input contracts and ordered reuse steps, but executable code, package installs, endpoints, permission changes, and runtime tool creation remain approval-gated or rejected.
 - Candidate predictions are falsifiable decision-observability records copied onto promoted revisions; post-hoc attribution records compare later gate metrics with prediction targets without mutating immutable revision manifests.
 - Conservative auto-rollback can move `current.json` from the current falsified revision to its predecessor; it never deletes revisions, never rolls back non-current revisions, and does nothing when no predecessor exists.

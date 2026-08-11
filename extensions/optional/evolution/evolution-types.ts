@@ -13,6 +13,7 @@ export type EvolutionArtifactKind =
 	| "skill_manifest"
 	| "subagent_spec"
 	| "tool_spec"
+	| "executable_tool"
 	| "eval_fixture";
 
 export type EvolutionCandidateStatus = "proposed" | "rejected" | "promoted" | "quarantined";
@@ -49,12 +50,21 @@ export interface EvolutionPredictionAttribution {
 	reason: string;
 }
 
+export interface EvolutionStreamAttribution {
+	streamId: string;
+	mode: "isolated" | "sequential" | "interleaved";
+	passed: boolean;
+	metrics: EvolutionGateReport["metrics"];
+	results: EvolutionPredictionAttribution[];
+}
+
 export interface EvolutionAttribution {
 	schemaVersion: 1;
 	id: string;
 	revisionId: string;
 	gateReport: EvolutionGateReport;
 	results: EvolutionPredictionAttribution[];
+	streamResults?: EvolutionStreamAttribution[];
 	attributedAt: string;
 	attributedBy: string;
 }

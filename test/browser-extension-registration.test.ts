@@ -31,26 +31,47 @@ test("browser keeps a lightweight slash fallback while full extension is opt-in"
 	assert.equal(command?.category, "tools", "/browser should stay grouped with tool commands.");
 });
 
-test("optional extensions are not loaded by default", () => {
+test("only product-approved optional extensions are loaded by default", () => {
 	const paths = getBuiltinExtensionPaths();
+	const defaultOptionalIds = new Set(["evolution"]);
+	const unexpectedDefaultOptionalPaths = paths.filter((entry) =>
+		entry.includes("extensions") &&
+		entry.includes("optional") &&
+		![...defaultOptionalIds].some((id) => entry.includes(`${sep}optional${sep}${id}${sep}`))
+	);
 	assert.ok(
-		!paths.some((entry) => entry.includes("extensions") && entry.includes("optional")),
-		`Expected optional extensions to require explicit opt-in, got: ${paths.join(", ")}`,
+		unexpectedDefaultOptionalPaths.length === 0,
+		`Expected only approved optional extensions to load by default, got: ${unexpectedDefaultOptionalPaths.join(", ")}`,
+	);
+	assert.ok(
+		paths.some((entry) => entry.includes(`${sep}extensions${sep}optional${sep}evolution${sep}`)),
+		`Expected evolution to be default-loaded after product approval, got: ${paths.join(", ")}`,
 	);
 });
 
-test("extension metadata keeps optional and write-capable extensions out of defaults", () => {
+test("extension metadata keeps unapproved optional and write-capable extensions out of defaults", () => {
 	const optionalExtensions = builtInExtensions.filter((extension) => extension.category === "optional");
+	const defaultOptionalIds = new Set(["evolution"]);
 	assert.ok(optionalExtensions.length > 0, "Expected optional extensions to be represented in metadata.");
 	for (const extension of optionalExtensions) {
-		assert.equal(extension.defaultEnabled, false, `${extension.id} must require explicit opt-in.`);
+		assert.equal(extension.defaultEnabled, defaultOptionalIds.has(extension.id), `${extension.id} defaultEnabled policy mismatch.`);
 	}
 
-	const defaultEnabled = builtInExtensions.filter((extension) => extension.defaultEnabled);
-	for (const extension of defaultEnabled) {
+	const defaultEnabledOptional = builtInExtensions.filter((extension) => extension.category === "optional" && extension.defaultEnabled);
+	for (const extension of defaultEnabledOptional) {
 		assert.notEqual(extension.riskLevel, "write-capable", `${extension.id} is default-enabled but write-capable.`);
 		assert.equal(extension.writesWorkspace, false, `${extension.id} is default-enabled but writes workspace files.`);
 	}
+});
+
+test("evolution self-evolution is product-approved for default load", () => {
+	const evolution = builtInExtensions.find((extension) => extension.id === "evolution");
+	assert.ok(evolution, "Expected evolution metadata.");
+	assert.equal(evolution?.category, "optional", "Evolution source remains under optional while default policy is explicit.");
+	assert.equal(evolution?.defaultEnabled, true, "Evolution should load by default after product approval.");
+	assert.equal(evolution?.riskLevel, "background");
+	assert.equal(evolution?.startsTimers, false, "Default-loaded evolution must stay idle unless used.");
+	assert.equal(evolution?.writesWorkspace, false, "Default-loaded evolution must not write workspace files.");
 });
 
 test("default extension directories are represented in metadata", () => {

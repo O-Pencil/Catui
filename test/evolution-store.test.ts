@@ -6,6 +6,7 @@
  */
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,7 +25,7 @@ import {
 	rejectEvolutionCandidate,
 	rollbackEvolution,
 } from "../extensions/optional/evolution/evolution-store.js";
-import type { EvolutionCandidateInput } from "../extensions/optional/evolution/evolution-types.js";
+import type { EvolutionCandidateInput, EvolutionGateReport } from "../extensions/optional/evolution/evolution-types.js";
 import { formatCandidate, formatRevision } from "../extensions/optional/evolution/evolution-format.js";
 
 function withTempAgentDir(fn: (agentDir: string) => void | Promise<void>): Promise<void> | void {
@@ -90,6 +91,59 @@ function evalFixtureInput(title = "Fixture smoke", content = JSON.stringify({
 				applicability: "Self-evolution gates.",
 			},
 		],
+	};
+}
+
+function sha256(value: string): string {
+	return createHash("sha256").update(value).digest("hex");
+}
+
+function executableToolContent(): string {
+	return JSON.stringify({
+		schemaVersion: 1,
+		description: "Format local failure evidence without reading files, installing packages, or using network access.",
+		steps: [
+			{ op: "template", output: "summary", template: "Failure {{input.failure}} belongs to {{input.owner}}." },
+		],
+	});
+}
+
+function executableToolInput(scope: EvolutionCandidateInput["scope"] = "workspace", content = executableToolContent()): EvolutionCandidateInput {
+	return {
+		scope,
+		summary: "Promote a workspace executable evidence formatter",
+		rationale: "The tool is a deterministic no-IO formatter for repeated local triage output.",
+		expectedOutcome: "Future turns can execute the approved formatter inside the restricted evolution runtime.",
+		artifacts: [
+			{
+				id: "evolved:executable_tool:failure-formatter",
+				kind: "executable_tool",
+				title: "Failure formatter",
+				content,
+				applicability: "Workspace-local failure triage summaries.",
+				metadata: {
+					approvedContentHash: `sha256:${sha256(content)}`,
+					permissionManifest: {
+						workspaceOnly: true,
+						network: false,
+						install: false,
+						write: "none",
+					},
+				},
+			},
+		],
+	};
+}
+
+function streamGateReport(streams: EvolutionGateReport["streams"]): EvolutionGateReport {
+	const replayDivergences = Math.max(...(streams ?? []).map((stream) => stream.metrics.replayDivergences), 0);
+	return {
+		name: "evolved-harness-eval",
+		passed: replayDivergences === 0,
+		checkedAt: "2026-08-09T02:30:00.000Z",
+		metrics: { passRate: replayDivergences === 0 ? 1 : 0.5, replayDivergences, policyViolations: 0, unpairedToolCalls: 0 },
+		...(streams ? { streams } : {}),
+		...(replayDivergences === 0 ? {} : { failure: "stream replay divergence" }),
 	};
 }
 
@@ -278,6 +332,132 @@ test("evolution auto-rolls back the current revision when attribution falsifies 
 		assert.match(history, /"event":"auto_rolled_back"/);
 	}));
 
+test("workspace auto-rollback waits for repeated stream falsification and records per-stream attribution", () =>
+	withTempAgentDir((agentDir) => {
+		const root = getEvolutionScopeRoot(agentDir, { scope: "workspace", cwd: "/tmp/project-stream-threshold" });
+		createEvolutionCandidate(root, { ...candidateInput("Baseline"), scope: "workspace" }, { id: () => "candidate-baseline" });
+		promoteEvolutionCandidate(root, "candidate-baseline", {
+			id: () => "revision-baseline",
+			approvedBy: "test",
+		});
+		createEvolutionCandidate(root, {
+			...candidateInput("Risky workspace"),
+			scope: "workspace",
+			predictions: [
+				{
+					id: "prediction-replay",
+					metric: "harness_eval.replayDivergences",
+					direction: "no_regression",
+					target: "0",
+					rationale: "Workspace edit should not introduce replay divergence.",
+				},
+			],
+		}, { id: () => "candidate-risky-workspace" });
+		promoteEvolutionCandidate(root, "candidate-risky-workspace", {
+			id: () => "revision-risky-workspace",
+			approvedBy: "test",
+		});
+
+		const isolatedOnly = recordEvolutionAttributionAndMaybeRollback(root, "revision-risky-workspace", {
+			gateReport: streamGateReport([
+				{
+					id: "isolated-stream",
+					mode: "isolated",
+					passed: false,
+					metrics: { passRate: 0, replayDivergences: 1, policyViolations: 0, unpairedToolCalls: 0 },
+				},
+				{
+					id: "sequential-stream",
+					mode: "sequential",
+					passed: true,
+					metrics: { passRate: 1, replayDivergences: 0, policyViolations: 0, unpairedToolCalls: 0 },
+				},
+			]),
+			now: () => "2026-08-09T02:30:01.000Z",
+			attributedBy: "test",
+		});
+
+		assert.equal(isolatedOnly.rollback, undefined);
+		assert.equal(isolatedOnly.reason, "insufficient_stream_falsification");
+		assert.equal(loadCurrentEvolution(root)?.revisionId, "revision-risky-workspace");
+		assert.equal(isolatedOnly.attribution.streamResults?.[0]?.mode, "isolated");
+		assert.equal(isolatedOnly.attribution.streamResults?.[0]?.results[0]?.status, "falsified");
+		assert.equal(isolatedOnly.attribution.streamResults?.[1]?.mode, "sequential");
+		assert.equal(isolatedOnly.attribution.streamResults?.[1]?.results[0]?.status, "kept");
+
+		const repeated = recordEvolutionAttributionAndMaybeRollback(root, "revision-risky-workspace", {
+			gateReport: streamGateReport([
+				{
+					id: "isolated-stream",
+					mode: "isolated",
+					passed: false,
+					metrics: { passRate: 0, replayDivergences: 1, policyViolations: 0, unpairedToolCalls: 0 },
+				},
+				{
+					id: "sequential-stream",
+					mode: "sequential",
+					passed: false,
+					metrics: { passRate: 0, replayDivergences: 1, policyViolations: 0, unpairedToolCalls: 0 },
+				},
+			]),
+			now: () => "2026-08-09T02:31:01.000Z",
+			attributedBy: "test",
+			rollbackBy: "test-stream-policy",
+		});
+
+		assert.equal(repeated.rollback?.revisionId, "revision-baseline");
+		assert.equal(loadCurrentEvolution(root)?.revisionId, "revision-baseline");
+		const inspection = inspectEvolution(root);
+		assert.equal(inspection.attributions.length, 2);
+		assert.equal(inspection.attributions[1]?.streamResults?.length, 2);
+		assert.match(formatRevision(inspection.revisions.find((revision) => revision.id === "revision-risky-workspace") ?? promoteEvolutionCandidate(root, "missing")), /Stream attribution: isolated falsified, sequential falsified/);
+	}));
+
+test("workspace auto-rollback treats interleaved stream falsification as strong contamination evidence", () =>
+	withTempAgentDir((agentDir) => {
+		const root = getEvolutionScopeRoot(agentDir, { scope: "workspace", cwd: "/tmp/project-interleaved-threshold" });
+		createEvolutionCandidate(root, { ...candidateInput("Baseline"), scope: "workspace" }, { id: () => "candidate-baseline" });
+		promoteEvolutionCandidate(root, "candidate-baseline", {
+			id: () => "revision-baseline",
+			approvedBy: "test",
+		});
+		createEvolutionCandidate(root, {
+			...candidateInput("Risky interleaved workspace"),
+			scope: "workspace",
+			predictions: [
+				{
+					id: "prediction-replay",
+					metric: "harness_eval.replayDivergences",
+					direction: "no_regression",
+					target: "0",
+					rationale: "Workspace edit should not introduce interleaved replay divergence.",
+				},
+			],
+		}, { id: () => "candidate-risky-interleaved" });
+		promoteEvolutionCandidate(root, "candidate-risky-interleaved", {
+			id: () => "revision-risky-interleaved",
+			approvedBy: "test",
+		});
+
+		const result = recordEvolutionAttributionAndMaybeRollback(root, "revision-risky-interleaved", {
+			gateReport: streamGateReport([
+				{
+					id: "interleaved-stream",
+					mode: "interleaved",
+					passed: false,
+					metrics: { passRate: 0, replayDivergences: 1, policyViolations: 0, unpairedToolCalls: 0 },
+				},
+			]),
+			now: () => "2026-08-09T02:40:01.000Z",
+			attributedBy: "test",
+			rollbackBy: "test-interleaved-policy",
+		});
+
+		assert.equal(result.rollback?.revisionId, "revision-baseline");
+		assert.equal(result.attribution.streamResults?.[0]?.mode, "interleaved");
+		assert.equal(result.attribution.streamResults?.[0]?.results[0]?.status, "falsified");
+	}));
+
 test("evolution auto-rollback does not move current for non-current or root revisions", () =>
 	withTempAgentDir((agentDir) => {
 		const root = getEvolutionScopeRoot(agentDir, { scope: "workspace", cwd: "/tmp/project-auto-rollback-guard" });
@@ -355,6 +535,46 @@ test("evolution validation rejects executable artifacts and rejected candidates 
 		});
 		assert.throws(() => promoteEvolutionCandidate(root, "candidate-3"), /rejected/i);
 		assert.equal(inspectEvolution(root).candidates[0]?.status, "rejected");
+	}));
+
+test("evolution accepts only workspace-scoped executable tools with approved hash and no-IO permissions", () =>
+	withTempAgentDir((agentDir) => {
+		const root = getEvolutionScopeRoot(agentDir, { scope: "workspace", cwd: "/tmp/project-executable-tool" });
+		const candidate = createEvolutionCandidate(root, executableToolInput(), { id: () => "candidate-executable" });
+		assert.equal(candidate.artifacts[0]?.kind, "executable_tool");
+		const revision = promoteEvolutionCandidate(root, "candidate-executable", {
+			id: () => "revision-executable",
+			approvedBy: "test",
+			gateReport: {
+				name: "workspace-executable-tool-gate",
+				passed: true,
+				checkedAt: "2026-08-09T03:00:00.000Z",
+				metrics: { passRate: 1, replayDivergences: 0, policyViolations: 0, unpairedToolCalls: 0 },
+			},
+		});
+		assert.equal(revision.artifacts[0]?.kind, "executable_tool");
+		assert.equal(inspectEvolution(root).current?.revisionId, "revision-executable");
+
+		const sessionRoot = getEvolutionScopeRoot(agentDir, { scope: "session", sessionId: "executable-session" });
+		assert.throws(() => createEvolutionCandidate(sessionRoot, executableToolInput("session")), /workspace-scoped/i);
+
+		const globalRoot = getEvolutionScopeRoot(agentDir, { scope: "global" });
+		assert.throws(() => createEvolutionCandidate(globalRoot, executableToolInput("global")), /workspace-scoped/i);
+
+		const unsafe = executableToolInput();
+		unsafe.artifacts[0] = {
+			...unsafe.artifacts[0]!,
+			metadata: {
+				approvedContentHash: `sha256:${sha256(unsafe.artifacts[0]?.content ?? "")}`,
+				permissionManifest: {
+					workspaceOnly: true,
+					network: true,
+					install: false,
+					write: "none",
+				},
+			},
+		};
+		assert.throws(() => createEvolutionCandidate(root, unsafe, { id: () => "candidate-unsafe-executable" }), /permission|network|install|write/i);
 	}));
 
 test("evolution global auto-promotion allows bounded declarative tool specs", () => {

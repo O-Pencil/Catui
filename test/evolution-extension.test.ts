@@ -6,7 +6,8 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -91,6 +92,20 @@ function writeProjectStreamEvalCorpus(cwd: string): void {
 
 function writeTraceJsonl(path: string, events: readonly RunTraceEventV1[]): void {
 	writeFileSync(path, `${events.map((event) => JSON.stringify(event)).join("\n")}\n`, "utf8");
+}
+
+function sha256(value: string): string {
+	return createHash("sha256").update(value).digest("hex");
+}
+
+function executableToolContent(): string {
+	return JSON.stringify({
+		schemaVersion: 1,
+		description: "Format local failure evidence without file, network, install, or write access.",
+		steps: [
+			{ op: "template", output: "summary", template: "Failure {{input.failure}} belongs to {{input.owner}}." },
+		],
+	});
 }
 
 type BeforeAgentStartHandler = (
@@ -182,6 +197,31 @@ test("evolution extension registers refine command and injects only promoted pro
 	}
 });
 
+test("default-loaded evolution stays idle before candidates or promoted artifacts exist", async () => {
+	const harness = createHarness();
+	try {
+		await evolutionExtension(harness.api);
+		assert.ok(harness.commands.has("refine"));
+		assert.ok(harness.tools.has("evolution_refine"));
+		assert.ok(harness.tools.has("evolved_tool"));
+		assert.ok(harness.tools.has("evolved_executable_tool"));
+		assert.equal(existsSync(join(harness.agentDir, "evolution")), false);
+
+		const beforeAgentStart = harness.handlers.get("before_agent_start")?.[0] as BeforeAgentStartHandler;
+		const ctx = {
+			agentDir: harness.agentDir,
+			sessionManager: { getSessionId: () => "idle-session", getEntries: () => [] },
+			cwd: process.cwd(),
+			ui: { notify: () => {} },
+		} as unknown as ExtensionCommandContext;
+		const idle = await beforeAgentStart({ type: "before_agent_start", prompt: "hello", systemPrompt: "base" }, ctx);
+		assert.equal(idle?.appendSystemPrompt, undefined);
+		assert.equal(existsSync(join(harness.agentDir, "evolution")), false);
+	} finally {
+		harness.cleanup();
+	}
+});
+
 test("evolution extension exposes promoted tool specs through controlled evolved_tool", async () => {
 	const harness = createHarness();
 	try {
@@ -252,6 +292,209 @@ test("evolution extension exposes promoted tool specs through controlled evolved
 		const details = invoked.details as { plan?: { inputs?: Record<string, unknown>; steps?: Array<{ name: string }> } };
 		assert.equal(details.plan?.inputs?.failure, "npm test failed");
 		assert.equal(details.plan?.steps?.[0]?.name, "Read failure output");
+	} finally {
+		harness.cleanup();
+	}
+});
+
+test("evolution extension executes promoted workspace executable tools in a no-IO runtime", async () => {
+	const harness = createHarness();
+	const cwd = mkdtempSync(join(tmpdir(), "catui-evolution-executable-tool-"));
+	try {
+		await evolutionExtension(harness.api);
+		const tool = harness.tools.get("evolved_executable_tool");
+		assert.ok(tool, "Expected evolved_executable_tool to be registered.");
+		const content = executableToolContent();
+		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "workspace", cwd });
+		createEvolutionCandidate(root, {
+			scope: "workspace",
+			summary: "Create executable failure formatter",
+			rationale: "Repeated local triage summaries need the same deterministic formatting.",
+			expectedOutcome: "Future workspace turns can execute the formatter without IO access.",
+			artifacts: [
+				{
+					id: "evolved:executable_tool:failure-formatter",
+					kind: "executable_tool",
+					title: "Failure formatter",
+					content,
+					applicability: "Workspace-local failure triage summaries.",
+					metadata: {
+						approvedContentHash: `sha256:${sha256(content)}`,
+						permissionManifest: {
+							workspaceOnly: true,
+							network: false,
+							install: false,
+							write: "none",
+						},
+					},
+				},
+			],
+		}, { id: () => "candidate-executable-tool" });
+		promoteEvolutionCandidate(root, "candidate-executable-tool", {
+			id: () => "revision-executable-tool",
+			approvedBy: "test",
+			gateReport: {
+				name: "workspace-executable-tool-gate",
+				passed: true,
+				checkedAt: "2026-08-09T03:10:00.000Z",
+				metrics: { passRate: 1, replayDivergences: 0, policyViolations: 0, unpairedToolCalls: 0 },
+			},
+		});
+
+		const ctx = {
+			agentDir: harness.agentDir,
+			sessionManager: { getSessionId: () => "session-executable-tool", getEntries: () => [] },
+			cwd,
+		} as unknown as ExtensionCommandContext;
+		const listed = await tool.execute("tool-call", { action: "list" }, undefined, undefined, ctx);
+		assert.match(listed.content[0]?.type === "text" ? listed.content[0].text : "", /failure-formatter/);
+
+		const invoked = await tool.execute(
+			"tool-call",
+			{
+				action: "invoke",
+				id: "evolved:executable_tool:failure-formatter",
+				input: { failure: "TS2345", owner: "evolution-store" },
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
+		const text = invoked.content[0]?.type === "text" ? invoked.content[0].text : "";
+		assert.match(text, /Failure TS2345 belongs to evolution-store/);
+		assert.equal((invoked.details as { outputs?: { summary?: string } }).outputs?.summary, "Failure TS2345 belongs to evolution-store.");
+	} finally {
+		rmSync(cwd, { recursive: true, force: true });
+		harness.cleanup();
+	}
+});
+
+test("evolution_refine proposes executable tools and refine promote gates activation", async () => {
+	const harness = createHarness();
+	const cwd = mkdtempSync(join(tmpdir(), "catui-evolution-executable-promote-"));
+	try {
+		await evolutionExtension(harness.api);
+		const refineTool = harness.tools.get("evolution_refine");
+		const executableTool = harness.tools.get("evolved_executable_tool");
+		const refineCommand = harness.commands.get("refine");
+		assert.ok(refineTool, "Expected evolution_refine to be registered.");
+		assert.ok(executableTool, "Expected evolved_executable_tool to be registered.");
+		assert.ok(refineCommand, "Expected refine command to be registered.");
+		const ctx = {
+			agentDir: harness.agentDir,
+			sessionManager: { getSessionId: () => "session-executable-promote", getEntries: () => [] },
+			cwd,
+			reload: async () => {},
+			ui: { notify: () => {} },
+		} as unknown as ExtensionCommandContext;
+
+		const proposed = await refineTool.execute(
+			"tool-call",
+			{
+				action: "create_executable_tool",
+				scope: "workspace",
+				title: "Failure formatter",
+				content: executableToolContent(),
+				applicability: "Workspace-local failure triage summaries.",
+				autoPromote: true,
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
+		const proposedText = proposed.content[0]?.type === "text" ? proposed.content[0].text : "";
+		assert.match(proposedText, /created/);
+		assert.match(proposedText, /requires explicit user review/i);
+		assert.equal((proposed.details as { promoted?: boolean }).promoted, false);
+		const workspaceRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "workspace", cwd });
+		const candidate = inspectEvolution(workspaceRoot).candidates[0];
+		assert.equal(candidate?.artifacts[0]?.kind, "executable_tool");
+		assert.match(String(candidate?.artifacts[0]?.metadata?.approvedContentHash ?? ""), /^sha256:/);
+
+		await refineCommand(`--workspace promote ${candidate?.id ?? ""}`, ctx);
+		assert.match(inspectEvolution(workspaceRoot).current?.revisionId ?? "", /^revision-/);
+		const invoked = await executableTool.execute(
+			"tool-call",
+			{
+				action: "invoke",
+				id: "evolved:executable_tool:failure-formatter",
+				input: { failure: "TS2345", owner: "evolution-store" },
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
+		assert.match(invoked.content[0]?.type === "text" ? invoked.content[0].text : "", /Failure TS2345 belongs to evolution-store/);
+	} finally {
+		rmSync(cwd, { recursive: true, force: true });
+		harness.cleanup();
+	}
+});
+
+test("refine status and changes show scoped active state and revision rationale", async () => {
+	const harness = createHarness();
+	try {
+		await evolutionExtension(harness.api);
+		const refineCommand = harness.commands.get("refine");
+		assert.ok(refineCommand, "Expected refine command to be registered.");
+		const cwd = process.cwd();
+		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "workspace", cwd });
+		createEvolutionCandidate(root, {
+			scope: "workspace",
+			summary: "Baseline workspace lesson",
+			rationale: "Baseline rationale",
+			expectedOutcome: "Baseline outcome",
+			artifacts: [
+				{
+					id: "evolved:memory:baseline",
+					kind: "memory",
+					title: "Baseline",
+					content: "Use baseline workspace behavior.",
+				},
+			],
+		}, { id: () => "candidate-baseline" });
+		promoteEvolutionCandidate(root, "candidate-baseline", { id: () => "revision-baseline", approvedBy: "test" });
+		createEvolutionCandidate(root, {
+			scope: "workspace",
+			summary: "Prefer inspectable changes",
+			rationale: "Users need a one-command view of what changed and why.",
+			expectedOutcome: "The active revision can be explained without opening JSON ledgers.",
+			artifacts: [
+				{
+					id: "evolved:memory:baseline",
+					kind: "memory",
+					title: "Baseline refined",
+					content: "Use inspectable workspace behavior.",
+				},
+				{
+					id: "evolved:prompt_note:explain-changes",
+					kind: "prompt_note",
+					title: "Explain changes",
+					content: "When asked about evolution state, show active changes and rationale.",
+				},
+			],
+		}, { id: () => "candidate-current" });
+		promoteEvolutionCandidate(root, "candidate-current", { id: () => "revision-current", approvedBy: "test" });
+		const ctx = {
+			agentDir: harness.agentDir,
+			sessionManager: { getSessionId: () => "session-ux", getEntries: () => [] },
+			cwd,
+			reload: async () => {},
+			ui: { notify: () => {} },
+		} as unknown as ExtensionCommandContext;
+
+		await refineCommand("--workspace status", ctx);
+		assert.match(harness.messages.at(-1) ?? "", /Evolution workspace view/);
+		assert.match(harness.messages.at(-1) ?? "", /Current: revision-current/);
+		assert.match(harness.messages.at(-1) ?? "", /Active artifacts: 2/);
+
+		await refineCommand("--workspace changes", ctx);
+		const changes = harness.messages.at(-1) ?? "";
+		assert.match(changes, /What changed and why/);
+		assert.match(changes, /Revision: revision-current/);
+		assert.match(changes, /Rationale: Users need a one-command view/);
+		assert.match(changes, /Added:\n- evolved:prompt_note:explain-changes/);
+		assert.match(changes, /Changed:\n- evolved:memory:baseline/);
 	} finally {
 		harness.cleanup();
 	}
@@ -700,6 +943,71 @@ test("evolution_refine sweeps workspace traces into deduplicated eval fixture ca
 		assert.equal((sweptAgain.details as { created?: number; skipped?: number }).created, 0);
 		assert.equal((sweptAgain.details as { created?: number; skipped?: number }).skipped, 2);
 		assert.equal(inspectEvolution(workspaceRoot).candidates.length, 2);
+	} finally {
+		rmSync(cwd, { recursive: true, force: true });
+		harness.cleanup();
+	}
+});
+
+test("evolution_refine attaches distilled trace evidence to swept eval fixture candidates", async () => {
+	const harness = createHarness();
+	const cwd = mkdtempSync(join(tmpdir(), "catui-evolution-trace-distillation-"));
+	try {
+		await evolutionExtension(harness.api);
+		const refineTool = harness.tools.get("evolution_refine");
+		assert.ok(refineTool, "Expected evolution_refine to be registered.");
+		const traceDir = join(cwd, ".catui", "traces");
+		mkdirSync(traceDir, { recursive: true });
+		writeTraceJsonl(join(traceDir, "diverged-a.jsonl"), minimalTrace("sha256:changed"));
+		writeTraceJsonl(join(traceDir, "diverged-b.jsonl"), minimalTrace("sha256:changed").map((event, index) => ({
+			...event,
+			eventId: `b${index + 1}`,
+			runId: "project-run-b",
+		})));
+		const ctx = {
+			agentDir: harness.agentDir,
+			sessionManager: { getSessionId: () => "session-trace-distillation", getEntries: () => [] },
+			cwd,
+		} as unknown as ExtensionCommandContext;
+
+		const swept = await refineTool.execute(
+			"tool-call",
+			{
+				action: "sweep_workspace_traces",
+				scope: "workspace",
+				title: "Sweep workspace traces",
+				content: "Create eval fixture candidates from recent workspace run traces.",
+				maxTraces: 5,
+			},
+			undefined,
+			undefined,
+			ctx,
+		);
+
+		assert.equal((swept.details as { evidenceSummary?: { clusters?: unknown[] } }).evidenceSummary?.clusters?.length, 1);
+		const workspaceRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "workspace", cwd });
+		const candidates = inspectEvolution(workspaceRoot).candidates;
+		assert.equal(candidates.length, 2);
+		for (const candidate of candidates) {
+			const evidence = candidate.evidence as {
+				distilledEvidence?: {
+					clusters?: Array<{
+						id?: string;
+						traceCount?: number;
+						rootCause?: string;
+						tracePaths?: string[];
+					}>;
+					slicesByTracePath?: Record<string, { clusterId?: string; rootCause?: string }>;
+				};
+				tracePath?: string;
+			};
+			const tracePath = evidence.tracePath ?? "";
+			const evidenceSlice = evidence.distilledEvidence?.slicesByTracePath?.[tracePath];
+			assert.equal(evidence.distilledEvidence?.clusters?.[0]?.traceCount, 2);
+			assert.match(evidence.distilledEvidence?.clusters?.[0]?.rootCause ?? "", /output fingerprint diverged/i);
+			assert.equal(evidenceSlice?.clusterId, evidence.distilledEvidence?.clusters?.[0]?.id);
+			assert.match(evidenceSlice?.rootCause ?? "", /output fingerprint diverged/i);
+		}
 	} finally {
 		rmSync(cwd, { recursive: true, force: true });
 		harness.cleanup();

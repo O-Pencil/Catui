@@ -5,14 +5,21 @@ scope: `extensions/optional/evolution/` controlled harness evolution
 
 ## Decision
 
-Self-evolution lands as an opt-in extension. The extension owns `/refine`,
-`evolution_refine`, `evolved_tool`, deterministic `turn_end` observation,
-candidate state, immutable revisions, validation, activation, rollback, and prompt
-injection. Core runtime remains a host capability provider only.
+Self-evolution is product-approved for default loading while its source remains
+under `extensions/optional/evolution/`. The extension owns `/refine`,
+`evolution_refine`, `evolved_tool`, `evolved_executable_tool`, deterministic
+`turn_end` observation, candidate state, immutable revisions, validation,
+activation, rollback, and prompt injection. Core runtime remains a host
+capability provider only. Default loading is idle-neutral: without candidates or
+promoted artifacts, it performs no model calls, creates no evolution ledger, and
+injects no prompt content.
 
 ## Boundaries
 
 - No business logic in `core/runtime/agent-session.ts`.
+- `builtin-extensions.ts` is the only default-load switch. `evolution` is the only
+  optional-source extension approved for default loading; browser, simplify, and
+  export-html remain explicit opt-in capabilities.
 - Generated artifacts live under `<agentDir>/evolution/v1/`.
 - Candidates may carry `predictions`: falsifiable metric/direction/target records
   that are copied onto promoted revisions. This is the first decision
@@ -24,15 +31,23 @@ injection. Core runtime remains a host capability provider only.
 - Conservative auto-rollback may move `current.json` from the current revision to
   its predecessor when post-hoc attribution falsifies at least one prediction. It
   is pointer-only, never deletes revisions, never targets non-current revisions,
-  and refuses to act when no predecessor exists.
-- First slice permits declarative `prompt_note`, `memory`, `skill_manifest`,
-  `subagent_spec`, `tool_spec`, and `eval_fixture` records only.
-- First slice never generates or activates source code, shell commands, packages,
-  MCP servers, network endpoints, or permission changes.
+  and refuses to act when no predecessor exists. Session revisions may use direct
+  falsification; workspace/global revisions require stream-aware evidence, with
+  repeated isolated/sequential falsification or an interleaved falsification
+  treated as rollback-eligible contamination evidence.
+- First slice permits `prompt_note`, `memory`, `skill_manifest`, `subagent_spec`,
+  `tool_spec`, `eval_fixture`, and restricted workspace `executable_tool` records.
+- First slice never generates or activates arbitrary source code, shell commands,
+  packages, MCP servers, network endpoints, or permission changes.
 - Promoted `tool_spec` artifacts may carry declarative `metadata.inputs`,
   `metadata.steps`, and `metadata.usesExistingTools`. `evolved_tool` validates
   declared inputs and returns a structured plan, but it still does not execute
   generated code or bypass existing tool permissions.
+- Promoted workspace `executable_tool` artifacts are invoked only through
+  `evolved_executable_tool`, which re-checks an approved content hash and
+  no-IO permission manifest before interpreting a small JSON template-step
+  manifest. The runtime cannot run shell commands, install packages, access the
+  network, read files, or write files.
 - Session/workspace declarative artifacts may auto-promote when requested by the
   model-facing tool or structured turn-end proposal.
 - Global auto-promotion is bounded to low-risk `prompt_note`, `memory`, and
@@ -57,7 +72,9 @@ injection. Core runtime remains a host capability provider only.
   inactive until promoted, then participate in future automatic promotion gates.
 - The refine tool can also sweep recent workspace `.catui/traces/*.jsonl` files
   into multiple inactive `eval_fixture` candidates in one call. Sweep output is
-  deduplicated by fixture content and never auto-promoted by the sweep itself.
+  deduplicated by fixture content, clustered into distilled trace evidence, and
+  never auto-promoted by the sweep itself. Each candidate cites the cluster/root
+  cause slice for its trace.
 - Duplicate `eval_fixture` content is rejected per scope across proposed/promoted
   candidates and revisions so repeated traces do not accumulate indefinitely.
 - Active `eval_fixture` participation is bounded by pointer: the newest three
@@ -67,6 +84,9 @@ injection. Core runtime remains a host capability provider only.
   `eval_fixture` candidates from `tracePath: "latest"`. Requested auto-promotion
   is allowed only after the current harness gate passes and the candidate fixture
   itself replays without divergence.
+- Default-loaded idle sessions register `/refine` and evolution tools but do not
+  write runtime state or call a model until a user/model action creates a
+  candidate or an active promoted artifact exists.
 
 ## Acceptance
 
@@ -78,21 +98,26 @@ injection. Core runtime remains a host capability provider only.
   summary for inspection without changing active pointers.
 - Rollback only moves `current.json` to an existing revision.
 - Auto-rollback has the same pointer-only semantics and is limited to the active
-  revision with a predecessor.
+  revision with a predecessor. Workspace/global auto-rollback requires
+  stream-aware falsification evidence.
 - Invalid active revisions are quarantined into an auditable ledger record and
   removed from active prompt/tool consumption.
 - Prompt injection includes only active `prompt_note` and `memory` artifacts.
 - `evolved_tool` lists/invokes only promoted declarative `tool_spec` records,
   validates declared inputs, returns structured non-executable plans, and never
   executes generated code.
+- `evolved_executable_tool` lists/invokes only promoted workspace
+  `executable_tool` records, verifies approved content hashes and no-IO
+  permission manifests, and runs only supported JSON template steps.
 - Bounded global `tool_spec` artifacts can be promoted automatically only after
   validation and deterministic gate success, then become reusable through
   `evolved_tool`.
 - Tests cover storage confinement, executable-content rejection, promotion,
   rollback, model-created artifacts, structured turn-end proposals, eval-gated
   promotion, project eval corpora, trace-derived and turn-end eval fixtures,
-  bounded trace sweeps, stream eval scenarios, stream-aware gate evidence,
-  prediction manifest persistence, post-hoc prediction
-  attribution, conservative auto-rollback, global auto-promotion bounds, fixture
-  dedupe, fixture active retention, and extension
-  registration/injection.
+  bounded trace sweeps with distilled evidence, stream eval scenarios,
+  stream-aware gate evidence and rollback thresholds, prediction manifest
+  persistence, post-hoc prediction attribution, conservative auto-rollback,
+  executable tool validation/runtime, global auto-promotion bounds, fixture
+  dedupe, fixture active retention, scoped status/changes UX, and extension
+  registration/default-load/injection.

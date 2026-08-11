@@ -12,31 +12,35 @@ status: implemented controlled autonomous slice
 - Added prediction manifests so candidates can declare falsifiable metric/direction/target expectations, and promoted revisions preserve those predictions for later attribution.
 - Added post-hoc attribution records so later gate metrics classify revision predictions as kept, falsified, or inconclusive without mutating immutable revision manifests.
 - Added conservative auto-rollback so falsified attribution on the current revision can move `current.json` back to its predecessor without deleting revisions or touching non-current revisions.
+- Added stream-aware auto-rollback thresholds so workspace/global revisions require repeated stream falsification, while interleaved falsification is treated as stronger contamination evidence.
 - Added quarantine records for invalid active revisions so corrupted or tampered artifacts stop injecting and remain auditable.
 - Added `before_agent_start` injection for promoted `prompt_note` and `memory` artifacts only.
 - Added `evolution_refine` so the model can create declarative artifacts and auto-promote scoped artifacts without installing code.
 - Added `evolved_tool` so promoted declarative `tool_spec` artifacts become reusable model-callable procedures without executable code; structured metadata can declare required inputs, ordered steps, and existing tool names, and invocation returns a non-executable plan.
+- Added `evolved_executable_tool` as a workspace-only restricted executable prototype. It only runs promoted `executable_tool` artifacts after approved content-hash and no-IO permission-manifest checks, and the runtime supports JSON template steps only.
 - Added deterministic `turn_end` observation for explicit reusable lessons and structured `catui_evolution` JSON proposals.
 - Added deterministic harness eval gating for automatic promotion; projects can provide declarative JSON corpora under `.catui/evolution/`, passing revisions persist gate reports, and failed gates leave candidates inactive with evidence.
 - Added AgentStream-style harness stream scenarios (`isolated`, `sequential`, `interleaved`) so future gates can evaluate task-flow reliability beyond independent single-task fixtures.
 - Added stream summaries to evolution gate reports so revisions and failed candidates preserve which stream mode produced the gate evidence.
 - Added trace-derived `eval_fixture` proposal from validated local run trace JSONL files, including `tracePath: "latest"` discovery under workspace `.catui/traces/`; model tool proposals stay inactive, structured turn-end proposals may auto-promote only after current gate plus candidate fixture replay, and promoted fixtures join future automatic promotion gates without executing project code.
 - Added bounded workspace trace sweep proposal so the model can mine recent `.catui/traces/*.jsonl` files into inactive `eval_fixture` candidates in one call; duplicate fixture content is skipped without failing the sweep.
+- Added deterministic trace distillation for workspace trace sweeps: traces are clustered by completion/failure signature, summarized into compact root-cause evidence, and each candidate links to its evidence slice.
 - Added per-scope `eval_fixture` content-hash dedupe across proposed/promoted candidates and revisions.
 - Added active `eval_fixture` retention: the newest three promoted fixture artifacts remain active for future gates, older fixture ids are archived by pointer while immutable revisions remain intact.
 - Added bounded global auto-promotion for low-risk `prompt_note`, `memory`, and declarative `tool_spec` artifacts with explicit applicability; global `tool_spec` artifacts also require explicit non-applicability; broader global artifacts remain inactive candidates.
-- Added focused tests for store safety, active revision quarantine, extension prompt consumption, prediction manifest persistence, post-hoc prediction attribution, conservative auto-rollback, model-created artifacts, eval-gated promotion, project eval corpora, stream eval scenarios, stream-aware gate evidence, trace-derived and turn-end eval fixtures, bounded trace sweeps, fixture dedupe, structured auto-observation, evolved tool reuse with input validation and structured plans, and global promotion bounds.
+- Added scoped `/refine status` and `/refine changes` views so users can inspect active state, revision rationale, added/changed/removed artifacts, attribution, and stream evidence without opening JSON ledgers.
+- Default-enabled `evolution` through `builtin-extensions.ts` after product approval while keeping source under `extensions/optional/evolution/`; default loading is idle-neutral until candidates or promoted artifacts exist.
+- Added focused tests for store safety, active revision quarantine, extension prompt consumption, prediction manifest persistence, post-hoc prediction attribution, stream-aware conservative auto-rollback, model-created artifacts, eval-gated promotion, project eval corpora, stream eval scenarios, stream-aware gate evidence, trace-derived and turn-end eval fixtures, bounded trace sweeps with distilled evidence, fixture dedupe, structured auto-observation, evolved tool reuse with input validation and structured plans, workspace executable tool validation/runtime, scoped changes UX, and global promotion bounds.
 
 ## Deferred
 
 - Richer fixture aging/compaction policies beyond active pointer retention and duplicate suppression.
-- Stream-aware rollback thresholds based on repeated falsified attributions across isolated/sequential/interleaved stream outcomes.
 - Richer project eval fixture formats beyond declarative recorded/observed trace JSON.
-- Executable generated skills, tools, extensions, or source patches.
+- Arbitrary executable generated skills, tools, extensions, or source patches.
 - Unattended global promotion for `skill_manifest`, `subagent_spec`, executable artifacts, permission changes, network endpoints, package installs, or source patches.
 
 ## Reopen Conditions
 
 - The extension needs new host capabilities beyond `ExtensionContext`.
-- Any generated artifact becomes executable.
-- Evolution becomes default-enabled.
+- Default-loaded evolution stops being idle-neutral on unused startup.
+- The restricted `executable_tool` interpreter expands beyond no-IO template steps.

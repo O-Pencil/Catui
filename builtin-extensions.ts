@@ -44,6 +44,7 @@ const BUNDLED_INSIGHTS_EXTENSION = join(__dirname, "extensions", "builtin", "ins
 const BUNDLED_NOTEBOOK_EXTENSION = join(__dirname, "extensions", "builtin", "notebook", "index.js");
 const BUNDLED_SKILL_TOOL_EXTENSION = join(__dirname, "extensions", "builtin", "skill-tool", "index.js");
 const BUNDLED_CATPAW_EXTENSION = join(__dirname, "extensions", "builtin", "catpaw", "index.js");
+const BUNDLED_EVOLUTION_EXTENSION = join(__dirname, "extensions", "optional", "evolution", "index.js");
 
 export type BuiltinExtensionRiskLevel = "passive" | "command" | "tool" | "background" | "write-capable";
 export type BuiltinExtensionTestContract = "lifecycle" | "external-process" | "resource-discovery" | "write-guard";
@@ -95,7 +96,7 @@ export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "catpaw", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, resourceDiscovery: true },
 	{ id: "simplify", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: true, testContracts: ["external-process", "write-guard"], testFiles: ["test/simplify-extension.test.ts"] },
 	{ id: "export-html", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false, testContracts: ["write-guard"], testFiles: ["test/extension-smoke.test.ts", "test/export-html-branch-navigation.test.ts"] },
-	{ id: "evolution", category: "optional", defaultEnabled: false, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/evolution-store.test.ts", "test/evolution-extension.test.ts"] },
+	{ id: "evolution", category: "optional", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/evolution-store.test.ts", "test/evolution-extension.test.ts"] },
 ];
 
 /** Find package root from current module location (containing package.json with catui-agent related name) */
@@ -134,6 +135,9 @@ function findPackageRoot(startDir: string): string | null {
  * - export-html (HTML export) - extensions/optional/export-html/
  * - Browser harness (CDP automation) - extensions/builtin/browser/ (opt-in since P6/EV03; source stays
  *   under builtin/ until the Q2 physical/package opt-in decision moves it to extensions/optional/ or a package)
+ *
+ * Product-approved optional source loaded by default:
+ * - Evolution (controlled self-evolution) - extensions/optional/evolution/
  */
 export function getBuiltinExtensionPaths(): string[] {
 	const paths: string[] = [];
@@ -407,6 +411,16 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const catpawTs = join(__dirname, "extensions", "builtin", "catpaw", "index.ts");
 		if (existsSync(catpawTs)) paths.push(catpawTs);
+	}
+
+	// === Evolution extension (controlled self-evolution, default-on after product approval) ===
+	// Source remains under optional because it is a high-trust product capability with explicit
+	// default-on policy gates, not a generic builtin primitive.
+	if (existsSync(BUNDLED_EVOLUTION_EXTENSION)) {
+		paths.push(BUNDLED_EVOLUTION_EXTENSION);
+	} else {
+		const evolutionTs = join(__dirname, "extensions", "optional", "evolution", "index.ts");
+		if (existsSync(evolutionTs)) paths.push(evolutionTs);
 	}
 
 	return paths;

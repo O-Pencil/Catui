@@ -18,18 +18,22 @@ import {
 	loadActiveEvolutionArtifacts,
 	promoteEvolutionCandidate,
 	rejectEvolutionCandidate,
+	recordEvolutionGateFailure,
 	rollbackEvolution,
 } from "./evolution-store.js";
 import {
 	buildEvolutionPromptAppend,
 	formatCandidate,
 	formatCreatedCandidate,
+	formatEvolutionChanges,
 	formatEvolutionStatus,
 	formatRevision,
 } from "./evolution-format.js";
 import { planEvolutionCandidate } from "./evolution-refiner.js";
 import { createEvolutionRefineTool } from "./evolution-refine-tool.js";
+import { runEvolutionGate } from "./evolution-gate.js";
 import { createEvolvedTool } from "./evolution-tool.js";
+import { createEvolvedExecutableTool } from "./evolution-executable-tool.js";
 import { EvolutionAutoObserver } from "./evolution-auto.js";
 import type { EvolutionScope, EvolutionScopeSelector } from "./evolution-types.js";
 
@@ -69,7 +73,7 @@ async function handleRefineCommand(args: string, ctx: ExtensionCommandContext, a
 	const subcommand = command ?? "";
 	if (subcommand === "status" || subcommand === "") {
 		if (subcommand === "status") {
-			send(api, formatEvolutionStatus(inspectEvolution(root)));
+			send(api, formatEvolutionStatus(inspectEvolution(root), parsed.scope));
 			return;
 		}
 		if (!ctx.model) {
@@ -86,7 +90,7 @@ async function handleRefineCommand(args: string, ctx: ExtensionCommandContext, a
 	if (subcommand === "inspect") {
 		const id = tail[0];
 		if (!id) {
-			send(api, formatEvolutionStatus(inspectEvolution(root)));
+			send(api, formatEvolutionStatus(inspectEvolution(root), parsed.scope));
 			return;
 		}
 		const inspection = inspectEvolution(root);
@@ -102,10 +106,25 @@ async function handleRefineCommand(args: string, ctx: ExtensionCommandContext, a
 		}
 		throw new Error(`Evolution item not found: ${id}`);
 	}
+	if (subcommand === "changes") {
+		send(api, formatEvolutionChanges(inspectEvolution(root), tail[0]));
+		return;
+	}
 	if (subcommand === "promote" || subcommand === "approve") {
 		const id = tail[0];
 		if (!id) throw new Error("Usage: /refine promote <candidate-id>");
-		const revision = promoteEvolutionCandidate(root, id, { approvedBy: "user" });
+		const candidate = inspectEvolution(root).candidates.find((item) => item.id === id);
+		if (!candidate) throw new Error(`Evolution candidate not found: ${id}`);
+		const hasExecutableTool = candidate.artifacts.some((artifact) => artifact.kind === "executable_tool");
+		const gateReport = hasExecutableTool
+			? await runEvolutionGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId: ctx.sessionManager.getSessionId() })
+			: undefined;
+		if (gateReport && !gateReport.passed) {
+			recordEvolutionGateFailure(root, id, { gateReport });
+			send(api, `Evolution candidate ${id} remains inactive: eval gate failed (${gateReport.failure ?? gateReport.name}).`);
+			return;
+		}
+		const revision = promoteEvolutionCandidate(root, id, { approvedBy: "user", ...(gateReport ? { gateReport } : {}) });
 		api.appendEntry("catui.evolution.promoted", { scope: parsed.scope, candidateId: id, revisionId: revision.id });
 		await ctx.reload();
 		send(api, `Evolution revision ${revision.id} is now active.`);
@@ -155,10 +174,11 @@ export default async function evolutionExtension(api: ExtensionAPI): Promise<voi
 	const autoObserver = new EvolutionAutoObserver();
 	api.registerTool(createEvolutionRefineTool());
 	api.registerTool(createEvolvedTool());
+	api.registerTool(createEvolvedExecutableTool());
 	api.registerCommand("refine", {
 		description: "Propose, inspect, promote, reject, or rollback controlled evolved harness artifacts.",
 		getArgumentCompletions: (prefix) => {
-			const values = ["status", "inspect", "promote", "approve", "reject", "rollback", "--session", "--workspace", "--global"];
+			const values = ["status", "inspect", "changes", "promote", "approve", "reject", "rollback", "--session", "--workspace", "--global"];
 			const normalized = prefix.trim();
 			return values
 				.filter((value) => value.startsWith(normalized))

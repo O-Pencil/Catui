@@ -24,6 +24,7 @@ import type {
 	EvolutionValidationReport,
 	EvolutionPrediction,
 	EvolutionPredictionAttribution,
+	EvolutionStreamAttribution,
 } from "./evolution-types.js";
 
 const EVOLUTION_SCHEMA_VERSION = 1;
@@ -41,10 +42,12 @@ const ARTIFACT_KINDS: readonly EvolutionArtifactKind[] = [
 	"skill_manifest",
 	"subagent_spec",
 	"tool_spec",
+	"executable_tool",
 	"eval_fixture",
 ];
 
 const PREDICTION_DIRECTIONS = new Set(["increase", "decrease", "stay_at_or_above", "stay_at_or_below", "no_regression"]);
+type EvolutionStreamMode = NonNullable<EvolutionGateReport["streams"]>[number]["mode"];
 
 const EXECUTABLE_PATTERNS: readonly RegExp[] = [
 	/\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|cargo|go|python|python3|node|npx|bash|sh|zsh)\s+(?:i|install|add|run|exec|-c|x)\b/i,
@@ -202,6 +205,57 @@ function hasExecutableContent(artifact: EvolutionArtifact): boolean {
 	return EXECUTABLE_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+function validateExecutableToolManifest(artifact: EvolutionArtifact): string[] {
+	const errors: string[] = [];
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(artifact.content);
+	} catch (error) {
+		return [`artifact ${artifact.id} executable_tool content must be valid JSON: ${error instanceof Error ? error.message : String(error)}`];
+	}
+	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+		errors.push(`artifact ${artifact.id} executable_tool content must be an object`);
+		return errors;
+	}
+	const manifest = parsed as Record<string, unknown>;
+	if (manifest.schemaVersion !== 1) errors.push(`artifact ${artifact.id} executable_tool schemaVersion must be 1`);
+	if (typeof manifest.description !== "string" || !manifest.description.trim()) {
+		errors.push(`artifact ${artifact.id} executable_tool description is required`);
+	}
+	if (!Array.isArray(manifest.steps) || manifest.steps.length === 0 || manifest.steps.length > 12) {
+		errors.push(`artifact ${artifact.id} executable_tool steps must contain 1-12 steps`);
+	} else {
+		for (const [index, step] of manifest.steps.entries()) {
+			if (typeof step !== "object" || step === null || Array.isArray(step)) {
+				errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} must be an object`);
+				continue;
+			}
+			const record = step as Record<string, unknown>;
+			if (record.op !== "template") errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} uses unsupported op`);
+			if (typeof record.output !== "string" || !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(record.output)) {
+				errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} output is invalid`);
+			}
+			if (typeof record.template !== "string" || record.template.length > 1000) {
+				errors.push(`artifact ${artifact.id} executable_tool step ${index + 1} template is invalid`);
+			}
+		}
+	}
+	const approvedHash = artifact.metadata?.approvedContentHash;
+	if (approvedHash !== `sha256:${sha256(artifact.content)}`) {
+		errors.push(`artifact ${artifact.id} executable_tool approvedContentHash does not match content`);
+	}
+	const permissions = artifact.metadata?.permissionManifest;
+	if (typeof permissions !== "object" || permissions === null || Array.isArray(permissions)) {
+		errors.push(`artifact ${artifact.id} executable_tool permission manifest is required`);
+	} else {
+		const record = permissions as Record<string, unknown>;
+		if (record.workspaceOnly !== true || record.network !== false || record.install !== false || record.write !== "none") {
+			errors.push(`artifact ${artifact.id} executable_tool permission manifest must be workspace-only with network=false, install=false, and write=none`);
+		}
+	}
+	return errors;
+}
+
 function validateArtifact(artifact: EvolutionArtifact, seen: Set<string>): string[] {
 	const errors: string[] = [];
 	if (!ARTIFACT_KINDS.includes(artifact.kind)) errors.push(`unsupported artifact kind: ${String(artifact.kind)}`);
@@ -221,6 +275,7 @@ function validateArtifact(artifact: EvolutionArtifact, seen: Set<string>): strin
 	if (hasExecutableContent(artifact)) {
 		errors.push(`artifact ${artifact.id} contains executable command, package, credential, or server content`);
 	}
+	if (artifact.kind === "executable_tool") errors.push(...validateExecutableToolManifest(artifact));
 	return errors;
 }
 
@@ -256,6 +311,9 @@ export function validateEvolutionCandidateInput(
 	if (input.artifacts.length > MAX_ARTIFACTS_PER_CANDIDATE) errors.push("too many artifacts in one candidate");
 	const seen = new Set<string>();
 	for (const artifact of input.artifacts ?? []) errors.push(...validateArtifact(artifact, seen));
+	if (input.artifacts.some((artifact) => artifact.kind === "executable_tool") && input.scope !== "workspace") {
+		errors.push("executable_tool artifacts must be workspace-scoped");
+	}
 	errors.push(...validatePredictions(input));
 	return { passed: errors.length === 0, errors, warnings, validatedAt: now(options) };
 }
@@ -468,6 +526,9 @@ export function promoteEvolutionCandidate(
 	if (candidate.status === "promoted") throw new Error(`Evolution candidate is already promoted: ${candidateId}`);
 	const validation = validateEvolutionCandidateInput(candidate, options);
 	if (!validation.passed) throw new Error(`Evolution candidate failed validation: ${validation.errors.join("; ")}`);
+	if (candidate.artifacts.some((artifact) => artifact.kind === "executable_tool") && options?.gateReport?.passed !== true) {
+		throw new Error("Executable tool promotion requires a passing gate report");
+	}
 	const current = loadCurrentEvolution(scopeRoot);
 	const revisionId = nextId("revision", options);
 	const createdAt = now(options);
@@ -558,6 +619,49 @@ function attributePrediction(prediction: EvolutionPrediction, report: EvolutionG
 	};
 }
 
+function streamReport(parent: EvolutionGateReport, stream: NonNullable<EvolutionGateReport["streams"]>[number]): EvolutionGateReport {
+	return {
+		name: `${parent.name}:${stream.id}`,
+		passed: stream.passed,
+		checkedAt: parent.checkedAt,
+		metrics: stream.metrics,
+		...(stream.passed ? {} : { failure: parent.failure ?? `${stream.id} failed` }),
+	};
+}
+
+function attributeStreams(revision: EvolutionRevision, report: EvolutionGateReport): EvolutionStreamAttribution[] | undefined {
+	if (!report.streams || report.streams.length === 0) return undefined;
+	return report.streams.map((stream) => ({
+		streamId: stream.id,
+		mode: stream.mode,
+		passed: stream.passed,
+		metrics: stream.metrics,
+		results: (revision.predictions ?? []).map((prediction) => attributePrediction(prediction, streamReport(report, stream))),
+	}));
+}
+
+function hasFalsifiedPrediction(results: readonly EvolutionPredictionAttribution[]): boolean {
+	return results.some((result) => result.status === "falsified");
+}
+
+function streamFalsificationScore(attribution: EvolutionAttribution): number {
+	const falsifiedModes = new Set<EvolutionStreamMode>();
+	for (const stream of attribution.streamResults ?? []) {
+		if (hasFalsifiedPrediction(stream.results)) falsifiedModes.add(stream.mode);
+	}
+	let score = 0;
+	for (const mode of falsifiedModes) score += mode === "interleaved" ? 2 : 1;
+	return score;
+}
+
+function rollbackPolicyAllows(revision: EvolutionRevision, attribution: EvolutionAttribution): { allowed: boolean; reason?: string } {
+	if (!hasFalsifiedPrediction(attribution.results)) return { allowed: false, reason: "no_falsified_predictions" };
+	if (revision.scope === "session") return { allowed: true };
+	const score = streamFalsificationScore(attribution);
+	if (score >= 2) return { allowed: true };
+	return { allowed: false, reason: "insufficient_stream_falsification" };
+}
+
 export function recordEvolutionAttribution(
 	scopeRoot: string,
 	revisionId: string,
@@ -566,12 +670,14 @@ export function recordEvolutionAttribution(
 	const revision = loadRevision(scopeRoot, revisionId);
 	const attributedAt = now(options);
 	const attributionId = nextId("attribution", options);
+	const streamResults = attributeStreams(revision, options.gateReport);
 	const attribution: EvolutionAttribution = {
 		schemaVersion: EVOLUTION_SCHEMA_VERSION,
 		id: attributionId,
 		revisionId,
 		gateReport: options.gateReport,
 		results: (revision.predictions ?? []).map((prediction) => attributePrediction(prediction, options.gateReport)),
+		...(streamResults ? { streamResults } : {}),
 		attributedAt,
 		attributedBy: options.attributedBy ?? "system",
 	};
@@ -596,11 +702,11 @@ export function recordEvolutionAttributionAndMaybeRollback(
 	options: EvolutionAutoRollbackOptions,
 ): { attribution: EvolutionAttribution; rollback?: EvolutionCurrent; reason?: string } {
 	const attribution = recordEvolutionAttribution(scopeRoot, revisionId, options);
-	const falsified = attribution.results.filter((result) => result.status === "falsified").length;
-	if (falsified === 0) return { attribution, reason: "no_falsified_predictions" };
+	const revision = loadRevision(scopeRoot, revisionId);
+	const policy = rollbackPolicyAllows(revision, attribution);
+	if (!policy.allowed) return { attribution, reason: policy.reason };
 	const current = loadCurrentEvolution(scopeRoot);
 	if (current?.revisionId !== revisionId) return { attribution, reason: "revision_not_current" };
-	const revision = loadRevision(scopeRoot, revisionId);
 	if (!revision.predecessorRevisionId) return { attribution, reason: "no_predecessor_revision" };
 	const rollback = rollbackEvolution(scopeRoot, revision.predecessorRevisionId, {
 		now: options.now,
@@ -612,7 +718,8 @@ export function recordEvolutionAttributionAndMaybeRollback(
 		revisionId,
 		rollbackToRevisionId: rollback.revisionId,
 		attributionId: attribution.id,
-		falsified,
+		falsified: attribution.results.filter((result) => result.status === "falsified").length,
+		streamFalsificationScore: streamFalsificationScore(attribution),
 		at: rollback.activatedAt,
 		rollbackBy: rollback.activatedBy,
 	});

@@ -1,16 +1,10 @@
 # Controlled Harness Evolution
 
-This optional extension gives Catui a separate, auditable place to learn reusable declarative behavior from its own sessions. It does not modify Catui source, built-in tools, the base system prompt, user-authored resources, or model weights.
+This default-loaded extension gives Catui a separate, auditable place to learn reusable declarative behavior from its own sessions. It does not modify Catui source, built-in tools, the base system prompt, user-authored resources, or model weights.
 
-## Enable
+## Default Loading
 
-From a source checkout:
-
-```bash
-catui --extension extensions/optional/evolution
-```
-
-The extension is opt-in. When enabled but unused, it performs no model calls and creates no evolution directory.
+`evolution` remains physically under `extensions/optional/` because it is a high-trust product capability, but it is product-approved for default loading through `getBuiltinExtensionPaths()`. When unused, it performs no model calls, creates no evolution directory, and injects no prompt content. It becomes behaviorally active only after a candidate or promoted artifact exists.
 
 ## Manual candidate flow
 
@@ -18,6 +12,7 @@ The extension is opt-in. When enabled but unused, it performs no model calls and
 /refine --scope session Focus on the repeated verification omission
 /refine status --scope session
 /refine inspect candidate_0123456789abcdef --scope session
+/refine changes --scope workspace
 /refine verify candidate_0123456789abcdef --scope session
 /refine approve candidate_0123456789abcdef verified-by-owner --scope session
 /refine reject candidate_0123456789abcdef insufficient-evidence --scope session
@@ -47,7 +42,9 @@ Generated data lives outside the repository:
 
 Directories are lazy. Each scope contains immutable candidates and revisions, write-once evidence, an append-only `history.jsonl`, and an atomically replaced `current.json`. Files use private permissions. Workspace keys are derived from canonical paths and do not disclose those paths.
 
-Only an active revision can contribute context. Applicable promoted prompt notes, memories, and preference facets are appended as supplementary context in deterministic `global -> workspace -> session` order, after negative-applicability filtering and within one conservative 4 KiB aggregate cap (therefore below 4,096 model tokens even without tokenizer coupling). Subagent specifications appear as planning hints for Catui's existing delegation controls. Promoted skill manifests are materialized as namespaced declarative `SKILL.md` resources and verified against their manifest before discovery. Existing explicit skills win name collisions. Tool specifications appear only in a design backlog and are never registered as tools.
+Only an active revision can contribute context. Applicable promoted prompt notes, memories, and preference facets are appended as supplementary context in deterministic `global -> workspace -> session` order, after negative-applicability filtering and within one conservative 4 KiB aggregate cap (therefore below 4,096 model tokens even without tokenizer coupling). Subagent specifications appear as planning hints for Catui's existing delegation controls. Promoted skill manifests are materialized as namespaced declarative `SKILL.md` resources and verified against their manifest before discovery. Existing explicit skills win name collisions. Tool specifications remain declarative and are exposed through `evolved_tool`.
+
+Workspace-scoped `executable_tool` artifacts are a restricted prototype, not arbitrary generated code. `evolution_refine` can propose them only as inactive workspace candidates. Activation through `/refine --workspace promote <candidate-id>` runs the evolution gate first, then stores the approved revision hash. Invocation goes through `evolved_executable_tool`, which re-checks the approved content hash and no-IO permission manifest before interpreting a small JSON step manifest. The runtime supports template steps only; it has no shell, package install, network, file read, or file write capability.
 
 ## Trust boundary
 
@@ -55,4 +52,6 @@ V1 rejects executable commands, package installation, MCP server declarations, n
 
 Rollback and approval activate an immutable revision and reload resources. If reload fails, the extension restores the previous pointer. A corrupt pointer recovers from the newest fully verified history revision; modified artifact or skill files are rejected. If no valid revision remains, the scope is ignored so ordinary Catui operation continues.
 
-History pruning, generated executable code, unattended global promotion, and model-weight training are intentionally outside this design.
+Post-hoc attribution is recorded against prediction manifests after later gates run. Session-scoped revisions may auto-rollback on direct falsified predictions when a predecessor exists. Workspace and global revisions require stream-aware evidence before auto-rollback: falsification must repeat across multiple stream modes, while an interleaved stream falsification is treated as stronger contamination evidence. Per-stream attribution is persisted with the attribution record and shown in `/refine inspect`.
+
+History pruning, arbitrary generated source-code execution, unattended global promotion, and model-weight training are intentionally outside this design.
