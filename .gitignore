@@ -83,6 +83,9 @@ agent-workspace/
 # Personal planning notes
 .cunyu/
 
+# Local learning prototypes and scratch notes
+learning/
+
 # Isolated local development worktrees
 .worktrees/
 
