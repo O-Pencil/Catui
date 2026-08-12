@@ -136,3 +136,62 @@ test("StreamRenderController auto-hides completed task panel without deleting co
 		rmSync(agentDir, { recursive: true, force: true });
 	}
 });
+
+test("StreamRenderController treats a lone roll-up in-progress task as completed when all other tasks are done", async () => {
+	initTheme("dark", false);
+	const agentDir = mkdtempSync(join(tmpdir(), "catui-stream-task-panel-rollup-"));
+	const taskListId = getTaskListId("task-panel-session");
+	const originalSetTimeout = globalThis.setTimeout;
+	const originalClearTimeout = globalThis.clearTimeout;
+	let autoHideCallback: (() => Promise<void>) | undefined;
+	const state = new InteractiveState();
+
+	(globalThis as unknown as { setTimeout: typeof setTimeout }).setTimeout = ((callback) => {
+		autoHideCallback = callback as () => Promise<void>;
+		return 1;
+	}) as typeof setTimeout;
+	(globalThis as unknown as { clearTimeout: typeof clearTimeout }).clearTimeout = (() => {}) as typeof clearTimeout;
+
+	try {
+		await createTask(agentDir, taskListId, {
+			subject: "Build safety module",
+			description: "",
+			status: "in_progress",
+			blocks: [],
+			blockedBy: [],
+		});
+		await createTask(agentDir, taskListId, {
+			subject: "Add safety tests",
+			description: "",
+			status: "completed",
+			blocks: [],
+			blockedBy: [],
+		});
+		await createTask(agentDir, taskListId, {
+			subject: "Run verification",
+			description: "",
+			status: "completed",
+			blocks: [],
+			blockedBy: [],
+		});
+
+		const ui = new TUI();
+		const status = new Container();
+		const controller = createController(agentDir, state, ui, status);
+		await (controller as unknown as {
+			refreshTaskPanel(state: InteractiveState, ui: TUI, statusContainer: Container): Promise<void>;
+		}).refreshTaskPanel(state, ui, status);
+
+		assert.ok(state.taskStatusPanel, "roll-up residue should still render before auto-hide");
+		const renderedTasks = state.taskStatusPanel?.getLastTasks() ?? [];
+		assert.equal(renderedTasks.length, 3);
+		assert.equal(renderedTasks.every((task) => task.status === "completed"), true);
+		assert.ok(autoHideCallback, "normalized all-done tasks should schedule panel auto-hide");
+	} finally {
+		state.taskStatusPanel?.dispose?.();
+		globalThis.setTimeout = originalSetTimeout;
+		globalThis.clearTimeout = originalClearTimeout;
+		stopAllTaskFileWatchers();
+		rmSync(agentDir, { recursive: true, force: true });
+	}
+});

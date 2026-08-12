@@ -634,7 +634,7 @@ export class StreamRenderController {
     try {
       const rawTasks = await listTasks(agentDir, taskListId);
       // Filter out internal tasks
-      const tasks = rawTasks
+      const visibleTasks = rawTasks
         .filter((t) => !(t.metadata as Record<string, unknown>)?._internal)
         .map((t) => ({
           id: t.id,
@@ -646,6 +646,7 @@ export class StreamRenderController {
             return rawTasks.some((bt) => bt.id === id && bt.status !== "completed");
           }),
         }));
+      const tasks = normalizeTaskPanelStatuses(visibleTasks);
 
       if (tasks.length === 0) {
         // No tasks — remove panel if it exists
@@ -728,6 +729,26 @@ function getTaskPanelSignature(tasks: Array<Pick<TaskStatusEntry, "id" | "subjec
     .map((task) => `${task.id}\u0000${task.status}\u0000${task.subject}`)
     .sort()
     .join("\u0001");
+}
+
+function normalizeTaskPanelStatuses(tasks: TaskStatusEntry[]): TaskStatusEntry[] {
+  const activeTasks = tasks.filter((task) => task.status !== "completed");
+  const pendingTasks = activeTasks.filter((task) => task.status === "pending");
+  const inProgressTasks = activeTasks.filter((task) => task.status === "in_progress");
+  const completedCount = tasks.length - activeTasks.length;
+  const hasLoneRollupResidue = tasks.length > 1 &&
+    completedCount > 0 &&
+    pendingTasks.length === 0 &&
+    inProgressTasks.length === 1;
+
+  if (!hasLoneRollupResidue) return tasks;
+
+  const residueId = inProgressTasks[0]?.id;
+  return tasks.map((task) =>
+    task.id === residueId
+      ? { ...task, status: "completed" }
+      : task,
+  );
 }
 
 // ============================================================================
