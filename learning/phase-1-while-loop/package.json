@@ -1,0 +1,30 @@
+{
+  "name": "phase-1-while-loop",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx caturn.tsx",
+    "start": "tsx caturn.tsx",
+    "tui": "node tui.js",
+    "test": "tsx test/run-all.tsx",
+    "test:tools": "tsx test/unit/tools.tsx",
+    "test:agent": "tsx test/unit/agent.tsx",
+    "test:tui": "tsx test/unit/tui.tsx",
+    "test:e2e": "tsx test/unit/e2e.tsx"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "ink": "^7.1.1",
+    "ink-text-input": "^6.0.0",
+    "openai": "^7.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "ink-testing-library": "^4.0.0",
+    "tsx": "^4.23.12"
+  }
+}
