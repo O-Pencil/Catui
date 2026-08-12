@@ -525,6 +525,7 @@ export default async function salExtension(api: ExtensionAPI) {
 				`  weightsSource: ${runtime.weightsSource}`,
 				`  snapshotGeneratedAt: ${snapshot ? new Date(snapshot.generatedAt).toISOString() : "(not built)"}`,
 				`  nodes: ${snapshot?.nodes.length ?? 0}`,
+				`  scan: ${snapshot?.scan.truncated ? `truncated (${snapshot.scan.reason})` : "complete"}`,
 				`  sidecarDir: ${isSalAbEnabled() ? runtime.sidecarDir : "(disabled; use --sal-ab)"}`,
 			];
 			ctx.ui.notify(lines.join("\n"), "info");
