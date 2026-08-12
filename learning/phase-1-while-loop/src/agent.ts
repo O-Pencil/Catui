@@ -12,25 +12,31 @@
  *    ✦ 囚徒很聪明，能读懂你的问题，能想清楚怎么回答
  *    ✦ 但囚徒出不去监狱——他自己读不了文件、跑不了命令
  *    ✦ 囚徒的"手脚"是使者（tools），活跃在监狱外面
- *    ✦ 每次对话都得把"日记本"整本给他——他没记忆
+ *    ✦ 每次对话都得把一叠纸条给他——他没记忆
  *
- *  这个文件的 agentLoop 就是"跟囚徒来回对话"的流程：
- *    1. 把日记本递给囚徒
+ *  这个文件的 agentLoop 就是"跟囚徒来回传纸条"的流程：
+ *    1. 把一叠纸条递给囚徒
  *    2. 看他说啥：
- *       a. "我要派使者" → 派使者 → 报告塞回日记本 → 回到 1
+ *       a. "我要派使者" → 派使者 → 把报告写成新纸条塞回去 → 回到 1
  *       b. "我想完了，答案给你" → 跳出循环
  *
  *  关键：
  *    - 工具实现不在这里（看 src/tools.ts）
  *    - UI 怎么显示不在这里（看 caturn.tsx）
  *    - 这里只关心"跟模型对话的业务流程"
+ *
+ *  比喻对照：
+ *    - messages 参数 = 一叠纸条（包含 system + 之前所有对话）
+ *    - onChunk 回调 = 囚徒嘴上说出一个字（流式）
+ *    - onToolCall 回调 = 囚徒说"我要派这个使者"
+ *    - signal = 狱卒的"打断旗"（Esc 时翻起来）
  */
 
 import OpenAI from 'openai';
 import { tools, executeTool, formatReport } from './tools.ts';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 客户端连接（狱卒：负责把纸条递给囚徒，把回复读出来）
+// 客户端连接（狱卒：负责把纸条递进牢房，把回复读出来）
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // baseURL 指向阿里百炼 coding plan 的"牢房"
 // apiKey 是"通行证"，没它狱卒不放行
@@ -53,10 +59,10 @@ export class AbortError extends Error {
 }
 
 /**
- * Agent Loop：跟囚徒来回对话直到他给最终答案
+ * Agent Loop：跟囚徒来回传纸条直到他给最终答案
  *
- * @param messages - 日记本（包含 system + 所有历史 user/assistant/tool 消息）
- *                   注意：传进去后会被修改（每轮结束会 push 消息进去）
+ * @param messages - 一叠纸条（包含 system + 所有历史 user/assistant/tool 消息）
+ *                   注意：传进去后会被修改（每轮结束会塞新纸条进去）
  * @param onChunk - 每收到一个文本片段时调用（用于"打字机"效果）
  *                 收到一个字符就调一次
  * @param onToolCall - 囚徒决定调工具时调用（用于 UI 显示"AI 在用 XX 工具"）
@@ -70,32 +76,32 @@ export class AbortError extends Error {
  * 流程一图流：
  *
  *   while (true) {
- *     if (信号说要停) throw AbortError;       ← 用户按 Esc 了
+ *     if (打断旗立起来了) throw AbortError;       ← 用户按 Esc 了
  *
  *     问囚徒："你下一步想干啥？"
  *     reply = await client.chat.completions.create({ stream: true })
  *
  *     一边生成一边把字吐出来（流式）：
  *     for await (chunk of reply) {
- *       if (信号说要停) break;               ← 立刻打断
+ *       if (打断旗立起来了) break;               ← 立刻打断
  *       if (chunk 是文字) {
  *         拼到 msg.content
- *         onChunk(chunk.content)              ← 告诉 UI "我生成一个字"
+ *         onChunk(chunk.content)                  ← 告诉 UI "我生成一个字"
  *       }
  *       if (chunk 是工具调用) {
  *         拼到 msg.tool_calls
  *       }
  *     }
  *
- *     把模型这一轮的发言记进日记本
+ *     把囚徒这一轮的发言写成新纸条，塞进一叠
  *     messages.push(msg)
  *
  *     if (msg 含工具调用) {
  *       for (每个工具调用) {
  *         让使者去现实世界跑（executeTool）
- *         把结果塞回日记本
+ *         把结果写成新纸条塞回去
  *       }
- *       continue;                              ← 回到循环开头，让囚徒重新看日记本
+ *       continue;                              ← 回到循环开头，让囚徒重新看一叠
  *     } else {
  *       return msg.content;                    ← 囚徒给最终答案了，结束
  *     }
@@ -109,16 +115,16 @@ export async function agentLoop(
 ): Promise<string> {
   while (true) {
     // ── 进循环第一件事：检查用户有没有按 Esc ──
-    // 如果信号说要停，立刻抛 AbortError 退出
+    // 如果打断旗立着，立刻抛 AbortError 退出
     // 注意：检查必须放在"调 API 之前"，避免浪费一次 API 调用
     if (signal.aborted) throw new AbortError();
 
-    // ── 问囚徒：把日记本递给他，让他决定下一步 ──
+    // ── 问囚徒：把一叠纸条递给他，让他决定下一步 ──
     // stream: true 表示"边生成边推"，不要等全部生成完一次性返回
     // 这样我们才能一边打字一边判断用户是否按了 Esc
     const stream: any = await client.chat.completions.create({
       model: 'qwen3.7-plus',
-      messages,  // 日记本
+      messages,  // 一叠纸条
       tools,     // 可用使者清单
       stream: true,
     });
@@ -191,7 +197,7 @@ export async function agentLoop(
     // 把聚合后的工具调用列表挂到 msg 上
     msg.tool_calls = Object.values(toolCallChunks);
 
-    // ── 中断时，保留已收内容到日记本 ──
+    // ── 中断时，保留已收内容到纸条堆 ──
     // 为什么保留？
     //   用户已经看到的内容，扔掉就浪费了
     //   下次接着聊（如果是新会话就忽略），也起码知道"上一轮咱聊到哪了"
@@ -200,9 +206,9 @@ export async function agentLoop(
       throw new AbortError();
     }
 
-    // ── 正常结束：把囚徒这一轮的发言记进日记本 ──
+    // ── 正常结束：把囚徒这一轮的发言写成新纸条 ──
     // 不管是"调工具"还是"给最终答案"，都要记
-    // 不记的话，下次问之前囚徒翻日记本会看到空白，他会困惑
+    // 不记的话，下次问之前囚徒翻纸条堆会看到空白，他会困惑
     messages.push(msg);
 
     // ── 判断：囚徒是要调工具，还是给最终答案？──
@@ -221,8 +227,8 @@ export async function agentLoop(
         // 让使者去现实世界干活
         const result = await executeTool(call.function.name, args);
 
-        // 把结果格式化（成功/失败不同格式）后塞回日记本
-        // role: 'tool' 是 OpenAI 协议，意思是"这是一条工具结果"
+        // 把结果格式化（成功/失败不同格式）后写成新纸条
+        // role: 'tool' 是 OpenAI 协议，意思是"这是一条工具报告"
         // tool_call_id 对应到囚徒刚才说要调的那个工具（一一对应）
         messages.push({
           role: 'tool',
@@ -231,7 +237,7 @@ export async function agentLoop(
         });
       }
 
-      // ── 继续循环：让囚徒重新看日记本（含刚塞进去的报告）──
+      // ── 继续循环：让囚徒重新看一叠纸条（含刚塞进去的报告）──
       // 囚徒可能：
       //   - 再派使者（譬如 read 完后说"我还要 grep"）
       //   - 给最终答案（"我想完了，告诉你答案"）

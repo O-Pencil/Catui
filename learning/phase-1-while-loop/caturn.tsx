@@ -10,7 +10,7 @@
  *
  *  整个 caturn 拆成 3 层，本文件只管"显示"：
  *
- *    1. 业务逻辑：src/agent.ts（跟囚徒对话）
+ *    1. 业务逻辑：src/agent.ts（跟囚徒传纸条）
  *    2. 工具实现：src/tools.ts（使者跑腿）
  *    3. UI 渲染：本文件（怎么画、怎么响应键盘）
  *
@@ -133,7 +133,8 @@ function App() {
     const userMsg: ChatMessage = { role: 'user', content: text };
     setMessages((prev) => [...prev, userMsg]);
 
-    // 5. 准备"日记本"（system + 历史 + 这次用户的问题）
+    // 5. 准备"一叠纸条"（system + 历史 + 这次用户的问题）
+    // 比喻：每轮对话 = 一张纸条，所有纸条叠起来就是要递给模型的东西
     // 注意：必须用 messagesRef 拿最新值（React state 在 async 函数里是旧值）
     const apiMessages: any[] = [
       { role: 'system', content: SYSTEM_PROMPT },

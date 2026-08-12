@@ -338,7 +338,7 @@ Error: Cannot find module '/Users/cunyu666/Dev/catui/caturn.js'
 - **直接用囚徒使者比喻**
 - 画图：用户 → 囚徒 → 使者 → 现实 → 使者 → 囚徒 → 用户
 - 关键点：囚徒出不去、对话得带历史、使者是他的手脚、每次回来重新看历史
-- 重写 agent loop 代码用囚徒使者语义：`history` = 日记本、`prisoner.think()` = 思考、`messenger.run()` = 跑腿、`while(true) + continue` = 还想、`return` = 想完了
+- 重写 agent loop 代码用囚徒使者语义：`messages` = 一叠纸条、`prisoner.think()` = 思考、`messenger.run()` = 跑腿、`while(true) + continue` = 还想、`return` = 想完了
 - 三个认知检查（用囚徒比喻重述）
 
 ---
@@ -418,7 +418,7 @@ Error: Cannot find module '/Users/cunyu666/Dev/catui/caturn.js'
   - `execAsync` 是什么（`promisify` 把回调包成 async）
   - `required: ['path']` 的作用
   - `maxBuffer: 1MB` 防护
-  - `messages.push(msg)` 为什么必须（囚徒下次翻日记本）
+  - `messages.push(msg)` 为什么必须（囚徒下次翻纸条）
   - `tool_call_id` 对应关系
   - `busy` 标志为什么需要
 - 回归测试："告诉我当前目录最大的文件是哪个"
@@ -454,7 +454,7 @@ Error: Cannot find module '/Users/cunyu666/Dev/catui/caturn.js'
      - `execAsync` = "翻译器"（把老 API 翻译成现代 API）
      - `apiKey` = "囚徒通行证"
      - `tool_call_id` = "一一对应关系"
-     - `messages` = "日记本"
+     - `messages` = "一叠纸条"
   5. 关键术语加解释：`stdout` vs `stderr`、`utf8` 为啥必要、`maxBuffer` 防爆内存
 - 文件长度从 7.1KB → 8.9KB，但可读性大幅提升
 - 回归测试："caturn.js 第 50 行附近是啥" → **模型自己组合了 read + sed 两个工具**拿到答案
@@ -571,7 +571,7 @@ Error: Cannot find module '/Users/cunyu666/Dev/catui/caturn.js'
   - `delta.content` 拼到完整内容
   - `process.stdout.write(delta.content)` 实现打字机效果
   - `delta.tool_calls` 按 index 聚合（流式里工具调用是分片发的）
-  - 完整内容拼完才记进 messages（不然下次翻日记本看到半截话）
+  - 完整内容拼完才记进 messages（不然下次翻纸条看到半截话）
 - 改动：
   1. `agentLoop` 重写为流式版本
   2. `toolCallChunks` 按 index 聚合工具调用
