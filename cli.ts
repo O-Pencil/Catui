@@ -10,6 +10,9 @@ process.title = "catui";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { installOutputDisconnectHandlers } from "./cli/output-disconnect.js";
+
+installOutputDisconnectHandlers();
 
 const args = process.argv.slice(2);
 

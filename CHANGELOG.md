@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.13] - 2026-08-12
+
+### Fixed
+- fix(cli): exit cleanly when stdout or stderr consumers disconnect
+
 ## [1.2.12] - 2026-08-12
 
 ### Added
