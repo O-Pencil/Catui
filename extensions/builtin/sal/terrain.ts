@@ -5,8 +5,9 @@
  * [HERE]: extensions/builtin/sal/terrain.ts - terrain graph builder from DIP P2/P3 headers
  */
 
-import { readdir, readFile, stat } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { open, opendir, stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join, parse, relative, resolve, sep } from "node:path";
 
 /**
  * Yield control back to Node's event loop so pending process.nextTick
@@ -51,6 +52,24 @@ export interface TerrainSnapshot {
 	edges: TerrainEdge[];
 	// fileId -> moduleId index for fast lookup
 	moduleByFile: Record<string, string>;
+	scan: TerrainScanStats;
+}
+
+export interface TerrainScanOptions {
+	maxDirectories?: number;
+	maxCandidateFiles?: number;
+	maxFileBytes?: number;
+	maxDurationMs?: number;
+}
+
+export interface TerrainScanStats {
+	directoriesVisited: number;
+	peakPendingDirectories: number;
+	candidateFiles: number;
+	truncatedFiles: number;
+	durationMs: number;
+	truncated: boolean;
+	reason?: "unsafe-workspace-root" | "directory-budget" | "candidate-file-budget" | "time-budget";
 }
 
 export interface CoverageReport {
@@ -79,6 +98,13 @@ const IGNORED_DIRS = new Set([
 
 const SOURCE_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".mts", ".cts"]);
 
+const DEFAULT_SCAN_OPTIONS: Required<TerrainScanOptions> = {
+	maxDirectories: 10_000,
+	maxCandidateFiles: 50_000,
+	maxFileBytes: 64 * 1024,
+	maxDurationMs: 5_000,
+};
+
 /** P2 module map files: prefer AGENT.md; CLAUDE.md supported for legacy trees. */
 const DIP_MODULE_MAP_FILENAMES = ["AGENT.md", "CLAUDE.md"] as const;
 
@@ -97,65 +123,142 @@ interface WalkEntry {
 	abs: string;
 	rel: string; // posix-style
 	mtimeMs: number;
+	size: number;
 }
 
-async function walkAsync(root: string): Promise<{ files: WalkEntry[]; dirs: WalkEntry[] }> {
+interface WalkResult {
+	files: WalkEntry[];
+	scan: TerrainScanStats;
+}
+
+function isTerrainCandidate(name: string): boolean {
+	if ((DIP_MODULE_MAP_FILENAMES as readonly string[]).includes(name)) return true;
+	const dotIdx = name.lastIndexOf(".");
+	return dotIdx >= 0 && SOURCE_EXTS.has(name.slice(dotIdx));
+}
+
+function resolveScanOptions(options?: TerrainScanOptions): Required<TerrainScanOptions> {
+	return {
+		maxDirectories: Math.max(1, options?.maxDirectories ?? DEFAULT_SCAN_OPTIONS.maxDirectories),
+		maxCandidateFiles: Math.max(1, options?.maxCandidateFiles ?? DEFAULT_SCAN_OPTIONS.maxCandidateFiles),
+		maxFileBytes: Math.max(1, options?.maxFileBytes ?? DEFAULT_SCAN_OPTIONS.maxFileBytes),
+		maxDurationMs: Math.max(1, options?.maxDurationMs ?? DEFAULT_SCAN_OPTIONS.maxDurationMs),
+	};
+}
+
+function isUnsafeWorkspaceRoot(workspaceRoot: string): boolean {
+	const absoluteRoot = resolve(workspaceRoot);
+	return absoluteRoot === parse(absoluteRoot).root || absoluteRoot === resolve(homedir());
+}
+
+function emptyTerrainSnapshot(workspaceRoot: string, reason: TerrainScanStats["reason"]): TerrainSnapshot {
+	return {
+		workspaceRoot,
+		generatedAt: Date.now(),
+		nodes: [],
+		edges: [],
+		moduleByFile: {},
+		scan: {
+			directoriesVisited: 0,
+			peakPendingDirectories: 0,
+			candidateFiles: 0,
+			truncatedFiles: 0,
+			durationMs: 0,
+			truncated: true,
+			reason,
+		},
+	};
+}
+
+async function walkAsync(
+	root: string,
+	options: Required<TerrainScanOptions>,
+	startedAt: number,
+): Promise<WalkResult> {
 	const files: WalkEntry[] = [];
-	const dirs: WalkEntry[] = [];
 	const stack: string[] = [root];
-	let dirsProcessed = 0;
+	const scan: TerrainScanStats = {
+		directoriesVisited: 0,
+		peakPendingDirectories: 1,
+		candidateFiles: 0,
+		truncatedFiles: 0,
+		durationMs: 0,
+		truncated: false,
+	};
 	while (stack.length > 0) {
+		if (performance.now() - startedAt >= options.maxDurationMs) {
+			scan.truncated = true;
+			scan.reason = "time-budget";
+			break;
+		}
+		if (scan.directoriesVisited >= options.maxDirectories) {
+			scan.truncated = true;
+			scan.reason = "directory-budget";
+			break;
+		}
 		const current = stack.pop();
 		if (!current) break;
-		let entries: import("node:fs").Dirent[];
+		scan.directoriesVisited += 1;
+		let directory: Awaited<ReturnType<typeof opendir>>;
 		try {
-			entries = await readdir(current, { withFileTypes: true });
+			directory = await opendir(current);
 		} catch {
 			continue;
 		}
-		// Batch stat() calls per directory so the event loop turns over
-		// naturally between directories instead of serializing one syscall at a time.
-		const pending: Promise<void>[] = [];
-		for (const entry of entries) {
+		for await (const entry of directory) {
+			if (performance.now() - startedAt >= options.maxDurationMs) {
+				scan.truncated = true;
+				scan.reason = "time-budget";
+				break;
+			}
 			if (entry.name.startsWith(".") && entry.name !== ".") {
-				if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
 				if (entry.isDirectory()) continue;
 			}
 			if (entry.isDirectory()) {
 				if (IGNORED_DIRS.has(entry.name)) continue;
+				if (scan.directoriesVisited + stack.length >= options.maxDirectories) {
+					scan.truncated = true;
+					scan.reason ??= "directory-budget";
+					continue;
+				}
+				stack.push(join(current, entry.name));
+				scan.peakPendingDirectories = Math.max(scan.peakPendingDirectories, stack.length);
+			} else if (entry.isFile() && isTerrainCandidate(entry.name)) {
+				if (files.length >= options.maxCandidateFiles) {
+					scan.truncated = true;
+					scan.reason = "candidate-file-budget";
+					break;
+				}
 				const abs = join(current, entry.name);
 				const rel = toPosix(relative(root, abs));
-				pending.push(
-					stat(abs).then(
-						(st) => {
-							dirs.push({ abs, rel, mtimeMs: st.mtimeMs });
-							stack.push(abs);
-						},
-						() => {
-							dirs.push({ abs, rel, mtimeMs: 0 });
-							stack.push(abs);
-						},
-					),
-				);
-			} else if (entry.isFile()) {
-				const abs = join(current, entry.name);
-				const rel = toPosix(relative(root, abs));
-				pending.push(
-					stat(abs).then(
-						(st) => {
-							files.push({ abs, rel, mtimeMs: st.mtimeMs });
-						},
-						() => {
-							files.push({ abs, rel, mtimeMs: 0 });
-						},
-					),
-				);
+				try {
+					const fileStat = await stat(abs);
+					files.push({ abs, rel, mtimeMs: fileStat.mtimeMs, size: fileStat.size });
+				} catch {
+					files.push({ abs, rel, mtimeMs: 0, size: 0 });
+				}
 			}
 		}
-		await Promise.all(pending);
-		if (++dirsProcessed % 16 === 0) await yieldToEventLoop();
+		if (scan.reason === "candidate-file-budget" || scan.reason === "time-budget") break;
+		if (scan.directoriesVisited % 16 === 0) await yieldToEventLoop();
 	}
-	return { files, dirs };
+	scan.candidateFiles = files.length;
+	scan.durationMs = Math.round(performance.now() - startedAt);
+	return { files, scan };
+}
+
+async function readFilePrefix(file: WalkEntry, maxFileBytes: number, scan: TerrainScanStats): Promise<string> {
+	const bytesToRead = Math.min(file.size, maxFileBytes);
+	if (file.size > maxFileBytes) scan.truncatedFiles += 1;
+	if (bytesToRead <= 0) return "";
+	const handle = await open(file.abs, "r");
+	try {
+		const buffer = Buffer.allocUnsafe(bytesToRead);
+		const { bytesRead } = await handle.read(buffer, 0, bytesToRead, 0);
+		return buffer.toString("utf8", 0, bytesRead);
+	} finally {
+		await handle.close();
+	}
 }
 
 const P3_BLOCK_RE = /\/\*\*([\s\S]*?)\*\//;
@@ -225,8 +328,14 @@ function parseP2Summary(content: string): string | undefined {
  * GPU block terminals (Warp) coalesce a whole turn into a single block and
  * only render it when the turn ends.
  */
-export async function buildTerrainIndex(workspaceRoot: string): Promise<TerrainSnapshot> {
-	const { files } = await walkAsync(workspaceRoot);
+export async function buildTerrainIndex(
+	workspaceRoot: string,
+	options?: TerrainScanOptions,
+): Promise<TerrainSnapshot> {
+	if (isUnsafeWorkspaceRoot(workspaceRoot)) return emptyTerrainSnapshot(workspaceRoot, "unsafe-workspace-root");
+	const scanOptions = resolveScanOptions(options);
+	const startedAt = performance.now();
+	const { files, scan } = await walkAsync(workspaceRoot, scanOptions, startedAt);
 	const nodes: TerrainNode[] = [];
 	const edges: TerrainEdge[] = [];
 	const moduleByFile: Record<string, string> = {};
@@ -237,12 +346,17 @@ export async function buildTerrainIndex(workspaceRoot: string): Promise<TerrainS
 	// Pass 1: P2 module nodes from AGENT.md (or legacy CLAUDE.md) files
 	let pass1Count = 0;
 	for (const f of files) {
+		if (performance.now() - startedAt >= scanOptions.maxDurationMs) {
+			scan.truncated = true;
+			scan.reason = "time-budget";
+			break;
+		}
 		const dipName = dipModuleMapFileName(f.rel);
 		if (!dipName) continue;
 		const modulePath = f.rel === dipName ? "" : f.rel.slice(0, f.rel.length - dipName.length - 1);
 		let p2Summary: string | undefined;
 		try {
-			const content = await readFile(f.abs, "utf-8");
+			const content = await readFilePrefix(f, scanOptions.maxFileBytes, scan);
 			p2Summary = parseP2Summary(content);
 		} catch {
 			// ignore
@@ -265,6 +379,11 @@ export async function buildTerrainIndex(workspaceRoot: string): Promise<TerrainS
 	// Pass 2: file nodes for source files
 	let pass2Count = 0;
 	for (const f of files) {
+		if (performance.now() - startedAt >= scanOptions.maxDurationMs) {
+			scan.truncated = true;
+			scan.reason = "time-budget";
+			break;
+		}
 		const dotIdx = f.rel.lastIndexOf(".");
 		if (dotIdx < 0) continue;
 		const ext = f.rel.slice(dotIdx);
@@ -272,7 +391,7 @@ export async function buildTerrainIndex(workspaceRoot: string): Promise<TerrainS
 
 		let p3: P3Fields | undefined;
 		try {
-			const content = await readFile(f.abs, "utf-8");
+			const content = await readFilePrefix(f, scanOptions.maxFileBytes, scan);
 			p3 = parseP3Header(content);
 		} catch {
 			// ignore unreadable files
@@ -310,12 +429,14 @@ export async function buildTerrainIndex(workspaceRoot: string): Promise<TerrainS
 		if (++pass2Count % 32 === 0) await yieldToEventLoop();
 	}
 
+	scan.durationMs = Math.round(performance.now() - startedAt);
 	return {
 		workspaceRoot,
 		generatedAt: Date.now(),
 		nodes,
 		edges,
 		moduleByFile,
+		scan,
 	};
 }
 
@@ -364,40 +485,47 @@ export function checkDipCoverage(snapshot: TerrainSnapshot, modules: string[]): 
  * Async to avoid blocking the event loop during the staleness probe that runs
  * at the top of every before_agent_start hook.
  */
-export async function isSnapshotStale(snapshot: TerrainSnapshot): Promise<boolean> {
+export async function isSnapshotStale(
+	snapshot: TerrainSnapshot,
+	options?: TerrainScanOptions,
+): Promise<boolean> {
+	if (isUnsafeWorkspaceRoot(snapshot.workspaceRoot)) return false;
+	const scanOptions = resolveScanOptions(options);
+	const startedAt = performance.now();
 	const stack: string[] = [snapshot.workspaceRoot];
-	let dirsProcessed = 0;
+	let directoriesVisited = 0;
+	let candidateFiles = 0;
 	while (stack.length > 0) {
+		if (performance.now() - startedAt >= scanOptions.maxDurationMs) return false;
+		if (directoriesVisited >= scanOptions.maxDirectories) return false;
 		const current = stack.pop();
 		if (!current) break;
-		let entries: import("node:fs").Dirent[];
+		directoriesVisited += 1;
+		let directory: Awaited<ReturnType<typeof opendir>>;
 		try {
-			entries = await readdir(current, { withFileTypes: true });
+			directory = await opendir(current);
 		} catch {
 			continue;
 		}
-		const statTargets: string[] = [];
-		for (const entry of entries) {
+		for await (const entry of directory) {
+			if (performance.now() - startedAt >= scanOptions.maxDurationMs) return false;
 			if (entry.isDirectory()) {
 				if (IGNORED_DIRS.has(entry.name)) continue;
 				if (entry.name.startsWith(".")) continue;
+				if (directoriesVisited + stack.length >= scanOptions.maxDirectories) continue;
 				stack.push(join(current, entry.name));
 				continue;
 			}
-			if (!entry.isFile()) continue;
-			const isDipModuleMap = (DIP_MODULE_MAP_FILENAMES as readonly string[]).includes(entry.name);
-			const dotIdx = entry.name.lastIndexOf(".");
-			const ext = dotIdx >= 0 ? entry.name.slice(dotIdx) : "";
-			if (!isDipModuleMap && !SOURCE_EXTS.has(ext)) continue;
-			statTargets.push(join(current, entry.name));
+			if (!entry.isFile() || !isTerrainCandidate(entry.name)) continue;
+			if (candidateFiles >= scanOptions.maxCandidateFiles) return false;
+			candidateFiles += 1;
+			try {
+				if ((await stat(join(current, entry.name))).mtimeMs > snapshot.generatedAt) return true;
+			} catch {
+				// Ignore files that disappear during the scan.
+			}
 		}
-		const results = await Promise.all(
-			statTargets.map((abs) => stat(abs).then((st) => st.mtimeMs, () => 0)),
-		);
-		for (const mtime of results) {
-			if (mtime > snapshot.generatedAt) return true;
-		}
-		if (++dirsProcessed % 16 === 0) await yieldToEventLoop();
+		if (directoriesVisited % 16 === 0) await yieldToEventLoop();
 	}
 	return false;
 }

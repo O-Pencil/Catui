@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.14] - 2026-08-12
+
+### Fixed
+- fix(sal): bound workspace terrain scans so oversized directories degrade to a partial index instead of exhausting the Node.js heap
+- fix(sal): filter non-source files before stat collection and cap P2/P3 header reads
+- fix(sal): stop background terrain work after five seconds and keep the partial index usable
+- fix(sal): refuse broad filesystem and home-directory roots that are not valid code workspaces
+
+## [1.2.13] - 2026-08-12
+
+### Fixed
+- fix(cli): exit cleanly when stdout or stderr consumers disconnect
+
 ## [1.2.12] - 2026-08-12
 
 ### Added
