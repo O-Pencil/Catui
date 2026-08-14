@@ -1,5 +1,5 @@
 /**
- * [WHO]: EvolutionAutoObserver turns explicit reusable-lesson and structured turn output into evolution candidates
+ * [WHO]: EvolutionAutoObserver turns explicit reusable-lesson and structured turn output into automatically activated evolution artifacts
  * [FROM]: Depends on extension turn_end context, evolution gate, and evolution store validation/persistence
  * [TO]: Consumed by optional evolution extension entry
  * [HERE]: extensions/optional/evolution/evolution-auto.ts - deterministic loop-level self-evolution observer with scope gates
@@ -82,7 +82,6 @@ function structuredProposal(text: string):
 			tracePath?: string;
 			scenarioId?: string;
 			observedOutputFingerprint?: string;
-			autoPromote: boolean;
 	  }
 	| undefined {
 	for (const candidate of parseJsonCandidates(text)) {
@@ -103,10 +102,13 @@ function structuredProposal(text: string):
 			...(typeof record.tracePath === "string" ? { tracePath: record.tracePath } : {}),
 			...(typeof record.scenarioId === "string" ? { scenarioId: record.scenarioId } : {}),
 			...(typeof record.observedOutputFingerprint === "string" ? { observedOutputFingerprint: record.observedOutputFingerprint } : {}),
-			autoPromote: record.autoPromote === true,
 		};
 	}
 	return undefined;
+}
+
+function needsGate(kind: EvolutionArtifactKind): boolean {
+	return kind === "executable_tool";
 }
 
 export class EvolutionAutoObserver {
@@ -152,17 +154,15 @@ export class EvolutionAutoObserver {
 					],
 					evidence: { source: "turn_end_structured", turnIndex: event.turnIndex, tracePath: structured.tracePath },
 				});
-				if (structured.autoPromote) {
-					const currentGateReport = await this.#runGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId });
-					if (!currentGateReport.passed) {
-						recordEvolutionGateFailure(root, candidate.id, { gateReport: currentGateReport });
+				const currentGateReport = await this.#runGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId });
+				if (!currentGateReport.passed) {
+					recordEvolutionGateFailure(root, candidate.id, { gateReport: currentGateReport });
+				} else {
+					const fixtureGateReport = await runCandidateEvalFixtureGate(fixture.content, scenarioId);
+					if (fixtureGateReport.passed) {
+						promoteEvolutionCandidate(root, candidate.id, { approvedBy: "structured-turn-end", gateReport: fixtureGateReport });
 					} else {
-						const fixtureGateReport = await runCandidateEvalFixtureGate(fixture.content, scenarioId);
-						if (fixtureGateReport.passed) {
-							promoteEvolutionCandidate(root, candidate.id, { approvedBy: "structured-turn-end", gateReport: fixtureGateReport });
-						} else {
-							recordEvolutionGateFailure(root, candidate.id, { gateReport: fixtureGateReport });
-						}
+						recordEvolutionGateFailure(root, candidate.id, { gateReport: fixtureGateReport });
 					}
 				}
 				this.#lastCandidateTurnBySession.set(sessionId, event.turnIndex);
@@ -190,12 +190,16 @@ export class EvolutionAutoObserver {
 			};
 			const candidate = createEvolutionCandidate(root, input);
 			const globalPolicy = structured.scope === "global" ? canAutoPromoteGlobalEvolution(input) : { allowed: true };
-			if (structured.autoPromote && globalPolicy.allowed) {
-				const gateReport = await this.#runGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId });
-				if (gateReport.passed) {
-					promoteEvolutionCandidate(root, candidate.id, { approvedBy: "structured-turn-end", gateReport });
+			if (globalPolicy.allowed) {
+				if (needsGate(structured.kind)) {
+					const gateReport = await this.#runGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId });
+					if (gateReport.passed) {
+						promoteEvolutionCandidate(root, candidate.id, { approvedBy: "structured-turn-end", gateReport });
+					} else {
+						recordEvolutionGateFailure(root, candidate.id, { gateReport });
+					}
 				} else {
-					recordEvolutionGateFailure(root, candidate.id, { gateReport });
+					promoteEvolutionCandidate(root, candidate.id, { approvedBy: "structured-turn-end" });
 				}
 			}
 			this.#lastCandidateTurnBySession.set(sessionId, event.turnIndex);
@@ -210,7 +214,7 @@ export class EvolutionAutoObserver {
 			scope: "session",
 			summary: "Auto-observed reusable lesson",
 			rationale: "The assistant explicitly marked a reusable lesson at turn end.",
-			expectedOutcome: "Future turns can inspect and promote the lesson when it proves reusable.",
+			expectedOutcome: "Future turns can consume the lesson when matching conditions recur.",
 			artifacts: [
 				{
 					id: `evolved:memory:auto-${slug(lesson)}`,
@@ -225,6 +229,7 @@ export class EvolutionAutoObserver {
 				turnIndex: event.turnIndex,
 			},
 		});
+		promoteEvolutionCandidate(root, candidate.id, { approvedBy: "turn-end-auto" });
 		this.#lastCandidateTurnBySession.set(sessionId, event.turnIndex);
 		return { candidateId: candidate.id };
 	}

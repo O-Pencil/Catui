@@ -1,5 +1,5 @@
 /**
- * [WHO]: evolutionExtension registers /refine, model tools, turn observation, and active evolved harness prompt injection
+ * [WHO]: evolutionExtension registers /refine, model tools, automatic activation, turn observation, and active evolved harness prompt injection
  * [FROM]: Depends on core extension APIs plus local evolution store/refiner/format/tool/observer modules
  * [TO]: Loaded explicitly as optional extension through Catui extension configuration or --extension
  * [HERE]: extensions/optional/evolution/index.ts - controlled self-evolution feature entry
@@ -12,6 +12,7 @@ import type {
 	ExtensionContext,
 } from "../../../core/extensions-host/types.js";
 import {
+	canAutoPromoteGlobalEvolution,
 	createEvolutionCandidate,
 	getEvolutionScopeRoot,
 	inspectEvolution,
@@ -38,7 +39,7 @@ import { runEvolutionGate } from "./evolution-gate.js";
 import { createEvolvedTool } from "./evolution-tool.js";
 import { createEvolvedExecutableTool } from "./evolution-executable-tool.js";
 import { EvolutionAutoObserver } from "./evolution-auto.js";
-import type { EvolutionScope, EvolutionScopeSelector } from "./evolution-types.js";
+import type { EvolutionCandidate, EvolutionScope, EvolutionScopeSelector } from "./evolution-types.js";
 
 const MESSAGE_TYPE = "evolution";
 
@@ -75,6 +76,33 @@ function parseFeedbackOutcome(value: string | undefined): "useful" | "not_useful
 	throw new Error("Usage: /refine feedback <usage-id> useful|not-useful [note]");
 }
 
+async function activateCandidate(
+	candidate: EvolutionCandidate,
+	root: string,
+	scope: EvolutionScope,
+	ctx: ExtensionCommandContext,
+	api: ExtensionAPI,
+): Promise<void> {
+	const globalPolicy = scope === "global" ? canAutoPromoteGlobalEvolution(candidate) : { allowed: true };
+	if (!globalPolicy.allowed) {
+		send(api, `Evolution candidate ${candidate.id} remains inactive: ${globalPolicy.reason ?? "global auto-activation policy blocked it"}.`);
+		return;
+	}
+	const hasExecutableTool = candidate.artifacts.some((artifact) => artifact.kind === "executable_tool");
+	const gateReport = hasExecutableTool
+		? await runEvolutionGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId: ctx.sessionManager.getSessionId() })
+		: undefined;
+	if (gateReport && !gateReport.passed) {
+		recordEvolutionGateFailure(root, candidate.id, { gateReport });
+		send(api, `Evolution candidate ${candidate.id} remains inactive: eval gate failed (${gateReport.failure ?? gateReport.name}).`);
+		return;
+	}
+	const revision = promoteEvolutionCandidate(root, candidate.id, { approvedBy: "auto", ...(gateReport ? { gateReport } : {}) });
+	api.appendEntry("catui.evolution.promoted", { scope, candidateId: candidate.id, revisionId: revision.id, automatic: true });
+	await ctx.reload();
+	send(api, `Evolution revision ${revision.id} is now active.`);
+}
+
 async function handleRefineCommand(args: string, ctx: ExtensionCommandContext, api: ExtensionAPI): Promise<void> {
 	const parsed = parseScope(args, ctx);
 	const [command, ...tail] = parsed.rest.split(/\s+/).filter(Boolean);
@@ -94,6 +122,7 @@ async function handleRefineCommand(args: string, ctx: ExtensionCommandContext, a
 		const candidate = createEvolutionCandidate(root, input);
 		api.appendEntry("catui.evolution.candidate", { scope: parsed.scope, candidateId: candidate.id });
 		send(api, formatCreatedCandidate(candidate));
+		await activateCandidate(candidate, root, parsed.scope, ctx, api);
 		return;
 	}
 	if (subcommand === "inspect") {
@@ -183,6 +212,7 @@ async function handleRefineCommand(args: string, ctx: ExtensionCommandContext, a
 	const candidate = createEvolutionCandidate(root, input);
 	api.appendEntry("catui.evolution.candidate", { scope: parsed.scope, candidateId: candidate.id });
 	send(api, formatCreatedCandidate(candidate));
+	await activateCandidate(candidate, root, parsed.scope, ctx, api);
 }
 
 function beforeAgentStart(ctx: ExtensionContext): BeforeAgentStartEventResult | undefined {
@@ -212,7 +242,7 @@ export default async function evolutionExtension(api: ExtensionAPI): Promise<voi
 	api.registerTool(createEvolvedTool());
 	api.registerTool(createEvolvedExecutableTool());
 	api.registerCommand("refine", {
-		description: "Propose, inspect, promote, reject, or rollback controlled evolved harness artifacts.",
+		description: "Propose, inspect, activate, reject, or rollback controlled evolved harness artifacts.",
 		getArgumentCompletions: (prefix) => {
 			const values = ["status", "inspect", "changes", "review", "feedback", "promote", "approve", "reject", "rollback", "--session", "--workspace", "--global"];
 			const normalized = prefix.trim();

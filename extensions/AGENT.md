@@ -252,7 +252,7 @@ High-trust or extra extension source. Most optional entries require explicit ext
 #### evolution/ — Controlled Self-Evolution
 
 **P3 Contract:**
-`index.ts`: - [WHO]: Extension with /refine command, evolution_refine, evolved_tool, evolved_executable_tool, before_agent_start prompt injection, and turn_end observation
+`index.ts`: - [WHO]: Extension with /refine command, automatic activation, evolution_refine, evolved_tool, evolved_executable_tool, before_agent_start prompt injection, and turn_end observation
     - [FROM]: core/extensions-host/types and local evolution helpers
     - [HERE]: evolution extension entry
 
@@ -268,7 +268,7 @@ High-trust or extra extension source. Most optional entries require explicit ext
 
 `evolution-tool.ts`: Promoted declarative tool_spec reuse through evolved_tool; validates declared inputs and returns structured non-executable plans without executing generated code
 
-`evolution-auto.ts`: Deterministic `turn_end` auto-observer for explicit reusable-lesson candidates and structured `catui_evolution` JSON proposals with scope gates
+`evolution-auto.ts`: Deterministic `turn_end` auto-observer that turns explicit reusable lessons and structured `catui_evolution` JSON proposals into automatically activated artifacts with scope gates
 
 `evolution-format.ts`: Human-readable status/inspection/result text, prediction/attribution summaries, and prompt append formatting
 
@@ -276,7 +276,7 @@ High-trust or extra extension source. Most optional entries require explicit ext
 
 **Design Principle:**
 - Self-evolution is extension-owned default behavior, not core runtime behavior.
-- Default loading is idle by default: no model calls, prompt injection, or evolution ledger writes occur until a user/model action creates or promotes artifacts.
+- Default loading is idle by default: no model calls, prompt injection, or evolution ledger writes occur until a user/model action creates artifacts; valid low-risk artifacts activate automatically.
 - Generated artifacts are untrusted data. Prompt notes, memories, bounded tool specs, and eval fixtures can evolve under deterministic gates; tool specs may define input contracts and ordered reuse steps, but executable code, package installs, endpoints, permission changes, and runtime tool creation remain approval-gated or rejected.
 - Candidate predictions are falsifiable decision-observability records copied onto promoted revisions; post-hoc attribution records compare later gate metrics with prediction targets without mutating immutable revision manifests.
 - Conservative auto-rollback can move `current.json` from the current falsified revision to its predecessor; it never deletes revisions, never rolls back non-current revisions, and does nothing when no predecessor exists.

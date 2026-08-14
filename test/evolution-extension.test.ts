@@ -803,6 +803,48 @@ test("refine status and changes show scoped active state and revision rationale"
 	}
 });
 
+test("refine command activates planned declarative artifacts without manual promote", async () => {
+	const harness = createHarness();
+	try {
+		await evolutionExtension(harness.api);
+		const refineCommand = harness.commands.get("refine");
+		assert.ok(refineCommand, "Expected refine command to be registered.");
+		const ctx = {
+			agentDir: harness.agentDir,
+			model: { id: "test-model" },
+			sessionManager: { getSessionId: () => "session-refine-auto", getEntries: () => [] },
+			cwd: process.cwd(),
+			reload: async () => {},
+			ui: { notify: () => {} },
+			completeSimple: async () => JSON.stringify({
+				summary: "Remember focused verification",
+				rationale: "The session repeatedly relied on focused tests before broad checks.",
+				expectedOutcome: "Future turns start from focused verification.",
+				artifacts: [
+					{
+						id: "evolved:prompt_note:focused-verification",
+						kind: "prompt_note",
+						title: "Focused verification",
+						content: "When a localized behavior changes, run the smallest focused verification before broad gates.",
+						applicability: "Localized code changes.",
+					},
+				],
+			}),
+		} as unknown as ExtensionCommandContext;
+
+		await refineCommand("--session improve verification", ctx);
+		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-refine-auto" });
+		const inspection = inspectEvolution(root);
+		assert.equal(inspection.candidates[0]?.status, "promoted");
+		assert.match(inspection.current?.revisionId ?? "", /revision-/);
+		const beforeAgentStart = harness.handlers.get("before_agent_start")?.[0] as BeforeAgentStartHandler;
+		const injected = await beforeAgentStart({ type: "before_agent_start", prompt: "continue", systemPrompt: "base" }, ctx);
+		assert.match(injected?.appendSystemPrompt ?? "", /Focused verification/);
+	} finally {
+		harness.cleanup();
+	}
+});
+
 test("evolution_refine lets the model create and auto-promote session tool specs without installing code", async () => {
 	const harness = createHarness();
 	try {
@@ -1488,7 +1530,7 @@ test("evolution_refine can auto-promote workspace artifacts across sessions and 
 	}
 });
 
-test("evolution auto-observer creates a session candidate from turn-end reusable lessons with cooldown", async () => {
+test("evolution auto-observer activates session reusable lessons with cooldown", async () => {
 	const harness = createHarness();
 	try {
 		await evolutionExtension(harness.api);
@@ -1525,7 +1567,8 @@ test("evolution auto-observer creates a session candidate from turn-end reusable
 		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-auto" });
 		let candidates = inspectEvolution(root).candidates;
 		assert.equal(candidates.length, 1);
-		assert.equal(candidates[0]?.status, "proposed");
+		assert.equal(candidates[0]?.status, "promoted");
+		assert.match(inspectEvolution(root).current?.revisionId ?? "", /revision-/);
 		assert.equal(candidates[0]?.artifacts[0]?.kind, "memory");
 		assert.match(candidates[0]?.artifacts[0]?.content ?? "", /focused failing test/);
 
@@ -1549,7 +1592,7 @@ test("evolution auto-observer creates a session candidate from turn-end reusable
 	}
 });
 
-test("evolution auto-observer consumes structured turn-end proposals with scope and promotion gates", async () => {
+test("evolution auto-observer consumes structured turn-end proposals with default activation gates", async () => {
 	const harness = createHarness();
 	try {
 		await evolutionExtension(harness.api);
@@ -1585,7 +1628,6 @@ test("evolution auto-observer consumes structured turn-end proposals with scope 
 								title: "Prefer extension-owned learning",
 								content: "When improving Catui learning behavior, keep product policy in the evolution extension.",
 								applicability: "Catui self-evolution changes.",
-								autoPromote: true,
 							},
 						}),
 						"```",
