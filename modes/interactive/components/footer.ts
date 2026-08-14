@@ -136,6 +136,11 @@ export class FooterComponent implements Component {
 		if (this.showTokenStats) {
 			if (totalInput) statsParts.push(`↑${formatTokens(totalInput)}`);
 			if (totalOutput) statsParts.push(`↓${formatTokens(totalOutput)}`);
+			const cacheDenominator = totalInput + totalCacheRead;
+			if (cacheDenominator > 0 && (totalCacheRead > 0 || totalCacheWrite > 0)) {
+				const cacheHitRate = Math.round((totalCacheRead / cacheDenominator) * 100);
+				statsParts.push(`${cacheHitRate}%`);
+			}
 			const usingSubscription = state.model ? this.session.modelRegistry.isUsingOAuth(state.model) : false;
 			if (totalCost || usingSubscription) {
 				const costStr = `$${totalCost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`;
