@@ -159,6 +159,19 @@ export const CATUI_DEFAULT_MODELS_JSON = {
 			api: "openai-completions",
 			models: [
 				{
+					id: "qwen3.8-max",
+					name: "Qwen3.8 Max (Ali Token Plan OpenAI)",
+					reasoning: true,
+					input: ["text", "image"],
+					compat: {
+						supportsStore: false,
+						supportsDeveloperRole: false,
+						supportsReasoningEffort: false,
+					},
+					contextWindow: 1000000,
+					maxTokens: 131072,
+				},
+				{
 					id: "qwen3.7-plus",
 					name: "Qwen3.7 Plus (Ali Token Plan OpenAI)",
 					reasoning: true,
@@ -372,6 +385,14 @@ export const CATUI_DEFAULT_MODELS_JSON = {
 			baseUrl: ALI_TOKEN_PLAN_ANTHROPIC_BASE_URL,
 			api: "anthropic-messages",
 			models: [
+				{
+					id: "qwen3.8-max",
+					name: "Qwen3.8 Max (Ali Token Plan Anthropic)",
+					reasoning: true,
+					input: ["text", "image"],
+					contextWindow: 1000000,
+					maxTokens: 131072,
+				},
 				{
 					id: "qwen3.7-plus",
 					name: "Qwen3.7 Plus (Ali Token Plan Anthropic)",

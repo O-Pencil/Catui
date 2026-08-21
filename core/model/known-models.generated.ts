@@ -95,6 +95,16 @@ export const GENERATED_KNOWN_MODELS: KnownModelMetadata[] = [
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 	},
 	{
+		id: "qwen3.8-max",
+		name: "Qwen3.8 Max (Ali Token Plan Anthropic)",
+		api: "anthropic-messages",
+		contextWindow: 1000000,
+		maxTokens: 131072,
+		reasoning: true,
+		input: ["text","image"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	},
+	{
 		id: "deepseek-v3.2",
 		name: "DeepSeek V3.2 (Ali Token Plan OpenAI)",
 		api: "openai-completions",
@@ -142,6 +152,16 @@ export const GENERATED_KNOWN_MODELS: KnownModelMetadata[] = [
 		maxTokens: 4096,
 		reasoning: false,
 		input: ["text"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	},
+	{
+		id: "qwen3.8-max",
+		name: "Qwen3.8 Max (Ali Token Plan OpenAI)",
+		api: "openai-completions",
+		contextWindow: 1000000,
+		maxTokens: 131072,
+		reasoning: true,
+		input: ["text","image"],
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 	},
 	{

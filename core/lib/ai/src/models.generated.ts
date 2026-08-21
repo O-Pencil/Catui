@@ -158,6 +158,23 @@ export const MODELS = {
 			contextWindow: 1000000,
 			maxTokens: 65536,
 		} satisfies Model<"anthropic-messages">,
+		"qwen3.8-max": {
+			id: "qwen3.8-max",
+			name: "Qwen3.8 Max (Ali Token Plan Anthropic)",
+			api: "anthropic-messages",
+			provider: "ali-token-plan-anthropic",
+			baseUrl: "https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic",
+			reasoning: true,
+			input: ["text", "image"],
+			cost: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+			},
+			contextWindow: 1000000,
+			maxTokens: 131072,
+		} satisfies Model<"anthropic-messages">,
 	},
 	"ali-token-plan-openai": {
 		"MiniMax-M2.5": {
@@ -411,6 +428,24 @@ export const MODELS = {
 			},
 			contextWindow: 1000000,
 			maxTokens: 65536,
+		} satisfies Model<"openai-completions">,
+		"qwen3.8-max": {
+			id: "qwen3.8-max",
+			name: "Qwen3.8 Max (Ali Token Plan OpenAI)",
+			api: "openai-completions",
+			provider: "ali-token-plan-openai",
+			baseUrl: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+			compat: {"supportsStore":false,"supportsDeveloperRole":false,"supportsReasoningEffort":false},
+			reasoning: true,
+			input: ["text", "image"],
+			cost: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+			},
+			contextWindow: 1000000,
+			maxTokens: 131072,
 		} satisfies Model<"openai-completions">,
 		"wan2.7-image": {
 			id: "wan2.7-image",
