@@ -1128,6 +1128,7 @@ export async function main(args: string[]) {
 			initialMessage,
 			initialImages,
 			printLoopResult: parsed.printLoopResult,
+			printTranscript: parsed.printTranscript,
 			failOnAgentError: parsed.failOnAgentError,
 			failOnToolDenial: parsed.failOnToolDenial,
 		});

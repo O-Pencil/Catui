@@ -20,7 +20,6 @@ import salExtension from "../extensions/builtin/sal/index.js";
 import securityAuditExtension from "../extensions/builtin/security-audit/index.js";
 import subagentExtension from "../extensions/builtin/subagent/index.js";
 import teamExtension from "../extensions/builtin/team/index.js";
-import tokenSaveExtension from "../extensions/builtin/token-save/index.js";
 
 type CapturedCommand = Omit<RegisteredCommand, "name">;
 
@@ -115,28 +114,6 @@ test("report-issue command exposes diagnostic scope completions", async () => {
 	assert.match(reportIssue.description ?? "", /Report recent diagnostics/);
 	assert.deepEqual(reportIssue.getArgumentCompletions?.("la")?.map((item) => item.value), ["last"]);
 	assert.deepEqual(reportIssue.getArgumentCompletions?.("al")?.map((item) => item.value), ["all"]);
-});
-
-test("tokensave command exposes first-argument completions", async () => {
-	const harness = createExtensionHarness();
-	await tokenSaveExtension(harness.api as never);
-
-	const tokensave = harness.commands.get("tokensave");
-	assert.ok(tokensave);
-	assert.match(tokensave.description ?? "", /Review shell output shortening/);
-	assert.deepEqual(tokensave.getArgumentCompletions?.("hi")?.map((item) => item.value), ["history"]);
-	assert.deepEqual(tokensave.getArgumentCompletions?.("re")?.map((item) => item.value), ["reload"]);
-	assert.match(tokensave.getArgumentCompletions?.("pl")?.[0]?.description ?? "", /Preview how a command will be shortened/);
-	assert.equal(
-		tokensave.getArgumentCompletions?.("hi", {
-			commandName: "tokensave",
-			argumentText: "plan hi",
-			argumentPrefix: "hi",
-			tokenIndex: 1,
-			previousTokens: ["plan"],
-		}),
-		null,
-	);
 });
 
 test("btw command uses human-readable description", async () => {

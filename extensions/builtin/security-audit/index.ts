@@ -140,22 +140,30 @@ function auditAndGateToolCall(api: ExtensionAPI, event: ToolCallEvent, ctx: Exte
 		if (!filePath) return;
 
 		const operation = toolName === "write" || toolName === "Write" ? "write" : "edit";
-		const result = detector.checkFileOperation(operation, filePath as string);
-		const shouldBlock = result.level === "dangerous";
+		const content = [input.content, input.new_string, input.newString, input.replacement]
+			.filter((value): value is string => typeof value === "string")
+			.join("\n");
+		const result = content
+			? detector.checkPersistedContent(content)
+			: detector.checkFileOperation(operation, filePath as string);
+		const finalResult = result.level === "safe"
+			? detector.checkFileOperation(operation, filePath as string)
+			: result;
+		const shouldBlock = finalResult.level === "dangerous";
 
 		logger.log({
 			type: `file_${operation}` as AuditEventType,
 			operation,
 			target: filePath as string,
 			cwd: ctx.cwd,
-			level: result.level,
-			status: shouldBlock ? "blocked" : result.level === "safe" ? "allowed" : "warning",
-			reason: result.reason,
+			level: finalResult.level,
+			status: shouldBlock ? "blocked" : finalResult.level === "safe" ? "allowed" : "warning",
+			reason: finalResult.reason,
 		});
 
 		if (!shouldBlock) return;
 
-		const reason = `Security blocked ${operation}: ${result.reason}`;
+		const reason = `Security blocked ${operation}: ${finalResult.reason}`;
 		sendSecurityNotice(api, `${reason}\n\nPath: \`${filePath}\``);
 		return { block: true, reason };
 	}

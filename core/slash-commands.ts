@@ -95,7 +95,6 @@ export function inferSlashCommandCategory(name: string, source?: SlashCommandSou
 		name === "debug" ||
 		name === "set-locale" ||
 		name === "report-issue" ||
-		name === "tokensave" ||
 		name === "security" ||
 		name.startsWith("security-") ||
 		name.startsWith("sal:")

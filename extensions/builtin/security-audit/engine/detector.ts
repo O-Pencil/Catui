@@ -1,5 +1,5 @@
 /**
- * [WHO]: DangerDetector and trusted skill-directory install detection
+ * [WHO]: DangerDetector, trusted skill-directory install detection, persisted prompt-injection and authority-boundary detection
  * [FROM]: Depends on node:os, node:path, ../interface.js
  * [TO]: Consumed by extension entry point (./index.ts)
  * [HERE]: extensions/builtin/security-audit/engine/detector.ts -
@@ -103,6 +103,39 @@ function detectGitCloneIntoTrustedSkillDirectory(command: string, cwd?: string):
 	return undefined;
 }
 
+function detectAuthorityBoundary(text: string): SecurityCheckResult | undefined {
+	const authorityPatterns = [
+		/only\s+(?:a\s+)?human\s+admin(?:istrator)?/i,
+		/human\s+admin(?:istrator)?\s+only/i,
+		/\badmin-only\b/i,
+		/仅限人类管理员/,
+		/只有人类管理员/,
+		/必须由人类管理员/,
+		/仅限管理员本人/,
+	];
+	if (!authorityPatterns.some((pattern) => pattern.test(text))) return undefined;
+	return {
+		allowed: false,
+		level: "dangerous",
+		reason: "Tool call crosses a human admin authority boundary",
+		pattern: "human-admin-only",
+		requiresConfirm: true,
+	};
+}
+
+function detectPersistedPromptInjection(text: string): SecurityCheckResult | undefined {
+	const hiddenHtmlInstruction =
+		/<!--[\s\S]{0,2000}?(?:ignore\s+(?:all\s+)?previous|system\s+prompt|developer\s+(?:message|instruction)|you\s+are\s+now|hidden\s+instruction|prompt\s+injection|run\s+the\s+hidden|execute\s+the\s+hidden)[\s\S]{0,2000}?-->/i;
+	if (!hiddenHtmlInstruction.test(text)) return undefined;
+	return {
+		allowed: false,
+		level: "dangerous",
+		reason: "Persisting hidden HTML prompt injection can poison future agent context",
+		pattern: "html-comment-prompt-injection",
+		requiresConfirm: true,
+	};
+}
+
 /**
  * Check if path is under home directory
  */
@@ -138,6 +171,9 @@ export class DangerDetector {
 	 */
 	checkCommand(command: string, cwd?: string): SecurityCheckResult {
 		const normalizedCmd = command.toLowerCase().trim();
+
+		const authorityBoundary = detectAuthorityBoundary(command);
+		if (authorityBoundary) return authorityBoundary;
 
 		const unsafeSkillInstall = detectGitCloneIntoTrustedSkillDirectory(command, cwd);
 		if (unsafeSkillInstall) return unsafeSkillInstall;
@@ -273,6 +309,20 @@ export class DangerDetector {
 			allowed: true,
 			level: "safe",
 			reason: "File operation appears safe",
+		};
+	}
+
+	checkPersistedContent(content: string): SecurityCheckResult {
+		const authorityBoundary = detectAuthorityBoundary(content);
+		if (authorityBoundary) return authorityBoundary;
+
+		const promptInjection = detectPersistedPromptInjection(content);
+		if (promptInjection) return promptInjection;
+
+		return {
+			allowed: true,
+			level: "safe",
+			reason: "Persisted content appears safe",
 		};
 	}
 

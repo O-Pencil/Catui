@@ -21,7 +21,7 @@ The `extensions/` module contains built-in extensions that extend Catui's capabi
 First-party extension source. Default-enabled entries are auto-loaded by `getBuiltinExtensionPaths()`; entries marked optional in `builtInExtensions` require explicit configuration/CLI opt-in even if their source directory is still here. Benchmark/CI harnesses may opt into Browser Harness registration with `CATUI_ENABLE_BROWSER_EXTENSION=1` without changing user config.
 
 Current default extension directories:
-`btw/`, `debug/`, `diagnostics/`, `discipline/`, `grub/`, `idle-think/`, `link-world/`, `loop/`, `mcp/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `soul/`, `subagent/`, `team/`, `token-save/`.
+`btw/`, `debug/`, `diagnostics/`, `discipline/`, `grub/`, `idle-think/`, `link-world/`, `loop/`, `mcp/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `soul/`, `subagent/`, `team/`.
 
 Current opt-in source still physically under `extensions/builtin/` pending Q2 physical/package decision:
 `browser/`.
@@ -59,37 +59,6 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 **Design Principle:**
 - Diagnostics policy, buffering, UI prompts, and reporting live in the extension layer.
 - Core and producer extensions emit only structured observations through the extension event bus.
-
-#### token-save/ — Default Token Savings
-
-**P3 Contract:**
-`index.ts`: - [WHO]: Extension with bash tool_result filtering, savings tracking, and /tokensave command
-    - [FROM]: core/extensions-host/types, token-save filters/tracking helpers
-    - [TO]: Auto-loaded by builtin-extensions.ts
-    - [HERE]: token-save extension entry
-
-`filters.ts`: Command classification and pure output filters for git, file reads, search, TS/test, JSON, and generic output
-
-`config.ts`: Trusted user/project filter loader; user filters load from `~/.catui/token-save/filters.json`, project filters require `.catui/token-save/trust.json`
-
-`lexer.ts`: Quote-aware shell segment splitter for compound command and pipe planning
-
-`rewrite.ts`: Central TokenSave rewrite registry that maps high-noise commands to TokenSave capture/passthrough plans
-
-`runner.ts`: Capture/passthrough contract that combines rewrite decisions, filters, raw recovery, and token accounting
-
-`recovery.ts`: Raw output recovery writer for filtered command output
-
-`toml-dsl.ts`: Configuration-driven filter pipeline with strip/replace/match/keep/truncate/head/tail/max-lines stages
-
-`tracking.ts`: Session-local token savings aggregate and JSONL history persistence; history.jsonl lives under `~/.catui/token-save/projects/<projectKey>/` (keyed by sha1 of realpath, never inside the project tree)
-
-`paths.ts`: projectKeyForPath() + dataDirForKey() + resolveTokenSavePaths() — single source of truth for the user-level runtime data dir; one-shot legacy migration from `<project>/.catui/token-save/` runs on first post-upgrade load
-
-**Design Principle:**
-- Token savings must not change command execution semantics.
-- Execution planning happens before bash, while filtering occurs after bash completes; raw output recovery is written for filtered results, and small/no-op savings fall back to raw output.
-- Runtime data (history, raw recovery) is kept out of the project tree; only user/project configuration files (filters.json, trust.json) may live under `<project>/.catui/token-save/`.
 
 #### teach/ — Guided Knowledge Teaching
 

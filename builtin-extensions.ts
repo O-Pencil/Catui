@@ -28,7 +28,6 @@ const BUNDLED_PLAN_EXTENSION = join(__dirname, "extensions", "builtin", "plan", 
 const BUNDLED_DISCIPLINE_EXTENSION = join(__dirname, "extensions", "builtin", "discipline", "index.js");
 const BUNDLED_DIAGNOSTICS_EXTENSION = join(__dirname, "extensions", "builtin", "diagnostics", "index.js");
 const BUNDLED_SAL_EXTENSION = join(__dirname, "extensions", "builtin", "sal", "index.js");
-const BUNDLED_TOKEN_SAVE_EXTENSION = join(__dirname, "extensions", "builtin", "token-save", "index.js");
 const BUNDLED_GRUB_EXTENSION = join(__dirname, "extensions", "builtin", "grub", "index.js");
 const BUNDLED_GOAL_EXTENSION = join(__dirname, "extensions", "builtin", "goal", "index.js");
 const BUNDLED_SUBAGENT_EXTENSION = join(__dirname, "extensions", "builtin", "subagent", "index.js");
@@ -66,7 +65,6 @@ export interface BuiltinExtension {
 export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "diagnostics", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: true, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/diagnostic-buffer-throttle.test.ts", "test/diagnostics-runtime.test.ts"] },
 	{ id: "sal", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/sal-lifecycle.test.ts"] },
-	{ id: "token-save", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "nanomem", category: "package", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["packages/mem-core/test/extension-commands.test.ts"] },
 	{ id: "link-world", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, resourceDiscovery: true, testContracts: ["external-process", "resource-discovery"], testFiles: ["test/link-world-extension-registration.test.ts"] },
 	{ id: "browser", category: "optional", defaultEnabled: false, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, resourceDiscovery: true, testContracts: ["external-process", "resource-discovery"], testFiles: ["test/browser-extension-registration.test.ts"] },
@@ -168,14 +166,6 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const salTs = join(__dirname, "extensions", "builtin", "sal", "index.ts");
 		if (existsSync(salTs)) paths.push(salTs);
-	}
-
-	// === TokenSave extension (default-on command output filtering and savings analytics) ===
-	if (existsSync(BUNDLED_TOKEN_SAVE_EXTENSION)) {
-		paths.push(BUNDLED_TOKEN_SAVE_EXTENSION);
-	} else {
-		const tokenSaveTs = join(__dirname, "extensions", "builtin", "token-save", "index.ts");
-		if (existsSync(tokenSaveTs)) paths.push(tokenSaveTs);
 	}
 
 	// === NanoMem extension ===

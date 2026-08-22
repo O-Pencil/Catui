@@ -40,6 +40,14 @@ test("parse args recognizes print loop result reporting", () => {
 	assert.deepEqual(args.messages, ["Run checks"]);
 });
 
+test("parse args recognizes print transcript stream reporting", () => {
+	const args = parseArgs(["--print", "--print-transcript", "Run checks"]);
+
+	assert.equal(args.print, true);
+	assert.equal(args.printTranscript, true);
+	assert.deepEqual(args.messages, ["Run checks"]);
+});
+
 test("parse args recognizes non-persistent agent loop controls", () => {
 	const args = parseArgs([
 		"--agent-loop",
@@ -296,6 +304,110 @@ test("text print mode includes latest run trace path in loop result JSON", async
 		durationMs: 125,
 		tracePath: "/workspace/.catui/traces/latest.jsonl",
 	});
+});
+
+test("text print mode can emit PawBench-readable transcript events as NDJSON", async () => {
+	const stdout: string[] = [];
+	const stderr: string[] = [];
+	const originalLog = console.log;
+	const originalError = console.error;
+	console.log = (...args: unknown[]) => {
+		stdout.push(args.map(String).join(" "));
+	};
+	console.error = (...args: unknown[]) => {
+		stderr.push(args.map(String).join(" "));
+	};
+
+	try {
+		const session = {
+			sessionManager: {
+				getHeader: () => undefined,
+			},
+			state: {
+				lastResult: {
+					stopReason: "stop",
+					turnCount: 1,
+					toolCallCount: 1,
+					durationMs: 125,
+				},
+				messages: [
+					{
+						role: "assistant",
+						stopReason: "stop",
+						content: [{ type: "text", text: "final answer" }],
+					},
+				],
+			},
+			extensionRunner: undefined,
+			agent: {
+				waitForIdle: async () => {},
+			},
+			bindExtensions: async () => {},
+			subscribe: (listener: (event: unknown) => void) => {
+				listener({
+					type: "message_delta",
+					message: {
+						role: "assistant",
+						content: [
+							{
+								type: "toolCall",
+								id: "call-1",
+								name: "bash",
+								arguments: { command: "echo hi" },
+							},
+						],
+					},
+				});
+				listener({
+					type: "tool_result",
+					toolCallId: "call-1",
+					name: "bash",
+					content: [{ type: "text", text: "hi" }],
+				});
+				return () => {};
+			},
+			prompt: async () => {},
+			getLastRunTracePath: () => "/workspace/.catui/traces/latest.jsonl",
+		};
+
+		await runPrintMode(session as any, {
+			mode: "text",
+			printTranscript: true,
+		});
+	} finally {
+		console.log = originalLog;
+		console.error = originalError;
+	}
+
+	assert.deepEqual(stdout, ["final answer"]);
+	const events = stderr.map((line) => JSON.parse(line));
+	assert.deepEqual(events, [
+		{
+			type: "tool_use",
+			id: "call-1",
+			name: "bash",
+			input: { command: "echo hi" },
+		},
+		{
+			type: "tool_result",
+			toolUseId: "call-1",
+			name: "bash",
+			output: "hi",
+		},
+		{
+			type: "assistant_text",
+			text: "final answer",
+		},
+		{
+			type: "result",
+			success: true,
+			stopReason: "stop",
+			turnCount: 1,
+			toolCallCount: 1,
+			durationMs: 125,
+			tracePath: "/workspace/.catui/traces/latest.jsonl",
+		},
+	]);
 });
 
 test("text print mode joins automatic continuation assistant text", async () => {

@@ -265,7 +265,7 @@ catui/
 │   │   ├── sal/  mcp/  loop/  diagnostics/  soul/  presence/
 │   │   ├── grub/  team/  subagent/  plan/  recap/
 │   │   ├── discipline/  interview/  idle-think/
-│   │   ├── link-world/  security-audit/  token-save/  btw/  debug/
+│   │   ├── link-world/  security-audit/  btw/  debug/
 │   │   └── AGENT.md
 │   ├── optional/                        ← 2 → 3+ 个
 │   │   ├── browser/                     ← 【F07】从 builtin/ 迁来

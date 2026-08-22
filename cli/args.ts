@@ -40,6 +40,8 @@ export interface Args {
 	print?: boolean;
 	/** In text print mode, emit the final agent loop result as stderr JSON. */
 	printLoopResult?: boolean;
+	/** In text print mode, emit PawBench-readable transcript events as stderr NDJSON. */
+	printTranscript?: boolean;
 	/** In print mode, exit non-zero when the final agent result is an error. */
 	failOnAgentError?: boolean;
 	/** In print mode, exit non-zero when any tool permission denial occurred. */
@@ -205,6 +207,8 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			result.print = true;
 		} else if (arg === "--print-loop-result") {
 			result.printLoopResult = true;
+		} else if (arg === "--print-transcript") {
+			result.printTranscript = true;
 		} else if (arg === "--fail-on-agent-error") {
 			result.failOnAgentError = true;
 		} else if (arg === "--fail-on-tool-denial") {
@@ -349,6 +353,7 @@ ${chalk.bold("Options:")}
   --mode <mode>                  Output mode: text (default), json, or rpc
   --print, -p                    Non-interactive mode: process prompt and exit
   --print-loop-result            In text print mode, write final loop result JSON to stderr
+  --print-transcript             In text print mode, write tool-call transcript NDJSON to stderr
   --fail-on-agent-error          In print mode, exit non-zero when final loop result is an error
   --fail-on-tool-denial          In print mode, exit non-zero when tools were denied
   --agent-loop <framework>       Override loop framework: standard or weak-model-compatible

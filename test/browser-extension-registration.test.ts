@@ -12,6 +12,12 @@ import { join, sep } from "node:path";
 import { builtInExtensions, getBuiltinExtensionPaths } from "../builtin-extensions.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../core/slash-commands.ts";
 
+test("TokenSave is removed from builtin extension metadata and default paths", () => {
+	const paths = getBuiltinExtensionPaths();
+	assert.equal(builtInExtensions.some((extension) => extension.id === "token-save"), false);
+	assert.equal(paths.some((entry) => entry.includes("token-save")), false);
+});
+
 test("browser harness is opt-in, not loaded by default (P6/EV03)", () => {
 	const previous = process.env.CATUI_ENABLE_BROWSER_EXTENSION;
 	try {
