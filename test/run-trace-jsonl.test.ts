@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { JsonlRunTraceSink, readRunTraceJsonl } from "../core/runtime/run-trace-jsonl.js";
+import { JsonlRunTraceSink, persistWorkspaceRunTrace, readRunTraceJsonl } from "../core/runtime/run-trace-jsonl.js";
 import type { RunTraceEventV1 } from "@catui/agent-core";
 
 const started: RunTraceEventV1 = {
@@ -49,6 +49,30 @@ test("JSONL trace storage enforces line and file byte limits", async () => {
 		await assert.rejects(readRunTraceJsonl(path, { maxFileBytes: 16 }), /file/i);
 		await assert.rejects(readRunTraceJsonl(path, { maxLineBytes: 16 }), /line/i);
 		assert.match(await readFile(path, "utf8"), /run.started/);
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test("workspace trace persistence writes run-specific and latest JSONL files", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "catui-trace-workspace-"));
+	try {
+		const completed: RunTraceEventV1 = {
+			...started,
+			eventId: "e2",
+			sequence: 2,
+			kind: "run.completed",
+			payload: { stopReason: "stop", turnCount: 1, toolCallCount: 1, outputFingerprint: "sha256:out" },
+		};
+		const result = await persistWorkspaceRunTrace(directory, [started, completed]);
+
+		assert.equal(result.runId, "r1");
+		assert.match(result.runPath, /\.catui\/traces\/r1\.jsonl$/);
+		assert.match(result.latestPath, /\.catui\/traces\/latest\.jsonl$/);
+		assert.deepEqual(await readRunTraceJsonl(result.runPath), [started, completed]);
+		assert.deepEqual(await readRunTraceJsonl(result.latestPath), [started, completed]);
+		assert.equal((await stat(result.runPath)).mode & 0o777, 0o600);
+		assert.equal((await stat(result.latestPath)).mode & 0o777, 0o600);
 	} finally {
 		await rm(directory, { recursive: true, force: true });
 	}

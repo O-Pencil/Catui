@@ -13,15 +13,43 @@ import { builtInExtensions, getBuiltinExtensionPaths } from "../builtin-extensio
 import { BUILTIN_SLASH_COMMANDS } from "../core/slash-commands.ts";
 
 test("browser harness is opt-in, not loaded by default (P6/EV03)", () => {
-	const paths = getBuiltinExtensionPaths();
-	assert.ok(
-		!paths.some((entry) => entry.includes("browser")),
-		`Expected browser to be opt-in (absent from default load paths), got: ${paths.join(", ")}`,
-	);
-	const browser = builtInExtensions.find((extension) => extension.id === "browser");
-	assert.ok(browser, "Expected browser to remain registered in metadata.");
-	assert.equal(browser?.category, "optional", "browser must be an optional capability.");
-	assert.equal(browser?.defaultEnabled, false, "browser must require explicit opt-in.");
+	const previous = process.env.CATUI_ENABLE_BROWSER_EXTENSION;
+	try {
+		delete process.env.CATUI_ENABLE_BROWSER_EXTENSION;
+		const paths = getBuiltinExtensionPaths();
+		assert.ok(
+			!paths.some((entry) => entry.includes("browser")),
+			`Expected browser to be opt-in (absent from default load paths), got: ${paths.join(", ")}`,
+		);
+		const browser = builtInExtensions.find((extension) => extension.id === "browser");
+		assert.ok(browser, "Expected browser to remain registered in metadata.");
+		assert.equal(browser?.category, "optional", "browser must be an optional capability.");
+		assert.equal(browser?.defaultEnabled, false, "browser must require explicit opt-in.");
+	} finally {
+		if (previous === undefined) {
+			delete process.env.CATUI_ENABLE_BROWSER_EXTENSION;
+		} else {
+			process.env.CATUI_ENABLE_BROWSER_EXTENSION = previous;
+		}
+	}
+});
+
+test("browser harness can be enabled for non-interactive benchmark harnesses by env", () => {
+	const previous = process.env.CATUI_ENABLE_BROWSER_EXTENSION;
+	try {
+		process.env.CATUI_ENABLE_BROWSER_EXTENSION = "1";
+		const paths = getBuiltinExtensionPaths();
+		assert.ok(
+			paths.some((entry) => entry.includes(`${sep}extensions${sep}builtin${sep}browser${sep}`)),
+			`Expected env-enabled browser extension path, got: ${paths.join(", ")}`,
+		);
+	} finally {
+		if (previous === undefined) {
+			delete process.env.CATUI_ENABLE_BROWSER_EXTENSION;
+		} else {
+			process.env.CATUI_ENABLE_BROWSER_EXTENSION = previous;
+		}
+	}
 });
 
 test("browser keeps a lightweight slash fallback while full extension is opt-in", () => {

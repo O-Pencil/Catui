@@ -1,5 +1,5 @@
 /**
- * [WHO]: default export (Extension), nanomem extension for Catui integration
+ * [WHO]: default export (Extension), nanomem extension for Catui integration, explicit remember/recall/search/alignment tools
  * [FROM]: Depends on node:fs, node:fs/promises, node:path, @sinclair/typebox, catui-protocol
  * [TO]: Consumed by packages/mem-core/src/index.ts
  * [HERE]: packages/mem-core/src/extension.ts - thin adapter bridging Catui events to host-agnostic NanoMemEngine
@@ -966,6 +966,44 @@ export default function nanomemExtension(api: ExtensionAPI) {
 	});
 
 	// ─── Progressive Recall Agent Tools ─────────────────────────
+
+	api.registerTool({
+		name: "nanomem_remember",
+		label: "Remember Memory",
+		description:
+			"Persist an explicit user memory such as a durable preference, fact, lesson, decision, event, pattern, or struggle. " +
+			"Use this when the user directly asks you to remember something for future conversations.",
+		parameters: Type.Object({
+			type: Type.Union([
+				Type.Literal("preference"),
+				Type.Literal("fact"),
+				Type.Literal("lesson"),
+				Type.Literal("decision"),
+				Type.Literal("event"),
+				Type.Literal("pattern"),
+				Type.Literal("struggle"),
+			]),
+			name: Type.Optional(Type.String({ description: "Short title, up to about 30 characters" })),
+			summary: Type.String({ description: "One-line memory cue, up to about 150 characters" }),
+			detail: Type.String({ description: "Full memory detail to preserve" }),
+		}),
+		async execute(_toolCallId, params) {
+			const entry = await engine.remember(
+				{
+					type: params.type,
+					name: params.name,
+					summary: params.summary,
+					detail: params.detail,
+				},
+				project,
+			);
+			const label = entry ? `${entry.type}${entry.id ? ` [ID: ${entry.id}]` : ""}` : params.type;
+			return {
+				content: [{ type: "text" as const, text: `Remembered ${label}: ${params.summary}` }],
+				details: entry ? { id: entry.id, type: entry.type } : undefined,
+			};
+		},
+	});
 
 	api.registerTool({
 		name: "nanomem_recall",

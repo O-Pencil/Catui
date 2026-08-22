@@ -6,7 +6,7 @@ Member List
 event-bus.ts: EventBus interface, EventBusController, createEventBus(), typed event emission system for extension hooks, key methods: emit(), on() returns unsubscribe function
 event-bridge.ts: ExtensionEventBridge, ExtensionEventBridgeDeps, owns AgentEvent-to-extension-event mapping and extension turn indexing; AgentSession keeps public subscribe, persistence, retry/compaction, and Soul ordering
 sdk.ts: createAgentSession(options) factory, creates all services with dependency injection, wires up extensions, applies loop framework/policy overrides, consumed by all run modes (interactive/print/rpc)
-agent-session.ts: AgentSession class, central session lifecycle manager, wraps Agent from agent-core, captures the latest semantic Run Trace, coordinates compaction, in-loop recovery and recoverable error-tail pruning, forwards agent_result telemetry to extensions, exposes runtime loop policy updates, emits events, handles model switching, all modes delegate to this class
+agent-session.ts: AgentSession class, central session lifecycle manager, wraps Agent from agent-core, captures and persists the latest semantic Run Trace, coordinates compaction, in-loop recovery and recoverable error-tail pruning, forwards agent_result telemetry to extensions, exposes runtime loop policy updates, emits events, handles model switching, all modes delegate to this class
 turn-context.ts: Generic per-turn hint bus on globalThis, TURN_CONTEXT_GLOBAL_KEY, TurnContext interface (currently structuralAnchor), setTurnContext/getTurnContext/resetTurnContext; producer-side API for SAL→mem-core decoupling (mem-core has read-only mirror at packages/mem-core/src/turn-context.ts using same global key)
 catui-agent.ts: CatuiAgent helper class wrapping Agent core
 retry-coordinator.ts: Retry coordination for transient failures
@@ -24,7 +24,7 @@ slash-command-catalog.ts: buildSessionSlashCommands(), buildExtensionSlashComman
 export-bridge.ts: exportSessionHtml(), getLastAssistantText(), owns HTML export wiring and last assistant text extraction; Theme remains injected through AgentSessionConfig
 plan-mode-permissions.ts: createPlanModeCanUseTool(), composePlanModeCanUseTool(), SDK-level plan mode tool permission enforcement; explicit planFilePath enables strict single-file writes while omitted paths preserve the legacy markdown profile; consumed by sdk.ts when permissionMode === 'plan'
 checkpoint-store.ts: FileCheckpointStore, path-confined atomic JSON persistence with cross-process at-most-once checkpoint consumption
-run-trace-jsonl.ts: JsonlRunTraceSink and readRunTraceJsonl, owner-only bounded JSONL persistence for versioned semantic run traces
+run-trace-jsonl.ts: JsonlRunTraceSink, persistWorkspaceRunTrace(), and readRunTraceJsonl, owner-only bounded JSONL persistence for versioned semantic run traces and workspace `.catui/traces/latest.jsonl` export
 thinking-levels.ts: pure thinking-level logic extracted from AgentSession (P4.2) — THINKING_LEVELS(_WITH_XHIGH), modelSupportsThinking/Xhigh, availableThinkingLevels, clampThinkingLevel, nextThinkingLevel; no session state, reusable by rpc/print
 model-cycle.ts: pure model-cycle decisions extracted from AgentSession (P4.2) — pickThinkingLevelOnModelChange, nextCyclicIndex; side effects are owned by model-controller.ts
 
@@ -48,7 +48,7 @@ model-cycle.ts: pure model-cycle decisions extracted from AgentSession (P4.2) �
 | runtime prompt resource assembly | `prompt-assembly.ts` | function deps | P4 |
 | HTML export + last assistant text | `export-bridge.ts` | function deps | P4 |
 | retry coordination | `retry-coordinator.ts` | `RetryCoordinatorHost` | pre-existing |
-| semantic run trace persistence | `run-trace-jsonl.ts` | `RunTraceSink` + validated JSONL reader | versioned offline replay and audit boundary |
+| semantic run trace persistence | `run-trace-jsonl.ts` | `RunTraceSink` + validated JSONL reader/writer | versioned offline replay, benchmark transcript visibility, and audit boundary |
 | pure thinking-level / model-cycle logic | `thinking-levels.ts`, `model-cycle.ts` | pure functions (no session state) | P4.2 |
 | cancellation slot / listener registry (primitives) | `../platform/abort-slot.ts`, `../platform/listeners.ts` | reusable primitives | P4.2 |
 | composition root: state, facade, loop continuation, teardown | `agent-session.ts` | — (owns adapters + orchestration) | [AS06](../../.dev-docs/architecture-review/runtime-session-review/findings/AS06-agent-session-public-facade.md); reload [AS09 deferred], teardown [AS12 rejected] |

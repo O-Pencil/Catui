@@ -1,5 +1,5 @@
 /**
- * [WHO]: AgentSession class, session lifecycle, semantic Run Trace capture, event emission, in-loop recovery adapter, pruneRecoverableErrorTail()
+ * [WHO]: AgentSession class, session lifecycle, semantic Run Trace capture/persistence, event emission, in-loop recovery adapter, pruneRecoverableErrorTail()
  * [FROM]: Depends on agent-core, ai, core/tools/*, core/session/*, core/platform/config/*
  * [TO]: Consumed by core/index.ts, core/runtime/sdk.ts, modes/interactive/interactive-mode.ts, modes/print-mode.ts, modes/rpc/rpc-mode.ts, modes/acp/acp-mode.ts, modes/rpc/rpc-types.ts, modes/rpc/rpc-client.ts, modes/interactive/components/footer.ts, modes/interactive/components/skill-invocation-message.ts
  * [HERE]: Central runtime hub; all modes delegate to this class
@@ -102,6 +102,7 @@ import {
 import { RetryCoordinator, type RetryCoordinatorHost, type RetrySessionEvent } from "./retry-coordinator.js";
 import { createLogger, type AgentLogger } from "../platform/utils/logger.js";
 import { createAgentTool, createTaskToolAlias, createSendMessageTool, AGENT_TOOL_NAME, TASK_TOOL_NAME, SEND_MESSAGE_TOOL_NAME, InProcessSubAgentBackend, type CreateSessionFn, type SubAgentEvent } from "../sub-agent/index.js";
+import { persistWorkspaceRunTrace } from "./run-trace-jsonl.js";
 
 export type { SessionSlashCommandDescriptor } from "./slash-command-catalog.js";
 export { CycleModelError } from "./model-controller.js";
@@ -742,6 +743,7 @@ export class AgentSession {
 
   // Latest completed semantic trace; extension consumers receive snapshots only.
   private _lastRunTrace: RunTraceEventV1[] | undefined;
+  private _lastRunTracePath: string | undefined;
 
   /** Internal handler for agent events - shared by subscribe and reconnect */
   private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
@@ -993,6 +995,11 @@ export class AgentSession {
   /** Latest completed semantic run trace, returned as an isolated snapshot. */
   getLastRunTrace(): readonly RunTraceEventV1[] | undefined {
     return this._lastRunTrace === undefined ? undefined : structuredClone(this._lastRunTrace);
+  }
+
+  /** Workspace-local JSONL path for the latest completed semantic run trace. */
+  getLastRunTracePath(): string | undefined {
+    return this._lastRunTracePath;
   }
 
   /** Current retry attempt (0 if not retrying) */
@@ -1314,6 +1321,8 @@ export class AgentSession {
       try {
         await traceRecorder.flush();
         this._lastRunTrace = traceSink.snapshot();
+        const persisted = await persistWorkspaceRunTrace(this._cwd, this._lastRunTrace);
+        this._lastRunTracePath = persisted.latestPath;
       } catch (error: unknown) {
         this._logger.warn("[run-trace] failed to finalize semantic trace", { error });
       }

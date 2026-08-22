@@ -1,6 +1,6 @@
 /**
  * [WHO]: BuiltinExtension, getBuiltinExtensionPaths(), builtInExtensions
- * [FROM]: Depends on node:fs, node:path, config
+ * [FROM]: Depends on node:fs, node:path, process.env, config
  * [TO]: Consumed by main.ts, test files
  * [HERE]: builtin-extensions.ts - built-in extension registry for Catui
  */
@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 /** Built-in extension paths */
 const BUNDLED_NANOMEM_EXTENSION_PACKAGES = join(__dirname, "packages", "mem-core", "extension.js");
 const BUNDLED_LINK_WORLD_EXTENSION = join(__dirname, "extensions", "builtin", "link-world", "index.js");
-// Browser harness is opt-in (P6/EV03): no default-load path const; enabled via --extension/config.
+const BUNDLED_BROWSER_EXTENSION = join(__dirname, "extensions", "builtin", "browser", "index.js");
 const BUNDLED_SECURITY_AUDIT_EXTENSION = join(__dirname, "extensions", "builtin", "security-audit", "index.js");
 const BUNDLED_SOUL_EXTENSION = join(__dirname, "extensions", "builtin", "soul", "index.js");
 const BUNDLED_PRESENCE_EXTENSION = join(__dirname, "extensions", "builtin", "presence", "index.js");
@@ -98,6 +98,11 @@ export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "export-html", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false, testContracts: ["write-guard"], testFiles: ["test/extension-smoke.test.ts", "test/export-html-branch-navigation.test.ts"] },
 	{ id: "evolution", category: "optional", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/evolution-store.test.ts", "test/evolution-extension.test.ts"] },
 ];
+
+function isBrowserExtensionEnvEnabled(): boolean {
+	const value = process.env.CATUI_ENABLE_BROWSER_EXTENSION?.trim().toLowerCase();
+	return value === "1" || value === "true" || value === "yes" || value === "on";
+}
 
 /** Find package root from current module location (containing package.json with catui-agent related name) */
 function findPackageRoot(startDir: string): string | null {
@@ -207,9 +212,17 @@ export function getBuiltinExtensionPaths(): string[] {
 	}
 
 	// Browser Harness is an opt-in optional capability (P6/EV03) — not loaded by default.
-	// Enable it explicitly via `--extension extensions/builtin/browser` or config `extensions:`.
-	// (Physical dir stays under builtin/ pending the Q2 physical/package opt-in decision; the
-	// P6 change here is registration-only and does not change package files.)
+	// Enable it explicitly via `--extension extensions/builtin/browser`, config `extensions:`, or
+	// `CATUI_ENABLE_BROWSER_EXTENSION=1` for benchmark/CI harnesses that need the browser tool
+	// registered without mutating user config.
+	if (isBrowserExtensionEnvEnabled()) {
+		if (existsSync(BUNDLED_BROWSER_EXTENSION)) {
+			paths.push(BUNDLED_BROWSER_EXTENSION);
+		} else {
+			const browserTs = join(__dirname, "extensions", "builtin", "browser", "index.ts");
+			if (existsSync(browserTs)) paths.push(browserTs);
+		}
+	}
 
 	// === Security Audit extension (built-in source, compiled to dist/extensions/builtin/security-audit) ===
 	if (existsSync(BUNDLED_SECURITY_AUDIT_EXTENSION)) {

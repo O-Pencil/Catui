@@ -102,11 +102,11 @@ interactive/
 
 Non-interactive mode for scripting and piping.
 
-`print-mode.ts`: Provides runPrintMode(options), PrintModeResult, print loop result JSON formatting, and automatic continuation text aggregation for batch/stdin/stdout execution consumed by main.ts
+`print-mode.ts`: Provides runPrintMode(options), PrintModeResult, print loop result JSON formatting with optional latest run trace path, and automatic continuation text aggregation for batch/stdin/stdout execution consumed by main.ts
 
 **P3 Contract:**
 `print-mode.ts`:
-- [WHO]: Provides PrintModeOptions, PrintModeResult, formatPrintLoopResult(), collectPrintAssistantText(), runPrintMode()
+- [WHO]: Provides PrintModeOptions, PrintModeResult, formatPrintLoopResult(), collectPrintAssistantText(), runPrintMode(), and benchmark-facing latest trace path metadata
 - [FROM]: Depends on ai, agent-core, agent-session
 - [TO]: Consumed by main.ts, modes/index.ts, print mode tests
 - [HERE]: modes/print-mode.ts - batch processing mode

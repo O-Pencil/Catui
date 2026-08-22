@@ -41,6 +41,7 @@ The codebase follows a clean layered architecture with clear module boundaries:
 ### Core Engine (`engine.ts`)
 The `NanoMemEngine` class is the main API facade. It orchestrates all other modules and provides:
 - Memory extraction and storage from conversations
+- Explicit memory persistence through `remember()` for traceable user-requested durable memories
 - Episode management and consolidation
 - Memory retrieval with budget-aware injection
 - Statistics and insights generation

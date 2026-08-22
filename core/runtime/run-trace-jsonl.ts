@@ -1,11 +1,12 @@
 /**
- * [WHO]: JsonlRunTraceSink, readRunTraceJsonl, secure file permissions, and byte limits
+ * [WHO]: JsonlRunTraceSink, persistWorkspaceRunTrace(), readRunTraceJsonl, secure file permissions, and byte limits
  * [FROM]: Depends on Node filesystem APIs and the agent-core trace contract
  * [TO]: Exported through the public runtime subpath for host persistence
- * [HERE]: core/runtime/run-trace-jsonl.ts - secure host-owned trace storage
+ * [HERE]: core/runtime/run-trace-jsonl.ts - secure host-owned and workspace-exported trace storage
  */
-import { chmod, open, readFile, stat } from "node:fs/promises";
-import { dirname } from "node:path";
+import { randomUUID } from "node:crypto";
+import { chmod, open, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import {
 	parseRunTraceEvent,
@@ -17,6 +18,12 @@ import {
 export interface RunTraceJsonlLimits {
 	maxFileBytes?: number;
 	maxLineBytes?: number;
+}
+
+export interface WorkspaceRunTraceResult {
+	runId: string;
+	runPath: string;
+	latestPath: string;
 }
 
 const DEFAULT_MAX_FILE_BYTES = 64 * 1024 * 1024;
@@ -96,4 +103,34 @@ export async function readRunTraceJsonl(
 		}
 	}
 	return validateRunTrace(events);
+}
+
+function safeTraceFileStem(runId: string): string {
+	const safe = runId.replace(/[^A-Za-z0-9._-]/g, "_");
+	return safe.length > 0 ? safe : `run-${randomUUID()}`;
+}
+
+async function writeAtomicOwnerOnly(path: string, content: string): Promise<void> {
+	await mkdir(dirname(path), { recursive: true });
+	const tmpPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+	await writeFile(tmpPath, content, { encoding: "utf8", mode: 0o600 });
+	await chmod(tmpPath, 0o600);
+	await rename(tmpPath, path);
+	await chmod(path, 0o600);
+}
+
+export async function persistWorkspaceRunTrace(
+	cwd: string,
+	events: readonly unknown[],
+): Promise<WorkspaceRunTraceResult> {
+	if (cwd.length === 0) throw new Error("Workspace trace cwd must not be empty");
+	const validated = validateRunTrace(events);
+	const runId = validated[0].runId;
+	const traceDir = join(cwd, ".catui", "traces");
+	const runPath = join(traceDir, `${safeTraceFileStem(runId)}.jsonl`);
+	const latestPath = join(traceDir, "latest.jsonl");
+	const content = `${validated.map((event) => JSON.stringify(event)).join("\n")}\n`;
+	await writeAtomicOwnerOnly(runPath, content);
+	await writeAtomicOwnerOnly(latestPath, content);
+	return { runId, runPath, latestPath };
 }

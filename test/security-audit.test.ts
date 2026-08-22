@@ -120,3 +120,19 @@ test("security-audit blocks sensitive file writes at tool_call boundary", async 
 	assert.match(result?.reason ?? "", /Security blocked write/);
 	assert.match(harness.messages[0], /Path: `.env`/);
 });
+
+test("security-audit blocks external git clone into trusted skill directories", async () => {
+	const harness = createHarness();
+	await securityAuditExtension(harness.api);
+
+	const result = await harness.emitToolCall({
+		type: "tool_call",
+		toolCallId: "call-skill-clone",
+		toolName: "bash",
+		input: { command: "git clone https://example.com/untrusted/skill.git ~/skills/evil" },
+	});
+
+	assert.equal(result?.block, true);
+	assert.match(result?.reason ?? "", /untrusted skill/i);
+	assert.match(harness.messages[0], /untrusted skill/i);
+});

@@ -235,6 +235,69 @@ test("text print mode can emit final agent loop result as stderr JSON", async ()
 	});
 });
 
+test("text print mode includes latest run trace path in loop result JSON", async () => {
+	const stdout: string[] = [];
+	const stderr: string[] = [];
+	const originalLog = console.log;
+	const originalError = console.error;
+	console.log = (...args: unknown[]) => {
+		stdout.push(args.map(String).join(" "));
+	};
+	console.error = (...args: unknown[]) => {
+		stderr.push(args.map(String).join(" "));
+	};
+
+	try {
+		const session = {
+			sessionManager: {
+				getHeader: () => undefined,
+			},
+			state: {
+				lastResult: {
+					stopReason: "stop",
+					turnCount: 1,
+					toolCallCount: 1,
+					durationMs: 125,
+				},
+				messages: [
+					{
+						role: "assistant",
+						stopReason: "stop",
+						content: [{ type: "text", text: "final answer" }],
+					},
+				],
+			},
+			extensionRunner: undefined,
+			agent: {
+				waitForIdle: async () => {},
+			},
+			bindExtensions: async () => {},
+			subscribe: () => () => {},
+			prompt: async () => {},
+			getLastRunTracePath: () => "/workspace/.catui/traces/latest.jsonl",
+		};
+
+		await runPrintMode(session as any, {
+			mode: "text",
+			printLoopResult: true,
+		});
+	} finally {
+		console.log = originalLog;
+		console.error = originalError;
+	}
+
+	assert.deepEqual(stdout, ["final answer"]);
+	assert.equal(stderr.length, 1);
+	assert.deepEqual(JSON.parse(stderr[0]), {
+		type: "agent_result",
+		stopReason: "stop",
+		turnCount: 1,
+		toolCallCount: 1,
+		durationMs: 125,
+		tracePath: "/workspace/.catui/traces/latest.jsonl",
+	});
+});
+
 test("text print mode joins automatic continuation assistant text", async () => {
 	const stdout: string[] = [];
 	const originalLog = console.log;

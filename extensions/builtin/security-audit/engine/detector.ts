@@ -1,5 +1,5 @@
 /**
- * [WHO]: DangerDetector
+ * [WHO]: DangerDetector and trusted skill-directory install detection
  * [FROM]: Depends on node:os, node:path, ../interface.js
  * [TO]: Consumed by extension entry point (./index.ts)
  * [HERE]: extensions/builtin/security-audit/engine/detector.ts -
@@ -7,7 +7,7 @@
 
 
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import type { SecurityCheckResult, SecurityLevel, SecurityConfig } from "../interface.js";
 import { DEFAULT_SECURITY_CONFIG } from "../interface.js";
 
@@ -15,10 +15,92 @@ import { DEFAULT_SECURITY_CONFIG } from "../interface.js";
  * Expand home directory in path
  */
 function expandHome(path: string): string {
-	if (path.startsWith("~")) {
-		return resolve(homedir(), path.slice(1));
+	if (path === "~") {
+		return homedir();
+	}
+	if (path.startsWith("~/")) {
+		return resolve(homedir(), path.slice(2));
 	}
 	return resolve(path);
+}
+
+function splitShellWords(command: string): string[] {
+	const words: string[] = [];
+	let current = "";
+	let quote: "'" | "\"" | undefined;
+	let escaped = false;
+	for (const char of command) {
+		if (escaped) {
+			current += char;
+			escaped = false;
+			continue;
+		}
+		if (char === "\\" && quote !== "'") {
+			escaped = true;
+			continue;
+		}
+		if ((char === "'" || char === "\"") && (!quote || quote === char)) {
+			quote = quote ? undefined : char;
+			continue;
+		}
+		if (!quote && /\s/.test(char)) {
+			if (current) {
+				words.push(current);
+				current = "";
+			}
+			continue;
+		}
+		current += char;
+	}
+	if (current) words.push(current);
+	return words;
+}
+
+function expandPath(path: string, cwd = process.cwd()): string {
+	if (path === "~" || path.startsWith("~/")) return expandHome(path);
+	return isAbsolute(path) ? resolve(path) : resolve(cwd, path);
+}
+
+function isTrustedSkillDirectory(path: string, cwd?: string): boolean {
+	const expanded = expandPath(path, cwd);
+	const home = homedir();
+	const trustedRoots = [
+		resolve(home, "skills"),
+		resolve(home, ".agents", "skills"),
+		resolve(home, ".catui", "agent", "skills"),
+		resolve(home, ".catui", "agents"),
+		resolve(home, ".claude", "skills"),
+		resolve(home, ".codex", "skills"),
+		resolve(cwd ?? process.cwd(), ".catui", "skills"),
+	];
+	return trustedRoots.some((root) => expanded === root || expanded.startsWith(`${root}/`));
+}
+
+function detectGitCloneIntoTrustedSkillDirectory(command: string, cwd?: string): SecurityCheckResult | undefined {
+	const words = splitShellWords(command);
+	for (let index = 0; index < words.length - 1; index += 1) {
+		if (words[index] !== "git" || words[index + 1] !== "clone") continue;
+		const positional: string[] = [];
+		for (let argIndex = index + 2; argIndex < words.length; argIndex += 1) {
+			const word = words[argIndex];
+			if (word === "--") continue;
+			if (word.startsWith("-")) continue;
+			positional.push(word);
+		}
+		const target = positional[1];
+		if (!target || !isTrustedSkillDirectory(target, cwd)) continue;
+		const repo = positional[0] ?? "";
+		const externalRepo = /^(?:https?:\/\/|ssh:\/\/|git@)/i.test(repo) || (!isAbsolute(repo) && !repo.startsWith("."));
+		if (!externalRepo) continue;
+		return {
+			allowed: false,
+			level: "dangerous",
+			reason: "Installing an untrusted skill repository into a trusted skill directory can execute attacker-controlled agent instructions",
+			pattern: "git clone <external> <trusted-skill-dir>",
+			requiresConfirm: true,
+		};
+	}
+	return undefined;
 }
 
 /**
@@ -54,8 +136,11 @@ export class DangerDetector {
 	/**
 	 * Check if command is dangerous
 	 */
-	checkCommand(command: string): SecurityCheckResult {
+	checkCommand(command: string, cwd?: string): SecurityCheckResult {
 		const normalizedCmd = command.toLowerCase().trim();
+
+		const unsafeSkillInstall = detectGitCloneIntoTrustedSkillDirectory(command, cwd);
+		if (unsafeSkillInstall) return unsafeSkillInstall;
 
 		// Check whitelist first
 		for (const allowed of this.whitelist) {

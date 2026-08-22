@@ -105,7 +105,7 @@ function auditAndGateToolCall(api: ExtensionAPI, event: ToolCallEvent, ctx: Exte
 		const command = (args as Record<string, unknown>).command as string | undefined;
 		if (!command) return;
 
-		const result = detector.checkCommand(command);
+		const result = detector.checkCommand(command, ctx.cwd);
 		const shouldBlock = result.level === "dangerous" && SECURITY_MODE === "strict";
 
 		logger.log({

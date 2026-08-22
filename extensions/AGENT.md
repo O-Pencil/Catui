@@ -18,7 +18,7 @@ The `extensions/` module contains built-in extensions that extend Catui's capabi
 
 ### Built-in Extension Source (`extensions/builtin/`)
 
-First-party extension source. Default-enabled entries are auto-loaded by `getBuiltinExtensionPaths()`; entries marked optional in `builtInExtensions` require explicit configuration/CLI opt-in even if their source directory is still here.
+First-party extension source. Default-enabled entries are auto-loaded by `getBuiltinExtensionPaths()`; entries marked optional in `builtInExtensions` require explicit configuration/CLI opt-in even if their source directory is still here. Benchmark/CI harnesses may opt into Browser Harness registration with `CATUI_ENABLE_BROWSER_EXTENSION=1` without changing user config.
 
 Current default extension directories:
 `btw/`, `debug/`, `diagnostics/`, `discipline/`, `grub/`, `idle-think/`, `link-world/`, `loop/`, `mcp/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `soul/`, `subagent/`, `team/`, `token-save/`.
@@ -213,7 +213,7 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 `interface.ts`: Security audit interface definitions
 
 `engine/`: Detection engine components
-`engine/detector.ts`: Vulnerability detection logic
+`engine/detector.ts`: Vulnerability detection logic, including trusted skill-directory install safeguards
 `engine/interceptor.ts`: Request/response interception
 `engine/logger.ts`: Security event logging
 

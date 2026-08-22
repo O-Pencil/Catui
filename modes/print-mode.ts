@@ -1,5 +1,5 @@
 /**
- * [WHO]: PrintModeOptions, PrintModeResult, formatPrintLoopResult(), collectPrintAssistantText(), runPrintMode()
+ * [WHO]: PrintModeOptions, PrintModeResult, formatPrintLoopResult(), collectPrintAssistantText(), runPrintMode(), latest trace path reporting
  * [FROM]: Depends on ai, agent-core, core/runtime/agent-session
  * [TO]: Consumed by modes/index.ts, main.ts, print mode tests
  * [HERE]: modes/print-mode.ts - non-interactive batch processing mode
@@ -32,9 +32,9 @@ export interface PrintModeResult {
 	exitCode: number;
 }
 
-export function formatPrintLoopResult(result: AgentRunResult | undefined): string | undefined {
+export function formatPrintLoopResult(result: AgentRunResult | undefined, tracePath?: string): string | undefined {
 	if (!result) return undefined;
-	return JSON.stringify({ type: "agent_result", ...result });
+	return JSON.stringify({ type: "agent_result", ...result, ...(tracePath ? { tracePath } : {}) });
 }
 
 function isAutomaticContinuationMessage(message: Message | undefined): message is UserMessage {
@@ -89,8 +89,8 @@ export function collectPrintAssistantText(messages: Message[], result?: AgentRun
 	return assistantMessages.flatMap(assistantTextBlocks);
 }
 
-function emitPrintLoopResult(result: AgentRunResult | undefined): void {
-	const loopResult = formatPrintLoopResult(result);
+function emitPrintLoopResult(result: AgentRunResult | undefined, tracePath?: string): void {
+	const loopResult = formatPrintLoopResult(result, tracePath);
 	if (loopResult) console.error(loopResult);
 }
 
@@ -192,7 +192,7 @@ export async function runPrintMode(session: AgentSession, options: PrintModeOpti
 			if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
 				console.error(assistantMsg.errorMessage || `Request ${assistantMsg.stopReason}`);
 				if (options.printLoopResult) {
-					emitPrintLoopResult(state.lastResult);
+					emitPrintLoopResult(state.lastResult, session.getLastRunTracePath?.());
 				}
 				exitCode = 1;
 			} else {
@@ -202,7 +202,7 @@ export async function runPrintMode(session: AgentSession, options: PrintModeOpti
 				}
 
 				if (options.printLoopResult) {
-					emitPrintLoopResult(state.lastResult);
+					emitPrintLoopResult(state.lastResult, session.getLastRunTracePath?.());
 				}
 			}
 		}

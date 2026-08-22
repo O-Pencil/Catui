@@ -261,10 +261,16 @@ async function executeSimplify(options: SimplifyOptions, ctx: ExtensionCommandCo
 
 export default function simplifyExtension(pi: ExtensionAPI) {
 	pi.registerCommand("simplify", {
-		description: "Simplify code to reduce cognitive load (Claude Code style)",
-		getArgumentCompletions: (prefix) => {
-			const options = ["--dry-run", "--no-test", "--concurrency=", "--force"];
-			return options.filter((o) => o.startsWith(prefix)).map((o) => ({ value: o, label: o }));
+		description: "Suggest smaller code changes",
+		getArgumentCompletions: (prefix, context) => {
+			if (context && context.tokenIndex > 0) return null;
+			const options = [
+				{ value: "--dry-run", label: "--dry-run", description: "Preview changes without writing files" },
+				{ value: "--no-test", label: "--no-test", description: "Skip running tests after applying changes" },
+				{ value: "--concurrency=", label: "--concurrency=", description: "Set how many file simplifications run at once" },
+				{ value: "--force", label: "--force", description: "Apply suggestions even when the safety check is conservative" },
+			];
+			return options.filter((option) => option.value.startsWith(prefix));
 		},
 		handler: async (args, ctx) => {
 			const options = parseOptions(args);

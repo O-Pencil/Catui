@@ -78,6 +78,10 @@ import {
 } from "./store-v2.js";
 import { compileProcedureFromEpisode } from "./procedural-v2.js";
 import type { EmbeddingFn, EpisodeFacet, EpisodeMemory, FacetKind, MemoryLink, ProceduralMemory, SemanticMemory } from "./types-v2.js";
+
+type RememberableMemoryItem = Omit<ExtractedItem, "type"> & {
+	type: Exclude<ExtractedItem["type"], "retract">;
+};
 import { applyExtraction, checkConsolidationEntry, checkWorkDuplicate } from "./update.js";
 import {
 	computeStructuralBoost,
@@ -242,6 +246,35 @@ export class NanoMemEngine {
 		]);
 
 		return items;
+	}
+
+	async remember(item: RememberableMemoryItem, project: string): Promise<MemoryEntry | null> {
+		const knowledge = await loadEntries(this.knowledgePath);
+		const lessons = await loadEntries(this.lessonsPath);
+		const events = await loadEntries(this.eventsPath);
+		const prefs = await loadEntries(this.preferencesPath);
+		const facets = await loadEntries(this.facetsPath);
+		const v2Semantic = await loadV2Semantic(this.v2Paths);
+		let target = knowledge;
+		if (item.type === "lesson") target = lessons;
+		if (item.type === "event") target = events;
+		if (item.type === "preference") target = prefs;
+		if (item.type === "pattern" || item.type === "struggle") target = facets;
+		applyExtraction(target, item, project, this.cfg);
+		this.upsertSemanticFromExtractedItem(v2Semantic, item, project);
+
+		const hl = this.cfg.halfLife;
+		const ew = this.cfg.evictionWeights;
+		await Promise.all([
+			saveEntries(this.knowledgePath, knowledge, this.cfg.maxEntries.knowledge, (e) => utilityEntry(e, hl, ew)),
+			saveEntries(this.lessonsPath, lessons, this.cfg.maxEntries.lessons, (e) => utilityEntry(e, hl, ew)),
+			saveEntries(this.eventsPath, events, this.cfg.maxEntries.events, (e) => utilityEntry(e, hl, ew)),
+			saveEntries(this.preferencesPath, prefs, this.cfg.maxEntries.preferences, (e) => utilityEntry(e, hl, ew)),
+			saveEntries(this.facetsPath, facets, this.cfg.maxEntries.facets, (e) => utilityEntry(e, hl, ew)),
+			saveV2Semantic(this.v2Paths, v2Semantic),
+		]);
+
+		return target.find((entry) => entry.name === item.name || entry.summary === item.summary) ?? target.at(-1) ?? null;
 	}
 
 	async extractAndStoreWork(conversation: string, project: string, sessionGoal?: string): Promise<void> {
