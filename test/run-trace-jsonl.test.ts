@@ -77,3 +77,33 @@ test("workspace trace persistence writes run-specific and latest JSONL files", a
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+test("workspace trace persistence retains clear tool inputs", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "catui-trace-input-"));
+	try {
+		const requested = {
+			...started,
+			eventId: "e2",
+			sequence: 2,
+			kind: "tool.requested",
+			payload: {
+				toolCallId: "call-1",
+				toolName: "CronCreate",
+				inputFingerprint: "sha256:input",
+				input: { schedule: "0 9 * * *", prompt: "Drink water", channel: "console" },
+			},
+		} as RunTraceEventV1;
+		const completed = {
+			...started,
+			eventId: "e3",
+			sequence: 3,
+			kind: "run.completed",
+			payload: { stopReason: "stop", turnCount: 1, toolCallCount: 0, outputFingerprint: "sha256:out" },
+		} as RunTraceEventV1;
+		const result = await persistWorkspaceRunTrace(directory, [started, requested, completed]);
+
+		assert.deepEqual((await readRunTraceJsonl(result.latestPath))[1], requested);
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});

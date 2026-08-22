@@ -93,6 +93,7 @@ export async function traceToolBatch(
 		await recorder.record("tool.requested", {
 			toolCallId: call.id,
 			toolName: call.name,
+			input: call.arguments,
 			inputFingerprint: fingerprintTraceValue(call.arguments),
 		});
 		if (policyEnabled || paused || denied) {

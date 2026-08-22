@@ -31,6 +31,25 @@ describe("run trace protocol", () => {
 		expect(parseRunTraceEvent(event())).toEqual(event());
 	});
 
+	it("accepts tool request payloads with and without clear input", () => {
+		const legacy = event({
+			kind: "tool.requested",
+			payload: { toolCallId: "call-1", toolName: "CronCreate", inputFingerprint: "sha256:input" },
+		});
+		const withInput = event({
+			kind: "tool.requested",
+			payload: {
+				toolCallId: "call-1",
+				toolName: "CronCreate",
+				inputFingerprint: "sha256:input",
+				input: { schedule: "0 9 * * *", prompt: "Drink water", channel: "console" },
+			},
+		} as Partial<RunTraceEventV1>);
+
+		expect(parseRunTraceEvent(legacy)).toEqual(legacy);
+		expect(parseRunTraceEvent(withInput)).toEqual(withInput);
+	});
+
 	it.each([
 		["unsupported version", { version: 2 }],
 		["unknown kind", { kind: "run.teleported" }],

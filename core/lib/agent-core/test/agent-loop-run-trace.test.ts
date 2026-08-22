@@ -76,7 +76,9 @@ describe("agent loop run tracing", () => {
 		});
 		for await (const _event of stream) { /* drain */ }
 		const events = sink.snapshot();
+		const requested = events.find((traceEvent) => traceEvent.kind === "tool.requested");
 		expect(events.map((traceEvent) => traceEvent.kind)).toEqual(expect.arrayContaining(["tool.requested", "tool.started", "tool.completed"]));
+		expect(requested).toMatchObject({ kind: "tool.requested", payload: { input: {} } });
 		expect(events.at(-1)).toMatchObject({ kind: "run.completed", payload: { toolCallCount: 1 } });
 	});
 });

@@ -23,7 +23,7 @@ export interface RunTracePayloadMapV1 {
 		decision: "allow" | "deny" | "pause";
 		inputFingerprint: string;
 	};
-	"tool.requested": { toolCallId: string; toolName: string; inputFingerprint: string };
+	"tool.requested": { toolCallId: string; toolName: string; inputFingerprint: string; input?: unknown };
 	"tool.started": { toolCallId: string; toolName: string };
 	"tool.completed": {
 		toolCallId: string;

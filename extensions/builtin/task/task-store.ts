@@ -108,17 +108,20 @@ async function snapshotTasksDir(dir: string): Promise<string> {
 
 function startPollingTimer(dir: string): void {
 	const timer = setInterval(() => {
-		void snapshotTasksDir(dir).then((snap) => {
-			const previous = lastSeenSnapshots.get(dir);
-			if (previous === snap) return;
-			lastSeenSnapshots.set(dir, snap);
-			notifyTasksUpdated();
-		}).catch(() => {
+		void notifyIfTaskSnapshotChanged(dir).catch(() => {
 			// Snapshot failure is not actionable here; skip this tick.
 		});
 	}, POLL_INTERVAL_MS);
 	timer.unref?.();
 	pollTimers.set(dir, timer);
+}
+
+async function notifyIfTaskSnapshotChanged(dir: string): Promise<void> {
+	const snap = await snapshotTasksDir(dir);
+	const previous = lastSeenSnapshots.get(dir);
+	lastSeenSnapshots.set(dir, snap);
+	if (previous === undefined || previous === snap) return;
+	notifyTasksUpdated();
 }
 
 /**
@@ -133,7 +136,9 @@ export function startTaskFileWatcher(dir: string): void {
 	// Primary: fs.watch
 	try {
 		const watcher = watch(dir, { recursive: false }, () => {
-			notifyTasksUpdated();
+			void notifyIfTaskSnapshotChanged(dir).catch(() => {
+				// Snapshot failure is not actionable here; skip this event.
+			});
 		});
 		watcher.unref?.();
 		watchers.set(dir, watcher);
