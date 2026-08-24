@@ -50,6 +50,7 @@ This is a one-shot exercise. After the maintainer has acted on the Arch Agent's 
 - `baseline/public-api-symbols-main.txt` — P0 符号快照，**仍是 S-1 符号 diff 基准（留）**
 
 **📦 已结案专项评审（WHY 归档 — 改对应代码前回查决策依据）**
+- `trusted-skill-install-review/` — default security extension hardening for external Git clones into trusted skill roots (SA01 implemented; closure gate blocked by unrelated workspace changes)
 - `runtime-session-review/` — P4 AgentSession 拆（AS01–12，closed）
 - `interactive-ui-review/` — P5 InteractiveMode 拆（UI01–08，structurally-complete）
 - `entry-volume-review/` — P6 入口/lazy/包表面（EV01–05，closed）

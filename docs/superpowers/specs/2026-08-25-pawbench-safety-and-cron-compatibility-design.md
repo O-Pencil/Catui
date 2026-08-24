@@ -100,7 +100,7 @@ For an original `CronCreate` event with dictionary input, it returns a copied di
 | current/default Catui user | `target-user: "default"` |
 | current/default Catui session | `target-session: "default"` |
 
-Explicit input values take precedence over adapter defaults. The normalization does not mutate the parsed trace object.
+The adapter derives `schedule` only from Catui's native `cron` field and forces the fixed `console`/`default` delivery values. Grader-shaped fields that appear in native input are ignored because Catui does not support those configurable routing semantics. The normalization does not mutate the parsed trace object.
 
 `CronDelete`, `CronList`, unknown tools, and non-dictionary inputs pass through unchanged. The existing tool-name mapping from `CronCreate` to `cron` remains separate from argument normalization so create-specific fields are never attached to list or delete operations.
 

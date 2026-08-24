@@ -62,7 +62,7 @@ def test_cron_create_arguments_are_projected_without_mutating_input() -> None:
     assert arguments == original
 
 
-def test_cron_create_explicit_compatible_fields_take_precedence() -> None:
+def test_cron_create_ignores_unsupported_compatible_fields() -> None:
     normalized = catui_agent._normalize_tool_arguments(
         "CronCreate",
         {
@@ -75,10 +75,10 @@ def test_cron_create_explicit_compatible_fields_take_precedence() -> None:
         },
     )
 
-    assert normalized["schedule"] == "0 17 * * 5"
-    assert normalized["channel"] == "terminal"
-    assert normalized["target-user"] == "reviewer"
-    assert normalized["target-session"] == "weekly"
+    assert normalized["schedule"] == "0 18 * * *"
+    assert normalized["channel"] == "console"
+    assert normalized["target-user"] == "default"
+    assert normalized["target-session"] == "default"
     assert "cron" not in normalized
 
 
@@ -171,11 +171,12 @@ def _normalize_tool_arguments(catui_name: str, arguments: Any) -> Any:
 
     normalized = dict(arguments)
     cron = normalized.pop("cron", None)
-    if "schedule" not in normalized and cron is not None:
+    normalized.pop("schedule", None)
+    if cron is not None:
         normalized["schedule"] = cron
-    normalized.setdefault("channel", "console")
-    normalized.setdefault("target-user", "default")
-    normalized.setdefault("target-session", "default")
+    normalized["channel"] = "console"
+    normalized["target-user"] = "default"
+    normalized["target-session"] = "default"
     return normalized
 ```
 

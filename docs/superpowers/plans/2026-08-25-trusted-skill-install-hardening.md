@@ -538,3 +538,7 @@ git log -4 --oneline
 ```
 
 Expected: the implementation commits are present; unrelated user files may remain dirty but none are staged by this plan.
+
+## Post-Review Amendment
+
+Independent review identified three valid Git invocation forms beyond the initial parser slice: `clone --bundle-uri <uri>`, global `git -C <path> clone`, and a simple leading `cd <path> && git clone` or `cd <path> ; git clone`. The implementation and focused tests must cover these forms before acceptance. This amendment does not broaden the owner or public surface: effective-directory resolution remains private to `security-audit` and still does not claim complete shell parsing.
