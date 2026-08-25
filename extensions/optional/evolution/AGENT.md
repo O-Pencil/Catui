@@ -17,6 +17,7 @@ evolution-store.ts: Scope path resolution, candidate/revision/current/quarantine
 evolution-types.ts: Evolution artifact, workflow_spec, executable_tool, usage/feedback records, prediction/attribution, per-stream attribution, stream-aware gate report, eval_fixture, candidate, revision, current pointer, active fixture pointer, quarantine, and command result contracts
 benchmark-types.ts: Versioned real-task snapshot, policy, metrics, checks, and candidate-bound promotion report contracts
 benchmark-evidence.ts: Fail-closed unknown-input parsing plus frozen corpus/execution and exact held-out pair validation
+pawbench-import.ts: Byte-bound PawBench checkpoint and attestation-manifest validation into sanitized benchmark snapshots
 benchmark-comparison.ts: Deterministic task-cluster bootstrap, slice/safety/cost/latency checks, canonical report hashing, and integrity verification
 evolution-format.ts: Human-readable scoped status, revision changes, usefulness review, usage/feedback summaries, prediction/per-stream attribution inspection, command result, and prompt injection formatting
 evolution-fixture.ts: Non-executable trace path discovery/resolution and eval_fixture content construction from validated workspace run trace JSONL

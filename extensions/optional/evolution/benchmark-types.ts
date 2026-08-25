@@ -13,6 +13,7 @@ export interface EvolutionBenchmarkRunV1 {
 	repetition: number;
 	split: EvolutionBenchmarkSplit;
 	slices: string[];
+	diagnostics?: string[];
 	success: boolean;
 	score: number;
 	costUsd: number;

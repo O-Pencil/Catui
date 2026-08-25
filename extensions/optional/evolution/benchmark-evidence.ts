@@ -58,11 +58,15 @@ function stringList(value: unknown, field: string): string[] {
 
 function parseRun(value: unknown, index: number): EvolutionBenchmarkRunV1 {
 	const input = record(value, `runs[${index}]`);
+	const diagnostics = input.diagnostics === undefined
+		? undefined
+		: stringList(input.diagnostics, `runs[${index}].diagnostics`);
 	return {
 		taskId: text(input.taskId, `runs[${index}].taskId`, /^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/),
 		repetition: integer(input.repetition, `runs[${index}].repetition`, 1),
 		split: split(input.split, `runs[${index}].split`),
 		slices: stringList(input.slices, `runs[${index}].slices`),
+		...(diagnostics ? { diagnostics } : {}),
 		success: (() => {
 			if (typeof input.success !== "boolean") throw new Error(`runs[${index}].success must be boolean`);
 			return input.success;
