@@ -13,9 +13,43 @@ import type {
 	ValidatedEvolutionBenchmarkPair,
 } from "./benchmark-types.js";
 
+const MAX_BENCHMARK_RUNS = 10_000;
+
 function record(value: unknown, field: string): Record<string, unknown> {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`${field} must be an object`);
-	return value as Record<string, unknown>;
+	const prototype = Object.getPrototypeOf(value);
+	if (prototype !== Object.prototype && prototype !== null) throw new Error(`${field} must be a plain object`);
+	const descriptors = Object.getOwnPropertyDescriptors(value);
+	const data: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+	for (const key of Reflect.ownKeys(value)) {
+		if (typeof key !== "string") throw new Error(`${field} must contain only string data properties`);
+		const descriptor = descriptors[key];
+		if (descriptor?.enumerable !== true || !Object.hasOwn(descriptor, "value")) {
+			throw new Error(`${field}.${key} must be an own data property`);
+		}
+		data[key] = descriptor.value;
+	}
+	return data;
+}
+
+function dataArray(value: unknown, field: string, minimum: number, maximum: number): unknown[] {
+	if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
+		throw new Error(`${field} must be a plain array`);
+	}
+	const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+	const length = lengthDescriptor?.value;
+	if (!Number.isSafeInteger(length) || length < minimum || length > maximum) {
+		throw new Error(`${field} array length must be from ${minimum} to ${maximum}`);
+	}
+	const ownKeys = Reflect.ownKeys(value);
+	if (ownKeys.length !== length + 1) throw new Error(`${field} must be a dense array without extra properties`);
+	for (let index = 0; index < length; index += 1) {
+		const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+		if (descriptor?.enumerable !== true || !Object.hasOwn(descriptor, "value")) {
+			throw new Error(`${field}[${index}] must be an own data property`);
+		}
+	}
+	return value;
 }
 
 function text(value: unknown, field: string, pattern?: RegExp): string {
@@ -50,8 +84,8 @@ function split(value: unknown, field: string): EvolutionBenchmarkSplit {
 }
 
 function stringList(value: unknown, field: string): string[] {
-	if (!Array.isArray(value) || value.length === 0 || value.length > 32) throw new Error(`${field} must be a non-empty string array`);
-	const values = value.map((item, index) => text(item, `${field}[${index}]`, /^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/));
+	const input = dataArray(value, field, 1, 32);
+	const values = input.map((item, index) => text(item, `${field}[${index}]`, /^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/));
 	if (new Set(values).size !== values.length) throw new Error(`${field} contains duplicates`);
 	return [...values].sort();
 }
@@ -88,7 +122,10 @@ export function parseBenchmarkSnapshot(value: unknown): EvolutionBenchmarkSnapsh
 	const corpus = record(input.corpus, "corpus");
 	const harness = record(input.harness, "harness");
 	const execution = record(input.execution, "execution");
-	if (!Array.isArray(input.runs) || input.runs.length === 0) throw new Error("Benchmark snapshot runs must be non-empty");
+	if (Array.isArray(input.runs) && Object.getOwnPropertyDescriptor(input.runs, "length")?.value === 0) {
+		throw new Error("Benchmark snapshot runs must be non-empty");
+	}
+	const runs = dataArray(input.runs, "Benchmark snapshot runs", 1, MAX_BENCHMARK_RUNS);
 	const candidateId = input.candidateId === undefined ? undefined : text(input.candidateId, "candidateId", /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/);
 	const candidateContentHash = input.candidateContentHash === undefined
 		? undefined
@@ -121,7 +158,7 @@ export function parseBenchmarkSnapshot(value: unknown): EvolutionBenchmarkSnapsh
 			timeoutMs: integer(execution.timeoutMs, "execution.timeoutMs", 1),
 			budgetUsd: finite(execution.budgetUsd, "execution.budgetUsd", 0.000001),
 		},
-		runs: input.runs.map(parseRun),
+		runs: runs.map(parseRun),
 	};
 }
 

@@ -1,13 +1,17 @@
 /**
  * [WHO]: Byte-bound PawBench evolution snapshot import contract tests
- * [FROM]: Depends on node:test/assert, crypto, and the optional-evolution importer and benchmark parser
- * [TO]: Verifies extensions/optional/evolution/pawbench-import.ts without granting runtime execution authority
- * [HERE]: test/evolution-pawbench.test.ts - held-out PawBench checkpoint and attestation-manifest boundary
+ * [FROM]: Depends on node:test/assert, crypto, and the optional-evolution import, parser, and diagnosis contracts
+ * [TO]: Verifies PawBench snapshot import and sanitized failure-cohort diagnosis without granting runtime execution authority
+ * [HERE]: test/evolution-pawbench.test.ts - PawBench evidence and deterministic failure-cohort boundaries
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { parseBenchmarkSnapshot } from "../extensions/optional/evolution/benchmark-evidence.ts";
+import {
+	diagnoseEvolutionBenchmarkFailures,
+	verifyEvolutionFailureCohortReport,
+} from "../extensions/optional/evolution/benchmark-diagnosis.ts";
 import { importPawBenchEvolutionSnapshot } from "../extensions/optional/evolution/pawbench-import.ts";
 
 type PawBenchLabels = Partial<{
@@ -552,4 +556,481 @@ test("rejects a result index without explicit trace-audit counters", () => {
 		}),
 		/audit|replayDivergences|counter/i,
 	);
+});
+
+function ordinalCompare(left: string, right: string): number {
+	return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function canonical(value: unknown): string {
+	if (value === null || typeof value !== "object") return JSON.stringify(value);
+	if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+	const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) => ordinalCompare(left, right));
+	return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(",")}}`;
+}
+
+function canonicalHash(value: unknown): string {
+	return `sha256:${createHash("sha256").update(canonical(value), "utf8").digest("hex")}`;
+}
+
+function rehashFailureReport<T extends { contentHash: string }>(report: T): T {
+	const { contentHash: _contentHash, ...content } = report;
+	return { ...report, contentHash: canonicalHash(content) };
+}
+
+function normalizedSnapshotForHash(snapshot: ReturnType<typeof importPawBenchEvolutionSnapshot>) {
+	const parsed = parseBenchmarkSnapshot(snapshot);
+	return {
+		...parsed,
+		runs: [...parsed.runs].sort((left, right) => {
+			const leftKey = `${left.split}\u0000${left.taskId}\u0000${left.repetition}`;
+			const rightKey = `${right.split}\u0000${right.taskId}\u0000${right.repetition}`;
+			return ordinalCompare(leftKey, rightKey);
+		}),
+	};
+}
+
+function diagnosisSignalFixture(): ReturnType<typeof importPawBenchEvolutionSnapshot> {
+	const snapshot = importFixture();
+	const failedRun = snapshot.runs[1]!;
+	const run = (taskId: string, overrides: Partial<typeof failedRun> = {}): typeof failedRun => ({
+		...failedRun,
+		taskId,
+		repetition: 1,
+		success: false,
+		diagnostics: undefined,
+		policyViolations: 0,
+		replayDivergences: 0,
+		unpairedToolCalls: 0,
+		...overrides,
+	});
+	snapshot.runs = [
+		{
+			...run("task-success", {
+				success: true,
+				diagnostics: ["ignored-success-signal"],
+				policyViolations: 9,
+				replayDivergences: 9,
+				unpairedToolCalls: 9,
+			}),
+		},
+		run("task-diagnostic", { diagnostics: ["diagnostic-sentinel"] }),
+		run("task-diagnostic", { repetition: 2, diagnostics: ["diagnostic-sentinel"] }),
+		run("task-error", { diagnostics: ["status:error"] }),
+		run("task-timeout", { diagnostics: ["timeout"] }),
+		run("task-policy", { policyViolations: 1 }),
+		run("task-replay", { replayDivergences: 1 }),
+		run("task-unpaired", { unpairedToolCalls: 1 }),
+	];
+	return snapshot;
+}
+
+function assertExactReportShape(report: ReturnType<typeof diagnoseEvolutionBenchmarkFailures>): void {
+	assert.deepEqual(Object.keys(report).sort(), [
+		"contentHash",
+		"cohorts",
+		"generatedAt",
+		"kind",
+		"schemaVersion",
+		"snapshotHash",
+	].sort());
+	for (const cohort of report.cohorts) {
+		assert.deepEqual(Object.keys(cohort).sort(), [
+			"id",
+			"runCount",
+			"signal",
+			"taskCount",
+			"taskIds",
+			"taskIdsTruncated",
+		].sort());
+	}
+}
+
+test("extracts each independent signal only from failed runs", () => {
+	const snapshot = diagnosisSignalFixture();
+	const report = diagnoseEvolutionBenchmarkFailures(snapshot, {
+		generatedAt: "2026-08-26T03:00:00.000Z",
+	});
+
+	assert.deepEqual(report.cohorts, [
+		{
+			id: "diagnostic:diagnostic-sentinel",
+			signal: "diagnostic:diagnostic-sentinel",
+			runCount: 2,
+			taskCount: 1,
+			taskIds: ["task-diagnostic"],
+			taskIdsTruncated: false,
+		},
+		{
+			id: "diagnostic:status:error",
+			signal: "diagnostic:status:error",
+			runCount: 1,
+			taskCount: 1,
+			taskIds: ["task-error"],
+			taskIdsTruncated: false,
+		},
+		{
+			id: "diagnostic:timeout",
+			signal: "diagnostic:timeout",
+			runCount: 1,
+			taskCount: 1,
+			taskIds: ["task-timeout"],
+			taskIdsTruncated: false,
+		},
+		{
+			id: "policy-violation",
+			signal: "policy-violation",
+			runCount: 1,
+			taskCount: 1,
+			taskIds: ["task-policy"],
+			taskIdsTruncated: false,
+		},
+		{
+			id: "replay-divergence",
+			signal: "replay-divergence",
+			runCount: 1,
+			taskCount: 1,
+			taskIds: ["task-replay"],
+			taskIdsTruncated: false,
+		},
+		{
+			id: "unpaired-tool-call",
+			signal: "unpaired-tool-call",
+			runCount: 1,
+			taskCount: 1,
+			taskIds: ["task-unpaired"],
+			taskIdsTruncated: false,
+		},
+	]);
+	assertExactReportShape(report);
+	for (const cohort of report.cohorts) {
+		assert.deepEqual(cohort.taskIds, [...new Set(cohort.taskIds)].sort());
+		assert.equal(cohort.taskCount, cohort.taskIds.length);
+		assert.equal(cohort.taskIdsTruncated, false);
+	}
+	assert.equal(report.schemaVersion, 1);
+	assert.equal(report.kind, "catui-evolution-failure-cohort-report");
+	assert.equal(report.generatedAt, "2026-08-26T03:00:00.000Z");
+	assert.equal(report.snapshotHash, canonicalHash(normalizedSnapshotForHash(snapshot)));
+	assert.equal(report.contentHash, canonicalHash({
+		schemaVersion: report.schemaVersion,
+		kind: report.kind,
+		generatedAt: report.generatedAt,
+		snapshotHash: report.snapshotHash,
+		cohorts: report.cohorts,
+	}));
+	assert.doesNotMatch(JSON.stringify(report), /"(?:notes|error|transcript|prompt|artifact)"/);
+});
+
+test("strips unknown raw values through snapshot parsing before diagnosis", () => {
+	const cleanSnapshot = diagnosisSignalFixture();
+	const options = { generatedAt: "2026-08-26T03:00:00.000Z" };
+	const cleanReport = diagnoseEvolutionBenchmarkFailures(cleanSnapshot, options);
+	const taintedSnapshot = {
+		...cleanSnapshot,
+		rawNotes: "raw-notes-sentinel",
+		rawError: "raw-error-sentinel",
+		runs: cleanSnapshot.runs.map((run) => ({
+			...run,
+			rawNotes: "run-raw-notes-sentinel",
+			rawError: "run-raw-error-sentinel",
+		})),
+	};
+
+	const taintedReport = diagnoseEvolutionBenchmarkFailures(taintedSnapshot, options);
+	assert.deepEqual(taintedReport, cleanReport);
+	assert.doesNotMatch(JSON.stringify(taintedReport), /raw-(?:notes|error)-sentinel/);
+});
+
+test("attributes every independent signal from one failed run", () => {
+	const snapshot = importFixture();
+	snapshot.runs = [
+		{
+			...snapshot.runs[0]!,
+			taskId: "task-success-control",
+			success: true,
+			diagnostics: ["ignored-success-signal"],
+			policyViolations: 9,
+			replayDivergences: 9,
+			unpairedToolCalls: 9,
+		},
+		{
+			...snapshot.runs[1]!,
+			taskId: "task-multi-signal",
+			repetition: 1,
+			diagnostics: ["diagnostic-alpha", "diagnostic-beta"],
+			policyViolations: 2,
+			replayDivergences: 3,
+			unpairedToolCalls: 4,
+		},
+	];
+	const report = diagnoseEvolutionBenchmarkFailures(snapshot, {
+		generatedAt: "2026-08-26T03:00:00.000Z",
+	});
+
+	for (const signal of [
+		"diagnostic:diagnostic-alpha",
+		"diagnostic:diagnostic-beta",
+		"policy-violation",
+		"replay-divergence",
+		"unpaired-tool-call",
+	]) {
+		const cohort = report.cohorts.find((item) => item.signal === signal);
+		assert.deepEqual(cohort, {
+			id: signal,
+			signal,
+			runCount: 1,
+			taskCount: 1,
+			taskIds: ["task-multi-signal"],
+			taskIdsTruncated: false,
+		});
+	}
+});
+
+test("failure cohort IDs and hashes are stable across run order", () => {
+	const snapshot = diagnosisSignalFixture();
+	const report = diagnoseEvolutionBenchmarkFailures(snapshot, {
+		generatedAt: "2026-08-26T03:00:00.000Z",
+	});
+	const reorderedSnapshot = { ...snapshot, runs: [...snapshot.runs].reverse() };
+	const reorderedReport = diagnoseEvolutionBenchmarkFailures(reorderedSnapshot, {
+		generatedAt: "2026-08-26T03:00:00.000Z",
+	});
+
+	assert.deepEqual(reorderedReport, report);
+});
+
+test("uses locale-independent ordinal ordering for case-sensitive ASCII IDs and hashes", () => {
+	const snapshot = diagnosisSignalFixture();
+	const failedRun = snapshot.runs[1]!;
+	snapshot.runs = [
+		{
+			...failedRun,
+			taskId: "i-task",
+			repetition: 1,
+			diagnostics: ["i-signal", "shared"],
+		},
+		{
+			...failedRun,
+			taskId: "I-task",
+			repetition: 1,
+			diagnostics: ["I-signal", "shared"],
+		},
+	];
+	const report = diagnoseEvolutionBenchmarkFailures(snapshot, {
+		generatedAt: "2026-08-26T03:00:00.000Z",
+	});
+
+	assert.deepEqual(report.cohorts.map((cohort) => cohort.signal), [
+		"diagnostic:I-signal",
+		"diagnostic:i-signal",
+		"diagnostic:shared",
+	]);
+	assert.deepEqual(report.cohorts[2]!.taskIds, ["I-task", "i-task"]);
+	assert.equal(report.snapshotHash, canonicalHash(normalizedSnapshotForHash(snapshot)));
+	assert.equal(report.contentHash, canonicalHash({
+		schemaVersion: report.schemaVersion,
+		kind: report.kind,
+		generatedAt: report.generatedAt,
+		snapshotHash: report.snapshotHash,
+		cohorts: report.cohorts,
+	}));
+});
+
+test("bounds each cohort to 100 sorted task IDs while preserving counts", () => {
+	const snapshot = diagnosisSignalFixture();
+	const diagnosticRun = snapshot.runs[1]!;
+	for (let index = 0; index < 105; index += 1) {
+		snapshot.runs.push({
+			...diagnosticRun,
+			taskId: `task-bulk-${String(105 - index).padStart(3, "0")}`,
+			repetition: index + 10,
+		});
+	}
+	const report = diagnoseEvolutionBenchmarkFailures(snapshot, {
+		generatedAt: "2026-08-26T03:00:00.000Z",
+	});
+	const cohort = report.cohorts.find((item) => item.signal === "diagnostic:diagnostic-sentinel");
+	assert.ok(cohort);
+	const expectedTaskIds = ["task-diagnostic", ...Array.from({ length: 105 }, (_, index) => `task-bulk-${String(index + 1).padStart(3, "0")}`)].sort();
+	assert.equal(cohort.runCount, 107);
+	assert.equal(cohort.taskCount, expectedTaskIds.length);
+	assert.deepEqual(cohort.taskIds, expectedTaskIds.slice(0, 100));
+	assert.equal(cohort.taskIdsTruncated, true);
+	assert.equal(new Set(cohort.taskIds).size, cohort.taskIds.length);
+});
+
+test("binds a canonical snapshot and detects any cohort-report tampering", () => {
+	const report = diagnoseEvolutionBenchmarkFailures(diagnosisSignalFixture(), {
+		generatedAt: "2026-08-26T03:00:00.000Z",
+	});
+	assert.equal(verifyEvolutionFailureCohortReport(report), true);
+
+	const tampered = structuredClone(report);
+	tampered.cohorts[0]!.taskIds = ["task-001"];
+	assert.equal(verifyEvolutionFailureCohortReport(tampered), false);
+
+	const tamperedGeneratedAt = { ...report, generatedAt: "2026-08-26T03:01:00.000Z" };
+	assert.equal(verifyEvolutionFailureCohortReport(tamperedGeneratedAt), false);
+
+	const tamperedHash = { ...report, snapshotHash: `sha256:${"0".repeat(64)}` };
+	assert.equal(verifyEvolutionFailureCohortReport(tamperedHash), false);
+});
+
+test("rejects duplicate benchmark run identities before cohorting", () => {
+	const snapshot = diagnosisSignalFixture();
+	snapshot.runs.push({
+		...snapshot.runs[0]!,
+		success: false,
+		diagnostics: ["duplicate-identity"],
+	});
+	assert.throws(
+		() => diagnoseEvolutionBenchmarkFailures(snapshot, {
+			generatedAt: "2026-08-26T03:00:00.000Z",
+		}),
+		/duplicate|task repetition|identity/i,
+	);
+});
+
+test("rejects an invalid snapshot through the existing benchmark parser", () => {
+	assert.throws(
+		() => diagnoseEvolutionBenchmarkFailures({ ...diagnosisSignalFixture(), runs: [] }, {
+			generatedAt: "2026-08-26T03:00:00.000Z",
+		}),
+		/Benchmark snapshot runs must be non-empty/,
+	);
+	assert.throws(
+		() => diagnoseEvolutionBenchmarkFailures({ not: "a snapshot" }, {
+			generatedAt: "2026-08-26T03:00:00.000Z",
+		}),
+		/Unsupported benchmark snapshot schema version/,
+	);
+});
+
+test("bounds diagnosis runs and distinct failure cohorts", () => {
+	const tooManyRuns = diagnosisSignalFixture();
+	const run = tooManyRuns.runs[0]!;
+	tooManyRuns.runs = Array.from({ length: 10_001 }, (_, index) => ({
+		...run,
+		taskId: `bounded-run-${index}`,
+		repetition: 1,
+	}));
+	assert.throws(
+		() => diagnoseEvolutionBenchmarkFailures(tooManyRuns, { generatedAt: "2026-08-26T03:00:00.000Z" }),
+		/runs|10.?000|maximum|limit/i,
+	);
+
+	const tooManyCohorts = diagnosisSignalFixture();
+	const failedRun = tooManyCohorts.runs[1]!;
+	tooManyCohorts.runs = Array.from({ length: 129 }, (_, runIndex) => ({
+		...failedRun,
+		taskId: `cohort-run-${runIndex}`,
+		repetition: 1,
+		diagnostics: Array.from({ length: 32 }, (_, signalIndex) => `signal-${runIndex}-${signalIndex}`),
+	}));
+	assert.throws(
+		() => diagnoseEvolutionBenchmarkFailures(tooManyCohorts, { generatedAt: "2026-08-26T03:00:00.000Z" }),
+		/cohort|signal|4.?096|maximum|limit/i,
+	);
+});
+
+test("requires canonical millisecond RFC3339 UTC diagnosis timestamps", () => {
+	assert.throws(
+		() => diagnoseEvolutionBenchmarkFailures(diagnosisSignalFixture(), { generatedAt: "0" }),
+		/generatedAt|timestamp|RFC3339|UTC/i,
+	);
+	const report = diagnoseEvolutionBenchmarkFailures(diagnosisSignalFixture(), {
+		generatedAt: "2026-08-26T03:00:00.000Z",
+	});
+	assert.equal(verifyEvolutionFailureCohortReport(rehashFailureReport({ ...report, generatedAt: "0" })), false);
+});
+
+test("rejects adversarial failure report objects without invoking getters", () => {
+	const report = diagnoseEvolutionBenchmarkFailures(diagnosisSignalFixture(), {
+		generatedAt: "2026-08-26T03:00:00.000Z",
+	});
+	assert.equal(verifyEvolutionFailureCohortReport(rehashFailureReport({ ...report, unknown: true })), false);
+
+	const customPrototype = structuredClone(report);
+	Object.setPrototypeOf(customPrototype, { inherited: true });
+	assert.equal(verifyEvolutionFailureCohortReport(customPrototype), false);
+
+	let getterCalls = 0;
+	const accessor = structuredClone(report);
+	Object.defineProperty(accessor.cohorts[0]!, "signal", {
+		enumerable: true,
+		get: () => {
+			getterCalls += 1;
+			return accessor.cohorts[0]!.id;
+		},
+	});
+	assert.equal(verifyEvolutionFailureCohortReport(accessor), false);
+	assert.equal(getterCalls, 0);
+
+	const sparseCohorts = structuredClone(report);
+	sparseCohorts.cohorts = new Array(1);
+	assert.equal(verifyEvolutionFailureCohortReport(sparseCohorts), false);
+
+	const sparseTaskIds = structuredClone(report);
+	sparseTaskIds.cohorts[0]!.taskIds = new Array(1);
+	assert.equal(verifyEvolutionFailureCohortReport(sparseTaskIds), false);
+
+	const decoratedTaskIds = structuredClone(report);
+	(decoratedTaskIds.cohorts[0]!.taskIds as string[] & { extra?: string }).extra = "raw";
+	assert.equal(verifyEvolutionFailureCohortReport(decoratedTaskIds), false);
+});
+
+test("rejects failure report ordering, duplicate, count, truncation, and array-bound violations", () => {
+	const report = diagnoseEvolutionBenchmarkFailures(diagnosisSignalFixture(), {
+		generatedAt: "2026-08-26T03:00:00.000Z",
+	});
+
+	const cohortOrder = structuredClone(report);
+	cohortOrder.cohorts.reverse();
+	assert.equal(verifyEvolutionFailureCohortReport(rehashFailureReport(cohortOrder)), false);
+
+	const duplicateCohort = structuredClone(report);
+	duplicateCohort.cohorts.splice(1, 0, structuredClone(duplicateCohort.cohorts[0]!));
+	assert.equal(verifyEvolutionFailureCohortReport(rehashFailureReport(duplicateCohort)), false);
+
+	const taskOrder = structuredClone(report);
+	taskOrder.cohorts[0]!.taskIds = ["z-task", "a-task"];
+	taskOrder.cohorts[0]!.taskCount = 2;
+	taskOrder.cohorts[0]!.runCount = 2;
+	assert.equal(verifyEvolutionFailureCohortReport(rehashFailureReport(taskOrder)), false);
+
+	const duplicateTask = structuredClone(report);
+	duplicateTask.cohorts[0]!.taskIds = ["same-task", "same-task"];
+	duplicateTask.cohorts[0]!.taskCount = 2;
+	duplicateTask.cohorts[0]!.runCount = 2;
+	assert.equal(verifyEvolutionFailureCohortReport(rehashFailureReport(duplicateTask)), false);
+
+	for (const mutation of [
+		(cohort: typeof report.cohorts[number]) => { cohort.taskCount = cohort.runCount + 1; },
+		(cohort: typeof report.cohorts[number]) => { cohort.taskCount = 101; cohort.runCount = 101; cohort.taskIdsTruncated = false; },
+		(cohort: typeof report.cohorts[number]) => { cohort.taskCount = 1; cohort.taskIdsTruncated = true; },
+	]) {
+		const inconsistent = structuredClone(report);
+		mutation(inconsistent.cohorts[0]!);
+		assert.equal(verifyEvolutionFailureCohortReport(rehashFailureReport(inconsistent)), false);
+	}
+
+	const excessiveCohorts = structuredClone(report);
+	excessiveCohorts.cohorts = [];
+	excessiveCohorts.cohorts.length = 4_097;
+	assert.equal(verifyEvolutionFailureCohortReport(excessiveCohorts), false);
+
+	const excessiveTaskIds = structuredClone(report);
+	excessiveTaskIds.cohorts[0]!.taskIds = Array.from({ length: 101 }, (_, index) => `task-${index}`);
+	assert.equal(verifyEvolutionFailureCohortReport(excessiveTaskIds), false);
+
+	const hugeSparseCohorts = structuredClone(report);
+	hugeSparseCohorts.cohorts = [];
+	hugeSparseCohorts.cohorts.length = 1_000_000_000;
+	assert.equal(verifyEvolutionFailureCohortReport(hugeSparseCohorts), false);
+
+	const hugeSparseTaskIds = structuredClone(report);
+	hugeSparseTaskIds.cohorts[0]!.taskIds = [];
+	hugeSparseTaskIds.cohorts[0]!.taskIds.length = 1_000_000_000;
+	assert.equal(verifyEvolutionFailureCohortReport(hugeSparseTaskIds), false);
 });

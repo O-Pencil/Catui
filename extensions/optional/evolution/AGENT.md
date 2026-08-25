@@ -18,6 +18,7 @@ evolution-types.ts: Evolution artifact, workflow_spec, executable_tool, usage/fe
 benchmark-types.ts: Versioned real-task snapshot, policy, metrics, checks, and candidate-bound promotion report contracts
 benchmark-evidence.ts: Fail-closed unknown-input parsing plus frozen corpus/execution and exact held-out pair validation
 pawbench-import.ts: Byte-bound PawBench checkpoint and attestation-manifest validation into sanitized benchmark snapshots
+benchmark-diagnosis.ts: Deterministic sanitized failure-signal cohorts, canonical snapshot/report hashing, and fail-closed report integrity verification
 benchmark-comparison.ts: Deterministic task-cluster bootstrap, slice/safety/cost/latency checks, canonical report hashing, and integrity verification
 evolution-format.ts: Human-readable scoped status, revision changes, usefulness review, usage/feedback summaries, prediction/per-stream attribution inspection, command result, and prompt injection formatting
 evolution-fixture.ts: Non-executable trace path discovery/resolution and eval_fixture content construction from validated workspace run trace JSONL

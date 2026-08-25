@@ -102,6 +102,113 @@ test("parses a complete versioned benchmark snapshot", () => {
 	assert.deepEqual(parseBenchmarkSnapshot(snapshot("baseline")), snapshot("baseline"));
 });
 
+test("rejects inherited and accessor-backed snapshot fields without invoking getters", () => {
+	let getterCalls = 0;
+	const accessorSnapshot = snapshot("baseline");
+	Object.defineProperty(accessorSnapshot, "schemaVersion", {
+		enumerable: true,
+		get: () => {
+			getterCalls += 1;
+			return 1;
+		},
+	});
+	assert.throws(() => parseBenchmarkSnapshot(accessorSnapshot), /data property|accessor|plain|own/i);
+	assert.equal(getterCalls, 0);
+
+	const inheritedCorpus = snapshot("baseline");
+	inheritedCorpus.corpus = Object.assign(Object.create({ id: "pawbench" }), {
+		version: inheritedCorpus.corpus.version,
+		digest: inheritedCorpus.corpus.digest,
+	});
+	assert.throws(() => parseBenchmarkSnapshot(inheritedCorpus), /plain|prototype|own/i);
+
+	const accessorRun = snapshot("baseline");
+	Object.defineProperty(accessorRun.runs[0]!, "taskId", {
+		enumerable: true,
+		get: () => {
+			getterCalls += 1;
+			return "task-000";
+		},
+	});
+	assert.throws(() => parseBenchmarkSnapshot(accessorRun), /data property|accessor|plain|own/i);
+	assert.equal(getterCalls, 0);
+
+	const inheritedRequiredField = snapshot("baseline") as unknown as Record<string, unknown>;
+	Reflect.deleteProperty(inheritedRequiredField, "schemaVersion");
+	Object.defineProperty(Object.prototype, "schemaVersion", {
+		configurable: true,
+		get: () => {
+			getterCalls += 1;
+			return 1;
+		},
+	});
+	try {
+		assert.throws(() => parseBenchmarkSnapshot(inheritedRequiredField), /schema version|own|property/i);
+		assert.equal(getterCalls, 0);
+	} finally {
+		Reflect.deleteProperty(Object.prototype, "schemaVersion");
+	}
+});
+
+test("rejects sparse, decorated, inherited, symbol, and accessor string lists", () => {
+	const sparse = snapshot("baseline");
+	const sparseSlices = new Array<string>(2);
+	sparseSlices[0] = "coding";
+	sparse.runs[0]!.slices = sparseSlices;
+	assert.throws(() => parseBenchmarkSnapshot(sparse), /slices|dense|array|property/i);
+
+	const decorated = snapshot("baseline");
+	const decoratedDiagnostics = ["grader.failure"] as string[] & { extra?: string };
+	decoratedDiagnostics.extra = "raw";
+	decorated.runs[0]!.diagnostics = decoratedDiagnostics;
+	assert.throws(() => parseBenchmarkSnapshot(decorated), /diagnostics|array|property/i);
+
+	const inherited = snapshot("baseline");
+	const inheritedSlices = ["coding"];
+	Object.setPrototypeOf(inheritedSlices, { inherited: true });
+	inherited.runs[0]!.slices = inheritedSlices;
+	assert.throws(() => parseBenchmarkSnapshot(inherited), /slices|array|prototype/i);
+
+	const symbolDecorated = snapshot("baseline");
+	const symbolSlices = ["coding"];
+	Object.defineProperty(symbolSlices, Symbol("hidden"), { value: "raw" });
+	symbolDecorated.runs[0]!.slices = symbolSlices;
+	assert.throws(() => parseBenchmarkSnapshot(symbolDecorated), /slices|array|property/i);
+
+	let getterCalls = 0;
+	const accessor = snapshot("baseline");
+	const accessorDiagnostics = ["grader.failure"];
+	Object.defineProperty(accessorDiagnostics, "0", {
+		enumerable: true,
+		get: () => {
+			getterCalls += 1;
+			return "grader.failure";
+		},
+	});
+	accessor.runs[0]!.diagnostics = accessorDiagnostics;
+	assert.throws(() => parseBenchmarkSnapshot(accessor), /diagnostics|data property|accessor|array/i);
+	assert.equal(getterCalls, 0);
+});
+
+test("rejects malformed benchmark run arrays before iterating their entries", () => {
+	const decorated = snapshot("baseline");
+	const decoratedRuns = decorated.runs as EvolutionBenchmarkRunV1[] & { extra?: string };
+	decoratedRuns.extra = "raw";
+	assert.throws(() => parseBenchmarkSnapshot(decorated), /runs|array|property/i);
+
+	let getterCalls = 0;
+	const accessor = snapshot("baseline");
+	Object.defineProperty(accessor.runs, "0", {
+		enumerable: true,
+		get: () => {
+			getterCalls += 1;
+			return runs("baseline")[0];
+		},
+	});
+	assert.throws(() => parseBenchmarkSnapshot(accessor), /runs|data property|accessor|array/i);
+	assert.equal(getterCalls, 0);
+});
+
 test("rejects unsupported schemas and out-of-range run metrics", () => {
 	const unsupported = { ...snapshot("baseline"), schemaVersion: 2 };
 	assert.throws(() => parseBenchmarkSnapshot(unsupported), /schema version/i);
