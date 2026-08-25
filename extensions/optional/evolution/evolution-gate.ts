@@ -10,8 +10,11 @@ import { BUILTIN_HARNESS_EVAL_FIXTURES, BUILTIN_HARNESS_EVAL_MANIFEST } from "..
 import type { HarnessEvalFixture, HarnessEvalFixtureResult, HarnessEvalManifest, HarnessEvalReport, HarnessEvalScenarioManifest } from "../../../core/harness-eval/types.js";
 import { getEvolutionScopeRoot, loadActiveEvalFixtureArtifacts, loadActiveEvolutionArtifacts } from "./evolution-store.js";
 import type { EvolutionCandidate, EvolutionGateReport } from "./evolution-types.js";
-import { existsSync, readFileSync } from "node:fs";
+import { verifyEvolutionBenchmarkReport } from "./benchmark-comparison.js";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+
+const MAX_BENCHMARK_REPORT_BYTES = 1_000_000;
 
 export interface EvolutionGateContext {
 	agentDir?: string;
@@ -108,6 +111,50 @@ function gateReport(name: string, report: HarnessEvalReport): EvolutionGateRepor
 	};
 }
 
+function requiresBenchmarkEvidence(candidate: EvolutionCandidate): boolean {
+	return candidate.artifacts.some((artifact) => artifact.kind !== "eval_fixture");
+}
+
+function hasStrictSafetyMetrics(report: EvolutionGateReport): boolean {
+	return report.metrics.passRate === 1
+		&& report.metrics.replayDivergences === 0
+		&& report.metrics.policyViolations === 0
+		&& report.metrics.unpairedToolCalls === 0;
+}
+
+function withBenchmarkEvidence(
+	candidate: EvolutionCandidate,
+	context: EvolutionGateContext,
+	safetyReport: EvolutionGateReport,
+): EvolutionGateReport {
+	if (!safetyReport.passed || !requiresBenchmarkEvidence(candidate)) return safetyReport;
+	if (!hasStrictSafetyMetrics(safetyReport)) {
+		return { ...safetyReport, passed: false, failure: "Behavioral evolution requires perfect replay and safety metrics." };
+	}
+	if (!context.cwd) return { ...safetyReport, passed: false, failure: "Behavioral evolution benchmark evidence requires a workspace path." };
+	if (!/^[a-zA-Z0-9._-]{1,120}$/.test(candidate.id)) {
+		return { ...safetyReport, passed: false, failure: "Evolution candidate id is unsafe for benchmark evidence lookup." };
+	}
+	const reportPath = join(context.cwd, ".catui", "evolution", "benchmarks", `${candidate.id}.json`);
+	if (!existsSync(reportPath)) {
+		return { ...safetyReport, passed: false, failure: `Missing behavioral benchmark evidence: ${reportPath}` };
+	}
+	try {
+		const stats = statSync(reportPath);
+		if (!stats.isFile() || stats.size > MAX_BENCHMARK_REPORT_BYTES) throw new Error("Benchmark evidence must be a JSON file no larger than 1 MB.");
+		const benchmark = readJson(reportPath);
+		if (!verifyEvolutionBenchmarkReport(benchmark, candidate.id, candidate.contentHash)) throw new Error("Benchmark evidence is invalid, tampered, or bound to another candidate revision.");
+		if (!benchmark.passed) throw new Error("Behavioral benchmark evidence did not pass every promotion check.");
+		return { ...safetyReport, name: `${safetyReport.name}+heldout-benchmark`, benchmark };
+	} catch (error) {
+		return {
+			...safetyReport,
+			passed: false,
+			failure: error instanceof Error ? error.message : String(error),
+		};
+	}
+}
+
 export async function runCandidateEvalFixtureGate(content: string, scenarioId: string): Promise<EvolutionGateReport> {
 	try {
 		const fixture = fixtureResult(JSON.parse(content), scenarioId);
@@ -122,13 +169,13 @@ export async function runCandidateEvalFixtureGate(content: string, scenarioId: s
 	}
 }
 
-export async function runEvolutionGate(_candidate: EvolutionCandidate, context: EvolutionGateContext = {}): Promise<EvolutionGateReport> {
+export async function runEvolutionGate(candidate: EvolutionCandidate, context: EvolutionGateContext = {}): Promise<EvolutionGateReport> {
 	const projectManifestPath = context.cwd ? join(context.cwd, ".catui", "evolution", "eval-manifest.json") : undefined;
 	if (projectManifestPath && existsSync(projectManifestPath)) {
 		const projectFixturePath = join(context.cwd ?? "", ".catui", "evolution", "eval-fixtures.json");
 		try {
 			const report = await runHarnessEval(readJson(projectManifestPath), projectFixtureMap(readJson(projectFixturePath)));
-			return gateReport("project-harness-eval", report);
+			return withBenchmarkEvidence(candidate, context, gateReport("project-harness-eval", report));
 		} catch (error) {
 			return reportFailure("project-harness-eval", error);
 		}
@@ -143,12 +190,12 @@ export async function runEvolutionGate(_candidate: EvolutionCandidate, context: 
 		if (evolved) {
 			try {
 				const report = await runHarnessEval(evolved.manifest, evolved.fixtures);
-				return gateReport("evolved-harness-eval", report);
+				return withBenchmarkEvidence(candidate, context, gateReport("evolved-harness-eval", report));
 			} catch (error) {
 				return reportFailure("evolved-harness-eval", error);
 			}
 		}
 	}
 	const report = await runHarnessEval(BUILTIN_HARNESS_EVAL_MANIFEST, BUILTIN_HARNESS_EVAL_FIXTURES);
-	return gateReport("builtin-harness-eval", report);
+	return withBenchmarkEvidence(candidate, context, gateReport("builtin-harness-eval", report));
 }

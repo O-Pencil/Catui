@@ -25,10 +25,31 @@ import {
 	createEvolutionCandidate,
 	inspectEvolution,
 	getEvolutionScopeRoot,
-	promoteEvolutionCandidate,
+	promoteEvolutionCandidate as promoteStoredEvolutionCandidate,
 } from "../extensions/optional/evolution/evolution-store.js";
 import { formatEvolutionChanges } from "../extensions/optional/evolution/evolution-format.js";
 import { createEvolutionRefineTool } from "../extensions/optional/evolution/evolution-refine-tool.js";
+import { passingEvolutionGate, writePassingEvolutionBenchmark } from "./helpers/evolution-benchmark.js";
+
+function promoteEvolutionCandidate(
+	root: string,
+	candidateId: string,
+	options: Parameters<typeof promoteStoredEvolutionCandidate>[2] = {},
+) {
+	const candidate = inspectEvolution(root).candidates.find((item) => item.id === candidateId);
+	const pureFixture = candidate?.artifacts.every((artifact) => artifact.kind === "eval_fixture") === true;
+	const gateReport = pureFixture
+		? options?.gateReport ?? {
+			name: "candidate-eval-fixture",
+			passed: true,
+			checkedAt: "2026-08-25T01:00:00.000Z",
+			metrics: { passRate: 1, replayDivergences: 0, policyViolations: 0, unpairedToolCalls: 0 },
+		}
+		: options?.gateReport
+			? { ...options.gateReport, ...(options.gateReport.passed && candidate ? { benchmark: passingEvolutionGate(candidateId, candidate.contentHash).benchmark } : {}) }
+			: passingEvolutionGate(candidateId, candidate?.contentHash ?? `sha256:${"0".repeat(64)}`);
+	return promoteStoredEvolutionCandidate(root, candidateId, { ...options, gateReport });
+}
 
 function minimalTrace(outputFingerprint = "sha256:out"): RunTraceEventV1[] {
 	return [
@@ -713,6 +734,7 @@ test("evolution_refine proposes executable tools and refine promote gates activa
 		assert.equal(candidate?.artifacts[0]?.kind, "executable_tool");
 		assert.match(String(candidate?.artifacts[0]?.metadata?.approvedContentHash ?? ""), /^sha256:/);
 
+		writePassingEvolutionBenchmark(cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
 		await refineCommand(`--workspace promote ${candidate?.id ?? ""}`, ctx);
 		assert.match(inspectEvolution(workspaceRoot).current?.revisionId ?? "", /^revision-/);
 		const invoked = await executableTool.execute(
@@ -803,7 +825,7 @@ test("refine status and changes show scoped active state and revision rationale"
 	}
 });
 
-test("refine command activates planned declarative artifacts without manual promote", async () => {
+test("refine command keeps planned artifacts inactive until held-out evidence is supplied", async () => {
 	const harness = createHarness();
 	try {
 		await evolutionExtension(harness.api);
@@ -813,7 +835,7 @@ test("refine command activates planned declarative artifacts without manual prom
 			agentDir: harness.agentDir,
 			model: { id: "test-model" },
 			sessionManager: { getSessionId: () => "session-refine-auto", getEntries: () => [] },
-			cwd: process.cwd(),
+			cwd: harness.agentDir,
 			reload: async () => {},
 			ui: { notify: () => {} },
 			completeSimple: async () => JSON.stringify({
@@ -834,7 +856,11 @@ test("refine command activates planned declarative artifacts without manual prom
 
 		await refineCommand("--session improve verification", ctx);
 		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-refine-auto" });
-		const inspection = inspectEvolution(root);
+		let inspection = inspectEvolution(root);
+		assert.equal(inspection.candidates[0]?.status, "proposed");
+		writePassingEvolutionBenchmark(ctx.cwd, inspection.candidates[0]?.id ?? "", inspection.candidates[0]?.contentHash ?? "");
+		await refineCommand(`--session promote ${inspection.candidates[0]?.id ?? ""}`, ctx);
+		inspection = inspectEvolution(root);
 		assert.equal(inspection.candidates[0]?.status, "promoted");
 		assert.match(inspection.current?.revisionId ?? "", /revision-/);
 		const beforeAgentStart = harness.handlers.get("before_agent_start")?.[0] as BeforeAgentStartHandler;
@@ -845,7 +871,7 @@ test("refine command activates planned declarative artifacts without manual prom
 	}
 });
 
-test("evolution_refine lets the model create and auto-promote session tool specs without installing code", async () => {
+test("evolution_refine keeps model-created tool specs inactive until evidence-backed approval", async () => {
 	const harness = createHarness();
 	try {
 		await evolutionExtension(harness.api);
@@ -857,7 +883,8 @@ test("evolution_refine lets the model create and auto-promote session tool specs
 		const ctx = {
 			agentDir: harness.agentDir,
 			sessionManager: { getSessionId: () => "session-autonomous", getEntries: () => [] },
-			cwd: process.cwd(),
+			cwd: harness.agentDir,
+			reload: async () => {},
 		} as unknown as ExtensionCommandContext;
 
 		const created = await refineTool.execute(
@@ -876,7 +903,13 @@ test("evolution_refine lets the model create and auto-promote session tool specs
 		);
 		const createdText = created.content[0]?.type === "text" ? created.content[0].text : "";
 		assert.match(createdText, /created/);
-		assert.match(createdText, /promoted/);
+		assert.match(createdText, /not promoted|gate failed/i);
+		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-autonomous" });
+		const candidate = inspectEvolution(root).candidates[0];
+		writePassingEvolutionBenchmark(ctx.cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		const refineCommand = harness.commands.get("refine");
+		assert.ok(refineCommand);
+		await refineCommand(`--session promote ${candidate?.id ?? ""}`, ctx);
 
 		const listed = await evolvedTool.execute("tool-call", { action: "list" }, undefined, undefined, ctx);
 		assert.match(listed.content[0]?.type === "text" ? listed.content[0].text : "", /triage-flaky-test/);
@@ -903,12 +936,7 @@ test("evolution_refine gates auto-promotion with deterministic eval evidence", a
 	const harness = createHarness();
 	try {
 		const refineTool = createEvolutionRefineTool({
-			runGate: async () => ({
-				name: "test-gate",
-				passed: true,
-				checkedAt: "2026-08-09T00:00:00.000Z",
-				metrics: { passRate: 1, replayDivergences: 0, policyViolations: 0, unpairedToolCalls: 0 },
-			}),
+			runGate: async (candidate) => passingEvolutionGate(candidate.id, candidate.contentHash, { name: "test-gate" }),
 		});
 		const ctx = {
 			agentDir: harness.agentDir,
@@ -930,7 +958,7 @@ test("evolution_refine gates auto-promotion with deterministic eval evidence", a
 			undefined,
 			ctx,
 		);
-		assert.match(promoted.content[0]?.type === "text" ? promoted.content[0].text : "", /promoted/);
+		assert.match(promoted.content[0]?.type === "text" ? promoted.content[0].text : "", /promoted/i);
 		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-gated" });
 		const revisionId = inspectEvolution(root).current?.revisionId;
 		assert.ok(revisionId);
@@ -973,7 +1001,7 @@ test("evolution_refine gates auto-promotion with deterministic eval evidence", a
 	}
 });
 
-test("evolution_refine uses project custom eval corpus for auto-promotion", async () => {
+test("evolution_refine combines project corpus and held-out evidence for promotion", async () => {
 	const harness = createHarness();
 	const cwd = mkdtempSync(join(tmpdir(), "catui-evolution-project-gate-"));
 	try {
@@ -985,9 +1013,10 @@ test("evolution_refine uses project custom eval corpus for auto-promotion", asyn
 			agentDir: harness.agentDir,
 			sessionManager: { getSessionId: () => "session-project-gate", getEntries: () => [] },
 			cwd,
+			reload: async () => {},
 		} as unknown as ExtensionCommandContext;
 
-		const promoted = await refineTool.execute(
+		const proposed = await refineTool.execute(
 			"tool-call",
 			{
 				action: "create_artifact",
@@ -1001,11 +1030,16 @@ test("evolution_refine uses project custom eval corpus for auto-promotion", asyn
 			undefined,
 			ctx,
 		);
-		assert.match(promoted.content[0]?.type === "text" ? promoted.content[0].text : "", /promoted/);
+		assert.match(proposed.content[0]?.type === "text" ? proposed.content[0].text : "", /not promoted|gate failed/i);
 		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-project-gate" });
+		const candidate = inspectEvolution(root).candidates[0];
+		writePassingEvolutionBenchmark(cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		const refineCommand = harness.commands.get("refine");
+		assert.ok(refineCommand);
+		await refineCommand(`--session promote ${candidate?.id ?? ""}`, ctx);
 		const revisionId = inspectEvolution(root).current?.revisionId;
 		const revision = inspectEvolution(root).revisions.find((item) => item.id === revisionId);
-		assert.equal(revision?.gateReport?.name, "project-harness-eval");
+		assert.equal(revision?.gateReport?.name, "project-harness-eval+heldout-benchmark");
 		assert.equal(revision?.gateReport?.passed, true);
 	} finally {
 		rmSync(cwd, { recursive: true, force: true });
@@ -1025,6 +1059,7 @@ test("evolution_refine preserves project stream eval evidence on gate reports", 
 			agentDir: harness.agentDir,
 			sessionManager: { getSessionId: () => "session-project-stream-gate", getEntries: () => [] },
 			cwd,
+			reload: async () => {},
 		} as unknown as ExtensionCommandContext;
 
 		const promoted = await refineTool.execute(
@@ -1043,6 +1078,11 @@ test("evolution_refine preserves project stream eval evidence on gate reports", 
 		);
 		assert.match(promoted.content[0]?.type === "text" ? promoted.content[0].text : "", /promoted/);
 		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-project-stream-gate" });
+		const candidate = inspectEvolution(root).candidates[0];
+		writePassingEvolutionBenchmark(cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		const refineCommand = harness.commands.get("refine");
+		assert.ok(refineCommand);
+		await refineCommand(`--session promote ${candidate?.id ?? ""}`, ctx);
 		const revisionId = inspectEvolution(root).current?.revisionId;
 		const revision = inspectEvolution(root).revisions.find((item) => item.id === revisionId);
 		assert.equal(revision?.gateReport?.streams?.length, 2);
@@ -1109,6 +1149,7 @@ test("evolution_refine proposes trace-derived eval fixtures that gate future pro
 			agentDir: harness.agentDir,
 			sessionManager: { getSessionId: () => "session-trace-fixture", getEntries: () => [] },
 			cwd,
+			reload: async () => {},
 		} as unknown as ExtensionCommandContext;
 
 		const proposed = await refineTool.execute(
@@ -1156,9 +1197,15 @@ test("evolution_refine proposes trace-derived eval fixtures that gate future pro
 			undefined,
 			ctx,
 		);
-		assert.match(beforeApproval.content[0]?.type === "text" ? beforeApproval.content[0].text : "", /promoted/);
-		const promotedRevisionId = (beforeApproval.details as { revisionId?: string }).revisionId ?? "";
-		const promotedRevision = inspectEvolution(getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-trace-fixture" }))
+		assert.match(beforeApproval.content[0]?.type === "text" ? beforeApproval.content[0].text : "", /not promoted|gate failed/i);
+		const sessionRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-trace-fixture" });
+		const memoryCandidate = inspectEvolution(sessionRoot).candidates[0];
+		writePassingEvolutionBenchmark(cwd, memoryCandidate?.id ?? "", memoryCandidate?.contentHash ?? "");
+		const refineCommand = harness.commands.get("refine");
+		assert.ok(refineCommand);
+		await refineCommand(`--session promote ${memoryCandidate?.id ?? ""}`, ctx);
+		const promotedRevisionId = inspectEvolution(sessionRoot).current?.revisionId ?? "";
+		const promotedRevision = inspectEvolution(sessionRoot)
 			.revisions.find((revision) => revision.id === promotedRevisionId);
 		assert.equal(promotedRevision?.predictions?.[0]?.id, "prediction-trace-pass");
 
@@ -1359,7 +1406,7 @@ test("evolution_refine attaches distilled trace evidence to swept eval fixture c
 	}
 });
 
-test("evolution_refine can auto-promote session prompt notes and memories for the next turn", async () => {
+test("evolution_refine activates session artifacts only after evidence-backed approval", async () => {
 	const harness = createHarness();
 	try {
 		await evolutionExtension(harness.api);
@@ -1369,7 +1416,8 @@ test("evolution_refine can auto-promote session prompt notes and memories for th
 		const ctx = {
 			agentDir: harness.agentDir,
 			sessionManager: { getSessionId: () => "session-self-tune", getEntries: () => [] },
-			cwd: process.cwd(),
+			cwd: harness.agentDir,
+			reload: async () => {},
 		} as unknown as ExtensionCommandContext;
 
 		const created = await refineTool.execute(
@@ -1386,7 +1434,13 @@ test("evolution_refine can auto-promote session prompt notes and memories for th
 			undefined,
 			ctx,
 		);
-		assert.match(created.content[0]?.type === "text" ? created.content[0].text : "", /promoted/);
+		assert.match(created.content[0]?.type === "text" ? created.content[0].text : "", /not promoted|gate failed/i);
+		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-self-tune" });
+		let candidate = inspectEvolution(root).candidates[0];
+		writePassingEvolutionBenchmark(ctx.cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		const refineCommand = harness.commands.get("refine");
+		assert.ok(refineCommand);
+		await refineCommand(`--session promote ${candidate?.id ?? ""}`, ctx);
 
 		const beforeAgentStart = harness.handlers.get("before_agent_start")?.[0] as BeforeAgentStartHandler;
 		const injected = await beforeAgentStart(
@@ -1409,7 +1463,10 @@ test("evolution_refine can auto-promote session prompt notes and memories for th
 			undefined,
 			ctx,
 		);
-		assert.match(memory.content[0]?.type === "text" ? memory.content[0].text : "", /promoted/);
+		assert.match(memory.content[0]?.type === "text" ? memory.content[0].text : "", /not promoted|gate failed/i);
+		candidate = inspectEvolution(root).candidates.find((item) => item.summary.includes("User prefers ambitious autonomy"));
+		writePassingEvolutionBenchmark(ctx.cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		await refineCommand(`--session promote ${candidate?.id ?? ""}`, ctx);
 		const reinjected = await beforeAgentStart(
 			{ type: "before_agent_start", prompt: "continue", systemPrompt: "base" },
 			ctx,
@@ -1420,7 +1477,7 @@ test("evolution_refine can auto-promote session prompt notes and memories for th
 	}
 });
 
-test("evolution_refine can auto-promote workspace artifacts across sessions and propose global artifacts", async () => {
+test("evolution_refine requires evidence before workspace and global behavioral activation", async () => {
 	const harness = createHarness();
 	try {
 		await evolutionExtension(harness.api);
@@ -1430,12 +1487,14 @@ test("evolution_refine can auto-promote workspace artifacts across sessions and 
 		const firstSession = {
 			agentDir: harness.agentDir,
 			sessionManager: { getSessionId: () => "workspace-session-a", getEntries: () => [] },
-			cwd: process.cwd(),
+			cwd: harness.agentDir,
+			reload: async () => {},
 		} as unknown as ExtensionCommandContext;
 		const secondSession = {
 			agentDir: harness.agentDir,
 			sessionManager: { getSessionId: () => "workspace-session-b", getEntries: () => [] },
-			cwd: process.cwd(),
+			cwd: harness.agentDir,
+			reload: async () => {},
 		} as unknown as ExtensionCommandContext;
 
 		const created = await refineTool.execute(
@@ -1453,7 +1512,13 @@ test("evolution_refine can auto-promote workspace artifacts across sessions and 
 			firstSession,
 		);
 		assert.match(created.content[0]?.type === "text" ? created.content[0].text : "", /workspace/);
-		assert.match(created.content[0]?.type === "text" ? created.content[0].text : "", /promoted/);
+		assert.match(created.content[0]?.type === "text" ? created.content[0].text : "", /not promoted|gate failed/i);
+		const workspaceRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "workspace", cwd: harness.agentDir });
+		let candidate = inspectEvolution(workspaceRoot).candidates[0];
+		writePassingEvolutionBenchmark(harness.agentDir, candidate?.id ?? "", candidate?.contentHash ?? "");
+		const refineCommand = harness.commands.get("refine");
+		assert.ok(refineCommand);
+		await refineCommand(`--workspace promote ${candidate?.id ?? ""}`, firstSession);
 
 		const beforeAgentStart = harness.handlers.get("before_agent_start")?.[0] as BeforeAgentStartHandler;
 		const injected = await beforeAgentStart(
@@ -1496,9 +1561,12 @@ test("evolution_refine can auto-promote workspace artifacts across sessions and 
 			firstSession,
 		);
 		assert.match(globalAutoPromote.content[0]?.type === "text" ? globalAutoPromote.content[0].text : "", /global/);
-		assert.match(globalAutoPromote.content[0]?.type === "text" ? globalAutoPromote.content[0].text : "", /promoted/);
+		assert.match(globalAutoPromote.content[0]?.type === "text" ? globalAutoPromote.content[0].text : "", /not promoted|gate failed/i);
 
 		const globalRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "global" });
+		candidate = inspectEvolution(globalRoot).candidates.find((item) => item.summary.includes("Prefer reversible global lessons"));
+		writePassingEvolutionBenchmark(harness.agentDir, candidate?.id ?? "", candidate?.contentHash ?? "");
+		await refineCommand(`--global promote ${candidate?.id ?? ""}`, firstSession);
 		assert.match(inspectEvolution(globalRoot).current?.revisionId ?? "", /revision-/);
 
 		const globalToolSpec = await refineTool.execute(
@@ -1519,7 +1587,10 @@ test("evolution_refine can auto-promote workspace artifacts across sessions and 
 		);
 		const globalToolText = globalToolSpec.content[0]?.type === "text" ? globalToolSpec.content[0].text : "";
 		assert.match(globalToolText, /created/);
-		assert.match(globalToolText, /promoted/);
+		assert.match(globalToolText, /not promoted|gate failed/i);
+		candidate = inspectEvolution(globalRoot).candidates.find((item) => item.summary.includes("Global tool candidate"));
+		writePassingEvolutionBenchmark(harness.agentDir, candidate?.id ?? "", candidate?.contentHash ?? "");
+		await refineCommand(`--global promote ${candidate?.id ?? ""}`, firstSession);
 
 		const evolvedTool = harness.tools.get("evolved_tool");
 		assert.ok(evolvedTool, "Expected evolved_tool to be registered.");
@@ -1530,7 +1601,7 @@ test("evolution_refine can auto-promote workspace artifacts across sessions and 
 	}
 });
 
-test("evolution auto-observer activates session reusable lessons with cooldown", async () => {
+test("evolution auto-observer leaves lessons inactive until evidence-backed approval", async () => {
 	const harness = createHarness();
 	try {
 		await evolutionExtension(harness.api);
@@ -1548,7 +1619,8 @@ test("evolution auto-observer activates session reusable lessons with cooldown",
 		const ctx = {
 			agentDir: harness.agentDir,
 			sessionManager: { getSessionId: () => "session-auto", getEntries: () => [] },
-			cwd: process.cwd(),
+			cwd: harness.agentDir,
+			reload: async () => {},
 		} as unknown as ExtensionCommandContext;
 		await turnEnd(
 			{
@@ -1567,6 +1639,12 @@ test("evolution auto-observer activates session reusable lessons with cooldown",
 		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-auto" });
 		let candidates = inspectEvolution(root).candidates;
 		assert.equal(candidates.length, 1);
+		assert.equal(candidates[0]?.status, "proposed");
+		writePassingEvolutionBenchmark(ctx.cwd, candidates[0]?.id ?? "", candidates[0]?.contentHash ?? "");
+		const refineCommand = harness.commands.get("refine");
+		assert.ok(refineCommand);
+		await refineCommand(`--session promote ${candidates[0]?.id ?? ""}`, ctx);
+		candidates = inspectEvolution(root).candidates;
 		assert.equal(candidates[0]?.status, "promoted");
 		assert.match(inspectEvolution(root).current?.revisionId ?? "", /revision-/);
 		assert.equal(candidates[0]?.artifacts[0]?.kind, "memory");
@@ -1592,7 +1670,7 @@ test("evolution auto-observer activates session reusable lessons with cooldown",
 	}
 });
 
-test("evolution auto-observer consumes structured turn-end proposals with default activation gates", async () => {
+test("evolution auto-observer requires held-out evidence for structured behavioral proposals", async () => {
 	const harness = createHarness();
 	try {
 		await evolutionExtension(harness.api);
@@ -1610,7 +1688,8 @@ test("evolution auto-observer consumes structured turn-end proposals with defaul
 		const ctx = {
 			agentDir: harness.agentDir,
 			sessionManager: { getSessionId: () => "session-structured", getEntries: () => [] },
-			cwd: process.cwd(),
+			cwd: harness.agentDir,
+			reload: async () => {},
 		} as unknown as ExtensionCommandContext;
 
 		await turnEnd(
@@ -1637,7 +1716,13 @@ test("evolution auto-observer consumes structured turn-end proposals with defaul
 			},
 			ctx,
 		);
-		const workspaceRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "workspace", cwd: process.cwd() });
+		const workspaceRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "workspace", cwd: harness.agentDir });
+		let candidate = inspectEvolution(workspaceRoot).candidates[0];
+		assert.equal(candidate?.status, "proposed");
+		writePassingEvolutionBenchmark(ctx.cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		const refineCommand = harness.commands.get("refine");
+		assert.ok(refineCommand);
+		await refineCommand(`--workspace promote ${candidate?.id ?? ""}`, ctx);
 		assert.match(inspectEvolution(workspaceRoot).current?.revisionId ?? "", /revision-/);
 		const beforeAgentStart = harness.handlers.get("before_agent_start")?.[0] as BeforeAgentStartHandler;
 		const injected = await beforeAgentStart(
@@ -1672,8 +1757,13 @@ test("evolution auto-observer consumes structured turn-end proposals with defaul
 			ctx,
 		);
 		const globalRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "global" });
-		const globalInspection = inspectEvolution(globalRoot);
+		let globalInspection = inspectEvolution(globalRoot);
 		assert.equal(globalInspection.candidates.length, 1);
+		candidate = globalInspection.candidates[0];
+		assert.equal(candidate?.status, "proposed");
+		writePassingEvolutionBenchmark(ctx.cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		await refineCommand(`--global promote ${candidate?.id ?? ""}`, ctx);
+		globalInspection = inspectEvolution(globalRoot);
 		assert.match(globalInspection.current?.revisionId ?? "", /revision-/);
 		assert.equal(globalInspection.candidates[0]?.status, "promoted");
 	} finally {

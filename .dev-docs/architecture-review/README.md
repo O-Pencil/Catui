@@ -51,6 +51,7 @@ This is a one-shot exercise. After the maintainer has acted on the Arch Agent's 
 
 **📦 已结案专项评审（WHY 归档 — 改对应代码前回查决策依据）**
 - `harness-foundation-review/` — executable harness evidence, workspace write confinement, trace safety, tool composition, and required critical tests (HF01, closed 2026-08-25)
+- `evidence-gated-evolution-review/` — behavioral evolution 的 paired held-out effectiveness authority（HAP-52 first slice，closed）
 - `trusted-skill-install-review/` — default security extension hardening for external Git clones into trusted skill roots (SA01 implemented; closure gate blocked by unrelated workspace changes)
 - `runtime-session-review/` — P4 AgentSession 拆（AS01–12，closed）
 - `interactive-ui-review/` — P5 InteractiveMode 拆（UI01–08，structurally-complete）

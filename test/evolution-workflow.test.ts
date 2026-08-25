@@ -93,15 +93,17 @@ test("global candidates always require explicit approval", () => {
 	assert.equal(advanceCandidate(approved, { type: "promote" }).state, "promoted");
 });
 
-test("manual approval can override missing effectiveness evidence but not safety", () => {
+test("manual approval cannot override missing effectiveness evidence or safety", () => {
 	let current = advanceCandidate(record(), { type: "static_checked", evidence: evidence("static") });
 	current = advanceCandidate(current, {
 		type: "replay_checked",
 		evidence: evidence("replay", true, { lifecyclePreserved: true, toolPairsPreserved: true, policyPreserved: true }),
 	});
 	current = advanceCandidate(current, { type: "request_approval", reason: "No matching eval scenario" });
-	current = advanceCandidate(current, { type: "approve", actor: "human", overrideMissingEffectiveness: true });
-	assert.equal(advanceCandidate(current, { type: "promote" }).state, "promoted");
+	assert.throws(
+		() => advanceCandidate(current, { type: "approve", actor: "human", overrideMissingEffectiveness: true }),
+		/effectiveness.*cannot be overridden|missing effectiveness/i,
+	);
 	assert.throws(() => advanceCandidate(advanceCandidate(record(), { type: "static_checked", evidence: evidence("static", false) }), { type: "approve", actor: "human" }), /cannot transition/i);
 });
 
