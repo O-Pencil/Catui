@@ -22,6 +22,8 @@ Create `research/runs/<run-id>/manifest.json` before or at run start. Record:
 
 Never overwrite raw outputs to make a rerun look like the original. A retry receives a new run ID and links to its parent.
 
+Repeating an unchanged experiment because the result was unfavorable is outcome chasing, not iteration. A scientifically motivated follow-up must cite an iteration decision, state what uncertainty or rival it addresses, and use a new run ID; material design changes require a new protocol revision or study.
+
 ## Ingestion
 
 Treat external result files as untrusted data. Validate schema, units, counts, missingness, and expected identifiers before analysis. Mark partial, failed, timed-out, and contaminated runs explicitly.

@@ -8,6 +8,14 @@ unresolved
 
 draft
 
+## Position Decision Reference
+
+unresolved
+
+## Study Role
+
+unresolved
+
 ## Research Question
 
 unresolved

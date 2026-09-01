@@ -12,6 +12,7 @@ Use this playbook after valid run artifacts exist.
 6. Report effect sizes or target estimates with uncertainty, not p-values or point accuracy alone. Address multiplicity where applicable.
 7. Run robustness, sensitivity, subgroup, or ablation analyses only when justified and label their status honestly.
 8. Bind result artifacts to claim IDs through the evidence register; include null, negative, failed, and contradictory results.
+9. Classify each affected claim as supported, mixed, unsupported, inconclusive, or withdrawn within its declared scope. Diagnose method failure separately from scientific refutation.
 
 Do not interpret non-significance as equivalence, association as causation, predictive accuracy as mechanism, or post-hoc fit as confirmation. Do not calculate “observed power” from the observed effect; use precision or sensitivity analysis instead.
 
@@ -19,4 +20,4 @@ Do not interpret non-significance as equivalence, association as causation, pred
 
 Preserve analysis code, environment, input run IDs, transformations, exclusions, seeds, outputs, and logs. Prefer a rerunnable script or notebook with a clean execution record over hand-calculated prose.
 
-Finish with supported, mixed, unsupported, and still-unresolved claims separately.
+Finish with supported, mixed, unsupported, inconclusive, withdrawn, and method-failed outcomes separately. Route any follow-up hypothesis, redesign, replication, or stop decision through `iterate`; do not silently launch another run.

@@ -11,6 +11,7 @@ Use stable claim IDs and one of these states:
 - `supported`: current verified evidence is directionally consistent, with limitations;
 - `mixed`: verified evidence conflicts or varies by condition;
 - `unsupported`: the planned evidence did not support it;
+- `inconclusive`: available evidence cannot discriminate the claim from rivals;
 - `withdrawn`: no longer advanced, with reason retained.
 
 Never use `proven` or `true` as a workflow state.
@@ -26,6 +27,8 @@ For every candidate central claim, record:
 - owner and verification date.
 
 Update `research/claims/claims.csv` and the relevant section of `RESEARCH.md`. Bind evidence only through `claim-evidence.csv`; do not hide evidence IDs inside prose.
+
+Maintain candidate hypotheses and rivals as separate rows in `research/claims/hypothesis-register.csv`. Do not compress all rivals into one prose cell when they predict different results. Record whether each candidate is human-originated, AI-assisted, literature-inspired, or result-derived; a result-derived hypothesis is exploratory until tested on new target data under a new frozen protocol.
 
 ## Audit questions
 

@@ -9,14 +9,24 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const STAGES = ["frame", "search", "claim", "design", "experiment", "analyze", "write"];
+const STAGES = ["frame", "search", "claim", "position", "design", "experiment", "analyze", "iterate", "write"];
+const STAGE_RANK = { frame: 0, search: 1, claim: 2, position: 3, design: 4, experiment: 5, analyze: 6, write: 7 };
 
 const CONTRACTS = {
 	RESEARCH: [
 		"Purpose",
 		"Accountable Owner",
 		"Intended Use",
+		"Requested Endpoint and Stop Boundary",
+		"Language and Terminology",
+		"Research Origin",
+		"Topic or Observation",
+		"Observation Provenance",
+		"Candidate Questions",
+		"Evidence Boundary",
 		"Primary Question",
+		"Candidate Contribution",
+		"Selected Research Modes",
 		"Scope",
 		"Out of Scope",
 		"Falsification Conditions",
@@ -27,8 +37,10 @@ const CONTRACTS = {
 	METHOD: [
 		"Evidence Policy",
 		"Literature Search Policy",
+		"Research Position Policy",
 		"Claim Lifecycle",
 		"Protocol Revision Policy",
+		"Iteration Policy",
 		"Analysis Classes",
 		"Reproducibility Policy",
 		"Confidentiality and External Services",
@@ -37,6 +49,8 @@ const CONTRACTS = {
 	STUDY: [
 		"Study ID and Revision",
 		"Status",
+		"Position Decision Reference",
+		"Study Role",
 		"Research Question",
 		"Claim IDs",
 		"Hypotheses and Predictions",
@@ -52,9 +66,13 @@ const CONTRACTS = {
 		"Amendments",
 	],
 	search: ["search_id", "source", "query", "filters", "accessed_at", "result_count", "retained_ids", "status", "notes"],
+	sources: ["source_id", "search_ids", "citation", "identifier", "source_type", "publication_status", "year", "url_or_path", "access_status", "relevance", "supports", "challenges", "quality_notes", "verified_by", "verified_at"],
 	claims: ["claim_id", "statement", "claim_type", "status", "scope", "rival_explanations", "prediction", "evidence_needed", "evidence_ids", "source_ids", "analysis_class", "owner", "verified_at"],
+	hypotheses: ["hypothesis_id", "claim_id", "statement", "origin", "class", "basis", "rival_to", "discriminating_prediction", "disconfirming_result", "indeterminate_result", "source_ids", "status"],
 	analysis: ["analysis_id", "study_id", "run_ids", "analysis_class", "plan_reference", "status", "artifact_path", "deviations", "created_at", "owner"],
 	evidence: ["evidence_id", "claim_id", "evidence_type", "artifact_path", "source_ids", "direction", "scope", "uncertainty", "verification_status", "verified_by", "verified_at", "limitations"],
+	iterations: ["iteration_id", "trigger", "prior_claim_status", "diagnosis", "decision", "new_question_or_hypothesis", "study_revision_or_id", "analysis_class", "next_evidence", "status", "decided_at", "owner"],
+	POSITION: ["Search Scope", "State of the Art", "Nearest Prior Work", "Competition and Saturation", "Candidate Contribution", "Publication Dimensions", "Feasibility", "Null and Negative Result Value", "Risks and Fatal Flaws", "Decision and Rationale", "Revisit Triggers"],
 };
 
 function readText(path) {
@@ -184,31 +202,77 @@ function checkRunManifest(path) {
 	}
 }
 
+function splitIds(value) {
+	return String(value ?? "").split(/[;|]/).map((item) => item.trim()).filter((item) => item && !["unresolved", "not_applicable", "not_started"].includes(item));
+}
+
+function checkPosition(path, requireAdvance) {
+	const issues = checkMarkdown(path, CONTRACTS.POSITION, CONTRACTS.POSITION);
+	if (!existsSync(path)) return { issues, decision: "" };
+	const sections = markdownSections(readText(path));
+	const decisionText = sections.get("Decision and Rationale")?.trim().toLowerCase() ?? "";
+	const decision = ["advance", "pilot-only", "reframe", "search-more", "stop"].find((candidate) => decisionText.startsWith(candidate)) ?? "";
+	if (!decision || decisionText.includes("unresolved")) issues.push(issue("invalid-position-decision", path, "Decision must begin with advance, pilot-only, reframe, search-more, or stop and include a resolved rationale."));
+	if (requireAdvance && !["advance", "pilot-only"].includes(decision)) issues.push(issue("position-blocks-design", path, `Design requires an advance or pilot-only decision; found '${decision || "invalid"}'.`));
+	for (const heading of ["State of the Art", "Nearest Prior Work", "Competition and Saturation", "Candidate Contribution"]) {
+		if (!/\bSRC-[A-Za-z0-9._-]+\b/i.test(sections.get(heading) ?? "")) issues.push(issue("missing-source-citation", path, `${heading} must cite at least one source-register ID.`));
+	}
+	return { issues, decision };
+}
+
 export function auditWorkspace({ root = process.cwd(), stage = "write" } = {}) {
 	if (!STAGES.includes(stage)) throw new Error(`Unknown stage '${stage}'. Expected one of: ${STAGES.join(", ")}.`);
 	const projectRoot = resolve(root);
 	const researchRoot = join(projectRoot, "research");
 	const issues = [];
-	const stageIndex = STAGES.indexOf(stage);
-	const reaches = (name) => stageIndex >= STAGES.indexOf(name);
+	const rankedStage = stage === "iterate" ? "analyze" : stage;
+	const stageIndex = STAGE_RANK[rankedStage];
+	const reaches = (name) => stageIndex >= STAGE_RANK[name];
 
-	issues.push(...checkMarkdown(join(researchRoot, "RESEARCH.md"), CONTRACTS.RESEARCH, ["Purpose", "Accountable Owner", "Intended Use", "Primary Question", "Scope", "Falsification Conditions", "Governance and Safety"]));
-	issues.push(...checkMarkdown(join(researchRoot, "METHOD.md"), CONTRACTS.METHOD, ["Confidentiality and External Services", "Human Approval Gates"]));
+	const researchPath = join(researchRoot, "RESEARCH.md");
+	issues.push(...checkMarkdown(researchPath, CONTRACTS.RESEARCH, ["Purpose", "Intended Use", "Requested Endpoint and Stop Boundary", "Language and Terminology", "Research Origin", "Topic or Observation", "Observation Provenance", "Candidate Questions", "Scope", "Falsification Conditions", "Governance and Safety"]));
+	if (reaches("design")) issues.push(...checkMarkdown(researchPath, [], ["Accountable Owner", "Evidence Boundary", "Primary Question", "Candidate Contribution", "Selected Research Modes"]));
+	issues.push(...checkMarkdown(join(researchRoot, "METHOD.md"), CONTRACTS.METHOD, ["Confidentiality and External Services", "Human Approval Gates", "Research Position Policy", "Iteration Policy"]));
 
 	const search = checkCsv(join(researchRoot, "literature", "search-log.csv"), CONTRACTS.search, reaches("search"));
 	issues.push(...search.issues);
 	issues.push(...checkUniqueIds(search.records, "search_id", join(researchRoot, "literature", "search-log.csv")));
+	const sourcesPath = join(researchRoot, "literature", "source-register.csv");
+	const sources = checkCsv(sourcesPath, CONTRACTS.sources, reaches("position"));
+	issues.push(...sources.issues);
+	issues.push(...checkUniqueIds(sources.records, "source_id", sourcesPath));
+	const sourceIds = new Set(sources.records.map((record) => record.source_id));
 	const claims = checkCsv(join(researchRoot, "claims", "claims.csv"), CONTRACTS.claims, reaches("claim"));
 	issues.push(...claims.issues);
 	issues.push(...checkUniqueIds(claims.records, "claim_id", join(researchRoot, "claims", "claims.csv")));
+	const hypothesesPath = join(researchRoot, "claims", "hypothesis-register.csv");
+	const hypotheses = checkCsv(hypothesesPath, CONTRACTS.hypotheses, reaches("claim"));
+	issues.push(...hypotheses.issues);
+	issues.push(...checkUniqueIds(hypotheses.records, "hypothesis_id", hypothesesPath));
+	for (const [path, records] of [[join(researchRoot, "claims", "claims.csv"), claims.records], [hypothesesPath, hypotheses.records]]) {
+		for (const record of records) {
+			for (const sourceId of splitIds(record.source_ids)) if (!sourceIds.has(sourceId)) issues.push(issue("unknown-source", path, `Record references unknown source ${sourceId}.`));
+		}
+	}
+
+	let positionDecision = "";
+	if (reaches("position")) {
+		const position = checkPosition(join(researchRoot, "POSITION.md"), reaches("design"));
+		issues.push(...position.issues);
+		positionDecision = position.decision;
+	}
 
 	if (reaches("design")) {
 		const studies = listFiles(join(researchRoot, "studies"), "STUDY.md");
 		if (studies.length === 0) issues.push(issue("missing-study", join(researchRoot, "studies"), "At least one study contract is required."));
 		for (const path of studies) {
-			issues.push(...checkMarkdown(path, CONTRACTS.STUDY, ["Study ID and Revision", "Status", "Research Question", "Claim IDs", "Units and Population", "Conditions and Controls", "Planned Analysis", "Safety and Governance"]));
-			const status = markdownSections(readText(path)).get("Status")?.toLowerCase() ?? "";
+			issues.push(...checkMarkdown(path, CONTRACTS.STUDY, ["Study ID and Revision", "Status", "Position Decision Reference", "Study Role", "Research Question", "Claim IDs", "Units and Population", "Conditions and Controls", "Planned Analysis", "Safety and Governance"]));
+			const sections = markdownSections(readText(path));
+			const status = sections.get("Status")?.toLowerCase() ?? "";
 			if (!status.includes("frozen")) issues.push(issue("study-not-frozen", path, "Study status must identify a frozen protocol revision."));
+			const role = sections.get("Study Role")?.trim().toLowerCase() ?? "";
+			if (!["pilot", "confirmatory", "replication", "exploratory", "measurement-validation", "feasibility"].includes(role)) issues.push(issue("invalid-study-role", path, `Unknown study role '${role}'.`));
+			if (positionDecision === "pilot-only" && !["pilot", "measurement-validation", "feasibility"].includes(role)) issues.push(issue("pilot-only-role", path, "A pilot-only position cannot authorize a confirmatory, replication, or exploratory study role."));
 		}
 	}
 
@@ -242,7 +306,15 @@ export function auditWorkspace({ root = process.cwd(), stage = "write" } = {}) {
 		}
 	}
 
-	return { ok: issues.length === 0, stage, root: projectRoot, checks: { searches: search.records.length, claims: claims.records.length, analyses: analyses.records.length, evidence: evidence.records.length }, issues };
+	const iterationsPath = join(researchRoot, "iterations", "iteration-log.csv");
+	const iterations = checkCsv(iterationsPath, CONTRACTS.iterations, stage === "iterate");
+	issues.push(...iterations.issues);
+	issues.push(...checkUniqueIds(iterations.records, "iteration_id", iterationsPath));
+	for (const record of iterations.records) {
+		if (!["confirmatory", "exploratory", "post-hoc", "not_applicable"].includes(record.analysis_class)) issues.push(issue("invalid-iteration-analysis-class", iterationsPath, `Iteration ${record.iteration_id || "<missing-id>"} has invalid analysis class '${record.analysis_class}'.`));
+	}
+
+	return { ok: issues.length === 0, stage, root: projectRoot, checks: { searches: search.records.length, sources: sources.records.length, claims: claims.records.length, hypotheses: hypotheses.records.length, analyses: analyses.records.length, evidence: evidence.records.length, iterations: iterations.records.length }, issues };
 }
 
 function parseArgs(args) {
@@ -260,7 +332,7 @@ function parseArgs(args) {
 export function runCli(args = process.argv.slice(2)) {
 	const options = parseArgs(args);
 	if (options.help) {
-		console.log("Usage: node audit.mjs [--root <project>] [--stage <frame|search|claim|design|experiment|analyze|write>]");
+		console.log("Usage: node audit.mjs [--root <project>] [--stage <frame|search|claim|position|design|experiment|analyze|iterate|write>]");
 		return 0;
 	}
 	const result = auditWorkspace(options);

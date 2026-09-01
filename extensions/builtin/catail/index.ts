@@ -1,8 +1,8 @@
 /**
- * [WHO]: catailExtension - exposes Catui's evidence-traceable scientific workflow skill
+ * [WHO]: catailExtension - exposes Catui's explicit-use professional scientific agent Skill
  * [FROM]: Depends on node:fs, node:path, node:url, and core/extensions-host/types
  * [TO]: Auto-loaded by builtin-extensions.ts; ResourceLoader discovers SKILL.md through resources_discover
- * [HERE]: extensions/builtin/catail/index.ts - passive CATAIL skill bundle wrapper
+ * [HERE]: extensions/builtin/catail/index.ts - passive CATAIL scientific-agent Skill wrapper
  */
 
 import { existsSync } from "node:fs";
@@ -14,11 +14,11 @@ const CATAIL_DIR = dirname(fileURLToPath(import.meta.url));
 const SKILL_FILE = join(CATAIL_DIR, "SKILL.md");
 
 export const CATAIL_BOOTSTRAP_PROMPT = [
-	"## CATAIL Research Workflow",
+	"## CATAIL — Professional Scientific Agent",
 	"",
-	"Catui bundles the `catail` skill for evidence-traceable scientific work. Load it through the Skill tool when the user is framing a research question, mapping literature or claims, designing or running a study, analyzing results, producing scientific figures or writing, or reviewing research quality.",
+	"Catui bundles the `catail` Skill for professional scientific work. Load it only when the user explicitly invokes `/skill:catail` or explicitly asks to use CATAIL. Do not infer activation from words such as research, paper, discovery, test, experiment, evidence, analysis, or their translations; ordinary coding remains Catui's default behavior.",
 	"",
-	"CATAIL treats project artifacts as the durable source of truth. Model output, search snippets, hypotheses, and fluent drafts are not evidence, and scientific or ethics decisions remain with accountable humans.",
+	"When explicitly activated, follow the Skill's task, method, lifecycle, stop-boundary, and language routing. Preserve the distinction between observation, hypothesis, evidence, claim, and conclusion; do not strengthen claims during translation or writing.",
 ].join("\n");
 
 export default async function catailExtension(api: ExtensionAPI): Promise<void> {

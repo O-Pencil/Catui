@@ -4,7 +4,7 @@ Use this playbook only when the relevant claim-evidence bindings are available.
 
 ## Intake
 
-Resolve document type, audience, target venue and current instructions, study design, reporting guidance, scope, verified source manifest, methods, results, figures/tables, authorship and declarations, confidentiality, and data/code availability.
+Resolve document type, audience, target venue and current instructions, artifact language, dialogue/feedback language, terminology glossary, study design, reporting guidance, scope, verified source manifest, methods, results, figures/tables, authorship and declarations, confidentiality, and data/code availability.
 
 ## Drafting rules
 
@@ -15,11 +15,13 @@ Resolve document type, audience, target venue and current instructions, study de
 - Include negative, null, adverse, failed, unexpected, and inconclusive results when part of the study record.
 - State concrete limitations, rival explanations, and bounds on generalization.
 - Mark missing or unverified fields explicitly. Never fill plausible citations, numbers, approvals, software versions, author roles, funding, conflicts, or availability statements.
+- Preserve epistemic force across languages. Translation and stylistic editing must not convert provisional support into proof, association into causation, non-significance into no effect, or a possible mechanism into the mechanism.
+- Keep official titles, identifiers, instruments, and direct quotations in their source language unless a clearly labeled translation is requested. Apply the project glossary consistently.
 
-Separate drafting, evidence verification, and final human approval. AI-generated fluency is not evidence and does not confer authorship.
+Separate drafting, evidence verification, language editing, and final human approval. AI-generated fluency is not evidence and does not confer authorship. Writing an English artifact does not change the user's Chinese dialogue or feedback language unless requested.
 
 ## Consistency pass
 
-Reconcile claim IDs, citations, sample sizes, denominators, units, labels, timepoints, table/figure references, method/result choices, and declarations. Run `audit.mjs --stage write`, then inspect every remaining gap manually.
+Reconcile claim IDs, citations, sample sizes, denominators, units, labels, timepoints, terminology translations, table/figure references, method/result choices, and declarations. Run `audit.mjs --stage write`, then inspect every remaining gap manually.
 
 Finish by listing passages that remain unverified or require accountable author judgment.
