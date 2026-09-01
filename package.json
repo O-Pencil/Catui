@@ -203,7 +203,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/O-Catui/Catui.git"
+    "url": "git+ssh://git@github.com/O-Pencil/Catui.git"
   },
-  "homepage": "https://github.com/O-Catui/Catui"
+  "homepage": "https://github.com/O-Pencil/Catui"
 }

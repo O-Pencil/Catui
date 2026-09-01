@@ -1,0 +1,17 @@
+{
+  "runId": "unresolved",
+  "studyId": "unresolved",
+  "protocolRevision": "unresolved",
+  "status": "not_started",
+  "operator": "unresolved",
+  "startedAt": null,
+  "completedAt": null,
+  "codeRevision": "unresolved",
+  "dataIds": [],
+  "environment": {},
+  "configuration": {},
+  "command": "unresolved",
+  "outputs": [],
+  "deviations": [],
+  "parentRunId": null
+}

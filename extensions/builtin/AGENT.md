@@ -24,6 +24,13 @@ browser/install.md: Browser Harness setup and troubleshooting instructions, expo
 browser/src/browser_harness/: Vendored Browser Harness Python package, CDP daemon, IPC bridge, admin commands, and helper functions
 browser/interaction-skills/: Reusable Browser Harness mechanics guides for browser interactions
 browser/agent-workspace/: Seed workspace copied to .catui/browser-workspace for editable helpers and domain skills
+catail/index.ts: Passive CATAIL extension entry, discovers the evidence-traceable research Skill and injects a bounded activation reminder
+catail/SKILL.md: CATAIL research workflow router, safety boundaries, durable workspace, stage gates, and completion contract
+catail/references/: Progressively loaded frame/search/claim/design/experiment/analyze/visualize/write/review/audit playbooks and artifact contracts
+catail/templates/: Research charter, method policy, search/claim/analysis/evidence registers, study contract, and run manifest shape references
+catail/scripts/audit.mjs: Dependency-free read-only structural audit for CATAIL research artifacts
+catail/README.md: User-facing CATAIL overview and example invocations
+catail/THIRD_PARTY_NOTICE.md: CATPAW and K-Dense Scientific Agent Skills attribution and adaptation boundary
 discipline/index.ts: Engineering discipline extension entry, registers skill tool, default workflow skills, and lightweight before_agent_start bootstrap prompt
 discipline/skills/: Built-in engineering workflow skills for brainstorming, debugging, TDD, verification, planning, code review, worktrees, and branch finishing
 idle-think/index.ts: IdleThink extension entry, session lifecycle registration, activity tracking, and persistent insight prompt injection

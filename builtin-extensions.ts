@@ -43,6 +43,7 @@ const BUNDLED_INSIGHTS_EXTENSION = join(__dirname, "extensions", "builtin", "ins
 const BUNDLED_NOTEBOOK_EXTENSION = join(__dirname, "extensions", "builtin", "notebook", "index.js");
 const BUNDLED_SKILL_TOOL_EXTENSION = join(__dirname, "extensions", "builtin", "skill-tool", "index.js");
 const BUNDLED_CATPAW_EXTENSION = join(__dirname, "extensions", "builtin", "catpaw", "index.js");
+const BUNDLED_CATAIL_EXTENSION = join(__dirname, "extensions", "builtin", "catail", "index.js");
 const BUNDLED_EVOLUTION_EXTENSION = join(__dirname, "extensions", "optional", "evolution", "index.js");
 
 export type BuiltinExtensionRiskLevel = "passive" | "command" | "tool" | "background" | "write-capable";
@@ -92,6 +93,7 @@ export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "notebook", category: "default", defaultEnabled: true, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false },
 	{ id: "skill-tool", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "catpaw", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, resourceDiscovery: true },
+	{ id: "catail", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, resourceDiscovery: true, testContracts: ["resource-discovery"], testFiles: ["test/catail-extension.test.ts"] },
 	{ id: "simplify", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: true, testContracts: ["external-process", "write-guard"], testFiles: ["test/simplify-extension.test.ts"] },
 	{ id: "export-html", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false, testContracts: ["write-guard"], testFiles: ["test/extension-smoke.test.ts", "test/export-html-branch-navigation.test.ts"] },
 	{ id: "evolution", category: "optional", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/evolution-store.test.ts", "test/evolution-extension.test.ts"] },
@@ -414,6 +416,14 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const catpawTs = join(__dirname, "extensions", "builtin", "catpaw", "index.ts");
 		if (existsSync(catpawTs)) paths.push(catpawTs);
+	}
+
+	// === CATAIL extension (evidence-traceable scientific workflow skill) ===
+	if (existsSync(BUNDLED_CATAIL_EXTENSION)) {
+		paths.push(BUNDLED_CATAIL_EXTENSION);
+	} else {
+		const catailTs = join(__dirname, "extensions", "builtin", "catail", "index.ts");
+		if (existsSync(catailTs)) paths.push(catailTs);
 	}
 
 	// === Evolution extension (controlled self-evolution, default-on after product approval) ===

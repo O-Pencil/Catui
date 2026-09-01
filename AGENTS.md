@@ -307,10 +307,11 @@ Extensions can:
 | `link-world` | Internet access via agent-reach |
 | `browser` | Opt-in direct browser automation via vendored Browser Harness CDP bridge |
 | `discipline` | Built-in engineering workflow skills, `skill` tool, and lightweight skill-use bootstrap |
+| `catpaw` | Evidence-led UI/UX design craft workflow skill |
+| `catail` | Evidence-traceable scientific workflow from research framing through review |
 | `mcp` | MCP protocol support |
 | `security-audit` | Security vulnerability detection |
 | `soul` | AI personality evolution and memory |
-| `token-save` | Default-on bash output filtering, token savings tracking, and `/tokensave` stats |
 
 ### Tools (`core/tools/`)
 

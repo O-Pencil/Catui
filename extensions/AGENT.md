@@ -21,12 +21,31 @@ The `extensions/` module contains built-in extensions that extend Catui's capabi
 First-party extension source. Default-enabled entries are auto-loaded by `getBuiltinExtensionPaths()`; entries marked optional in `builtInExtensions` require explicit configuration/CLI opt-in even if their source directory is still here. Benchmark/CI harnesses may opt into Browser Harness registration with `CATUI_ENABLE_BROWSER_EXTENSION=1` without changing user config.
 
 Current default extension directories:
-`btw/`, `debug/`, `diagnostics/`, `discipline/`, `grub/`, `idle-think/`, `link-world/`, `loop/`, `mcp/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `soul/`, `subagent/`, `team/`.
+`ask-user-question/`, `btw/`, `catail/`, `catpaw/`, `debug/`, `diagnostics/`, `discipline/`, `goal/`, `grub/`, `idle-think/`, `insights/`, `link-world/`, `loop/`, `lsp/`, `mcp/`, `next-step/`, `notebook/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `skill-tool/`, `soul/`, `subagent/`, `task/`, `teach/`, `team/`.
 
 Current opt-in source still physically under `extensions/builtin/` pending Q2 physical/package decision:
 `browser/`.
 
 The complete file-level member list for defaults lives in `extensions/builtin/AGENT.md`; this parent map records category boundaries and high-level responsibilities.
+
+#### catail/ — Evidence-Traceable Research Workflow
+
+**P3 Contract:**
+`index.ts`: - [WHO]: Passive extension that discovers the CATAIL research Skill and injects a bounded activation reminder
+    - [FROM]: core/extensions-host/types, node path/url/fs
+    - [HERE]: CATAIL extension entry
+
+`SKILL.md`: Research workflow router for framing, search, claims, design, experiments, analysis, figures, writing, review, and audit
+
+`references/`: Progressively loaded stage playbooks and research artifact contracts
+
+`templates/`: Research charter, method policy, register, study, run, analysis, and evidence-binding shape references
+
+`scripts/audit.mjs`: Dependency-free, read-only structural audit; never evaluates scientific merit
+
+**Design Principle:**
+- Durable project artifacts are authoritative; model output is not evidence.
+- Default activation remains passive and bounded; CATAIL owns no core runtime state or public protocol.
 
 #### discipline/ — Engineering Workflow Skills
 
