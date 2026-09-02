@@ -24,7 +24,7 @@ browser/install.md: Browser Harness setup and troubleshooting instructions, expo
 browser/src/browser_harness/: Vendored Browser Harness Python package, CDP daemon, IPC bridge, admin commands, and helper functions
 browser/interaction-skills/: Reusable Browser Harness mechanics guides for browser interactions
 browser/agent-workspace/: Seed workspace copied to .catui/browser-workspace for editable helpers and domain skills
-catail/index.ts: Passive CATAIL extension entry, discovers the research-to-publication Skill and injects a bounded activation reminder for explicit use or Vera scientific intent
+catail/index.ts: Passive CATAIL extension entry, discovers the research-to-publication Skill and injects a bounded activation reminder for explicit use or Athena scientific intent
 catail/SKILL.md: CATAIL activation, method composition, lifecycle, publication, language, safety, and routing contract
 catail/references/foundations/: Scientific method catalog, epistemic and language discipline, lifecycle, decision gates, and task routing
 catail/references/: Progressively loaded frame/search/claim/position/design/experiment/analyze/iterate/visualize/write/review/venue/submission/rebuttal/audit playbooks and artifact contracts

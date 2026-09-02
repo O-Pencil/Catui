@@ -16,15 +16,15 @@ Natural language is also supported when CATAIL is explicitly named:
 Use CATAIL to assess whether this research idea is novel and feasible.
 ```
 
-For a dedicated scientific session, switch to Vera:
+For a dedicated scientific session, switch to Athena:
 
 ```text
-/persona use vera
+/persona use athena
 ```
 
-Vera uses CATAIL by default for scientific intent while retaining direct coding behavior for ordinary engineering work.
+Athena uses CATAIL by default for scientific intent while retaining direct coding behavior for ordinary engineering work.
 
-Outside the Vera scientific persona, CATAIL does not activate from words such as research, paper, experiment, discovery, test, or analysis alone. Catui remains a coding agent by default. Selecting Vera authorizes CATAIL for scientific intent, while ordinary coding under Vera remains ordinary coding.
+Outside the Athena scientific persona, CATAIL does not activate from words such as research, paper, experiment, discovery, test, or analysis alone. Catui remains a coding agent by default. Selecting Athena authorizes CATAIL for scientific intent, while ordinary coding under Athena remains ordinary coding.
 
 ## Examples
 

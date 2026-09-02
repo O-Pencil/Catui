@@ -45,7 +45,7 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 
 **Design Principle:**
 - Durable project artifacts are authoritative; model output is not evidence.
-- Default activation remains passive and bounded; Vera supplies persona-level scientific authorization, and CATAIL owns no core runtime state or public protocol.
+- Default activation remains passive and bounded; Athena supplies persona-level scientific authorization, and CATAIL owns no core runtime state or public protocol.
 
 #### discipline/ — Engineering Workflow Skills
 

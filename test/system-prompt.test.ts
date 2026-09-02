@@ -82,7 +82,7 @@ describe("buildSystemPrompt: main template injects project context", () => {
 		const out = buildSystemPrompt({
 			selectedTools: ["read", "bash"],
 			contextFiles: [
-				{ path: "C:\\Users\\PC\\.catui\\agents\\default\\personas\\vera\\CATUI.md", content: "WINDOWS_VERA_MARKER" },
+				{ path: "C:\\Users\\PC\\.catui\\agents\\default\\personas\\athena\\CATUI.md", content: "WINDOWS_ATHENA_MARKER" },
 				{ path: "D:\\Projects\\Catui\\AGENT.md", content: "WINDOWS_PROJECT_MARKER" },
 			],
 		});
@@ -91,8 +91,8 @@ describe("buildSystemPrompt: main template injects project context", () => {
 		const idxProject = out.indexOf("# Project Context");
 		assert.ok(idxIdentity > 0);
 		assert.ok(idxProject > idxIdentity);
-		assert.ok(out.slice(idxIdentity, idxProject).includes("WINDOWS_VERA_MARKER"));
-		assert.ok(!out.slice(idxProject).includes("WINDOWS_VERA_MARKER"));
+		assert.ok(out.slice(idxIdentity, idxProject).includes("WINDOWS_ATHENA_MARKER"));
+		assert.ok(!out.slice(idxProject).includes("WINDOWS_ATHENA_MARKER"));
 		assert.ok(out.slice(idxProject).includes("WINDOWS_PROJECT_MARKER"));
 	});
 

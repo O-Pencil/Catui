@@ -1,4 +1,4 @@
-# SP03 — Harden Generic Persona Loading Before Adding Vera
+# SP03 — Harden Generic Persona Loading Before Adding Athena
 
 ## Evidence
 

@@ -1,6 +1,6 @@
 ---
 name: catail
-description: Professional research-to-publication Skill for question formation, prior-art positioning, theory, evidence synthesis, empirical or computational investigation, inference, replication, scientific writing, venue verification, and submission readiness. Use when the user explicitly invokes /skill:catail, explicitly asks to use CATAIL, or the active persona is Vera and the task has scientific intent. Outside Vera, do not activate from scientific keywords or ordinary coding investigation alone.
+description: Professional research-to-publication Skill for question formation, prior-art positioning, theory, evidence synthesis, empirical or computational investigation, inference, replication, scientific writing, venue verification, and submission readiness. Use when the user explicitly invokes /skill:catail, explicitly asks to use CATAIL, or the active persona is Athena and the task has scientific intent. Outside Athena, do not activate from scientific keywords or ordinary coding investigation alone.
 metadata:
   short-description: Research-to-publication Skill
 ---
@@ -15,9 +15,9 @@ Use CATAIL when the user:
 
 - invokes `/skill:catail`, with or without arguments; or
 - explicitly says to use CATAIL; or
-- has selected the Vera persona and asks for scientific inquiry, evidence, experiment, paper, review, venue, or publication work.
+- has selected the Athena persona and asks for scientific inquiry, evidence, experiment, paper, review, venue, or publication work.
 
-Outside Vera, do not infer activation from words such as research, paper, discovery, investigation, test, experiment, evidence, analysis, or their translations. Ordinary coding, debugging, implementation, and verification remain under Catui's default coding behavior unless CATAIL is explicitly named. While Vera is active, ordinary coding, debugging, maintenance, and administrative work still does not require a research workflow merely because Vera is the active persona.
+Outside Athena, do not infer activation from words such as research, paper, discovery, investigation, test, experiment, evidence, analysis, or their translations. Ordinary coding, debugging, implementation, and verification remain under Catui's default coding behavior unless CATAIL is explicitly named. While Athena is active, ordinary coding, debugging, maintenance, and administrative work still does not require a research workflow merely because Athena is the active persona.
 
 If invoked without a task, inspect only readily available project context and present two or three context-aware scientific next actions. Never initialize a workspace, search, design, or experiment merely because CATAIL was opened.
 

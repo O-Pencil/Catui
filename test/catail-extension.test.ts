@@ -65,9 +65,9 @@ test("CATAIL discovers one passive skill without registering a dedicated slash c
 	assert.ok(before);
 	const result = before({ type: "before_agent_start", prompt: "Design a study", systemPrompt: "base" }, {} as ExtensionContext) as { appendSystemPrompt?: string };
 	assert.equal(result.appendSystemPrompt, CATAIL_BOOTSTRAP_PROMPT);
-	assert.match(result.appendSystemPrompt ?? "", /active persona is Vera and the request has scientific intent/i);
-	assert.match(result.appendSystemPrompt ?? "", /Outside Vera, do not infer activation/i);
-	assert.match(result.appendSystemPrompt ?? "", /Vera's ordinary coding, debugging, maintenance, and administrative work does not require a research workflow/i);
+	assert.match(result.appendSystemPrompt ?? "", /active persona is Athena and the request has scientific intent/i);
+	assert.match(result.appendSystemPrompt ?? "", /Outside Athena, do not infer activation/i);
+	assert.match(result.appendSystemPrompt ?? "", /Athena's ordinary coding, debugging, maintenance, and administrative work does not require a research workflow/i);
 	assert.match(result.appendSystemPrompt ?? "", /ordinary coding remains Catui's default behavior/i);
 	assert.ok((result.appendSystemPrompt ?? "").length < 1_200, "Default prompt overhead should stay bounded.");
 });
@@ -77,8 +77,8 @@ const CATAIL_ROOT = join(process.cwd(), "extensions", "builtin", "catail");
 test("CATAIL routes through a resolvable nine-mode scientific method catalog", () => {
 	const skill = readFileSync(join(CATAIL_ROOT, "SKILL.md"), "utf8");
 	assert.match(skill, /CATAIL — Professional Research-to-Publication Skill/);
-	assert.match(skill, /active persona is Vera and the task has scientific intent/i);
-	assert.match(skill, /Outside Vera, do not activate from scientific keywords/i);
+	assert.match(skill, /active persona is Athena and the task has scientific intent/i);
+	assert.match(skill, /Outside Athena, do not activate from scientific keywords/i);
 	assert.match(skill, /ordinary coding, debugging, maintenance, and administrative work still does not require a research workflow/i);
 	assert.match(skill, /foundations\/scientific-methods\.md/);
 	assert.match(skill, /dialogue language/);

@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Bundles CATAIL — Professional Research-to-Publication Skill as a passive, default-discovered Skill. CATAIL routes explicitly named work, plus scientific intent under the Vera persona, through a shared inquiry lifecycle, composable research methods, progressively loaded playbooks, optional durable project memory, and human-gated submission preparation without adding a core runtime controller or public protocol.
+Bundles CATAIL — Professional Research-to-Publication Skill as a passive, default-discovered Skill. CATAIL routes explicitly named work, plus scientific intent under the Athena persona, through a shared inquiry lifecycle, composable research methods, progressively loaded playbooks, optional durable project memory, and human-gated submission preparation without adding a core runtime controller or public protocol.
 
 ## Members
 
@@ -22,7 +22,7 @@ Bundles CATAIL — Professional Research-to-Publication Skill as a passive, defa
 ## Invariants
 
 - Extension runtime is passive: no timer, external process, workspace write, network call, tool, or command registration.
-- CATAIL activates when the user invokes `/skill:catail`, explicitly names CATAIL, or selects Vera and provides scientific intent; scientific vocabulary alone never activates it outside Vera.
+- CATAIL activates when the user invokes `/skill:catail`, explicitly names CATAIL, or selects Athena and provides scientific intent; scientific vocabulary alone never activates it outside Athena.
 - CATAIL is a professional research-to-publication Skill, not a persona, audit product, paper generator, or mandatory experiment pipeline.
 - Scientific methods compose selectively; papers are outputs and experiments are optional investigation strategies.
 - Research artifacts are authoritative; model output is not evidence.

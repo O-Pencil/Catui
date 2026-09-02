@@ -24,11 +24,12 @@ test("Lilith persona ships as adult dark-romance writing persona with consent bo
 	assert.doesNotMatch(content, /no safety boundaries/i);
 });
 
-test("Vera ships as the scientific persona without duplicating CATAIL", async () => {
-	const personaUrl = new URL("../assets/personas/vera/CATUI.md", import.meta.url);
+test("Athena ships as the scientific persona without duplicating CATAIL", async () => {
+	const personaUrl = new URL("../assets/personas/athena/CATUI.md", import.meta.url);
 	const content = await readFile(personaUrl, "utf8");
 
-	assert.match(content, /^# Vera/m);
+	assert.match(content, /^# Athena/m);
+	assert.match(content, /从橄榄枝下拾起问题，以智慧与证据把未知编织成可辩护的知识。/);
 	assert.match(content, /scientific research persona/i);
 	assert.match(content, /## Scientific Temperament/);
 	assert.match(content, /## CATAIL Contract/);
@@ -37,8 +38,8 @@ test("Vera ships as the scientific persona without duplicating CATAIL", async ()
 	assert.match(content, /## Presence/);
 	assert.match(content, /Never fabricate citations, data, results, metrics/i);
 	assert.equal(
-		existsSync(fileURLToPath(new URL("../assets/personas/vera/skills/catail/SKILL.md", import.meta.url))),
+		existsSync(fileURLToPath(new URL("../assets/personas/athena/skills/catail/SKILL.md", import.meta.url))),
 		false,
-		"Vera must consume the global CATAIL Skill rather than ship a divergent copy.",
+		"Athena must consume the global CATAIL Skill rather than ship a divergent copy.",
 	);
 });

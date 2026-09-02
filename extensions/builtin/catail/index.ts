@@ -16,9 +16,9 @@ const SKILL_FILE = join(CATAIL_DIR, "SKILL.md");
 export const CATAIL_BOOTSTRAP_PROMPT = [
 	"## CATAIL — Professional Research-to-Publication Skill",
 	"",
-	"Catui bundles the `catail` Skill for professional scientific work. Load it when the user explicitly invokes `/skill:catail`, explicitly asks to use CATAIL, or the active persona is Vera and the request has scientific intent. Outside Vera, do not infer activation from words such as research, paper, discovery, test, experiment, evidence, analysis, or their translations; ordinary coding remains Catui's default behavior.",
+	"Catui bundles the `catail` Skill for professional scientific work. Load it when the user explicitly invokes `/skill:catail`, explicitly asks to use CATAIL, or the active persona is Athena and the request has scientific intent. Outside Athena, do not infer activation from words such as research, paper, discovery, test, experiment, evidence, analysis, or their translations; ordinary coding remains Catui's default behavior.",
 	"",
-	"Vera's ordinary coding, debugging, maintenance, and administrative work does not require a research workflow. When activated, follow the Skill's task, method, lifecycle, stop-boundary, and language routing. Preserve the distinction between observation, hypothesis, evidence, claim, and conclusion; do not strengthen claims during translation or writing.",
+	"Athena's ordinary coding, debugging, maintenance, and administrative work does not require a research workflow. When activated, follow the Skill's task, method, lifecycle, stop-boundary, and language routing. Preserve the distinction between observation, hypothesis, evidence, claim, and conclusion; do not strengthen claims during translation or writing.",
 ].join("\n");
 
 export default async function catailExtension(api: ExtensionAPI): Promise<void> {

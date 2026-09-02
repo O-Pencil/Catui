@@ -21,23 +21,39 @@ function withManager(run: (manager: PersonaManager, root: string) => void): void
 	}
 }
 
-test("PersonaManager discovers bundled Vera during direct source execution", () => {
+test("PersonaManager discovers bundled Athena during direct source execution", () => {
 	withManager((manager, root) => {
 		const personas = manager.listPersonas();
-		assert.ok(personas.includes("vera"));
+		assert.ok(personas.includes("athena"));
+		assert.equal(personas.includes("vera"), false);
 		assert.ok(personas.includes("vex"));
-		assert.ok(existsSync(join(root, "personas", "vera", "CATUI.md")));
+		assert.ok(existsSync(join(root, "personas", "athena", "CATUI.md")));
 	});
 });
 test("PersonaManager preserves an existing customized persona file", () => {
 	withManager((manager, root) => {
 		manager.listPersonas();
-		const path = join(root, "personas", "vera", "CATUI.md");
-		writeFileSync(path, "# Vera\n\nlocal customization\n", "utf8");
+		const path = join(root, "personas", "athena", "CATUI.md");
+		writeFileSync(path, "# Athena\n\nlocal customization\n", "utf8");
 
 		manager.listPersonas();
 
-		assert.equal(readFileSync(path, "utf8"), "# Vera\n\nlocal customization\n");
+		assert.equal(readFileSync(path, "utf8"), "# Athena\n\nlocal customization\n");
+	});
+});
+
+test("PersonaManager migrates the legacy Vera selection to Athena without listing Vera", () => {
+	withManager((manager, root) => {
+		manager.listPersonas();
+		const legacyDir = join(root, "personas", "vera");
+		mkdirSync(legacyDir, { recursive: true });
+		writeFileSync(join(legacyDir, "CATUI.md"), "# Vera\n\nlegacy customization\n", "utf8");
+		writeFileSync(join(root, "persona.json"), JSON.stringify({ activePersonaId: "vera" }), "utf8");
+
+		assert.equal(manager.getActivePersonaId(), "athena");
+		assert.equal(manager.listPersonas().includes("vera"), false);
+		assert.deepEqual(JSON.parse(readFileSync(join(root, "persona.json"), "utf8")), { activePersonaId: "athena" });
+		assert.ok(existsSync(join(legacyDir, "CATUI.md")), "legacy customization must remain recoverable");
 	});
 });
 

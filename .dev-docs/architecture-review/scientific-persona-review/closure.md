@@ -1,11 +1,11 @@
-# Vera Scientific Persona Review Closure
+# Athena Scientific Persona Review Closure
 
 Status: closed — implementation and local verification complete.
 
 ## Delivered
 
-- Added Vera as an evidence-led scientific Persona with an explicit CATAIL contract and no duplicate persona-local CATAIL Skill.
-- Preserved direct coding behavior under Vera and Catui's coding default under every other persona.
+- Added Athena as an evidence-led scientific Persona with an explicit CATAIL contract and no duplicate persona-local CATAIL Skill.
+- Preserved direct coding behavior under Athena and Catui's coding default under every other persona.
 - Repositioned CATAIL as the professional research-to-publication Skill and added venue, submission, and rebuttal playbooks.
 - Added venue and submission artifact templates plus submission-stage structural audit coverage.
 - Hardened bundled Persona discovery for source and distribution layouts, rejected unknown or empty Persona selections, and preserved local customization.
@@ -23,8 +23,8 @@ Status: closed — implementation and local verification complete.
 - `npx tsc --noEmit`: passed.
 - `npm run verify:package-boundary:dist`: passed.
 - Source and built CLI `--help` smoke checks passed.
-- Built `PersonaManager` discovered `aria,lilith,lucy,pencil,rem,sage,vera,vex` from a clean temporary agent directory.
-- `npm pack --dry-run --json` contained Vera plus venue, submission, rebuttal, and publication template assets.
+- Built `PersonaManager` discovered `aria,athena,lilith,lucy,pencil,rem,sage,vex` from a clean temporary agent directory.
+- `npm pack --dry-run --json` contained Athena plus venue, submission, rebuttal, and publication template assets.
 
 ## Additional Windows regressions closed during full-suite verification
 

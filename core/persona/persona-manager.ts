@@ -34,6 +34,7 @@ type PersonaState = {
 // Backward-compatible renames: old id → new id
 const PERSONA_RENAMES: Record<string, string> = {
 	default: "catui",
+	vera: "athena",
 };
 
 function normalizePersonaId(personaId: string): string {
@@ -181,7 +182,7 @@ export class PersonaManager {
 		try {
 			this.ensurePersonasDir();
 			return readdirSync(this.personasDir)
-				.filter((entry) => normalizePersonaId(entry) === entry && this.isSelectablePersona(entry))
+				.filter((entry) => !PERSONA_RENAMES[entry] && normalizePersonaId(entry) === entry && this.isSelectablePersona(entry))
 				.sort((a, b) => a.localeCompare(b));
 		} catch {
 			return [];

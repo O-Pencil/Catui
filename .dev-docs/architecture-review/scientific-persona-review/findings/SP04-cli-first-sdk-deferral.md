@@ -6,8 +6,8 @@ The existing interactive CLI already persists the active persona, forks the sess
 
 ## Decision
 
-- Reuse `/persona`, `/persona list`, and `/persona use vera`.
-- Do not add a Vera-specific command or a new CLI flag in this change.
+- Reuse `/persona`, `/persona list`, and `/persona use athena`.
+- Do not add an Athena-specific command or a new CLI flag in this change.
 - Existing print/RPC sessions inherit the persisted active persona through normal resource loading.
 - Do not add `personaId` to `CreateAgentSessionOptions` or `catui-protocol` until a real SDK or Workbench consumer needs process-local or concurrent persona selection.
 
