@@ -4400,6 +4400,15 @@ export class InteractiveMode {
     personaId = personaId ?? getActivePersonaId();
     if (!personaId) return;
 
+    // A custom persona may have been removed after this session was tagged.
+    // Fall back to the current valid persona instead of wiring extensions to
+    // missing directories or failing the entire session resume.
+    const availablePersonaIds = new Set(listPersonas());
+    if (!availablePersonaIds.has(personaId)) {
+      personaId = getActivePersonaId();
+    }
+    if (!personaId || !availablePersonaIds.has(personaId)) return;
+
     // Apply persona env vars so extensions (NanoMem, Soul, MCP) use persona dirs
     process.env.NANOMEM_MEMORY_DIR = toAbsolutePath(
       getPersonaMemoryDir(personaId),
@@ -4508,7 +4517,13 @@ export class InteractiveMode {
     // setActivePersonaId triggers ensurePersonasDir() which copies bundled
     // personas to ~/.catui/agent/personas/ on first run. Must be called
     // before checking if the persona directory exists.
-    setActivePersonaId(personaId);
+    try {
+      setActivePersonaId(personaId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.showError(message);
+      return;
+    }
 
     const personaDir = getPersonaDir(personaId);
     if (!fs.existsSync(personaDir)) {

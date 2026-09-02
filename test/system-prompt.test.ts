@@ -78,6 +78,24 @@ describe("buildSystemPrompt: main template injects project context", () => {
 			"project content should appear under 'Project Context'");
 	});
 
+	it("keeps Windows persona paths in the Identity section", () => {
+		const out = buildSystemPrompt({
+			selectedTools: ["read", "bash"],
+			contextFiles: [
+				{ path: "C:\\Users\\PC\\.catui\\agents\\default\\personas\\vera\\CATUI.md", content: "WINDOWS_VERA_MARKER" },
+				{ path: "D:\\Projects\\Catui\\AGENT.md", content: "WINDOWS_PROJECT_MARKER" },
+			],
+		});
+
+		const idxIdentity = out.indexOf("# Your Identity");
+		const idxProject = out.indexOf("# Project Context");
+		assert.ok(idxIdentity > 0);
+		assert.ok(idxProject > idxIdentity);
+		assert.ok(out.slice(idxIdentity, idxProject).includes("WINDOWS_VERA_MARKER"));
+		assert.ok(!out.slice(idxProject).includes("WINDOWS_VERA_MARKER"));
+		assert.ok(out.slice(idxProject).includes("WINDOWS_PROJECT_MARKER"));
+	});
+
 	it("omits the Project Context block when contextFiles is missing entirely", () => {
 		// Some callers (e.g. test harnesses, SDK users) pass no contextFiles
 		// at all. The default Code path must still produce a valid prompt

@@ -69,6 +69,12 @@ Produce the requested paper, review, report, figure, theory, method, dataset, be
 
 **Gate:** the output does not outrun current evidence and a reader can identify what is known, inferred, uncertain, and still human-owned.
 
+### 9. Prepare & Submit
+
+When publication is the requested endpoint, verify target-venue fit, current classification, official instructions, deadlines, anonymity policy, artifact rules, declarations, and required files from primary sources. Build a versioned submission package and run scientific, policy, and rendering preflight checks.
+
+**Gate:** every required artifact is identified, current venue facts have source and access dates, manuscript claims remain evidence-bound, author-owned declarations are resolved, and an accountable human approves the final package. Stop before the external submission action.
+
 ## Gate decisions
 
 Use one of five decisions:
@@ -102,6 +108,8 @@ Do not use numerical gate scores unless a validated domain instrument actually r
 | “Review this manuscript” | Authorization and material boundary -> critical review; do not initialize a project unasked |
 | “Design but do not run” | Complete dependencies through Strategize; stop before investigation |
 | “Reproduce this paper” | Position target claim -> reproduction type and correspondence -> execution -> discrepancy analysis |
+| “Take this idea to a CCF-A submission” | Full inquiry route as dependencies require -> venue verification -> manuscript and artifact preflight -> human submission gate |
+| “Prepare a rebuttal” | Authorized review package -> classify requests -> bind each response to evidence or a scoped revision -> human approval |
 
 ## Progressive interaction
 

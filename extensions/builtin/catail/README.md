@@ -1,6 +1,6 @@
 # CATAIL
 
-**CATAIL — Professional Scientific Agent** is Catui's explicit-use Skill for scientific inquiry. It helps researchers discover and position questions, select and combine methods, build and challenge explanations, investigate evidence, update claims, and communicate defensible conclusions.
+**CATAIL — Professional Research-to-Publication Skill** helps researchers and scientific personas discover and position questions, select and combine methods, build and challenge explanations, investigate evidence, update claims, write defensible papers, verify venue requirements, and prepare submission packages.
 
 ## Activation
 
@@ -16,7 +16,15 @@ Natural language is also supported when CATAIL is explicitly named:
 Use CATAIL to assess whether this research idea is novel and feasible.
 ```
 
-CATAIL does not activate from words such as research, paper, experiment, discovery, test, or analysis alone. Catui remains a coding agent by default.
+For a dedicated scientific session, switch to Vera:
+
+```text
+/persona use vera
+```
+
+Vera uses CATAIL by default for scientific intent while retaining direct coding behavior for ordinary engineering work.
+
+Outside the Vera scientific persona, CATAIL does not activate from words such as research, paper, experiment, discovery, test, or analysis alone. Catui remains a coding agent by default. Selecting Vera authorizes CATAIL for scientific intent, while ordinary coding under Vera remains ordinary coding.
 
 ## Examples
 
@@ -39,8 +47,11 @@ The shared inquiry lifecycle is:
 ```text
 Orient -> Position -> Formulate -> Strategize -> Investigate
        -> Infer -> Challenge & Revise -> Communicate & Update
+       -> Prepare & Submit
 ```
 
 A paper is an output, not a mode. An experiment is one investigation strategy, not the default endpoint.
+
+For CCF-A-oriented work, CATAIL verifies the current CCF classification and venue requirements from official primary sources. It never embeds a supposedly permanent venue list, deadline, page limit, or policy. The workflow stops before the external submission action until an accountable human approves it.
 
 When the user asks for durable project work, CATAIL can maintain research memory under `research/`. Provenance, auditability, and reproducibility are scientific stewardship disciplines, not the product's identity. The bundled structural audit never establishes truth, novelty, ethics approval, or publication readiness.

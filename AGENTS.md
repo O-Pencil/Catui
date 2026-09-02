@@ -308,7 +308,7 @@ Extensions can:
 | `browser` | Opt-in direct browser automation via vendored Browser Harness CDP bridge |
 | `discipline` | Built-in engineering workflow skills, `skill` tool, and lightweight skill-use bootstrap |
 | `catpaw` | Evidence-led UI/UX design craft workflow skill |
-| `catail` | Evidence-traceable scientific workflow from research framing through review |
+| `catail` | Research-to-publication Skill from framing through human-gated submission readiness |
 | `mcp` | MCP protocol support |
 | `security-audit` | Security vulnerability detection |
 | `soul` | AI personality evolution and memory |

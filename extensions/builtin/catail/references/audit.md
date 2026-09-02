@@ -12,6 +12,8 @@ node <catail-skill-dir>/scripts/audit.mjs --root . --stage <stage>
 
 Use the latest relevant stage. Treat every failure as a missing or inconsistent artifact, not proof that the research itself is wrong. Do not edit artifacts merely to silence the checker.
 
+Use `--stage submission` only when a publication package is the requested endpoint. It additionally requires resolved `VENUE.md` and `SUBMISSION.md` records; this structural pass does not prove venue fit, policy compliance, acceptance readiness, or scientific merit.
+
 ## Human-quality pass
 
 Inspect:

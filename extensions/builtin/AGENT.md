@@ -24,11 +24,11 @@ browser/install.md: Browser Harness setup and troubleshooting instructions, expo
 browser/src/browser_harness/: Vendored Browser Harness Python package, CDP daemon, IPC bridge, admin commands, and helper functions
 browser/interaction-skills/: Reusable Browser Harness mechanics guides for browser interactions
 browser/agent-workspace/: Seed workspace copied to .catui/browser-workspace for editable helpers and domain skills
-catail/index.ts: Passive CATAIL extension entry, discovers the explicit-use professional scientific agent Skill and injects a bounded activation reminder
-catail/SKILL.md: CATAIL scientific-agent identity, explicit activation, method composition, lifecycle, language, safety, and routing contract
+catail/index.ts: Passive CATAIL extension entry, discovers the research-to-publication Skill and injects a bounded activation reminder for explicit use or Vera scientific intent
+catail/SKILL.md: CATAIL activation, method composition, lifecycle, publication, language, safety, and routing contract
 catail/references/foundations/: Scientific method catalog, epistemic and language discipline, lifecycle, decision gates, and task routing
-catail/references/: Progressively loaded frame/search/claim/position/design/experiment/analyze/iterate/visualize/write/review/audit playbooks and artifact contracts
-catail/templates/: Research charter, position record, source/hypothesis/claim/analysis/iteration/evidence registers, study contract, and run manifest shape references
+catail/references/: Progressively loaded frame/search/claim/position/design/experiment/analyze/iterate/visualize/write/review/venue/submission/rebuttal/audit playbooks and artifact contracts
+catail/templates/: Research charter, position and venue decisions, source/hypothesis/claim/analysis/iteration/evidence registers, study/run contracts, submission readiness, and review-response shape references
 catail/scripts/audit.mjs: Dependency-free read-only structural audit for CATAIL research artifacts
 catail/README.md: User-facing CATAIL overview and example invocations
 catail/THIRD_PARTY_NOTICE.md: CATPAW and K-Dense Scientific Agent Skills attribution and adaptation boundary

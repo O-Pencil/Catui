@@ -31,11 +31,11 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 #### catail/ — Evidence-Traceable Research Workflow
 
 **P3 Contract:**
-`index.ts`: - [WHO]: Passive extension that discovers the CATAIL research Skill and injects a bounded activation reminder
+`index.ts`: - [WHO]: Passive extension that discovers the CATAIL research-to-publication Skill and injects a bounded activation reminder
     - [FROM]: core/extensions-host/types, node path/url/fs
     - [HERE]: CATAIL extension entry
 
-`SKILL.md`: Research workflow router for framing, search, claims, design, experiments, analysis, figures, writing, review, and audit
+`SKILL.md`: Research router for framing, search, claims, design, experiments, analysis, figures, writing, review, venue verification, submission preparation, rebuttal, and audit
 
 `references/`: Progressively loaded stage playbooks and research artifact contracts
 
@@ -45,7 +45,7 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 
 **Design Principle:**
 - Durable project artifacts are authoritative; model output is not evidence.
-- Default activation remains passive and bounded; CATAIL owns no core runtime state or public protocol.
+- Default activation remains passive and bounded; Vera supplies persona-level scientific authorization, and CATAIL owns no core runtime state or public protocol.
 
 #### discipline/ — Engineering Workflow Skills
 

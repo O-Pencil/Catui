@@ -88,8 +88,10 @@ export function buildSystemPrompt(
   // Separate persona CATUI.md from other context files.
   // Persona content defines identity/personality and should be injected at
   // higher priority than project context files.
-  const isPersonaFile = (f: { path: string }) =>
-    f.path.includes("/personas/") && f.path.endsWith("/CATUI.md");
+  const isPersonaFile = (f: { path: string }) => {
+    const normalizedPath = f.path.replaceAll("\\", "/");
+    return normalizedPath.includes("/personas/") && normalizedPath.endsWith("/CATUI.md");
+  };
   const personaFiles = contextFiles.filter(isPersonaFile);
   const projectFiles = contextFiles.filter((f) => !isPersonaFile(f));
 

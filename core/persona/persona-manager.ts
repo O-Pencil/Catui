@@ -1,5 +1,5 @@
 /**
- * [WHO]: PersonaManager class, persona state and path management
+ * [WHO]: PersonaManager class, persona state, bundled preset discovery, selection validation, and path management
  * [FROM]: Depends on node:fs, node:path, agent-dir-context
  * [TO]: Consumed by core/platform/config/resource-loader.ts
  * [HERE]: core/persona/persona-manager.ts - persona management layer
@@ -10,7 +10,22 @@ import { fileURLToPath } from "node:url";
 import { defaultAgentDirContext, type AgentDirContext } from "../agent-dir/agent-dir-context.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const BUNDLED_PERSONAS_DIR = resolve(__dirname, "../../../assets/personas");
+const BUNDLED_PERSONAS_DIR_CANDIDATES = [
+	// Direct source execution: <root>/core/persona -> <root>/assets/personas
+	resolve(__dirname, "../../assets/personas"),
+	// Compiled execution: <root>/dist/core/persona -> <root>/assets/personas
+	resolve(__dirname, "../../../assets/personas"),
+];
+
+function resolveBundledPersonasDir(): string | undefined {
+	return BUNDLED_PERSONAS_DIR_CANDIDATES.find((candidate) => {
+		try {
+			return existsSync(candidate) && statSync(candidate).isDirectory();
+		} catch {
+			return false;
+		}
+	});
+}
 
 type PersonaState = {
 	activePersonaId?: string;
@@ -41,6 +56,15 @@ export class PersonaManager {
 
 	private get activePersonaStatePath(): string {
 		return join(this.ctx.path, "persona.json");
+	}
+
+	private isSelectablePersona(personaId: string): boolean {
+		const personaDir = this.getPersonaDir(personaId);
+		try {
+			return statSync(personaDir).isDirectory() && statSync(join(personaDir, "CATUI.md")).isFile();
+		} catch {
+			return false;
+		}
 	}
 
 	private copyDirectoryIfMissing(srcDir: string, destDir: string): void {
@@ -89,10 +113,11 @@ export class PersonaManager {
 		// Copy bundled presets if they don't exist on disk.
 		// Missing files are copied, but existing files are preserved to avoid
 		// overwriting local persona customization.
-		if (existsSync(BUNDLED_PERSONAS_DIR)) {
+		const bundledPersonasDir = resolveBundledPersonasDir();
+		if (bundledPersonasDir) {
 			try {
-				for (const entry of readdirSync(BUNDLED_PERSONAS_DIR)) {
-					const srcDir = join(BUNDLED_PERSONAS_DIR, entry);
+				for (const entry of readdirSync(bundledPersonasDir)) {
+					const srcDir = join(bundledPersonasDir, entry);
 					if (!statSync(srcDir).isDirectory()) continue;
 					const destDir = join(this.personasDir, entry);
 					if (!existsSync(destDir)) {
@@ -110,6 +135,7 @@ export class PersonaManager {
 
 	getActivePersonaId(): string | undefined {
 		try {
+			this.ensurePersonasDir();
 			if (!existsSync(this.activePersonaStatePath)) return "vex";
 			const raw = readFileSync(this.activePersonaStatePath, "utf-8");
 			const parsed = JSON.parse(raw) as PersonaState;
@@ -117,10 +143,15 @@ export class PersonaManager {
 			let id = normalizePersonaId(String(parsed.activePersonaId));
 			// Migrate renamed personas and persist the update
 			if (PERSONA_RENAMES[id]) {
-				id = PERSONA_RENAMES[id];
-				this.setActivePersonaId(id);
+				const renamedId = PERSONA_RENAMES[id];
+				if (this.isSelectablePersona(renamedId)) {
+					id = renamedId;
+					this.setActivePersonaId(id);
+				} else {
+					return "vex";
+				}
 			}
-			return id;
+			return this.isSelectablePersona(id) ? id : "vex";
 		} catch {
 			return "vex";
 		}
@@ -139,10 +170,8 @@ export class PersonaManager {
 		}
 
 		const normalized = normalizePersonaId(personaId);
-		const personaDir = this.getPersonaDir(normalized);
-		if (!existsSync(personaDir)) {
-			// Ensure path exists to avoid reload failures from user typos
-			mkdirSync(personaDir, { recursive: true });
+		if (normalized !== personaId.trim() || !this.isSelectablePersona(normalized)) {
+			throw new Error(`Persona not found or missing CATUI.md: ${personaId}`);
 		}
 		const state: PersonaState = { activePersonaId: normalized };
 		writeFileSync(this.activePersonaStatePath, JSON.stringify(state, null, 2), "utf-8");
@@ -152,15 +181,7 @@ export class PersonaManager {
 		try {
 			this.ensurePersonasDir();
 			return readdirSync(this.personasDir)
-				.map((entry) => normalizePersonaId(entry))
-				.filter((id) => {
-					const p = this.getPersonaDir(id);
-					try {
-						return statSync(p).isDirectory();
-					} catch {
-						return false;
-					}
-				})
+				.filter((entry) => normalizePersonaId(entry) === entry && this.isSelectablePersona(entry))
 				.sort((a, b) => a.localeCompare(b));
 		} catch {
 			return [];

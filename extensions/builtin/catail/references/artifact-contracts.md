@@ -47,6 +47,14 @@ Never recycle an ID for a different object. Revisions append `-rN` or use an exp
 
 `iterations/iteration-log.csv` columns: `iteration_id,trigger,prior_claim_status,diagnosis,decision,new_question_or_hypothesis,study_revision_or_id,analysis_class,next_evidence,status,decided_at,owner`.
 
+Publication-stage `VENUE.md` headings: Candidate Venue, CCF Classification Verification, Scope and Audience Fit, Official Sources and Access Dates, Current Instructions and Deadlines, Anonymity and Review Model, Artifact and Availability Policy, Ethics and Disclosure Requirements, Fit Risks and Alternatives, Decision and Rationale, Reverification Triggers.
+
+Submission-stage `SUBMISSION.md` headings: Package Revision, Target Venue and Track, Accountable Submitter, Manuscript Artifact, Supplementary Artifacts, Claim and Evidence Audit, Formatting and Rendering Check, Anonymity Check, Reproducibility Package, Ethics Authorship Funding and Conflicts, Data Code and Model Disclosures, Policy and Tool-Use Compliance, Required Forms and Metadata, Known Gaps and Exceptions, Human Approval, Submission Status.
+
+`review-response.csv` columns: `item_id,source,reviewer_label,request_type,quoted_or_paraphrased_request,affected_claim_ids,response_decision,evidence_ids,artifact_changes,response_text,status,owner,verified_at`.
+
+`VENUE.md` and `SUBMISSION.md` are required only for a submission-stage audit. A rebuttal register is optional until a review response is requested.
+
 ## Fail-closed states
 
 Use explicit empty, `unresolved`, `not_applicable`, `not_started`, `blocked`, `failed`, or `unverified` values as appropriate. Do not use placeholder prose that resembles a completed fact. Templates contain markers that should remain visibly incomplete until a human or verified artifact supplies the value.

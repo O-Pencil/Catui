@@ -9,8 +9,8 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const STAGES = ["frame", "search", "claim", "position", "design", "experiment", "analyze", "iterate", "write"];
-const STAGE_RANK = { frame: 0, search: 1, claim: 2, position: 3, design: 4, experiment: 5, analyze: 6, write: 7 };
+const STAGES = ["frame", "search", "claim", "position", "design", "experiment", "analyze", "iterate", "write", "submission"];
+const STAGE_RANK = { frame: 0, search: 1, claim: 2, position: 3, design: 4, experiment: 5, analyze: 6, write: 7, submission: 8 };
 
 const CONTRACTS = {
 	RESEARCH: [
@@ -73,6 +73,8 @@ const CONTRACTS = {
 	evidence: ["evidence_id", "claim_id", "evidence_type", "artifact_path", "source_ids", "direction", "scope", "uncertainty", "verification_status", "verified_by", "verified_at", "limitations"],
 	iterations: ["iteration_id", "trigger", "prior_claim_status", "diagnosis", "decision", "new_question_or_hypothesis", "study_revision_or_id", "analysis_class", "next_evidence", "status", "decided_at", "owner"],
 	POSITION: ["Search Scope", "State of the Art", "Nearest Prior Work", "Competition and Saturation", "Candidate Contribution", "Publication Dimensions", "Feasibility", "Null and Negative Result Value", "Risks and Fatal Flaws", "Decision and Rationale", "Revisit Triggers"],
+	VENUE: ["Candidate Venue", "CCF Classification Verification", "Scope and Audience Fit", "Official Sources and Access Dates", "Current Instructions and Deadlines", "Anonymity and Review Model", "Artifact and Availability Policy", "Ethics and Disclosure Requirements", "Fit Risks and Alternatives", "Decision and Rationale", "Reverification Triggers"],
+	SUBMISSION: ["Package Revision", "Target Venue and Track", "Accountable Submitter", "Manuscript Artifact", "Supplementary Artifacts", "Claim and Evidence Audit", "Formatting and Rendering Check", "Anonymity Check", "Reproducibility Package", "Ethics Authorship Funding and Conflicts", "Data Code and Model Disclosures", "Policy and Tool-Use Compliance", "Required Forms and Metadata", "Known Gaps and Exceptions", "Human Approval", "Submission Status"],
 };
 
 function readText(path) {
@@ -306,6 +308,11 @@ export function auditWorkspace({ root = process.cwd(), stage = "write" } = {}) {
 		}
 	}
 
+	if (reaches("submission")) {
+		issues.push(...checkMarkdown(join(researchRoot, "VENUE.md"), CONTRACTS.VENUE, CONTRACTS.VENUE));
+		issues.push(...checkMarkdown(join(researchRoot, "SUBMISSION.md"), CONTRACTS.SUBMISSION, CONTRACTS.SUBMISSION));
+	}
+
 	const iterationsPath = join(researchRoot, "iterations", "iteration-log.csv");
 	const iterations = checkCsv(iterationsPath, CONTRACTS.iterations, stage === "iterate");
 	issues.push(...iterations.issues);
@@ -332,7 +339,7 @@ function parseArgs(args) {
 export function runCli(args = process.argv.slice(2)) {
 	const options = parseArgs(args);
 	if (options.help) {
-		console.log("Usage: node audit.mjs [--root <project>] [--stage <frame|search|claim|position|design|experiment|analyze|iterate|write>]");
+		console.log("Usage: node audit.mjs [--root <project>] [--stage <frame|search|claim|position|design|experiment|analyze|iterate|write|submission>]");
 		return 0;
 	}
 	const result = auditWorkspace(options);

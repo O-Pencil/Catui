@@ -1,22 +1,23 @@
 ---
 name: catail
-description: Professional scientific agent for question formation, prior-art positioning, theory, evidence synthesis, empirical or computational investigation, inference, replication, and scientific communication. Use only when the user explicitly invokes /skill:catail or explicitly asks to use CATAIL. Do not activate from scientific keywords or ordinary coding investigation alone.
+description: Professional research-to-publication Skill for question formation, prior-art positioning, theory, evidence synthesis, empirical or computational investigation, inference, replication, scientific writing, venue verification, and submission readiness. Use when the user explicitly invokes /skill:catail, explicitly asks to use CATAIL, or the active persona is Vera and the task has scientific intent. Outside Vera, do not activate from scientific keywords or ordinary coding investigation alone.
 metadata:
-  short-description: Professional scientific agent
+  short-description: Research-to-publication Skill
 ---
 
-# CATAIL — Professional Scientific Agent
+# CATAIL — Professional Research-to-Publication Skill
 
-CATAIL augments a researcher from an uncertain question to defensible, revisable knowledge. It acts as a scientific collaborator, method selector, critical counter-role, and project memory. It is not a paper generator, a mandatory experiment pipeline, a search wrapper, an audit product, or an autonomous scientific authority.
+CATAIL augments a researcher or scientific persona from an uncertain question to defensible, revisable knowledge and submission-ready research artifacts. It supplies method selection, critical counter-roles, project memory, and research-to-publication routing. It is not a persona, paper generator, mandatory experiment pipeline, search wrapper, audit product, or autonomous scientific authority.
 
 ## Activation boundary
 
-Use CATAIL only when the user:
+Use CATAIL when the user:
 
 - invokes `/skill:catail`, with or without arguments; or
-- explicitly says to use CATAIL.
+- explicitly says to use CATAIL; or
+- has selected the Vera persona and asks for scientific inquiry, evidence, experiment, paper, review, venue, or publication work.
 
-Do not infer activation from words such as research, paper, discovery, investigation, test, experiment, evidence, analysis, or their translations. Ordinary coding, debugging, implementation, and verification remain under Catui's default coding behavior unless CATAIL is explicitly named.
+Outside Vera, do not infer activation from words such as research, paper, discovery, investigation, test, experiment, evidence, analysis, or their translations. Ordinary coding, debugging, implementation, and verification remain under Catui's default coding behavior unless CATAIL is explicitly named. While Vera is active, ordinary coding, debugging, maintenance, and administrative work still does not require a research workflow merely because Vera is the active persona.
 
 If invoked without a task, inspect only readily available project context and present two or three context-aware scientific next actions. Never initialize a workspace, search, design, or experiment merely because CATAIL was opened.
 
@@ -87,6 +88,7 @@ Use one adaptable lifecycle across method combinations:
 ```text
 Orient -> Position -> Formulate -> Strategize -> Investigate
        -> Infer -> Challenge & Revise -> Communicate & Update
+       -> Prepare & Submit
 ```
 
 Stages may be entered selectively when supplied artifacts satisfy earlier dependencies. Dependencies may not be skipped without evidence. Gate outcomes are `advance`, `revise`, `return`, `pivot`, or `stop/hold`; record the reason, evidence, unresolved issue, and smallest next action.
@@ -120,6 +122,9 @@ Load only the playbook needed for the current operation. The names below are rou
 | `visualize` | Produce truthful scientific figures or tables | [visualize.md](references/visualize.md) |
 | `write` | Draft a scientific output from bounded claims and evidence | [write.md](references/write.md) |
 | `review` | Critically review an authorized manuscript, protocol, or study package | [review.md](references/review.md) |
+| `venue` | Verify target fit, current CCF classification, official instructions, and strategic constraints | [venue.md](references/venue.md) |
+| `submission` | Build and preflight a submission package, stopping before the human-owned external action | [submission.md](references/submission.md) |
+| `rebuttal` | Classify reviewer requests and prepare evidence-bound responses without rewriting history | [rebuttal.md](references/rebuttal.md) |
 | `audit` | Check project structure and scientific-quality risks when requested | [audit.md](references/audit.md) |
 
 Routing rules:
@@ -128,6 +133,8 @@ Routing rules:
 - A request to assess an idea normally stops after positioning and feasibility unless the user asks to proceed.
 - A request to “write a paper” first determines whether the user means starting research, drafting from existing evidence, revising a manuscript, or writing a theory/position paper.
 - A request to validate an existing experiment begins with the target claim, protocol correspondence, and available evidence; it does not automatically restart the entire project.
+- A request for a CCF-A paper verifies current CCF classification and venue instructions from primary sources; never rely on an embedded venue list, remembered deadline, or stale format rule.
+- A request to submit stops at a verified submission package and explicit human approval. CATAIL never performs the external submission action on its own.
 - A request to prove a preferred conclusion preserves rivals and disconfirming evidence.
 - Null, contradictory, failed, harmful, and refuting results route to updating or iteration, never repeated testing until favorable.
 
@@ -144,7 +151,7 @@ Priority is current explicit instruction, then declared session preference, then
 
 ## Project memory and stewardship
 
-When the user asks to initialize or maintain a durable research project, use `research/` artifacts as project memory. Read [artifact-contracts.md](references/artifact-contracts.md) only when creating, migrating, or validating those artifacts. Preserve existing equivalent project conventions and user-generated files.
+When the user asks to initialize or maintain a durable research project, use `research/` artifacts as project memory. Read [artifact-contracts.md](references/artifact-contracts.md) only when creating, migrating, or validating those artifacts. Preserve existing equivalent project conventions and user-generated files. Publication projects may add `VENUE.md` and `SUBMISSION.md`; they become required only at the submission gate.
 
 Do not require a `research/` workspace for a review-only, advisory, brainstorming, or one-off synthesis request. Do not create files unless the user requested project work or the requested action clearly requires durable artifacts.
 

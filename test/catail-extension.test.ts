@@ -1,5 +1,5 @@
 /**
- * [WHO]: Verifies CATAIL explicit Skill registration, scientific-method routing resources, bootstrap behavior, and deterministic artifact audit
+ * [WHO]: Verifies CATAIL activation, research-to-publication routing resources, bootstrap behavior, and deterministic artifact audit
  * [FROM]: Depends on node:test/assert/fs/os/path, builtin-extensions, CATAIL extension, and CATAIL audit script
  * [TO]: Consumed by focused CATAIL verification and default extension contract checks
  * [HERE]: test/catail-extension.test.ts - CATAIL workflow regression coverage
@@ -50,7 +50,7 @@ test("builtin extensions include passive default CATAIL metadata and path", () =
 	assert.ok(getBuiltinExtensionPaths().some((path) => path.includes(join("extensions", "builtin", "catail"))));
 });
 
-test("CATAIL discovers one explicit-use skill without registering a dedicated slash command", async () => {
+test("CATAIL discovers one passive skill without registering a dedicated slash command", async () => {
 	const { api, handlers, registeredCommands } = createApiHarness();
 	await catailExtension(api);
 
@@ -65,8 +65,9 @@ test("CATAIL discovers one explicit-use skill without registering a dedicated sl
 	assert.ok(before);
 	const result = before({ type: "before_agent_start", prompt: "Design a study", systemPrompt: "base" }, {} as ExtensionContext) as { appendSystemPrompt?: string };
 	assert.equal(result.appendSystemPrompt, CATAIL_BOOTSTRAP_PROMPT);
-	assert.match(result.appendSystemPrompt ?? "", /only when the user explicitly invokes `\/skill:catail` or explicitly asks to use CATAIL/i);
-	assert.match(result.appendSystemPrompt ?? "", /Do not infer activation/i);
+	assert.match(result.appendSystemPrompt ?? "", /active persona is Vera and the request has scientific intent/i);
+	assert.match(result.appendSystemPrompt ?? "", /Outside Vera, do not infer activation/i);
+	assert.match(result.appendSystemPrompt ?? "", /Vera's ordinary coding, debugging, maintenance, and administrative work does not require a research workflow/i);
 	assert.match(result.appendSystemPrompt ?? "", /ordinary coding remains Catui's default behavior/i);
 	assert.ok((result.appendSystemPrompt ?? "").length < 1_200, "Default prompt overhead should stay bounded.");
 });
@@ -75,8 +76,10 @@ const CATAIL_ROOT = join(process.cwd(), "extensions", "builtin", "catail");
 
 test("CATAIL routes through a resolvable nine-mode scientific method catalog", () => {
 	const skill = readFileSync(join(CATAIL_ROOT, "SKILL.md"), "utf8");
-	assert.match(skill, /CATAIL — Professional Scientific Agent/);
-	assert.match(skill, /Use only when the user explicitly invokes \/skill:catail/);
+	assert.match(skill, /CATAIL — Professional Research-to-Publication Skill/);
+	assert.match(skill, /active persona is Vera and the task has scientific intent/i);
+	assert.match(skill, /Outside Vera, do not activate from scientific keywords/i);
+	assert.match(skill, /ordinary coding, debugging, maintenance, and administrative work still does not require a research workflow/i);
 	assert.match(skill, /foundations\/scientific-methods\.md/);
 	assert.match(skill, /dialogue language/);
 	assert.match(skill, /artifact language/);
@@ -105,6 +108,16 @@ test("CATAIL routes through a resolvable nine-mode scientific method catalog", (
 	assert.match(catalog, /\*\*Cannot establish alone\*\*/);
 	assert.match(catalog, /\*\*Validity risks and quality floor\*\*/);
 	assert.match(catalog, /\*\*Common combinations\*\*/);
+});
+
+test("CATAIL links publication playbooks and keeps submission human-owned", () => {
+	const skill = readFileSync(join(CATAIL_ROOT, "SKILL.md"), "utf8");
+	for (const reference of ["venue.md", "submission.md", "rebuttal.md"]) {
+		assert.ok(existsSync(join(CATAIL_ROOT, "references", reference)), `Missing publication playbook: ${reference}`);
+		assert.match(skill, new RegExp(`references/${reference.replace(".", "\\.")}`));
+	}
+	assert.match(skill, /current CCF classification and venue instructions from primary sources/i);
+	assert.match(skill, /explicit human approval/i);
 });
 
 function copyResolvedTemplate(name: string, destination: string) {
@@ -196,6 +209,23 @@ test("CATAIL audit rejects a supported claim bound to unverified evidence", () =
 		const result = auditWorkspace({ root, stage: "write" });
 		assert.equal(result.ok, false);
 		assert.ok(result.issues.some((entry) => entry.code === "unverified-evidence"));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("CATAIL submission audit requires and accepts resolved venue and submission records", () => {
+	const root = makeCompleteWorkspace();
+	try {
+		let result = auditWorkspace({ root, stage: "submission" });
+		assert.equal(result.ok, false);
+		assert.ok(result.issues.some((entry) => entry.code === "missing-file" && entry.path.endsWith("VENUE.md")));
+		assert.ok(result.issues.some((entry) => entry.code === "missing-file" && entry.path.endsWith("SUBMISSION.md")));
+
+		copyResolvedTemplate("VENUE.md", join(root, "research", "VENUE.md"));
+		copyResolvedTemplate("SUBMISSION.md", join(root, "research", "SUBMISSION.md"));
+		result = auditWorkspace({ root, stage: "submission" });
+		assert.equal(result.ok, true, JSON.stringify(result.issues));
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

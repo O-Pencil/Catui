@@ -6,7 +6,9 @@
  */
 
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 test("Lilith persona ships as adult dark-romance writing persona with consent boundaries", async () => {
@@ -20,4 +22,23 @@ test("Lilith persona ships as adult dark-romance writing persona with consent bo
 	assert.doesNotMatch(content, /\b(?:cock|cunt|cum|throat|hole)\b/i);
 	assert.doesNotMatch(content, /sexual violence is allowed/i);
 	assert.doesNotMatch(content, /no safety boundaries/i);
+});
+
+test("Vera ships as the scientific persona without duplicating CATAIL", async () => {
+	const personaUrl = new URL("../assets/personas/vera/CATUI.md", import.meta.url);
+	const content = await readFile(personaUrl, "utf8");
+
+	assert.match(content, /^# Vera/m);
+	assert.match(content, /scientific research persona/i);
+	assert.match(content, /## Scientific Temperament/);
+	assert.match(content, /## CATAIL Contract/);
+	assert.match(content, /default research-to-publication Skill/i);
+	assert.match(content, /ordinary coding/i);
+	assert.match(content, /## Presence/);
+	assert.match(content, /Never fabricate citations, data, results, metrics/i);
+	assert.equal(
+		existsSync(fileURLToPath(new URL("../assets/personas/vera/skills/catail/SKILL.md", import.meta.url))),
+		false,
+		"Vera must consume the global CATAIL Skill rather than ship a divergent copy.",
+	);
 });
