@@ -6,7 +6,7 @@
  * [HERE]: scripts/dev-loop/run-verification.ts within repo-level development loop infrastructure
  */
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { argv, cwd, exit, stderr, stdout } from "node:process";
@@ -142,6 +142,15 @@ export async function execShellCommand(command: string, options: { cwd: string; 
 
 function killChildProcess(pid: number | undefined, signal: NodeJS.Signals, fallbackKill: (signal: NodeJS.Signals) => boolean): void {
 	if (!pid) return;
+	if (process.platform === "win32") {
+		// Windows has no POSIX process-group SIGTERM semantics. Killing only the
+		// shell can orphan its child and keep captured pipes open indefinitely,
+		// so terminate the entire tree at the timeout boundary.
+		const args = ["/PID", String(pid), "/T", "/F"];
+		const result = spawnSync("taskkill", args, { windowsHide: true, stdio: "ignore" });
+		if (result.status !== 0) fallbackKill(signal);
+		return;
+	}
 	try {
 		process.kill(-pid, signal);
 	} catch {

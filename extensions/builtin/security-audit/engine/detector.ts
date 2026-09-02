@@ -7,7 +7,7 @@
 
 
 import { homedir } from "node:os";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { SecurityCheckResult, SecurityLevel, SecurityConfig } from "../interface.js";
 import { DEFAULT_SECURITY_CONFIG } from "../interface.js";
 
@@ -73,7 +73,10 @@ function isTrustedSkillDirectory(path: string, cwd?: string): boolean {
 		resolve(home, ".codex", "skills"),
 		resolve(cwd ?? process.cwd(), ".catui", "skills"),
 	];
-	return trustedRoots.some((root) => expanded === root || expanded.startsWith(`${root}/`));
+	return trustedRoots.some((root) => {
+		const relativePath = relative(root, expanded);
+		return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+	});
 }
 
 function detectGitCloneIntoTrustedSkillDirectory(command: string, cwd?: string): SecurityCheckResult | undefined {
