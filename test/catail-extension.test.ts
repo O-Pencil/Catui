@@ -110,7 +110,8 @@ test("CATAIL routes through a resolvable nine-mode scientific method catalog", (
 function copyResolvedTemplate(name: string, destination: string) {
 	mkdirSync(dirname(destination), { recursive: true });
 	const source = join(CATAIL_ROOT, "templates", name);
-	writeFileSync(destination, readFileSync(source, "utf8").replaceAll("unresolved", "resolved").replaceAll("not_started", "resolved"), "utf8");
+	const template = readFileSync(source, "utf8").replaceAll("\r\n", "\n");
+	writeFileSync(destination, template.replaceAll("unresolved", "resolved").replaceAll("not_started", "resolved"), "utf8");
 }
 
 function makeCompleteWorkspace(): string {
