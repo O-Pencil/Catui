@@ -4,7 +4,9 @@
  * [TO]: Consumed by modes/index.ts
  * [HERE]: modes/interactive/interactive-mode.ts - TUI orchestration hub (slash-command bodies
  *         delegated to controllers/{session,persona,config,info}-command-handlers.js, P7 C-3a;
- *         transcript rendering delegated to controllers/chat-renderer.js, P7 C-3c)
+ *         transcript rendering delegated to controllers/chat-renderer.js, P7 C-3c;
+ *         external editor / buddy pet / run timer / status display / message queues
+ *         delegated to controllers/, P7 C-3d)
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -30,10 +32,9 @@ import {
   ProcessTerminal,
   Spacer,
   Text,
-  TruncatedText,
   TUI,
 } from "@catui/tui";
-import { spawn, spawnSync } from "child_process";
+import { spawn } from "child_process";
 import { APP_NAME, VERSION } from "../../config.js";
 import {
   type AgentSession,
@@ -84,9 +85,14 @@ import { InputSubmitController } from "./controllers/input-submit-controller.js"
 import { InterruptController } from "./controllers/interrupt-controller.js";
 import { StreamRenderController } from "./controllers/stream-render-controller.js";
 import { ChatRendererController } from "./controllers/chat-renderer.js";
+import { ExternalEditorController } from "./controllers/external-editor-controller.js";
+import { BuddyPetController } from "./controllers/buddy-pet-controller.js";
+import { AgentRunTimerController } from "./controllers/agent-run-timer-controller.js";
+import { StatusDisplayController } from "./controllers/status-display-controller.js";
+import { MessageQueueController } from "./controllers/message-queue-controller.js";
 import { AssistantMessageComponent } from "./components/assistant-message.js";
 import { BashExecutionComponent } from "./components/bash-execution.js";
-import { BuddyPetComponent, type BuddyState } from "./components/buddy/pet-sprites.js";
+import type { BuddyState } from "./components/buddy/pet-sprites.js";
 import { EditorBuddyLayout } from "./components/editor-buddy-layout.js";
 import { CatuiLoader } from "./components/catui-loader.js";
 import { NotificationQueue } from "./components/notification-queue.js";
@@ -183,33 +189,11 @@ export class InteractiveMode {
   private startupToolsPrewarmed = false;
   private editorContainer: Container;
   private footer: FooterComponent;
-  private buddyPet: BuddyPetComponent | null = null;
-  private buddyPetSpecies: number | null = null;
-  private buddyPetResetTimer: ReturnType<typeof setTimeout> | undefined;
   private footerDataProvider: FooterDataProvider;
   private keybindings: KeybindingsManager;
   private version: string;
   private isInitialized = false;
   private onInputCallback?: (text: string) => void;
-  private readonly catWorkingMessages = [
-    "Purring…",
-    "Meowing…",
-    "Napping…",
-    "Stretching…",
-    "Zooming…",
-    "Sneaking…",
-    "Pouncing…",
-    "Scratching…",
-    "Yawning…",
-    "Blinking…",
-    "Kneading…",
-    "Crouching…",
-    "Spinning…",
-    "Twitching…",
-    "Hiding…",
-  ];
-  private catMessageIndex = Math.floor(Math.random() * 15);
-  private catMessageLastSwitch = 0;
 
   /** Consolidated render/turn UI state (streaming, tools, loaders, run timers, status, queues). */
   private readonly state = new InteractiveState();
@@ -233,8 +217,6 @@ export class InteractiveMode {
   // Shutdown state
   private shutdownRequested = false;
 
-  // Auto-dismiss timers for status/warning messages
-  private statusTimers = new Set<ReturnType<typeof setTimeout>>();
 
   // Priority notification queue
   private notificationQueue: NotificationQueue;
@@ -339,6 +321,122 @@ export class InteractiveMode {
       });
     }
     return this.chatRendererRef;
+  }
+
+  private externalEditorRef: ExternalEditorController | undefined;
+  /** $VISUAL/$EDITOR round-trips. Lazy so partial-mode test harnesses keep working. */
+  private get externalEditor(): ExternalEditorController {
+    if (!this.externalEditorRef) {
+      const self = this;
+      this.externalEditorRef = new ExternalEditorController({
+        get editor() {
+          return self.editor;
+        },
+        get ui() {
+          return self.ui;
+        },
+        showWarning: (warningMessage) => this.showWarning(warningMessage),
+      });
+    }
+    return this.externalEditorRef;
+  }
+
+  private buddyPetHostRef: BuddyPetController | undefined;
+  /** Desktop-pet lifecycle. Lazy so partial-mode test harnesses keep working. */
+  private get buddyPetHost(): BuddyPetController {
+    if (!this.buddyPetHostRef) {
+      const self = this;
+      this.buddyPetHostRef = new BuddyPetController({
+        get settingsManager() {
+          return self.settingsManager;
+        },
+        get buddySlot() {
+          return self.buddySlot;
+        },
+        get ui() {
+          return self.ui;
+        },
+        renderWidgets: () => this.surfaces.renderWidgets(),
+        requestRender: () => this.ui.requestRender(),
+      });
+    }
+    return this.buddyPetHostRef;
+  }
+
+  private agentRunTimerRef: AgentRunTimerController | undefined;
+  /** Working-message rotation + agent-run timer. Lazy for partial-mode tests. */
+  private get agentRunTimer(): AgentRunTimerController {
+    if (!this.agentRunTimerRef) {
+      const self = this;
+      this.agentRunTimerRef = new AgentRunTimerController({
+        get state() {
+          return self.state;
+        },
+        get keybindings() {
+          return self.keybindings;
+        },
+      });
+    }
+    return this.agentRunTimerRef;
+  }
+
+  private statusDisplayRef: StatusDisplayController | undefined;
+  /** Chat status/error/warning lines + notifications. Lazy for partial-mode tests. */
+  private get statusDisplay(): StatusDisplayController {
+    if (!this.statusDisplayRef) {
+      const self = this;
+      this.statusDisplayRef = new StatusDisplayController({
+        get chatContainer() {
+          return self.chatContainer;
+        },
+        get state() {
+          return self.state;
+        },
+        get ui() {
+          return self.ui;
+        },
+        get notificationQueue() {
+          return self.notificationQueue;
+        },
+        setBuddyPetState: (state, speechBubble, options) =>
+          this.setBuddyPetState(state, speechBubble, options),
+      });
+    }
+    return this.statusDisplayRef;
+  }
+
+  private messageQueueRef: MessageQueueController | undefined;
+  /** Steering/follow-up/compaction queue management. Lazy for partial-mode tests. */
+  private get messageQueue(): MessageQueueController {
+    if (!this.messageQueueRef) {
+      const self = this;
+      this.messageQueueRef = new MessageQueueController({
+        get session() {
+          return self.session;
+        },
+        get state() {
+          return self.state;
+        },
+        get editor() {
+          return self.editor;
+        },
+        get ui() {
+          return self.ui;
+        },
+        get agent() {
+          return self.agent;
+        },
+        get pendingMessagesContainer() {
+          return self.pendingMessagesContainer;
+        },
+        isExtensionCommand: (text) => this.sessionCommands.isExtensionCommand(text),
+        getAppKeyDisplay: (action) => this.infoCommands.getAppKeyDisplay(action),
+        promptAfterRender: (text, options) => this.promptAfterRender(text, options),
+        showStatus: (message) => this.showStatus(message),
+        showError: (errorMessage) => this.showError(errorMessage),
+      });
+    }
+    return this.messageQueueRef;
   }
 
   constructor(
@@ -1777,45 +1875,19 @@ export class InteractiveMode {
   }
 
   private formatElapsedSeconds(ms: number): string {
-    return `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
+    return this.agentRunTimer.formatElapsedSeconds(ms);
   }
 
   private getNextCatMessage(): string {
-    const now = Date.now();
-    if (now - this.catMessageLastSwitch >= 3000) {
-      this.catMessageIndex++;
-      this.catMessageLastSwitch = now;
-    }
-    return this.catWorkingMessages[this.catMessageIndex % this.catWorkingMessages.length]!;
-  }
-
-  private buildWorkingMessage(): { base: string; suffix: string } {
-    const base = this.state.workingMessageOverride || this.getNextCatMessage();
-    const interruptHint = `${appKey(this.keybindings, "interrupt")} to interrupt`;
-    const elapsed =
-      this.state.agentRunStartMs !== undefined
-        ? this.formatElapsedSeconds(Date.now() - this.state.agentRunStartMs)
-        : undefined;
-    const suffix = elapsed
-      ? `(${elapsed}, ${interruptHint})`
-      : `(${interruptHint})`;
-    return { base, suffix };
+    return this.agentRunTimer.getNextCatMessage();
   }
 
   private updateWorkingMessage(options?: { resetStallTimer?: boolean }): void {
-    if (!this.state.loadingAnimation) return;
-    const { base, suffix } = this.buildWorkingMessage();
-    (this.state.loadingAnimation as CatuiLoader).setMessage(
-      base,
-      { ...options, suffix },
-    );
+    this.agentRunTimer.updateWorkingMessage(options);
   }
 
   private stopAgentRunTimer(): void {
-    if (this.state.agentRunTimer) {
-      clearInterval(this.state.agentRunTimer);
-      this.state.agentRunTimer = undefined;
-    }
+    this.agentRunTimer.stopAgentRunTimer();
   }
 
   private stopWelcomeBannerTimer(): void {
@@ -1826,16 +1898,7 @@ export class InteractiveMode {
   }
 
   private startAgentRunTimer(): void {
-    this.stopAgentRunTimer();
-    this.state.agentRunStartMs = Date.now();
-    this.state.agentRunTimer = setInterval(() => {
-      if (!this.state.loadingAnimation || this.state.agentRunStartMs === undefined) {
-        this.stopAgentRunTimer();
-        return;
-      }
-      // Keep stall detection meaningful while still showing live elapsed time.
-      this.updateWorkingMessage({ resetStallTimer: false });
-    }, 100);
+    this.agentRunTimer.startAgentRunTimer();
   }
 
   private resetExtensionUI(): void {
@@ -1856,39 +1919,8 @@ export class InteractiveMode {
     }
   }
 
-  private clearBuddyPetResetTimer(): void {
-    if (this.buddyPetResetTimer) {
-      clearTimeout(this.buddyPetResetTimer);
-      this.buddyPetResetTimer = undefined;
-    }
-  }
-
   private syncBuddyPet(): void {
-    const enabled = this.settingsManager.getBuddyEnabled();
-    const species = this.settingsManager.getBuddySpecies();
-
-    if (!enabled) {
-      this.clearBuddyPetResetTimer();
-      this.buddyPet?.dispose();
-      this.buddyPet = null;
-      this.buddyPetSpecies = null;
-      this.buddySlot.clear();
-      this.surfaces.renderWidgets();
-      return;
-    }
-
-    if (!this.buddyPet || this.buddyPetSpecies !== species) {
-      this.clearBuddyPetResetTimer();
-      this.buddyPet?.dispose();
-      this.buddyPet = new BuddyPetComponent(this.ui, species);
-      this.buddyPetSpecies = species;
-      this.buddyPet.setState("idle");
-      this.buddyPet.setSpeechBubble("");
-    }
-
-    this.buddySlot.clear();
-    this.buddySlot.addChild(this.buddyPet);
-    this.surfaces.renderWidgets();
+    this.buddyPetHost.syncBuddyPet();
   }
 
   /**
@@ -1907,23 +1939,7 @@ export class InteractiveMode {
     speechBubble = "",
     options?: { resetTo?: BuddyState; afterMs?: number },
   ): void {
-    if (!this.buddyPet) return;
-
-    this.clearBuddyPetResetTimer();
-    this.buddyPet.setState(state);
-    this.buddyPet.setSpeechBubble(speechBubble);
-
-    if (options?.resetTo) {
-      this.buddyPetResetTimer = setTimeout(() => {
-        if (!this.buddyPet) return;
-        this.buddyPet.setState(options.resetTo ?? "idle");
-        this.buddyPet.setSpeechBubble("");
-        this.buddyPetResetTimer = undefined;
-        this.ui.requestRender();
-      }, options.afterMs ?? 1500);
-    }
-
-    this.ui.requestRender();
+    this.buddyPetHost.setBuddyPetState(state, speechBubble, options);
   }
 
   private addExtensionTerminalInputListener(
@@ -2181,40 +2197,8 @@ export class InteractiveMode {
     return this.chatRenderer.getUserMessageText(message);
   }
 
-  /**
-   * Show a status message in the chat.
-   *
-   * If multiple status messages are emitted back-to-back (without anything else being added to the chat),
-   * we update the previous status line instead of appending new ones to avoid log spam.
-   * Auto-dismisses after 5 seconds.
-   */
   private showStatus(message: string): void {
-    const children = this.chatContainer.children;
-    const last =
-      children.length > 0 ? children[children.length - 1] : undefined;
-    const secondLast =
-      children.length > 1 ? children[children.length - 2] : undefined;
-
-    if (
-      last &&
-      secondLast &&
-      last === this.state.lastStatusText &&
-      secondLast === this.state.lastStatusSpacer
-    ) {
-      this.state.lastStatusText.setText(theme.fg("dim", message));
-      this.scheduleStatusDismiss(this.state.lastStatusSpacer!, this.state.lastStatusText);
-      this.ui.requestRender();
-      return;
-    }
-
-    const spacer = new Spacer(1);
-    const text = new Text(theme.fg("dim", message), 1, 0);
-    this.chatContainer.addChild(spacer);
-    this.chatContainer.addChild(text);
-    this.state.lastStatusSpacer = spacer;
-    this.state.lastStatusText = text;
-    this.scheduleStatusDismiss(spacer, text);
-    this.ui.requestRender();
+    this.statusDisplay.showStatus(message);
   }
 
   private addMessageToChat(
@@ -2315,62 +2299,18 @@ export class InteractiveMode {
   }
 
   private async handleFollowUp(): Promise<void> {
-    const text = (
-      this.editor.getExpandedText?.() ?? this.editor.getText()
-    ).trim();
-    if (!text) return;
-
-    // Queue input during compaction (extension commands execute immediately)
-    if (this.session.isCompacting) {
-      if (this.sessionCommands.isExtensionCommand(text)) {
-        this.editor.addToHistory?.(text);
-        this.editor.setText("");
-        await this.promptAfterRender(text);
-      } else {
-        this.queueCompactionMessage(text, "followUp");
-      }
-      return;
-    }
-
-    // Alt+Enter queues a follow-up message (waits until agent finishes)
-    // This handles extension commands (execute immediately), prompt template expansion, and queueing
-    if (this.session.isStreaming) {
-      this.editor.addToHistory?.(text);
-      this.editor.setText("");
-      await this.promptAfterRender(text, { streamingBehavior: "followUp" });
-      this.updatePendingMessagesDisplay();
-      this.ui.requestRender();
-    }
-    // If not streaming, Alt+Enter acts like regular Enter (trigger onSubmit)
-    else if (this.editor.onSubmit) {
-      this.editor.onSubmit(text);
-    }
+    await this.messageQueue.handleFollowUp();
   }
 
   private handleDequeue(): void {
-    const restored = this.restoreQueuedMessagesToEditor();
-    if (restored === 0) {
-      this.showStatus("No queued messages to restore");
-    } else {
-      this.showStatus(
-        `Restored ${restored} queued message${restored > 1 ? "s" : ""} to editor`,
-      );
-    }
+    this.messageQueue.handleDequeue();
   }
 
   private async promptAfterRender(
     text: string,
     options?: PromptOptions,
   ): Promise<void> {
-    const renderAwareUi = this.ui as TUI & {
-      awaitRender?: () => Promise<void>;
-    };
-    if (typeof renderAwareUi.awaitRender === "function") {
-      await renderAwareUi.awaitRender();
-    } else {
-      await new Promise<void>((resolve) => process.nextTick(resolve));
-    }
-    await this.session.prompt(text, options);
+    await this.messageQueue.promptAfterRender(text, options);
   }
 
   private updateEditorBorderColor(): void {
@@ -2418,75 +2358,11 @@ export class InteractiveMode {
   }
 
   private openExternalEditor(): void {
-    // Determine editor (respect $VISUAL, then $EDITOR)
-    const editorCmd = process.env.VISUAL || process.env.EDITOR;
-    if (!editorCmd) {
-      this.showWarning(
-        "No editor configured. Set $VISUAL or $EDITOR environment variable.",
-      );
-      return;
-    }
-
-    const currentText =
-      this.editor.getExpandedText?.() ?? this.editor.getText();
-    const tmpFile = path.join(os.tmpdir(), `catui-editor-${Date.now()}.catui.md`);
-
-    try {
-      // Write current content to temp file
-      fs.writeFileSync(tmpFile, currentText, "utf-8");
-
-      // Stop TUI to release terminal
-      this.ui.stop();
-
-      // Split by space to support editor arguments (e.g., "code --wait")
-      const [editor, ...editorArgs] = editorCmd.split(" ");
-
-      // Spawn editor synchronously with inherited stdio for interactive editing
-      const result = spawnSync(editor, [...editorArgs, tmpFile], {
-        stdio: "inherit",
-      });
-
-      // On successful exit (status 0), replace editor content
-      if (result.status === 0) {
-        const newContent = fs.readFileSync(tmpFile, "utf-8").replace(/\n$/, "");
-        this.editor.setText(newContent);
-      }
-      // On non-zero exit, keep original text (no action needed)
-    } finally {
-      // Clean up temp file
-      try {
-        fs.unlinkSync(tmpFile);
-      } catch {
-        // Ignore cleanup errors
-      }
-
-      // Restart TUI
-      this.ui.start();
-      // Force full re-render since external editor uses alternate screen
-      this.ui.requestRender(true);
-    }
+    this.externalEditor.openExternalEditor();
   }
 
   private async openExistingFileInExternalEditor(filePath: string): Promise<boolean> {
-    const editorCmd = process.env.VISUAL || process.env.EDITOR;
-    if (!editorCmd) {
-      this.showWarning(
-        "No editor configured. Set $VISUAL or $EDITOR environment variable.",
-      );
-      return false;
-    }
-
-    try {
-      this.ui.stop();
-      const [editor, ...editorArgs] = editorCmd.split(" ");
-      const result = spawnSync(editor, [...editorArgs, filePath], {
-        stdio: "inherit",
-      });
-      return result.status === 0;
-    } finally {
-      this.ui.start();
-      this.ui.requestRender(true);
-    }
+    return this.externalEditor.openExistingFileInExternalEditor(filePath);
   }
 
   // =========================================================================
@@ -2499,247 +2375,54 @@ export class InteractiveMode {
   }
 
   showError(errorMessage: string): void {
-    this.chatContainer.addChild(new Spacer(1));
-    this.chatContainer.addChild(
-      new Text(theme.fg("error", `Error: ${errorMessage}`), 1, 0),
-    );
-    this.setBuddyPetState("error", "Oops...", {
-      resetTo: "idle",
-      afterMs: 2200,
-    });
-    this.ui.requestRender();
+    this.statusDisplay.showError(errorMessage);
   }
 
   showWarning(warningMessage: string): void {
-    const spacer = new Spacer(1);
-    const text = new Text(theme.fg("warning", `Warning: ${warningMessage}`), 1, 0);
-    this.chatContainer.addChild(spacer);
-    this.chatContainer.addChild(text);
-    this.scheduleStatusDismiss(spacer, text);
-    this.setBuddyPetState("error", "Careful.", {
-      resetTo: "idle",
-      afterMs: 1800,
-    });
-    this.ui.requestRender();
+    this.statusDisplay.showWarning(warningMessage);
   }
 
-  /**
-   * Schedule auto-removal of a status/warning message after 5 seconds.
-   */
-  private scheduleStatusDismiss(spacer: Spacer, text: Text): void {
-    const timer = setTimeout(() => {
-      this.statusTimers.delete(timer);
-      this.chatContainer.removeChild(spacer);
-      this.chatContainer.removeChild(text);
-      // Clear lastStatus tracking if it matches the removed message
-      if (this.state.lastStatusText === text) {
-        this.state.lastStatusText = undefined;
-        this.state.lastStatusSpacer = undefined;
-      }
-      this.ui.requestRender();
-    }, 5000);
-    this.statusTimers.add(timer);
-  }
-
-  /**
-   * Cancel all pending status dismiss timers (e.g., on /clear).
-   */
   private clearStatusTimers(): void {
-    for (const timer of this.statusTimers) {
-      clearTimeout(timer);
-    }
-    this.statusTimers.clear();
-    this.notificationQueue.clearAll();
+    this.statusDisplay.clearStatusTimers();
   }
 
   /**
    * Show a priority notification (floating, auto-dismiss, dedup by key).
    */
   notify(message: string, options?: { key?: string; priority?: "immediate" | "high" | "medium" | "low"; type?: "info" | "warning" | "error"; duration?: number }): void {
-    this.notificationQueue.notify(message, options);
+    this.statusDisplay.notify(message, options);
   }
 
-  /**
-   * Get all queued messages (read-only).
-   * Combines session queue and compaction queue.
-   */
   private getAllQueuedMessages(): { steering: string[]; followUp: string[] } {
-    return {
-      steering: [
-        ...this.session.getSteeringMessages(),
-        ...this.state.compactionQueuedMessages
-          .filter((msg) => msg.mode === "steer")
-          .map((msg) => msg.text),
-      ],
-      followUp: [
-        ...this.session.getFollowUpMessages(),
-        ...this.state.compactionQueuedMessages
-          .filter((msg) => msg.mode === "followUp")
-          .map((msg) => msg.text),
-      ],
-    };
+    return this.messageQueue.getAllQueuedMessages();
   }
 
-  /**
-   * Clear all queued messages and return their contents.
-   * Clears both session queue and compaction queue.
-   */
   private clearAllQueues(): { steering: string[]; followUp: string[] } {
-    const { steering, followUp } = this.session.clearQueue();
-    const compactionSteering = this.state.compactionQueuedMessages
-      .filter((msg) => msg.mode === "steer")
-      .map((msg) => msg.text);
-    const compactionFollowUp = this.state.compactionQueuedMessages
-      .filter((msg) => msg.mode === "followUp")
-      .map((msg) => msg.text);
-    this.state.compactionQueuedMessages = [];
-    return {
-      steering: [...steering, ...compactionSteering],
-      followUp: [...followUp, ...compactionFollowUp],
-    };
+    return this.messageQueue.clearAllQueues();
   }
 
   private updatePendingMessagesDisplay(): void {
-    this.pendingMessagesContainer.clear();
-    const { steering: steeringMessages, followUp: followUpMessages } =
-      this.getAllQueuedMessages();
-    if (steeringMessages.length > 0 || followUpMessages.length > 0) {
-      this.pendingMessagesContainer.addChild(new Spacer(1));
-      for (const message of steeringMessages) {
-        const text = theme.fg("dim", `Steering: ${message}`);
-        this.pendingMessagesContainer.addChild(new TruncatedText(text, 1, 0));
-      }
-      for (const message of followUpMessages) {
-        const text = theme.fg("dim", `Follow-up: ${message}`);
-        this.pendingMessagesContainer.addChild(new TruncatedText(text, 1, 0));
-      }
-      const dequeueHint = this.infoCommands.getAppKeyDisplay("dequeue");
-      const hintText = theme.fg(
-        "dim",
-        `↳ ${dequeueHint} to edit all queued messages`,
-      );
-      this.pendingMessagesContainer.addChild(new TruncatedText(hintText, 1, 0));
-    }
+    this.messageQueue.updatePendingMessagesDisplay();
   }
 
   private restoreQueuedMessagesToEditor(options?: {
     abort?: boolean;
     currentText?: string;
   }): number {
-    const { steering, followUp } = this.clearAllQueues();
-    const allQueued = [...steering, ...followUp];
-    if (allQueued.length === 0) {
-      this.updatePendingMessagesDisplay();
-      if (options?.abort) {
-        this.agent.abort();
-      }
-      return 0;
-    }
-    const queuedText = allQueued.join("\n\n");
-    const currentText = options?.currentText ?? this.editor.getText();
-    const combinedText = [queuedText, currentText]
-      .filter((t) => t.trim())
-      .join("\n\n");
-    this.editor.setText(combinedText);
-    this.updatePendingMessagesDisplay();
-    if (options?.abort) {
-      this.agent.abort();
-    }
-    return allQueued.length;
+    return this.messageQueue.restoreQueuedMessagesToEditor(options);
   }
 
   private queueCompactionMessage(
     text: string,
     mode: "steer" | "followUp",
   ): void {
-    this.state.compactionQueuedMessages.push({ text, mode });
-    this.editor.addToHistory?.(text);
-    this.editor.setText("");
-    this.updatePendingMessagesDisplay();
-    this.showStatus("Queued message for after compaction");
+    this.messageQueue.queueCompactionMessage(text, mode);
   }
 
   private async flushCompactionQueue(options?: {
     willRetry?: boolean;
   }): Promise<void> {
-    if (this.state.compactionQueuedMessages.length === 0) {
-      return;
-    }
-
-    const queuedMessages = [...this.state.compactionQueuedMessages];
-    this.state.compactionQueuedMessages = [];
-    this.updatePendingMessagesDisplay();
-
-    const restoreQueue = (error: unknown) => {
-      this.session.clearQueue();
-      this.state.compactionQueuedMessages = queuedMessages;
-      this.updatePendingMessagesDisplay();
-      this.showError(
-        `Failed to send queued message${queuedMessages.length > 1 ? "s" : ""}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    };
-
-    try {
-      if (options?.willRetry) {
-        // When retry is pending, queue messages for the retry turn
-        for (const message of queuedMessages) {
-          if (this.sessionCommands.isExtensionCommand(message.text)) {
-            await this.promptAfterRender(message.text);
-          } else if (message.mode === "followUp") {
-            await this.session.followUp(message.text);
-          } else {
-            await this.session.steer(message.text);
-          }
-        }
-        this.updatePendingMessagesDisplay();
-        return;
-      }
-
-      // Find first non-extension-command message to use as prompt
-      const firstPromptIndex = queuedMessages.findIndex(
-        (message) => !this.sessionCommands.isExtensionCommand(message.text),
-      );
-      if (firstPromptIndex === -1) {
-        // All extension commands - execute them all
-        for (const message of queuedMessages) {
-          await this.promptAfterRender(message.text);
-        }
-        return;
-      }
-
-      // Execute any extension commands before the first prompt
-      const preCommands = queuedMessages.slice(0, firstPromptIndex);
-      const firstPrompt = queuedMessages[firstPromptIndex];
-      const rest = queuedMessages.slice(firstPromptIndex + 1);
-
-      for (const message of preCommands) {
-        await this.promptAfterRender(message.text);
-      }
-
-      // Send first prompt (starts streaming)
-      const promptPromise = this
-        .promptAfterRender(firstPrompt.text)
-        .catch((error) => {
-          restoreQueue(error);
-        });
-
-      // Queue remaining messages
-      for (const message of rest) {
-        if (this.sessionCommands.isExtensionCommand(message.text)) {
-          await this.promptAfterRender(message.text);
-        } else if (message.mode === "followUp") {
-          await this.session.followUp(message.text);
-        } else {
-          await this.session.steer(message.text);
-        }
-      }
-      this.updatePendingMessagesDisplay();
-      void promptPromise;
-    } catch (error) {
-      restoreQueue(error);
-    }
+    await this.messageQueue.flushCompactionQueue(options);
   }
 
   /** Move pending bash components from pending area to chat */
@@ -2775,9 +2458,7 @@ export class InteractiveMode {
 
   stop(): void {
     this.stopWelcomeBannerTimer();
-    this.clearBuddyPetResetTimer();
-    this.buddyPet?.dispose();
-    this.buddyPet = null;
+    this.buddyPetHost.dispose();
     if (this.state.loadingAnimation) {
       (this.state.loadingAnimation as CatuiLoader).stop();
       this.state.loadingAnimation = undefined;
@@ -2796,5 +2477,6 @@ export class InteractiveMode {
 
 
 }
+
 
 
