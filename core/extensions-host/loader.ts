@@ -11,7 +11,6 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "@mariozechner/jiti";
 import * as _bundledPiAgentCore from "@catui/agent-core";
-import * as _bundledPiAi from "@catui/ai";
 import * as _bundledPiAiEnv from "@catui/ai/env";
 import * as _bundledPiAiEvents from "@catui/ai/events";
 import * as _bundledPiAiJson from "@catui/ai/json";
@@ -85,7 +84,10 @@ async function getVirtualModules(): Promise<Record<string, unknown>> {
 		"@sinclair/typebox": _bundledTypebox,
 		"@catui/agent-core": _bundledPiAgentCore,
 		"@catui/tui": _bundledPiTui,
-		"@catui/ai": _bundledPiAi,
+		// Dynamic: importing the root @catui/ai barrel eagerly would pull every AI provider
+		// SDK into startup. getVirtualModules() only runs in the Bun binary path; Bun still
+		// bundles dynamic string imports, so extension resolution is unaffected.
+		"@catui/ai": await import("@catui/ai"),
 		...BUNDLED_AI_SUBPATH_MODULES,
 		// Dynamic to keep the extension loader off the root SDK barrel during normal app startup.
 		"@catui/agent": await import("../../index.js"),
