@@ -30,6 +30,8 @@ evolution-tool.ts: Controlled evolved_tool registration, lists promoted declarat
 evolution-executable-tool.ts: Controlled evolved_executable_tool registration, lists workspace executable_tool artifacts, verifies approved content hash and no-IO permission manifests, and runs safe DSL transform steps in a restricted interpreter
 evolution-auto.ts: Deterministic turn_end observer that converts explicit reusable-lesson markers and structured catui_evolution JSON into inactive behavioral candidates unless candidate-bound benchmark evidence exists; workspace eval_fixture proposals may activate only after current-gate plus candidate-fixture replay
 
+Related offline boundary: `scripts/evolution-pawbench.ts` is not an extension member; it performs bounded no-follow regular-file reads and atomic private local-file writes, then delegates import and advisory diagnosis to `pawbench-import.ts` and `benchmark-diagnosis.ts` without adding runtime execution authority.
+
 Rule: Generated artifacts are untrusted data; no executable artifact is activated by this extension.
 
 [COVENANT]: Update this file on member changes and verify against parent AGENT.md

@@ -1,5 +1,5 @@
 /**
- * [WHO]: Byte-bound PawBench checkpoint and attestation-manifest importer
+ * [WHO]: Provides the 64 MiB PawBench source bound and byte-bound checkpoint/manifest importer
  * [FROM]: Depends on node:crypto plus private evolution benchmark validation and contracts
  * [TO]: Consumed by the offline PawBench evolution CLI and focused contract tests
  * [HERE]: extensions/optional/evolution/pawbench-import.ts - fail-closed untrusted PawBench import boundary
@@ -14,7 +14,7 @@ import type {
 	EvolutionBenchmarkSplit,
 } from "./benchmark-types.js";
 
-const MAX_SOURCE_BYTES = 16 * 1024 * 1024;
+export const MAX_PAWBENCH_SOURCE_BYTES = 64 * 1024 * 1024;
 const MAX_RESULTS = 10_000;
 const MAX_IDENTIFIER_LENGTH = 512;
 const MAX_SHORT_TEXT_LENGTH = 512;
@@ -463,7 +463,7 @@ function parsePawBenchResult(value: unknown, index: number): ParsedPawBenchResul
 
 function parseCheckpoint(sourceText: string): { model: string; results: ParsedPawBenchResult[] } {
 	if (typeof sourceText !== "string" || sourceText.length === 0) throw new Error("PawBench source text must be non-empty");
-	if (Buffer.byteLength(sourceText, "utf8") > MAX_SOURCE_BYTES) throw new Error("PawBench source bytes exceed the import limit");
+	if (Buffer.byteLength(sourceText, "utf8") > MAX_PAWBENCH_SOURCE_BYTES) throw new Error("PawBench source bytes exceed the import limit");
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(sourceText);

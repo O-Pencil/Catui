@@ -29,7 +29,37 @@ The built-in corpus proves lifecycle, tool-pairing, policy, and baseline regress
 
 ## Held-out real-task evidence
 
-PawBench or another trusted runner produces versioned baseline and candidate snapshots. For PawBench, use the same frozen 150-task corpus, concealed held-out assignment, model/provider version, temperature, token and timeout limits, total budget, and at least three predeclared repetitions for both revisions. The candidate snapshot must use both the candidate id and `Content hash` shown by `/refine inspect`; this binds the result to the exact proposed artifacts. Do not use best-of-N selection.
+PawBench or another trusted runner produces versioned baseline and candidate snapshots. For PawBench, use the same frozen 150-task corpus, concealed held-out assignment, model/provider version, temperature, token and timeout limits, total budget, and at least three predeclared repetitions for both revisions. In PawBench terms, both paired runs must use `--runs >=3`; a one-off checkpoint or an unpaired candidate snapshot is not promotion evidence. The candidate snapshot must use both the candidate id and `Content hash` shown by `/refine inspect`; this binds the result to the exact proposed artifacts. Do not use best-of-N selection.
+
+### PawBench import trust boundary
+
+The private offline importer does not run PawBench, call a model, access the network, or infer benchmark provenance. A trusted benchmark runner must produce a sidecar manifest for each checkpoint. That manifest binds the checkpoint's exact UTF-8 bytes by SHA-256 and explicitly attests the role, candidate identity when applicable, frozen corpus and execution envelope, result indexes, repetitions, concealed splits, per-run costs, and safety trace-audit counts. The importer deliberately rejects missing cost, split, repetition, or safety evidence instead of treating absence as zero or deriving values from result order.
+
+Import the paired baseline and candidate checkpoints with explicit paths:
+
+```bash
+npm run eval:evolution-pawbench -- import \
+  --checkpoint ./pawbench-baseline-checkpoint.json \
+  --manifest ./pawbench-baseline-manifest.json \
+  --output ./pawbench-baseline.json
+
+npm run eval:evolution-pawbench -- import \
+  --checkpoint ./pawbench-candidate-checkpoint.json \
+  --manifest ./pawbench-candidate-manifest.json \
+  --output ./pawbench-candidate.json
+```
+
+Checkpoint and snapshot inputs are capped at 64 MiB; manifests are capped at 16 MiB. Inputs must be regular files: symlinks, FIFOs, devices, and directories are rejected without being followed. Existing output symlinks, non-regular paths, and paths or hardlinks that alias any input are also rejected. Outputs replace prior regular artifacts atomically through an owner-only `0600` same-directory temporary file, and the CLI prints only compact role/run or cohort counts rather than evidence contents.
+
+Failure diagnosis is optional and advisory:
+
+```bash
+npm run eval:evolution-pawbench -- diagnose \
+  --snapshot ./pawbench-candidate.json \
+  --output ./pawbench-candidate-diagnosis.json
+```
+
+The diagnosis report contains sanitized deterministic cohorts for planning the next candidate. It cannot mutate a candidate, authorize activation, or substitute for the paired held-out comparator and promotion gate.
 
 After both runs finish, generate the private report at the path consumed by `/refine promote`:
 
