@@ -1,7 +1,7 @@
 /**
  * [WHO]: ProcessedFiles, processFileArguments()
  * [FROM]: Depends on node:fs/promises, ai, chalk, core/tools/path-utils, modes/utils
- * [TO]: Consumed by main.ts
+ * [TO]: Consumed by main.ts, cli/session-start.ts (prepareInitialMessage)
  * [HERE]: cli/file-processor.ts - process @file CLI arguments into content
  */
 import { access, readFile, stat } from "node:fs/promises";

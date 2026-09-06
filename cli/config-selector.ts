@@ -1,7 +1,7 @@
 /**
  * [WHO]: ConfigSelectorOptions, ConfigSelector, runConfigSelector()
  * [FROM]: Depends on tui, core/platform/config, modes/interactive/components
- * [TO]: Consumed by main.ts
+ * [TO]: Consumed by main.ts, cli/subcommands.ts (handleConfigCommand)
  * [HERE]: cli/config-selector.ts - TUI config selector for `catui config` command
  */
 import { ProcessTerminal, TUI } from "@catui/tui";

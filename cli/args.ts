@@ -1,7 +1,7 @@
 /**
  * [WHO]: Args, Mode, parseArgs(), printHelp()
  * [FROM]: Depends on agent-core, chalk, config.ts, core/tools
- * [TO]: Consumed by main.ts, core/model-resolver.ts
+ * [TO]: Consumed by main.ts, cli/session-start.ts, cli/session-options.ts, core/model-resolver.ts
  * [HERE]: cli/args.ts - CLI argument parsing and help display
  */
 import {
