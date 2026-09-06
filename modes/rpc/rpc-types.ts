@@ -1,8 +1,8 @@
 /**
- * [WHO]: RpcCommand, RpcResponse, RpcSessionState, RpcSlashCommand types
+ * [WHO]: RpcCommand, RpcResponse, RpcSessionState, RpcSlashCommand, RpcSessionListEntry types
  * [FROM]: Depends on agent-core, ai, core/runtime, core/platform/exec/bash-executor, core/session/compaction
- * [TO]: Consumed by modes/index.ts, modes/rpc/rpc-client.ts, modes/rpc/rpc-mode.ts
- * [HERE]: modes/rpc/rpc-types.ts - RPC protocol type definitions
+ * [TO]: Consumed by modes/index.ts, modes/rpc/rpc-client.ts, modes/rpc/rpc-mode.ts, modes/rpc/rpc-command-handler.ts, apps/mobile web client (type-only)
+ * [HERE]: modes/rpc/rpc-types.ts - RPC protocol type definitions shared by stdio and WebSocket transports
  */
 import type { AgentLoopFramework, AgentMessage, AgentRunResult, ThinkingLevel } from "@catui/agent-core";
 import type { ImageContent, Model } from "@catui/ai/types";
@@ -65,6 +65,7 @@ export type RpcCommand =
 	| { id?: string; type: "get_session_stats" }
 	| { id?: string; type: "export_html"; outputPath?: string }
 	| { id?: string; type: "switch_session"; sessionPath: string }
+	| { id?: string; type: "list_sessions" }
 	| { id?: string; type: "fork"; entryId: string }
 	| { id?: string; type: "get_fork_messages" }
 	| { id?: string; type: "get_last_assistant_text" }
@@ -75,6 +76,26 @@ export type RpcCommand =
 
 	// Commands (available for invocation via prompt)
 	| { id?: string; type: "get_commands" };
+
+// ============================================================================
+// RPC Session List Entry (for list_sessions response)
+// ============================================================================
+
+/** JSON-serializable session entry (mirror of core SessionInfo; Date fields as ISO strings). */
+export interface RpcSessionListEntry {
+	path: string;
+	id: string;
+	/** Working directory where the session was started. */
+	cwd: string;
+	/** User-defined display name, if any. */
+	name?: string;
+	/** Path to the parent session (if this session was forked). */
+	parentSessionPath?: string;
+	created: string;
+	modified: string;
+	messageCount: number;
+	firstMessage: string;
+}
 
 // ============================================================================
 // RPC Slash Command (for get_commands response)
@@ -206,6 +227,7 @@ export type RpcResponse =
 	| { id?: string; type: "response"; command: "get_session_stats"; success: true; data: SessionStats }
 	| { id?: string; type: "response"; command: "export_html"; success: true; data: { path: string } }
 	| { id?: string; type: "response"; command: "switch_session"; success: true; data: { cancelled: boolean } }
+	| { id?: string; type: "response"; command: "list_sessions"; success: true; data: { sessions: RpcSessionListEntry[] } }
 	| { id?: string; type: "response"; command: "fork"; success: true; data: { text: string; cancelled: boolean } }
 	| {
 			id?: string;

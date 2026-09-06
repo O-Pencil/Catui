@@ -1,11 +1,12 @@
-﻿# modes/rpc/
+# modes/rpc/
 
 > P2 | Parent: ../AGENT.md
 
 Member List
-rpc-mode.ts: IDE integration via JSON-RPC over stdin/stdout, ExtensionUIContext implementation, RPC state construction with last loop result, serializable loop policy command mapping
+rpc-command-handler.ts: Transport-agnostic RPC protocol core (RpcCommandHandler), command dispatch over all RpcCommand variants, extension UI bridging (ExtensionUIContext + first-response-wins dialogs), session event forwarding, list_sessions via SessionManager.list
+rpc-mode.ts: stdio JSON-lines transport over the shared protocol core, readline command loop, re-exports protocol builders for tests and SDK consumers
 rpc-client.ts: Programmatic RPC client, spawns Catui subprocess, async event streaming, exposes loop policy updates
-rpc-types.ts: RPC protocol type definitions, RpcCommand/RpcResponse/RpcSessionState/RpcSlashCommand/RpcLoopPolicyOptions, includes last agent loop result in state
+rpc-types.ts: RPC protocol type definitions, RpcCommand/RpcResponse/RpcSessionState/RpcSlashCommand/RpcLoopPolicyOptions/RpcSessionListEntry, includes last agent loop result in state
 
 Rule: Members complete, one item per line, parent links valid, precise terms first
 
