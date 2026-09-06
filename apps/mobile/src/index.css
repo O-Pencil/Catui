@@ -1,0 +1,165 @@
+@import "tailwindcss";
+
+@theme {
+	/* Surfaces — Anthropic "book cloth" cream family */
+	--color-bg: #efece2;
+	--color-panel: #faf8f2;
+	--color-panel-2: #e8e3d6;
+	--color-line: #ddd7c8;
+
+	/* Ink scale — warm charcoal, replaces the generic zinc ramp */
+	--color-ink: #211f1b;
+	--color-muted: #6f6a5c;
+	--color-faint: #9b9483;
+
+	/* Accent — Anthropic clay / terracotta orange */
+	--color-accent: #bf6a45;
+	--color-accent-soft: #f2e0d3;
+	--color-accent-ink: #8f4526;
+	--color-on-accent: #fdf6f0;
+	--color-user-bubble: #e6dfd0;
+
+	/* Semantic — warm-muted, AA-contrast as text on cream */
+	--color-success: #4f7a45;
+	--color-error: #b04434;
+	--color-warning: #9a7522;
+
+	/* Type — serif carries the Anthropic reading feel; sans for UI chrome */
+	--font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia,
+		"Songti SC", "Noto Serif CJK SC", serif;
+	--font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC",
+		"Microsoft YaHei", sans-serif;
+	--font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+	background: var(--color-bg);
+	color: var(--color-ink);
+	font-family: var(--font-sans);
+	-webkit-tap-highlight-color: transparent;
+	overscroll-behavior: none;
+}
+
+/* Warm compact scrollbars for transcript/sheets */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: #cfc7b4 transparent;
+}
+*::-webkit-scrollbar {
+	width: 4px;
+	height: 4px;
+}
+*::-webkit-scrollbar-thumb {
+	background: #cfc7b4;
+	border-radius: 2px;
+}
+
+/* Safe-area padding for notched phones */
+.safe-top {
+	padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+	padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Markdown inside assistant messages: serif prose, mono code, dark code blocks
+   (kept dark on the cream page for contrast — the Claude.ai treatment). */
+.md-body {
+	font-family: var(--font-serif);
+	font-size: 1rem;
+	line-height: 1.65;
+	word-break: break-word;
+}
+.md-body > * + * {
+	margin-top: 0.65em;
+}
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4 {
+	font-family: var(--font-serif);
+	font-weight: 600;
+	line-height: 1.25;
+	letter-spacing: -0.01em;
+	color: var(--color-ink);
+}
+.md-body h1 {
+	font-size: 1.3em;
+}
+.md-body h2 {
+	font-size: 1.18em;
+}
+.md-body h3,
+.md-body h4 {
+	font-size: 1.05em;
+}
+.md-body ul,
+.md-body ol {
+	padding-left: 1.3em;
+}
+.md-body ul {
+	list-style: disc;
+}
+.md-body ol {
+	list-style: decimal;
+}
+.md-body li + li {
+	margin-top: 0.25em;
+}
+.md-body a {
+	color: var(--color-accent-ink);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	text-decoration-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+.md-body code {
+	font-family: var(--font-mono);
+	font-size: 0.84em;
+	background: #ece5d6;
+	border: 1px solid var(--color-line);
+	border-radius: 5px;
+	padding: 0.1em 0.35em;
+	color: #7a4a2a;
+}
+.md-body pre {
+	font-family: var(--font-mono);
+	background: #1c1a16;
+	border: 1px solid #2a2721;
+	border-radius: 10px;
+	padding: 0.85em;
+	overflow-x: auto;
+}
+.md-body pre code {
+	background: transparent;
+	border: none;
+	padding: 0;
+	font-size: 0.8125rem;
+	line-height: 1.55;
+	color: #e7e0d2;
+}
+.md-body table {
+	display: block;
+	overflow-x: auto;
+	border-collapse: collapse;
+	font-family: var(--font-sans);
+	font-size: 0.9em;
+}
+.md-body th,
+.md-body td {
+	border: 1px solid var(--color-line);
+	padding: 0.35em 0.65em;
+	text-align: left;
+}
+.md-body th {
+	background: var(--color-panel-2);
+	font-weight: 600;
+}
+.md-body blockquote {
+	border-left: 3px solid var(--color-accent);
+	padding-left: 0.85em;
+	color: var(--color-muted);
+	font-style: italic;
+}

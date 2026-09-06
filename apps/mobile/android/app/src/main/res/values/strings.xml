@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Catui</string>
+    <string name="title_activity_main">Catui</string>
+    <string name="package_name">app.catui.mobile</string>
+    <string name="custom_url_scheme">app.catui.mobile</string>
+</resources>
