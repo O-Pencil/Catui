@@ -44,7 +44,7 @@ import { runMigrations, showDeprecationWarnings } from "./migrations.js";
 import { initTheme, stopThemeWatcher, theme } from "./modes/interactive/theme/theme.js";
 import { exportFromFile } from "./core/export-html/index.js";
 import { profileCheckpoint } from "./utils/startup-profiler.js";
-import { isDevRuntime, reportDiagnostic } from "./utils/diagnostics.js";
+import { installWarningGuard } from "./utils/warning-guard.js";
 import {
 	CUSTOM_ANTHROPIC_PROVIDER,
 	CUSTOM_OPENAI_PROVIDER,
@@ -68,99 +68,10 @@ import { getBuiltinExtensionPaths } from "./builtin-extensions.js";
 const isDevelopment = process.env.NODE_ENV !== "production";
 const isCatuiProductApp = APP_NAME === "catui" || APP_NAME === "catui";
 
-// Belt-and-suspenders warning silencing for user mode. Two channels cover
-// every path Node uses to surface a warning:
-//   (1) wrap process.emitWarning so we can short-circuit BEFORE the 'warning'
-//       event ever fires. Catches the common path where Node internals call
-//       process.emitWarning(...).
-//   (2) replace Node's default 'warning' listener (the one that prints to
-//       stderr) with our own. Catches paths that emit the event directly
-//       without going through emitWarning, and makes sure no other library's
-//       ad-hoc warning listener can re-print what we suppressed.
-{
-	type WarningOpts = { type?: string; name?: string; code?: string; detail?: string };
-	type EmitWarning = typeof process.emitWarning;
-	type EmitWarningArg = string | Error;
-	type EmitWarningSecondArg = string | NodeJS.EmitWarningOptions | Function;
-
-	const originalEmitWarning = process.emitWarning.bind(process) as EmitWarning;
-	const callOriginalEmitWarning = (...args: [EmitWarningArg, ...unknown[]]) =>
-		(originalEmitWarning as unknown as (...innerArgs: unknown[]) => void)(...args);
-
-	const normalizeWarningOptions = (options?: EmitWarningSecondArg, code?: string | Function): WarningOpts => {
-		if (typeof options === "object" && options !== null) return options;
-		return {
-			type: typeof options === "string" ? options : undefined,
-			code: typeof code === "string" ? code : undefined,
-		};
-	};
-
-	const isMaxListenersWarning = (warning: (Error & { code?: string }) | null, message?: unknown, opts?: WarningOpts): boolean => {
-		const name = warning?.name ?? opts?.name ?? "";
-		if (name === "MaxListenersExceededWarning") return true;
-		const text = String(warning?.message ?? message ?? "");
-		return (
-			text.startsWith("Possible EventTarget memory leak detected") ||
-			text.startsWith("Possible EventEmitter memory leak detected")
-		);
-	};
-	const isDep0190 = (opts?: WarningOpts): boolean =>
-		(opts?.type ?? "") === "DeprecationWarning" && (opts?.code ?? "") === "DEP0190";
-
-	// (1) emitWarning override
-	process.emitWarning = ((message: EmitWarningArg, options?: EmitWarningSecondArg, code?: string | Function, ctor?: Function) => {
-		const opts = normalizeWarningOptions(options, code);
-		const warning = message instanceof Error ? message : null;
-
-		if (!isDevelopment && isDep0190(opts)) return;
-
-		if (isMaxListenersWarning(warning, message, opts)) {
-			if (!isDevRuntime()) {
-				const text = warning?.message ?? String(message ?? "");
-				reportDiagnostic({
-					source: "node.warning",
-					severity: "warning",
-					category: "fallback",
-					message: text.slice(0, 240),
-					detail: { code: opts.code, type: opts.type, name: opts.name },
-					fingerprint: "node.warning:max-listeners-exceeded",
-				});
-				return;
-			}
-		}
-
-		if (typeof options === "function") return callOriginalEmitWarning(message, options);
-		if (typeof code === "function") return callOriginalEmitWarning(message, typeof options === "string" ? options : undefined, code);
-		if (typeof ctor === "function") return callOriginalEmitWarning(message, typeof options === "string" ? options : undefined, code, ctor);
-		if (typeof options === "object" && options !== null) return callOriginalEmitWarning(message, options);
-		return callOriginalEmitWarning(message, options, code);
-	}) as EmitWarning;
-
-	// (2) replace 'warning' event listeners. Node attaches a default printer
-	// on startup; if anything bypassed (1), this stops the printer from
-	// running. We only do this in user mode — dev keeps default behaviour.
-	if (!isDevRuntime()) {
-		for (const listener of process.listeners("warning")) {
-			process.off("warning", listener as (warning: Error) => void);
-		}
-		process.on("warning", (warning: Error & { code?: string }) => {
-			if (isMaxListenersWarning(warning)) {
-				reportDiagnostic({
-					source: "node.warning",
-					severity: "warning",
-					category: "fallback",
-					message: warning.message.slice(0, 240),
-					detail: { code: warning.code, name: warning.name },
-					fingerprint: "node.warning:max-listeners-exceeded",
-				});
-				return;
-			}
-			if (isDep0190({ type: "DeprecationWarning", code: warning.code })) return;
-			// Print everything else exactly like Node's default would.
-			process.stderr.write(`(node:${process.pid}) ${warning.stack ?? warning.message}\n`);
-		});
-	}
-}
+// Route Node warnings (listener leaks, deprecations) into the diagnostics bus
+// without suppressing them — real issues stay visible on stderr.
+// See utils/warning-guard.ts for design history.
+installWarningGuard();
 
 /**
  * Read all content from piped stdin.
