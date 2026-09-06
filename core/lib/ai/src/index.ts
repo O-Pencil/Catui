@@ -10,13 +10,9 @@ export { Type } from "@sinclair/typebox";
 export * from "./api-registry.js";
 export * from "./env-api-keys.js";
 export * from "./models.js";
-export * from "./providers/anthropic.js";
-export * from "./providers/azure-openai-responses.js";
-export * from "./providers/google.js";
-export * from "./providers/google-gemini-cli.js";
-export * from "./providers/google-vertex.js";
-export * from "./providers/openai-completions.js";
-export * from "./providers/openai-responses.js";
+// Provider modules are intentionally NOT re-exported here: eager `export *`
+// would load every vendor SDK (anthropic/openai/google) as soon as the barrel
+// is imported. Providers register lazily via register-builtins instead.
 export * from "./providers/register-builtins.js";
 export * from "./stream.js";
 export * from "./types.js";

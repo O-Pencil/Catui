@@ -149,7 +149,7 @@ export function createReadTool(cwd: string, options?: ReadToolOptions): AgentToo
 								const base64 = buffer.toString("base64");
 
 								if (pages) {
-									// Page selection requested - use pdfjs-dist to extract pages
+									// Page selection requested - extract pages via pdf-extract (pdf-lib)
 									try {
 										const { extractPdfPages } = await import("./pdf-extract.js");
 										const extracted = await extractPdfPages(buffer, pages);
