@@ -1,7 +1,7 @@
 {
   "name": "catui-agent",
   "version": "1.2.21",
-  "description": "CLI writing agent with read, bash, edit, write tools and session management. Supports DashScope and Ali Token Plan. Soul enabled by default for AI personality evolution.",
+  "description": "CLI coding agent with read, bash, edit, write tools and session management. Supports DashScope and Ali Token Plan. Soul enabled by default for AI personality evolution.",
   "type": "module",
   "bin": {
     "catui": "dist/cli.js"

@@ -39,7 +39,7 @@
     <img src="https://img.shields.io/npm/dm/catui-agent.svg?style=flat-square&color=cb3837" alt="下载量">
   </a>
   <img src="https://img.shields.io/badge/TypeScript-5.0+-blue?style=flat-square&color=3178C6" alt="TypeScript">
-  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square&color=brightgreen" alt="License">
+  <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square&color=brightgreen" alt="License">
 </p>
 
 <p>
@@ -60,7 +60,7 @@
 
 ## 🌟 为什么选择 Catui？
 
-> **"唯一一个真正懂你的 AI 编程助手"**
+> **会记住你的项目、适应你工作方式的终端编程智能体**
 
 Catui 不只是一个普通的 AI 编程工具。它是专为终端原生开发者打造的 **AI 智能体**，拥有**持久记忆**和**进化性格**。
 
@@ -206,18 +206,15 @@ catui -p "生成 API" | catui -p "为其编写测试"
 
 ---
 
-## 📊 功能对比
+## 📊 差异点
 
-| 特性 | Catui | Cursor | Claude Code | Aider |
-|---------|:----------:|:------:|:-----------:|:-----:|
-| 终端原生 | ✅ | ❌ | ✅ | ✅ |
-| 持久记忆 | ✅ | ❌ | ❌ | ❌ |
-| AI 性格 | ✅ | ❌ | ❌ | ❌ |
-| 会话分支 | ✅ | ✅ | ✅ | ❌ |
-| 多模型 | ✅ | ✅ | ❌ | ✅ |
-| MCP 支持 | ✅ | ❌ | ✅ | ❌ |
-| 离线模式 | ✅ | ❌ | ❌ | ✅ |
-| 中文优化 | ✅ | ❌ | ❌ | ❌ |
+给其他工具打分的功能矩阵很快会过时，这里只列 Catui 可验证的差异点：
+
+| 差异点 | Catui |
+|---|---|
+| **持久记忆** | ✅ 项目知识、错误模式、使用偏好跨会话保留 |
+| **性格进化** | ✅ 回复风格与编码习惯会随交互逐渐演化 |
+| **中文优先** | ✅ 文档、提示词、本地化一等公民支持 |
 
 ---
 
@@ -242,7 +239,7 @@ Catui 建立在三大支柱之上：
 - **终端优先** — 无 Electron，无浏览器，纯终端
 - **隐私优先** — 本地存储，无遥测，你的数据属于你
 - **可扩展** — 工具、主题、行为的插件系统
-- **极速** — 亚秒启动，即时响应
+- **性能持续优化** — `--version`/`--help` 快路径 200ms 内响应；完整启动耗时有基准测试持续跟踪优化
 
 ---
 
@@ -267,7 +264,7 @@ Catui 建立在三大支柱之上：
 
 ## 📄 许可证
 
-MIT © [Catui Agent](https://github.com/catui-agent)
+GPL-3.0 © [Catui Agent](https://github.com/catui-agent)
 
 ---
 

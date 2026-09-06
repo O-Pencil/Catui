@@ -51,7 +51,7 @@
 
 ## 🌟 Why Catui?
 
-> **"The only AI coding assistant that truly learns from you"**
+> **A terminal-native coding agent that remembers your projects and adapts to how you work**
 
 Catui isn't just another AI coding tool. It's a **terminal-native AI agent** with **persistent memory** and **evolving personality** — designed for developers who live in the terminal.
 
@@ -197,18 +197,15 @@ catui -p "Generate API" | catui -p "Write tests for it"
 
 ---
 
-## 📊 Comparison
+## 📊 What's Different
 
-| Feature | Catui | Cursor | Claude Code | Aider |
-|---------|:----------:|:------:|:-----------:|:-----:|
-| Terminal Native | ✅ | ❌ | ✅ | ✅ |
-| Persistent Memory | ✅ | ❌ | ❌ | ❌ |
-| AI Personality | ✅ | ❌ | ❌ | ❌ |
-| Session Branching | ✅ | ✅ | ✅ | ❌ |
-| Multi-Model | ✅ | ✅ | ❌ | ✅ |
-| MCP Support | ✅ | ❌ | ✅ | ❌ |
-| Offline Mode | ✅ | ❌ | ❌ | ✅ |
-| Chinese Optimized | ✅ | ❌ | ❌ | ❌ |
+Feature matrices comparing tools age fast. Instead, here are Catui's verifiable differentiators:
+
+| Differentiator | Catui |
+|---|---|
+| **Persistent Memory** | ✅ Project knowledge, error patterns, and preferences survive across sessions |
+| **Evolving Personality** | ✅ The agent's tone and coding style adapt to how you work |
+| **Chinese-First** | ✅ First-class Chinese docs, prompts, and locale handling |
 
 ---
 
@@ -233,7 +230,7 @@ Catui is built on three pillars:
 - **Terminal First** — No Electron, no browser, pure terminal
 - **Privacy First** — Local storage by default; opt-in diagnostics/eval telemetry only when explicitly configured
 - **Extensible** — Plugin system for tools, themes, and behaviors
-- **Fast** — Sub-second startup, instant response
+- **Fast Where It Counts** — `--version`/`--help` fast paths respond in <200 ms; full startup time is continuously benchmarked and optimized
 
 ---
 
@@ -259,7 +256,7 @@ Catui is built on three pillars:
 
 ## 📄 License
 
-MIT © [Catui Agent](https://github.com/catui-agent)
+GPL-3.0 © [Catui Agent](https://github.com/catui-agent)
 
 ---
 
