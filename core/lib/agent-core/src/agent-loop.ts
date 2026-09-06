@@ -3,7 +3,7 @@
  * Transforms to Message[] only at the LLM call boundary.
  */
 /**
- * [WHO]: Provides agentLoop(), agentLoopContinue(), standard loop event emission, continuation recovery, recovered-error tombstoning, and serial tool execution.
+ * [WHO]: Provides agentLoop(), agentLoopContinue(), standard loop/trace emission, continuation recovery, recovered-error tombstoning, and serial tool execution.
  * [FROM]: Depends on @catui/ai streams/messages, ./types contracts, ./errors, and shared loop helpers.
  * [TO]: Consumed by agent.ts and package exports as the default agent execution loop.
  * [HERE]: core/lib/agent-core/src/agent-loop.ts within agent-core; standard counterpart to structured-adaptive-agent-loop.ts.
@@ -57,7 +57,7 @@ import {
 	waitForAssistantStreamEvent,
 	type AssistantStreamNext,
 } from "./agent-loop-stream-events.js";
-import { traceModelRequested, traceModelResponded, traceRunCompleted, traceRunStarted, traceToolBatch, traceTurnCompleted, traceTurnStarted } from "./run-trace-context.js";
+import { traceModelRequested, traceModelResponded, traceRunCompleted, traceRunStarted, traceToolBatch, traceTransitionApplied, traceTurnCompleted, traceTurnStarted } from "./run-trace-context.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 256;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 512;
@@ -282,6 +282,7 @@ async function runLoop(
 	const recordTransition = (transition: AgentLoopTransition): AgentLoopTransition => {
 		lastTransition = transition;
 		transitions.push(transition);
+		traceTransitionApplied(config.runTrace, transition);
 		return transition;
 	};
 	let pendingToolUseSummaries: PendingToolUseSummary[] = [];
@@ -412,6 +413,7 @@ async function runLoop(
 					stream.push({ type: "message_start", message: result });
 					stream.push({ type: "message_end", message: result });
 				}
+				await traceTurnCompleted(config.runTrace, turnCount, message);
 
 				if (
 					message.stopReason === "error" &&
@@ -530,7 +532,13 @@ async function runLoop(
 					currentContext.messages.length,
 					await config.getProgressMarker?.(),
 				);
-				await traceToolBatch(config.runTrace, toolCalls, toolExecution.toolResults, Boolean(config.toolPolicies?.length || config.canUseTool));
+				await traceToolBatch(
+					config.runTrace,
+					toolCalls,
+					toolExecution.toolResults,
+					Boolean(config.toolPolicies?.length || config.canUseTool),
+					toolExecution.approvalRequired,
+				);
 				toolResults.push(
 					...enforceToolResultBatchSize(toolExecution.toolResults, config.maxToolResultBatchSizeChars),
 				);
@@ -693,6 +701,7 @@ async function runLoop(
 
 			// Get steering messages after turn completes
 			if (steeringAfterTools && steeringAfterTools.length > 0) {
+				traceTransitionApplied(config.runTrace, { reason: "steering", messageCount: steeringAfterTools.length });
 				pendingMessages = steeringAfterTools;
 				steeringAfterTools = null;
 			} else {
@@ -1076,14 +1085,14 @@ async function executeToolCalls(
 	sessionId?: string,
 	messageCount = 0,
 	progressMarker?: string,
-): Promise<{ toolResults: ToolResultMessage[]; contextMessages: AgentMessage[]; steeringMessages?: AgentMessage[]; livelock?: LivelockDetection; approvalRequired?: { checkpointId: string; policyId?: string } }> {
+): Promise<{ toolResults: ToolResultMessage[]; contextMessages: AgentMessage[]; steeringMessages?: AgentMessage[]; livelock?: LivelockDetection; approvalRequired?: { checkpointId: string; policyId?: string; toolCallId: string } }> {
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
 	const toolByName = buildToolMap(tools);
 	const results: ToolResultMessage[] = [];
 	const contextMessages: AgentMessage[] = [];
 	let steeringMessages: AgentMessage[] | undefined;
 	let livelock: LivelockDetection | undefined;
-	let approvalRequired: { checkpointId: string; policyId?: string } | undefined;
+	let approvalRequired: { checkpointId: string; policyId?: string; toolCallId: string } | undefined;
 
 	for (let index = 0; index < toolCalls.length; index++) {
 		const toolCall = toolCalls[index];
@@ -1234,6 +1243,7 @@ async function executeToolCalls(
 				approvalRequired = {
 					checkpointId: details.checkpointId,
 					policyId: typeof details.policyId === "string" ? details.policyId : undefined,
+					toolCallId: toolCall.id,
 				};
 				results.pop();
 				break;

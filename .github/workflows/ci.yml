@@ -69,8 +69,8 @@ jobs:
         env:
           CI: true
 
-      - name: Run deterministic harness eval gate
-        run: npm run eval:harness
+      - name: Run critical harness state and eval gate
+        run: npm run test:harness-critical
         env:
           CI: true
 

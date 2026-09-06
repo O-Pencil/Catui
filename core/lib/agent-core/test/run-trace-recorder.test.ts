@@ -79,6 +79,25 @@ describe("RunTraceRecorder", () => {
 		await expect(required.record("turn.started", { turn: 2 })).rejects.toThrow(/queue/i);
 	});
 
+	it("latches required queue overflow for the final flush", async () => {
+		let release: (() => void) | undefined;
+		const pending = new Promise<void>((resolve) => { release = resolve; });
+		const recorder = new RunTraceRecorder({
+			runId: "run-required-overflow",
+			sink: { append: async () => pending },
+			maxPending: 1,
+			failureMode: "required",
+		});
+		const first = recorder.record("turn.started", { turn: 1 });
+		await expect(recorder.record("transition.applied", {
+			reason: "tool_result",
+			transitionFingerprint: "sha256:transition",
+		})).rejects.toThrow(/queue/i);
+		release?.();
+		await first;
+		await expect(recorder.flush()).rejects.toThrow(/queue/i);
+	});
+
 	it("returns defensive snapshots from the in-memory sink", async () => {
 		const sink = new InMemoryRunTraceSink();
 		const recorder = new RunTraceRecorder({ runId: "run-1", sink });

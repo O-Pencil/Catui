@@ -50,7 +50,7 @@ export interface StructuredAdaptiveToolRunResult {
 	contextMessages: AgentMessage[];
 	steeringMessages?: AgentMessage[];
 	permissionDenials: AgentToolPermissionDenial[];
-	approvalRequired?: { checkpointId: string; policyId?: string };
+	approvalRequired?: { checkpointId: string; policyId?: string; toolCallId: string };
 }
 
 interface StructuredAdaptiveToolUseResult {
@@ -412,13 +412,14 @@ function extractPermissionDenials(toolResults: ToolResultMessage[]): AgentToolPe
 	return denials;
 }
 
-export function extractApprovalRequired(result: ToolResultMessage): { checkpointId: string; policyId?: string } | undefined {
+export function extractApprovalRequired(result: ToolResultMessage): { checkpointId: string; policyId?: string; toolCallId: string } | undefined {
 	if (!result.details || typeof result.details !== "object") return undefined;
 	const details = result.details as { errorType?: unknown; checkpointId?: unknown; policyId?: unknown };
 	if (details.errorType !== "approval_required" || typeof details.checkpointId !== "string") return undefined;
 	return {
 		checkpointId: details.checkpointId,
 		policyId: typeof details.policyId === "string" ? details.policyId : undefined,
+		toolCallId: result.toolCallId,
 	};
 }
 

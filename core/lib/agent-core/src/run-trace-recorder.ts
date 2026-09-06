@@ -77,7 +77,10 @@ export class RunTraceRecorder {
 		if (this.#pending >= this.#options.maxPending) {
 			const sequence = this.#sequence + 1;
 			const error = new Error(`Run trace queue limit reached at sequence ${sequence}`);
-			if (this.#options.failureMode === "required") return Promise.reject(error);
+			if (this.#options.failureMode === "required") {
+				this.#requiredFailure ??= error;
+				return Promise.reject(error);
+			}
 			this.#failures.push({ sequence, message: error.message });
 			return Promise.resolve(undefined);
 		}

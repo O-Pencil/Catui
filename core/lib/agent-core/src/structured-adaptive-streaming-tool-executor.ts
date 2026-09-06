@@ -93,6 +93,10 @@ export class StructuredAdaptiveStreamingToolExecutor {
 		return this.records.length;
 	}
 
+	get toolCalls(): readonly StructuredAdaptiveToolCall[] {
+		return this.records.map((record) => record.toolCall);
+	}
+
 	addTool(toolCall: StructuredAdaptiveToolCall): void {
 		if (this.records.some((record) => record.toolCall.id === toolCall.id)) return;
 		const tool = this.toolByName.get(toolCall.name);
