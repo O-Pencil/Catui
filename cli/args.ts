@@ -2,7 +2,7 @@
  * [WHO]: Args, Mode, parseArgs(), printHelp()
  * [FROM]: Depends on agent-core, chalk, config.ts, core/tools
  * [TO]: Consumed by main.ts, cli/session-start.ts, cli/session-options.ts, core/model-resolver.ts
- * [HERE]: cli/args.ts - CLI argument parsing and help display
+ * [HERE]: cli/args.ts - CLI argument parsing and help display (incl. remote serve flags: --serve/--port/--host/--tunnel)
  */
 import {
 	normalizeAgentLoopFramework,
@@ -77,6 +77,18 @@ export interface Args {
 	disableSoul?: boolean;
 	/** Enable ACP (Agent Client Protocol) mode for editor integration */
 	acp?: boolean;
+	/** Enable remote serve mode: HTTP + WebSocket server for mobile/browser clients */
+	serve?: boolean;
+	/** Port for remote serve mode (default: 8787) */
+	port?: number;
+	/** Bind address for remote serve mode (default: 0.0.0.0) */
+	host?: string;
+	/** Spawn a cloudflared quick tunnel for external access in serve mode */
+	tunnel?: boolean;
+	/** Fixed pairing token for serve mode (unattended setups, e.g. behind frp). Default: random per run */
+	serveToken?: string;
+	/** Advertised WebSocket endpoint for serve mode QR/deep link (e.g. ws://frp-host:8787/ws) */
+	advertiseUrl?: string;
 	/** Multi-Agent: ID of the agent to use. Default: "default" */
 	agent?: string;
 	messages: string[];
@@ -296,6 +308,19 @@ export function parseArgs(args: string[], extensionFlags?: Map<string, { type: "
 			result.noMcp = true;
 		} else if (arg === "--acp") {
 			result.acp = true;
+		} else if (arg === "--serve") {
+			result.serve = true;
+		} else if (arg === "--port" && i + 1 < args.length) {
+			const value = parsePositiveIntegerOption(arg, args[++i]);
+			if (value !== undefined) result.port = value;
+		} else if (arg === "--host" && i + 1 < args.length) {
+			result.host = args[++i];
+		} else if (arg === "--tunnel") {
+			result.tunnel = true;
+		} else if (arg === "--token" && i + 1 < args.length) {
+			result.serveToken = args[++i];
+		} else if (arg === "--advertise" && i + 1 < args.length) {
+			result.advertiseUrl = args[++i];
 		} else if (arg === "--agent" && i + 1 < args.length) {
 			result.agent = args[++i];
 		} else if (arg.startsWith("@")) {
@@ -394,7 +419,13 @@ ${chalk.bold("Options:")}
   --disable-soul                 Disable Soul (AI personality evolution)
   --no-mcp                       Disable MCP (Model Context Protocol) tools
   --acp                         Run as ACP Agent (for editor integration)
-  --agent <id>                   Multi-Agent: Select a specific agent by ID (default: "default")
+  --serve                       Remote serve mode: HTTP + WebSocket server for mobile/browser clients
+  --port <n>                    Port for serve mode (default: 8787)
+  --host <addr>                 Bind address for serve mode (default: 0.0.0.0)
+  --tunnel                      With --serve: spawn a cloudflared quick tunnel for external access
+  --token <value>               With --serve: fixed pairing token (default: random per run; for unattended setups behind frp)
+  --advertise <url>             With --serve: WebSocket endpoint put into the QR/deep link (e.g. ws://frp-host:8787/ws)
+  --agent <id>                  Multi-Agent: Select a specific agent by ID (default: "default")
   --help, -h                     Show this help
   --version, -v                  Show version number
 
@@ -442,6 +473,15 @@ ${chalk.bold("Examples:")}
 
   # Read-only mode (no file modifications possible)
   ${APP_NAME} --tools read,grep,find,ls -p "Review the code in src/"
+
+  # Remote serve mode: control Catui from your phone (scan the printed QR code)
+  ${APP_NAME} --serve
+
+  # Remote serve mode with an external tunnel (works outside your LAN)
+  ${APP_NAME} --serve --tunnel
+
+  # Unattended serve behind frp (fixed token + advertised public endpoint)
+  ${APP_NAME} --serve --token my-secret --advertise ws://frp.example.com:8787/ws
 
   # Export a session file to HTML
   ${APP_NAME} --export ~/${CONFIG_DIR_NAME}/agent/sessions/--path--/session.jsonl

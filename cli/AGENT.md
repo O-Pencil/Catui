@@ -3,7 +3,7 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
-args.ts: Args, Mode, parseArgs(), printHelp(), two-pass CLI argument parsing (second pass receives extension flags) and help display
+args.ts: Args, Mode, parseArgs(), printHelp(), two-pass CLI argument parsing (second pass receives extension flags), remote serve flags (--serve/--port/--host/--tunnel), and help display
 config-selector.ts: ConfigSelectorOptions, ConfigSelector, runConfigSelector(), TUI config selector for the `catui config` command
 file-processor.ts: ProcessedFiles, processFileArguments(), expands @file CLI arguments into text content and resized image attachments
 list-models.ts: listModels(), lists available models with fuzzy search for --list-models

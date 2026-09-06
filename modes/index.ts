@@ -12,4 +12,5 @@ export { type PrintModeOptions, runPrintMode } from "./print-mode.js";
 export { type ModelInfo, RpcClient, type RpcClientOptions, type RpcEventListener } from "./rpc/rpc-client.js";
 export { runRpcMode } from "./rpc/rpc-mode.js";
 export { runAcpMode } from "./acp/acp-mode.js";
+export { type RemoteModeOptions, runRemoteMode } from "./remote/remote-mode.js";
 export type { RpcCommand, RpcResponse, RpcSessionState } from "./rpc/rpc-types.js";

@@ -52,4 +52,8 @@ copyTreeAssets(join(ROOT, "core", "export-html"), join(DIST_ROOT, "core", "expor
 	skipExtensions: new Set([".ts"]),
 });
 
+// Mobile web UI for remote serve mode (built by scripts/build-mobile-web.js).
+// Source is gitignored and only present after a mobile web build — skip silently.
+copyTreeAssets(join(ROOT, "modes", "remote", "public"), join(DIST_ROOT, "modes", "remote", "public"));
+
 console.log("Runtime assets copied to dist/");

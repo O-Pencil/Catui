@@ -1,7 +1,7 @@
 /**
- * [WHO]: Config path getters (getAgentDir, getModelsPath, etc.), APP_NAME, VERSION
+ * [WHO]: Config path getters (getAgentDir, getModelsPath, getRemotePublicDir, etc.), APP_NAME, VERSION
  * [FROM]: Depends on node:fs, node:os, node:path, node:url
- * [TO]: Consumed by main.ts, index.ts, migrations.ts, cli/args.ts, core/model-registry.ts, core/platform/keybindings.ts, core/skills.ts, core/package-manager.ts, core/soul-integration.ts, catui-defaults.ts, utils/changelog.ts, and all extension entry points
+ * [TO]: Consumed by main.ts, index.ts, migrations.ts, cli/args.ts, core/model-registry.ts, core/platform/keybindings.ts, core/skills.ts, core/package-manager.ts, core/soul-integration.ts, catui-defaults.ts, utils/changelog.ts, modes/remote/remote-server.ts, and all extension entry points
  * [HERE]: config.ts - configuration path discovery and constants
  */
 import { existsSync, readFileSync } from "fs";
@@ -147,6 +147,24 @@ export function getExportTemplateDir(): string {
 	}
 	const srcOrDist = existsSync(join(packageDir, "src")) ? "src" : "dist";
 	return join(packageDir, srcOrDist, "core", "export-html");
+}
+
+/**
+ * Get path to the remote serve mode's static web UI directory
+ * - For Bun binary: public/ next to executable
+ * - For Node.js (dist/): dist/modes/remote/public/
+ * - For tsx (src/): modes/remote/public/
+ */
+export function getRemotePublicDir(): string {
+	if (isBunBinary) {
+		return join(dirname(process.execPath), "public");
+	}
+	const packageDir = getPackageDir();
+	const publicPath = join(packageDir, "modes", "remote", "public");
+	if (existsSync(publicPath)) {
+		return publicPath; // Flat structure (dev mode with tsx)
+	}
+	return join(packageDir, "dist", "modes", "remote", "public");
 }
 
 /** Get path to package.json */

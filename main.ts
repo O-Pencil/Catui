@@ -283,8 +283,20 @@ export async function main(args: string[]) {
 		process.exit(0);
 	}
 
-	// Read piped stdin content (if any) - skip for RPC/ACP mode which uses stdin for JSON-RPC
-	if (parsed.mode !== "rpc" && !parsed.acp) {
+	// Warn about serve-mode flags used without --serve (lenient: continue with normal mode selection)
+	if (
+		!parsed.serve &&
+		(parsed.port !== undefined ||
+			parsed.host !== undefined ||
+			parsed.tunnel !== undefined ||
+			parsed.serveToken !== undefined ||
+			parsed.advertiseUrl !== undefined)
+	) {
+		console.error(chalk.yellow("Warning: --port/--host/--tunnel/--token/--advertise only take effect together with --serve."));
+	}
+
+	// Read piped stdin content (if any) - skip for RPC/ACP/serve modes which use stdin differently
+	if (parsed.mode !== "rpc" && !parsed.acp && !parsed.serve) {
 		const stdinContent = await readPipedStdin();
 		if (stdinContent !== undefined) {
 			// Force print mode since interactive mode requires a TTY for keyboard input
@@ -385,7 +397,7 @@ export async function main(args: string[]) {
 	// stays unmounted in this commit — see ADR §D6 "session persistence" + the
 	// "out of scope" list in commit 93cd746.
 	// Default: OFF. Users opt back in via settings.bashApproval = true.
-	if (isInteractive && isCatuiProductApp && settingsManager.getBashApproval()) {
+	if (isInteractive && !parsed.serve && isCatuiProductApp && settingsManager.getBashApproval()) {
 		sessionOptions.baseToolsOverride = {
 			bash: createBashTool(parsedCwd, {
 				commandPrefix: settingsManager.getShellCommandPrefix(),
@@ -498,6 +510,15 @@ export async function main(args: string[]) {
 	} else if (mode === "rpc") {
 		const { runRpcMode } = await import("./modes/rpc/rpc-mode.js");
 		await runRpcMode(session);
+	} else if (parsed.serve) {
+		const { runRemoteMode } = await import("./modes/remote/remote-mode.js");
+		await runRemoteMode(session, {
+			port: parsed.port,
+			host: parsed.host,
+			tunnel: parsed.tunnel === true,
+			serveToken: parsed.serveToken,
+			advertiseUrl: parsed.advertiseUrl,
+		});
 	} else if (isInteractive) {
 		if (scopedModels.length > 0 && (parsed.verbose || !settingsManager.getQuietStartup())) {
 			const modelList = scopedModels

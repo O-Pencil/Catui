@@ -129,7 +129,7 @@ Single responses must complete the "evidence -> conclusion -> actionable next st
 ```
 |---------------------------------------------------------------|
 |                    ENTRY POINTS                               |
-|  cli.ts -> main.ts -> Mode Selection (interactive/print/rpc) |
+|  cli.ts -> main.ts -> Mode Selection (interactive/print/rpc/acp/serve) |
 |---------------------------------------------------------------|
                               |
                               v
@@ -207,7 +207,11 @@ Catui/
 │   ├── interactive/       # TUI mode
 │   ├── print/             # Print mode
 │   ├── rpc/               # RPC mode
-│   └── acp/               # ACP mode
+│   ├── acp/               # ACP mode
+│   └── remote/            # Remote serve mode (HTTP + WebSocket for mobile/browser clients)
+│
+├── apps/                  # Standalone applications (own toolchains, not npm workspaces)
+│   └── mobile/            # Mobile web UI + Capacitor APK shell (Vite/React/Tailwind 4)
 │
 ├── extensions/            # Built-in extensions
 │   ├── builtin/           # First-party extension source (default-enabled entries auto-load)
@@ -239,8 +243,14 @@ npm run build
 # LLM Wiki (scan graph, update Markdown pages, verify isomorphism, render HTML)
 npm run wiki:all
 
+# Mobile web UI for serve mode (builds apps/mobile, copies bundle into modes/remote/public/)
+npm run build:mobile-web
+
 # Development (direct execution)
 npx tsx cli.ts [args...]
+
+# Remote serve mode (phone/browser control; prints QR + token)
+npx tsx cli.ts --serve [--port 8787] [--host 0.0.0.0] [--tunnel]
 
 # Production
 node dist/cli.js [args...]
@@ -270,13 +280,15 @@ Programmatic usage factory for embedding Catui:
 const { session } = await createAgentSession(options);
 ```
 
-### Three Run Modes
+### Run Modes
 
 | Mode | File | Use Case |
 |------|------|----------|
 | Interactive | `modes/interactive/interactive-mode.ts` | TUI interface |
 | Print | `modes/print/print-mode.ts` | stdout/stdin streaming |
-| RPC | `modes/rpc/rpc-mode.ts` | IDE integration |
+| RPC | `modes/rpc/rpc-mode.ts` | IDE integration (JSON-lines over stdio) |
+| ACP | `modes/acp/acp-mode.ts` | Agent Communication Protocol |
+| Remote Serve | `modes/remote/remote-mode.ts` | Control Catui from phone/browser (`catui --serve`) |
 
 ---
 
@@ -469,7 +481,7 @@ npm run release
   │    ├─ npm auto-commits package.json + CHANGELOG.md + creates local git tag
   │    └─ [postversion hook] git push (tags kept local, GitHub rules block tag push)
   └─ npm publish
-       └─ [prepublishOnly hook] build:release (build only, no changelog)
+       ├─ [prepublishOnly hook] build:release (mobile web UI + build; fails hard if apps/mobile is not installed)
 ```
 
 For non-patch releases, run `npm version` manually:
@@ -572,7 +584,8 @@ P3 headers serve as **context budget gatekeepers**:
 
 - [P2: core/](./core/AGENT.md) - Core functionality, runtime, tools
 - [P2: core/sub-agent/](./core/sub-agent/AGENT.md) - CC-style Agent tool, registry, worktree isolation
-- [P2: modes/](./modes/AGENT.md) - Interactive, print, RPC modes
+- [P2: modes/](./modes/AGENT.md) - Interactive, print, RPC, ACP, remote serve modes
+- [P2: apps/mobile/](./apps/mobile/AGENTS.md) - Mobile web UI + Capacitor APK shell
 - [P2: extensions/](./extensions/AGENT.md) - Built-in extensions
 - [P2: packages/](./packages/AGENT.md) - Bundled npm packages
 
