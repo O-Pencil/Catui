@@ -1,11 +1,11 @@
 /**
- * [WHO]: Shared semantic trace helpers for run, turn, model, and tool boundaries
+ * [WHO]: Shared semantic trace helpers for run, turn, model, tool, checkpoint, and transition boundaries
  * [FROM]: Depends on agent messages, the trace recorder, and canonical fingerprints
  * [TO]: Consumed by both standard and structured-adaptive loops
  * [HERE]: core/lib/agent-core/src/run-trace-context.ts - loop-neutral trace instrumentation
  */
 import type { AssistantMessage } from "@catui/ai/types";
-import type { AgentLoopFramework, AgentMessage } from "./types.js";
+import type { AgentLoopFramework, AgentLoopTransition, AgentMessage } from "./types.js";
 import { fingerprintTraceValue } from "./run-trace.js";
 import type { RunTraceRecorder } from "./run-trace-recorder.js";
 
@@ -81,6 +81,7 @@ export async function traceToolBatch(
 	calls: readonly TraceToolCall[],
 	results: readonly TraceToolResult[],
 	policyEnabled: boolean,
+	approvalRequired?: { checkpointId: string; policyId?: string; toolCallId: string },
 ): Promise<void> {
 	if (!recorder) return;
 	const resultById = new Map(results.map((result) => [result.toolCallId, result]));
@@ -88,7 +89,7 @@ export async function traceToolBatch(
 		const result = resultById.get(call.id);
 		const details = result?.details && typeof result.details === "object" ? result.details as Record<string, unknown> : {};
 		const errorType = details.errorType;
-		const paused = errorType === "approval_required";
+		const paused = errorType === "approval_required" || approvalRequired?.toolCallId === call.id;
 		const denied = errorType === "permission_denied";
 		await recorder.record("tool.requested", {
 			toolCallId: call.id,
@@ -99,15 +100,26 @@ export async function traceToolBatch(
 		if (policyEnabled || paused || denied) {
 			await recorder.record("policy.decided", {
 				toolCallId: call.id,
-				policyId: typeof details.policyId === "string" ? details.policyId : "runtime-tool-policy",
+				policyId: typeof details.policyId === "string"
+					? details.policyId
+					: approvalRequired?.toolCallId === call.id
+						? approvalRequired.policyId ?? "runtime-tool-policy"
+						: "runtime-tool-policy",
 				decision: paused ? "pause" : denied ? "deny" : "allow",
 				inputFingerprint: fingerprintTraceValue(call.arguments),
 			});
 		}
-		if (paused && typeof details.checkpointId === "string") {
+		const checkpointId = typeof details.checkpointId === "string"
+			? details.checkpointId
+			: approvalRequired?.toolCallId === call.id
+				? approvalRequired.checkpointId
+				: undefined;
+		if (paused && checkpointId) {
 			await recorder.record("checkpoint.created", {
-				checkpointId: details.checkpointId,
-				policyId: typeof details.policyId === "string" ? details.policyId : "runtime-tool-policy",
+				checkpointId,
+				policyId: typeof details.policyId === "string"
+					? details.policyId
+					: approvalRequired?.policyId ?? "runtime-tool-policy",
 				toolCallId: call.id,
 			});
 		}
@@ -119,6 +131,18 @@ export async function traceToolBatch(
 			outputFingerprint: fingerprintTraceValue(result ? { content: result.content, details: result.details } : undefined),
 		});
 	}
+}
+
+export function traceTransitionApplied(
+	recorder: RunTraceRecorder | undefined,
+	transition: AgentLoopTransition | { reason: string; [key: string]: unknown },
+): void {
+	const pending = recorder?.record("transition.applied", {
+		reason: transition.reason,
+		transitionFingerprint: fingerprintTraceValue(transition),
+	});
+	// Required failures remain latched on the recorder and surface at the final flush.
+	void pending?.catch(() => undefined);
 }
 
 export async function traceRunCompleted(

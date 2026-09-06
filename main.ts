@@ -26,11 +26,11 @@ import { ModelRegistry } from "./core/model-registry.js";
 import { resolveModelScope, type ScopedModel } from "./core/model-resolver.js";
 import { DefaultResourceLoader } from "./core/platform/config/resource-loader.js";
 import { createAgentSession } from "./core/runtime/sdk.js";
+import { createDefaultRuntimeTools } from "./core/runtime/default-tools.js";
 import { SessionManager } from "./core/session/session-manager.js";
 import { SettingsManager } from "./core/platform/config/settings-manager.js";
 
 import { time } from "./core/platform/timings.js";
-import { createBashTool } from "./core/tools/bash.js";
 import { CliApprovalClient } from "./modes/interactive/components/approval-selector.js";
 import { runMigrations, showDeprecationWarnings } from "./migrations.js";
 // Mode runners (interactive/print/rpc) are dynamically imported at dispatch time (P6/EV02)
@@ -397,13 +397,10 @@ export async function main(args: string[]) {
 	// stays unmounted in this commit — see ADR §D6 "session persistence" + the
 	// "out of scope" list in commit 93cd746.
 	// Default: OFF. Users opt back in via settings.bashApproval = true.
-	if (isInteractive && !parsed.serve && isCatuiProductApp && settingsManager.getBashApproval()) {
-		sessionOptions.baseToolsOverride = {
-			bash: createBashTool(parsedCwd, {
-				commandPrefix: settingsManager.getShellCommandPrefix(),
-				approval: new CliApprovalClient(),
-			}),
-		};
+	if (isInteractive && isCatuiProductApp && settingsManager.getBashApproval()) {
+		sessionOptions.baseToolsOverride = createDefaultRuntimeTools(parsedCwd, settingsManager, {
+			bashApproval: new CliApprovalClient(),
+		});
 	}
 
 	// Handle CLI --api-key as runtime override (not persisted)

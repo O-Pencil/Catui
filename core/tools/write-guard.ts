@@ -1,10 +1,11 @@
 /**
  * [WHO]: Provides createWorkspaceWriteGuard(), isPathWithinRoot()
- * [FROM]: Depends on node:path for absolute path normalization
- * [TO]: Consumed by core/runtime/agent-session.ts and tool-boundary tests
+ * [FROM]: Depends on node:fs/promises and node:path for canonical path validation
+ * [TO]: Consumed by core/runtime/default-tools.ts, core/runtime/run-trace-jsonl.ts, and tool-boundary tests
  * [HERE]: core/tools/write-guard.ts - shared filesystem write boundary helpers
  */
-import { isAbsolute, resolve } from "node:path";
+import { lstat, realpath } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 function normalizePath(path: string): string {
 	return resolve(isAbsolute(path) ? path : path);
@@ -20,12 +21,42 @@ export function isPathWithinRoot(targetPath: string, rootPath: string): boolean 
 	return target === root || target.startsWith(`${root}/`);
 }
 
-export function createWorkspaceWriteGuard(cwd: string): (absolutePath: string) => void {
+function isMissingPathError(error: unknown): boolean {
+	return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+async function assertNoSymlinkTraversal(targetPath: string, workspaceRoot: string): Promise<void> {
+	const canonicalRoot = await realpath(workspaceRoot);
+	const relativePath = relative(workspaceRoot, targetPath);
+	let currentPath = workspaceRoot;
+
+	for (const segment of relativePath.split(sep).filter(Boolean)) {
+		currentPath = join(currentPath, segment);
+		try {
+			const stats = await lstat(currentPath);
+			if (stats.isSymbolicLink()) {
+				throw new Error(`Write denied for ${targetPath}. Workspace writes may not traverse symbolic links: ${currentPath}`);
+			}
+			const canonicalCurrent = await realpath(currentPath);
+			if (!isPathWithinRoot(canonicalCurrent, canonicalRoot)) {
+				throw new Error(`Write denied for ${targetPath}. Resolved path escapes the current workspace: ${canonicalCurrent}`);
+			}
+		} catch (error: unknown) {
+			if (isMissingPathError(error)) return;
+			throw error;
+		}
+	}
+}
+
+export function createWorkspaceWriteGuard(cwd: string): (absolutePath: string) => Promise<void> {
 	const workspaceRoot = normalizePath(cwd);
-	return (absolutePath: string) => {
-		if (isPathWithinRoot(absolutePath, workspaceRoot)) return;
-		throw new Error(
-			`Write denied for ${absolutePath}. Main session write tools may only write inside the current workspace: ${workspaceRoot}`,
-		);
+	return async (absolutePath: string) => {
+		const targetPath = normalizePath(absolutePath);
+		if (!isPathWithinRoot(targetPath, workspaceRoot)) {
+			throw new Error(
+				`Write denied for ${absolutePath}. Main session write tools may only write inside the current workspace: ${workspaceRoot}`,
+			);
+		}
+		await assertNoSymlinkTraversal(targetPath, workspaceRoot);
 	};
 }

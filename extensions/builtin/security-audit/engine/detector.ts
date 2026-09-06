@@ -56,9 +56,133 @@ function splitShellWords(command: string): string[] {
 	return words;
 }
 
+const SHELL_CONTROL_WORDS = new Set(["&&", "||", ";", "|", "&"]);
+
+const GIT_CLONE_OPTIONS_WITH_VALUE = new Set([
+	"--branch",
+	"--bundle-uri",
+	"--config",
+	"--depth",
+	"--filter",
+	"--jobs",
+	"--origin",
+	"--reference",
+	"--reference-if-able",
+	"--revision",
+	"--separate-git-dir",
+	"--server-option",
+	"--shallow-exclude",
+	"--shallow-since",
+	"--template",
+	"--upload-pack",
+	"-b",
+	"-c",
+	"-j",
+	"-o",
+	"-u",
+]);
+
 function expandPath(path: string, cwd = process.cwd()): string {
 	if (path === "~" || path.startsWith("~/")) return expandHome(path);
 	return isAbsolute(path) ? resolve(path) : resolve(cwd, path);
+}
+
+type GitCloneInvocation = {
+	repository: string;
+	target: string;
+};
+
+type GitCloneCommand = {
+	cloneIndex: number;
+	cwd: string;
+};
+
+function inferGitCloneDirectory(repository: string): string | undefined {
+	const withoutSuffix = repository.split(/[?#]/, 1)[0]?.replace(/\/+$/, "") ?? "";
+	const separator = Math.max(withoutSuffix.lastIndexOf("/"), withoutSuffix.lastIndexOf(":"));
+	const basename = withoutSuffix.slice(separator + 1);
+	const directory = basename.endsWith(".git") ? basename.slice(0, -4) : basename;
+	return directory && directory !== "." && directory !== ".." ? directory : undefined;
+}
+
+function parseGitCloneInvocation(
+	words: string[],
+	cloneIndex: number,
+	cwd?: string,
+): GitCloneInvocation | undefined {
+	const positional: string[] = [];
+	let parseOptions = true;
+	let skipNext = false;
+
+	for (let index = cloneIndex + 1; index < words.length; index += 1) {
+		const word = words[index];
+		if (SHELL_CONTROL_WORDS.has(word)) break;
+		if (skipNext) {
+			skipNext = false;
+			continue;
+		}
+		if (parseOptions && word === "--") {
+			parseOptions = false;
+			continue;
+		}
+		const optionName = word.split("=", 1)[0];
+		if (parseOptions && GIT_CLONE_OPTIONS_WITH_VALUE.has(optionName)) {
+			skipNext = !word.includes("=");
+			continue;
+		}
+		if (parseOptions && word.startsWith("-")) continue;
+		positional.push(word);
+	}
+
+	const repository = positional[0];
+	if (!repository) return undefined;
+	const targetArgument = positional[1] ?? inferGitCloneDirectory(repository);
+	if (!targetArgument) return undefined;
+	return {
+		repository,
+		target: expandPath(targetArgument, cwd),
+	};
+}
+
+function locateGitCloneCommand(words: string[], gitIndex: number, cwd?: string): GitCloneCommand | undefined {
+	let effectiveCwd = cwd ?? process.cwd();
+	for (let index = gitIndex + 1; index < words.length; index += 1) {
+		const word = words[index];
+		if (SHELL_CONTROL_WORDS.has(word)) return undefined;
+		if (word === "clone") return { cloneIndex: index, cwd: effectiveCwd };
+		if (word === "-C") {
+			const target = words[index + 1];
+			if (!target || SHELL_CONTROL_WORDS.has(target)) return undefined;
+			effectiveCwd = expandPath(target, effectiveCwd);
+			index += 1;
+			continue;
+		}
+		if (word.startsWith("-C") && word.length > 2) {
+			effectiveCwd = expandPath(word.slice(2), effectiveCwd);
+			continue;
+		}
+		if (word === "-c" || word === "--config-env") {
+			if (!words[index + 1]) return undefined;
+			index += 1;
+			continue;
+		}
+		if (word.startsWith("-")) continue;
+		return undefined;
+	}
+	return undefined;
+}
+
+function resolveLeadingCd(words: string[], index: number, cwd: string): { cwd: string; nextIndex: number } | undefined {
+	if (words[index] !== "cd") return undefined;
+	let targetIndex = index + 1;
+	if (words[targetIndex] === "--") targetIndex += 1;
+	const target = words[targetIndex];
+	const control = words[targetIndex + 1];
+	if (!target || (control !== "&&" && control !== ";")) return undefined;
+	return {
+		cwd: expandPath(target, cwd),
+		nextIndex: targetIndex + 2,
+	};
 }
 
 function isTrustedSkillDirectory(path: string, cwd?: string): boolean {
@@ -81,19 +205,21 @@ function isTrustedSkillDirectory(path: string, cwd?: string): boolean {
 
 function detectGitCloneIntoTrustedSkillDirectory(command: string, cwd?: string): SecurityCheckResult | undefined {
 	const words = splitShellWords(command);
+	let effectiveCwd = cwd ?? process.cwd();
 	for (let index = 0; index < words.length - 1; index += 1) {
-		if (words[index] !== "git" || words[index + 1] !== "clone") continue;
-		const positional: string[] = [];
-		for (let argIndex = index + 2; argIndex < words.length; argIndex += 1) {
-			const word = words[argIndex];
-			if (word === "--") continue;
-			if (word.startsWith("-")) continue;
-			positional.push(word);
+		const leadingCd = resolveLeadingCd(words, index, effectiveCwd);
+		if (leadingCd) {
+			effectiveCwd = leadingCd.cwd;
+			index = leadingCd.nextIndex - 1;
+			continue;
 		}
-		const target = positional[1];
-		if (!target || !isTrustedSkillDirectory(target, cwd)) continue;
-		const repo = positional[0] ?? "";
-		const externalRepo = /^(?:https?:\/\/|ssh:\/\/|git@)/i.test(repo) || (!isAbsolute(repo) && !repo.startsWith("."));
+		if (words[index] !== "git") continue;
+		const cloneCommand = locateGitCloneCommand(words, index, effectiveCwd);
+		if (!cloneCommand) continue;
+		const invocation = parseGitCloneInvocation(words, cloneCommand.cloneIndex, cloneCommand.cwd);
+		if (!invocation || !isTrustedSkillDirectory(invocation.target, cloneCommand.cwd)) continue;
+		const externalRepo = /^(?:https?:\/\/|ssh:\/\/|git@)/i.test(invocation.repository)
+			|| (!isAbsolute(invocation.repository) && !invocation.repository.startsWith("."));
 		if (!externalRepo) continue;
 		return {
 			allowed: false,

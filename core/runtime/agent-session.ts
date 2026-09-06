@@ -102,7 +102,7 @@ import {
 import { RetryCoordinator, type RetryCoordinatorHost, type RetrySessionEvent } from "./retry-coordinator.js";
 import { createLogger, type AgentLogger } from "../platform/utils/logger.js";
 import { createAgentTool, createTaskToolAlias, createSendMessageTool, AGENT_TOOL_NAME, TASK_TOOL_NAME, SEND_MESSAGE_TOOL_NAME, InProcessSubAgentBackend, type CreateSessionFn, type SubAgentEvent } from "../sub-agent/index.js";
-import { persistWorkspaceRunTrace } from "./run-trace-jsonl.js";
+import { persistWorkspaceRunTrace, redactWorkspaceRunTraceEvent } from "./run-trace-jsonl.js";
 
 export type { SessionSlashCommandDescriptor } from "./slash-command-catalog.js";
 export { CycleModelError } from "./model-controller.js";
@@ -1170,6 +1170,7 @@ export class AgentSession {
       runId: `run-${randomUUID()}`,
       sessionId: this.sessionManager.getSessionId(),
       sink: traceSink,
+      redactor: redactWorkspaceRunTraceEvent,
       failureMode: "best_effort",
     });
     this.agent.setRunTrace(traceRecorder);

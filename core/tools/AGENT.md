@@ -9,7 +9,7 @@ find.ts: FindTool, findTool, createFindTool, FindToolInput, file pattern matchin
 orchestrator.ts: ToolInfo interface, ToolOrchestrator class, runtime tool registry, lookup, and active-tool resolution for AgentSession
 path-utils.ts: resolveReadPath(), resolveToCwd(), path manipulation utilities for tools, handles Unicode spaces and macOS NFD normalization
 input-validation.ts: validateIntegerWindowOption(), validatePositiveNumberOption(), shared numeric invariants for tool inputs
-write-guard.ts: createWorkspaceWriteGuard(), isPathWithinRoot(), shared filesystem write boundary helpers for keeping write tools inside a workspace root
+write-guard.ts: createWorkspaceWriteGuard(), isPathWithinRoot(), canonical filesystem write boundary that rejects lexical escapes and symbolic-link traversal below the workspace root
 ls.ts: LsTool, lsTool, createLsTool, LsToolInput, directory listing with metadata, consumed by orchestrator
 grep.ts: GrepTool, grepTool, createGrepTool, GrepToolInput, content search via ripgrep, consumed by orchestrator
 edit.ts: EditTool, editTool, createEditTool, EditToolInput, EditOperations, EditToolOptions.beforeWrite guard, filesystem mutation via diff application, consumed by orchestrator

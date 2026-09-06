@@ -4,7 +4,7 @@
  * state machine with ordered tool-result pairing and safe tool batching.
  */
 /**
- * [WHO]: structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue
+ * [WHO]: structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue, weak-model-compatible loop/trace emission
  * [FROM]: Depends on @catui/ai, ./types, ./errors, structured-adaptive tool executors, and shared loop helpers.
  * [TO]: Consumed by core/lib/agent-core/src/agent.ts and index.ts
  * [HERE]: core/lib/agent-core/src/structured-adaptive-agent-loop.ts - selectable structured-adaptive query loop framework with recovered-error tombstoning
@@ -57,7 +57,7 @@ import {
 	waitForAssistantStreamEvent,
 	type AssistantStreamNext,
 } from "./agent-loop-stream-events.js";
-import { traceModelRequested, traceModelResponded, traceRunCompleted, traceRunStarted, traceToolBatch, traceTurnCompleted, traceTurnStarted } from "./run-trace-context.js";
+import { traceModelRequested, traceModelResponded, traceRunCompleted, traceRunStarted, traceToolBatch, traceTransitionApplied, traceTurnCompleted, traceTurnStarted } from "./run-trace-context.js";
 
 const DEFAULT_MAX_TURNS_PER_PROMPT = 256;
 const DEFAULT_MAX_TOOL_CALLS_PER_PROMPT = 512;
@@ -308,6 +308,10 @@ async function runStructuredAdaptiveQueryLoop(
 		state.maxOutputTokensOverride = undefined;
 
 		if (message.stopReason === "error" || message.stopReason === "aborted") {
+			const failedToolCalls = Array.from(new Map([
+				...message.content.filter((part) => part.type === "toolCall"),
+				...streamingToolExecutor.toolCalls,
+			].map((call) => [call.id, call])).values());
 			const errorSubtype =
 				message.stopReason === "aborted"
 					? "aborted"
@@ -330,6 +334,14 @@ async function runStructuredAdaptiveQueryLoop(
 				new Set(toolResults.map((result) => result.toolCallId)),
 			);
 			const allToolResults = [...toolResults, ...interruptedToolResults];
+			state.toolCallCount += failedToolCalls.length;
+			await traceToolBatch(
+				config.runTrace,
+				failedToolCalls,
+				allToolResults,
+				Boolean(config.toolPolicies?.length || config.canUseTool),
+				failedToolExecution.approvalRequired,
+			);
 			for (const result of allToolResults) {
 				currentContext.messages.push(result);
 				newMessages.push(result);
@@ -342,6 +354,7 @@ async function runStructuredAdaptiveQueryLoop(
 				stream.push({ type: "message_start", message: contextMessage });
 				stream.push({ type: "message_end", message: contextMessage });
 			}
+			await traceTurnCompleted(config.runTrace, state.turnCount, message);
 
 			if (
 				message.stopReason === "error" &&
@@ -538,7 +551,13 @@ async function runStructuredAdaptiveQueryLoop(
 			toolExecution.toolResults,
 			config.maxToolResultBatchSizeChars,
 		);
-		await traceToolBatch(config.runTrace, toolCalls, toolResults, Boolean(config.toolPolicies?.length || config.canUseTool));
+		await traceToolBatch(
+			config.runTrace,
+			toolCalls,
+			toolResults,
+			Boolean(config.toolPolicies?.length || config.canUseTool),
+			toolExecution.approvalRequired,
+		);
 		state.permissionDenials.push(...toolExecution.permissionDenials);
 
 		for (const result of toolResults) {
@@ -617,6 +636,7 @@ async function runStructuredAdaptiveQueryLoop(
 		if (toolExecution.steeringMessages && toolExecution.steeringMessages.length > 0) {
 			progressTracker?.reset();
 			state.pendingMessages = toolExecution.steeringMessages;
+			traceTransitionApplied(config.runTrace, { reason: "steering", messageCount: state.pendingMessages.length });
 		} else {
 			state.pendingMessages = (await config.getSteeringMessages?.()) || [];
 			if (state.pendingMessages.length > 0) progressTracker?.reset();
@@ -958,6 +978,7 @@ function finish(
 function recordTransition(state: QueryLoopState, transition: AgentLoopTransition): void {
 	state.transition = transition;
 	state.transitions.push(transition);
+	traceTransitionApplied(state.config.runTrace, transition);
 }
 
 function emptyUsage(): Usage {

@@ -20,6 +20,7 @@ coverage/
 .catui/tasks/
 # Local agent-registry scratch (regenerable)
 .catui/agent-registry.json
+.catui/traces/run-*.jsonl
 # Daily pencil-on-pencil self-study runtime artifacts (task prompts + outputs)
 .pencil-self-study/
 # grub harness state (per-task progress logs + run state — regenerable via /grub)

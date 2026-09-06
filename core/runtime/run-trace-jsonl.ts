@@ -1,19 +1,22 @@
 /**
- * [WHO]: JsonlRunTraceSink, persistWorkspaceRunTrace(), readRunTraceJsonl, secure file permissions, and byte limits
- * [FROM]: Depends on Node filesystem APIs and the agent-core trace contract
+ * [WHO]: JsonlRunTraceSink, persistWorkspaceRunTrace(), redactWorkspaceRunTraceEvent(), secure file permissions, byte limits, and retention
+ * [FROM]: Depends on Node filesystem APIs, proper-lockfile, the agent-core trace contract, and the workspace write guard
  * [TO]: Exported through the public runtime subpath for host persistence
  * [HERE]: core/runtime/run-trace-jsonl.ts - secure host-owned and workspace-exported trace storage
  */
 import { randomUUID } from "node:crypto";
-import { chmod, open, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { chmod, open, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import lockfile from "proper-lockfile";
 import {
 	parseRunTraceEvent,
 	validateRunTrace,
 	type RunTraceEventV1,
+	type RunTraceRedactor,
 	type RunTraceSink,
 } from "@catui/agent-core";
+import { createWorkspaceWriteGuard } from "../tools/write-guard.js";
 
 export interface RunTraceJsonlLimits {
 	maxFileBytes?: number;
@@ -26,8 +29,65 @@ export interface WorkspaceRunTraceResult {
 	latestPath: string;
 }
 
+export interface WorkspaceRunTraceOptions {
+	maxRunFiles?: number;
+}
+
 const DEFAULT_MAX_FILE_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_LINE_BYTES = 1024 * 1024;
+const DEFAULT_MAX_RUN_FILES = 100;
+const REDACTED = "[REDACTED_SECRET]";
+const traceDirectoryTails = new Map<string, Promise<void>>();
+const SENSITIVE_KEYS = new Set([
+	"apikey", "authorization", "clientsecret", "connectionstring", "cookie", "credential", "credentials",
+	"databaseurl", "dsn", "password", "passwd", "privatekey", "refreshtoken", "secret", "setcookie", "token", "accesstoken",
+]);
+const SENSITIVE_KEY_SUFFIXES = [
+	"accesskey", "apikey", "authorization", "clientsecret", "connectionstring", "cookie", "credential", "credentials",
+	"databaseurl", "dsn", "idtoken", "password", "passwd", "privatekey", "refreshtoken", "secret", "sessiontoken", "token",
+];
+
+function isSensitiveKey(key: string): boolean {
+	return SENSITIVE_KEYS.has(key) || SENSITIVE_KEY_SUFFIXES.some((suffix) => key.endsWith(suffix));
+}
+
+function redactSecretText(value: string): string {
+	return value
+		.replace(/-----BEGIN [^-\n]*PRIVATE KEY-----[\s\S]*?-----END [^-\n]*PRIVATE KEY-----/gi, REDACTED)
+		.replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, `Bearer ${REDACTED}`)
+		.replace(/\b(Authorization\s*:\s*Basic)\s+[A-Za-z0-9+/=_-]+/gi, `$1 ${REDACTED}`)
+		.replace(/\b((?:Set-)?Cookie\s*:)\s*[^"'\r\n&|]+/gi, `$1 ${REDACTED}`)
+		.replace(/\b(?:[A-Za-z0-9_]*(?:api[_-]?key|access[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|credential|credentials|password|passwd|secret|token)|database[_-]?url|connection[_-]?string|dsn)\s*[:=]\s*(?:["'][^"'\n]+["']|[^\s,;]+)/gi, (match) => {
+			const separator = match.includes(":") ? ":" : "=";
+			return `${match.slice(0, match.indexOf(separator) + 1)}${REDACTED}`;
+		})
+		.replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/\s:@]+):([^@\s/]+)@/gi, `$1${REDACTED}:${REDACTED}@`)
+		.replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{12,}\b/g, REDACTED);
+}
+
+function redactTraceValue(value: unknown, depth = 0): unknown {
+	if (depth > 20) return "[REDACTED_DEPTH_LIMIT]";
+	if (typeof value === "string") return redactSecretText(value);
+	if (Array.isArray(value)) return value.map((item) => redactTraceValue(item, depth + 1));
+	if (!value || typeof value !== "object") return value;
+	const output: Record<string, unknown> = {};
+	for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+		const normalizedKey = key.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+		output[key] = isSensitiveKey(normalizedKey) ? REDACTED : redactTraceValue(child, depth + 1);
+	}
+	return output;
+}
+
+export const redactWorkspaceRunTraceEvent: RunTraceRedactor = (event) => {
+	if (event.kind !== "tool.requested" || event.payload.input === undefined) return event;
+	return {
+		...event,
+		payload: {
+			...event.payload,
+			input: redactTraceValue(event.payload.input),
+		},
+	};
+};
 
 function limits(options: RunTraceJsonlLimits): Required<RunTraceJsonlLimits> {
 	const resolved = {
@@ -119,18 +179,76 @@ async function writeAtomicOwnerOnly(path: string, content: string): Promise<void
 	await chmod(path, 0o600);
 }
 
+async function serializeTraceDirectoryWrite<T>(traceDir: string, operation: () => Promise<T>): Promise<T> {
+	const previous = traceDirectoryTails.get(traceDir) ?? Promise.resolve();
+	let release!: () => void;
+	const current = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const tail = previous.catch(() => undefined).then(() => current);
+	traceDirectoryTails.set(traceDir, tail);
+	await previous.catch(() => undefined);
+	try {
+		return await operation();
+	} finally {
+		release();
+		if (traceDirectoryTails.get(traceDir) === tail) traceDirectoryTails.delete(traceDir);
+	}
+}
+
+async function pruneWorkspaceRunTraces(traceDir: string, maxRunFiles: number): Promise<void> {
+	if (!Number.isInteger(maxRunFiles) || maxRunFiles < 1) {
+		throw new Error("Workspace trace maxRunFiles must be a positive integer");
+	}
+	const entries = await readdir(traceDir, { withFileTypes: true });
+	const candidates = await Promise.all(entries
+		.filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl") && entry.name !== "latest.jsonl")
+		.map(async (entry) => {
+			const path = join(traceDir, entry.name);
+			return { path, name: entry.name, modifiedAt: (await stat(path)).mtimeMs };
+		}));
+	if (candidates.length <= maxRunFiles) return;
+	candidates.sort((a, b) => b.modifiedAt - a.modifiedAt || b.name.localeCompare(a.name));
+	await Promise.all(candidates.slice(maxRunFiles).map((candidate) => unlink(candidate.path)));
+}
+
 export async function persistWorkspaceRunTrace(
 	cwd: string,
 	events: readonly unknown[],
+	options: WorkspaceRunTraceOptions = {},
 ): Promise<WorkspaceRunTraceResult> {
 	if (cwd.length === 0) throw new Error("Workspace trace cwd must not be empty");
 	const validated = validateRunTrace(events);
-	const runId = validated[0].runId;
+	const redacted = await Promise.all(validated.map((event) => redactWorkspaceRunTraceEvent(event)));
+	const runId = redacted[0].runId;
 	const traceDir = join(cwd, ".catui", "traces");
 	const runPath = join(traceDir, `${safeTraceFileStem(runId)}.jsonl`);
 	const latestPath = join(traceDir, "latest.jsonl");
-	const content = `${validated.map((event) => JSON.stringify(event)).join("\n")}\n`;
-	await writeAtomicOwnerOnly(runPath, content);
-	await writeAtomicOwnerOnly(latestPath, content);
-	return { runId, runPath, latestPath };
+	const content = `${redacted.map((event) => JSON.stringify(event)).join("\n")}\n`;
+	const guardWorkspaceWrite = createWorkspaceWriteGuard(cwd);
+	return serializeTraceDirectoryWrite(traceDir, async () => {
+		await guardWorkspaceWrite(traceDir);
+		await mkdir(traceDir, { recursive: true });
+		await guardWorkspaceWrite(traceDir);
+		const lockPath = join(traceDir, ".persist.lock");
+		await guardWorkspaceWrite(lockPath);
+		const release = await lockfile.lock(traceDir, {
+			lockfilePath: lockPath,
+			realpath: true,
+			stale: 30000,
+			retries: { retries: 10, factor: 2, minTimeout: 10, maxTimeout: 1000, randomize: true },
+		});
+		try {
+			await guardWorkspaceWrite(traceDir);
+			await guardWorkspaceWrite(runPath);
+			await guardWorkspaceWrite(latestPath);
+			await writeAtomicOwnerOnly(runPath, content);
+			await writeAtomicOwnerOnly(latestPath, content);
+			await guardWorkspaceWrite(traceDir);
+			await pruneWorkspaceRunTraces(traceDir, options.maxRunFiles ?? DEFAULT_MAX_RUN_FILES);
+			return { runId, runPath, latestPath };
+		} finally {
+			await release();
+		}
+	});
 }
