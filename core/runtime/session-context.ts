@@ -11,7 +11,7 @@
  */
 
 import type { AgentLoopFrameworkInput, AgentLoopPolicyOptions, AgentMessage, ThinkingLevel } from "@catui/agent-core";
-import type { Model } from "@catui/ai/types";
+import type { AssistantMessage, Model } from "@catui/ai/types";
 import type { CompactionResult } from "../session/compaction/index.js";
 import type { ExtensionRunner } from "../extensions-host/index.js";
 import type { AuthCredential } from "../platform/config/auth-storage.js";
@@ -88,6 +88,27 @@ export interface CompactionControllerContext {
   }): void;
   getAutoCompactionEnabled(): boolean;
   setAutoCompactionEnabled(enabled: boolean): void;
+}
+
+/**
+ * Narrow capability surface for SessionCompactionCoordinator (loop-driven compaction decisions:
+ * overflow/threshold checks + in-loop model-error recovery). Loop continuation stays owned by
+ * AgentSession and is requested through continueAgentLoop.
+ */
+export interface SessionCompactionCoordinatorContext {
+  getCompactionSettings(): CompactionSettings;
+  getModel(): Model<any> | undefined;
+  getBranch(): SessionEntry[];
+  getAgentMessages(): AgentMessage[];
+  replaceAgentMessages(messages: AgentMessage[]): void;
+  /** Whether follow-up/steering/custom messages are queued on the agent loop. */
+  hasQueuedMessages(): boolean;
+  /** Kick the agent loop asynchronously (AgentSession owns the setTimeout-continue pattern). */
+  continueAgentLoop(): void;
+  /** Delegate to CompactionController.runAuto — the compaction flow itself. */
+  runAutoCompaction(reason: "overflow" | "threshold", willRetry: boolean): Promise<AgentMessage[] | undefined>;
+  isRetryableError(message: AssistantMessage): boolean;
+  handleErrorInLoop(message: AssistantMessage): Promise<boolean>;
 }
 
 /**

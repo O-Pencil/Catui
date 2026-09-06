@@ -6,12 +6,12 @@ Member List
 event-bus.ts: EventBus interface, EventBusController, createEventBus(), typed event emission system for extension hooks, key methods: emit(), on() returns unsubscribe function
 event-bridge.ts: ExtensionEventBridge, ExtensionEventBridgeDeps, owns AgentEvent-to-extension-event mapping and extension turn indexing; AgentSession keeps public subscribe, persistence, retry/compaction, and Soul ordering
 sdk.ts: createAgentSession(options) factory, creates all services with dependency injection, wires up extensions, applies loop framework/policy overrides, consumed by all run modes (interactive/print/rpc)
-agent-session.ts: AgentSession class, central session lifecycle manager, wraps Agent from agent-core, captures and persists the latest semantic Run Trace, coordinates compaction, in-loop recovery and recoverable error-tail pruning, forwards agent_result telemetry to extensions, exposes runtime loop policy updates, emits events, handles model switching, all modes delegate to this class
+agent-session.ts: AgentSession class, central session lifecycle manager, wraps Agent from agent-core, captures and persists the latest semantic Run Trace, coordinates compaction decisions via SessionCompactionCoordinator, in-loop recovery and recoverable error-tail pruning (session-recovery.ts), forwards agent_result telemetry to extensions, exposes runtime loop policy updates, emits events, handles model switching, all modes delegate to this class
 turn-context.ts: Generic per-turn hint bus on globalThis, TURN_CONTEXT_GLOBAL_KEY, TurnContext interface (currently structuralAnchor), setTurnContext/getTurnContext/resetTurnContext; producer-side API for SAL→mem-core decoupling (mem-core has read-only mirror at packages/mem-core/src/turn-context.ts using same global key)
 catui-agent.ts: CatuiAgent helper class wrapping Agent core
 retry-coordinator.ts: Retry coordination for transient failures
 bash-runner.ts: BashRunner class — bash execution + pending-message queue extracted from AgentSession (P4.1); deps injected as closures (getCwd/getShellCommandPrefix/appendToAgent/appendToSession/isStreaming), no Agent/SessionManager import
-session-context.ts: ModelControllerContext, ModelSelectPayload, and ScopedModel contracts; narrow capability seam for runtime controllers
+session-context.ts: ModelControllerContext, CompactionControllerContext, SessionCompactionCoordinatorContext, SessionTreeControllerContext, SessionLifecycleControllerContext, ModelSelectPayload, ScopedModel; narrow capability seam for runtime controllers and coordinators
 model-controller.ts: ModelController, CycleModelError, ModelCycleResult, owns model set/cycle/restore and thinking-level mutations formerly embedded in AgentSession
 compaction-controller.ts: CompactionController — owns manual + auto compaction flows and their abort slots (AS04); reads session via narrow CompactionControllerContext (lifecycle disconnect/reconnect/abort as capabilities); AgentSession remains the facade and loop continuation host
 session-tree-controller.ts: SessionTreeController — owns navigateTree() + branch summarization + the branch-summary abort slot (AS10); reads session via narrow SessionTreeControllerContext; after this slice AgentSession holds no abort slots
@@ -27,6 +27,9 @@ checkpoint-store.ts: FileCheckpointStore, path-confined atomic JSON persistence 
 run-trace-jsonl.ts: JsonlRunTraceSink, persistWorkspaceRunTrace(), and readRunTraceJsonl, owner-only bounded JSONL persistence for versioned semantic run traces and workspace `.catui/traces/latest.jsonl` export
 thinking-levels.ts: pure thinking-level logic extracted from AgentSession (P4.2) — THINKING_LEVELS(_WITH_XHIGH), modelSupportsThinking/Xhigh, availableThinkingLevels, clampThinkingLevel, nextThinkingLevel; no session state, reusable by rpc/print
 model-cycle.ts: pure model-cycle decisions extracted from AgentSession (P4.2) — pickThinkingLevelOnModelChange, nextCyclicIndex; side effects are owned by model-controller.ts
+session-recovery.ts: ParsedSkillBlock, parseSkillBlock(), pruneRecoverableErrorTail() — pure skill-block parsing + recoverable error-tail pruning extracted from AgentSession (P6), no session state; re-exported by agent-session.ts for SDK compatibility
+session-events.ts: AgentSessionEvent, AgentSessionEventListener, mapSubAgentEvent() — session event contract + SubAgentEvent mapping extracted from AgentSession (P6); re-exported by agent-session.ts
+session-compaction-coordinator.ts: SessionCompactionCoordinator — loop-driven compaction decisions (overflow/threshold) + in-loop model-error recovery extracted from AgentSession (AS04/P6); reads session via narrow SessionCompactionCoordinatorContext, delegates the flow to compaction-controller.ts
 
 ## Capability Ownership (runtime subsystem)
 
@@ -40,6 +43,7 @@ model-cycle.ts: pure model-cycle decisions extracted from AgentSession (P4.2) �
 |---------|-------|---------------------|-------------------|
 | model set/cycle + thinking level | `model-controller.ts` | `ModelControllerContext` | [AS02](../../.dev-docs/architecture-review/runtime-session-review/findings/AS02-model-controller-boundary.md), [AS03](../../.dev-docs/architecture-review/runtime-session-review/findings/AS03-session-switch-state-restore.md) |
 | manual + auto compaction (+ abort slots) | `compaction-controller.ts` | `CompactionControllerContext` | [AS04](../../.dev-docs/architecture-review/runtime-session-review/findings/AS04-compaction-coordinator-placeholder.md) |
+| loop-driven compaction decisions (overflow/threshold) + in-loop model-error recovery | `session-compaction-coordinator.ts` | `SessionCompactionCoordinatorContext` | [AS04](../../.dev-docs/architecture-review/runtime-session-review/findings/AS04-compaction-coordinator-placeholder.md) |
 | session-tree navigation + branch summary | `session-tree-controller.ts` | `SessionTreeControllerContext` | [AS10](../../.dev-docs/architecture-review/runtime-session-review/findings/AS10-tree-navigation-boundary.md) |
 | session new/switch/fork (identity change) | `session-lifecycle-controller.ts` | `SessionLifecycleControllerContext` | [AS08](../../.dev-docs/architecture-review/runtime-session-review/findings/AS08-session-lifecycle-boundary.md), [AS11](../../.dev-docs/architecture-review/runtime-session-review/findings/AS11-session-fork-boundary.md) |
 | tool runtime merge/adapt/active/registry | `tool-runtime-controller.ts` | `ToolRuntimeBuildOptions/Result` | [AS05](../../.dev-docs/architecture-review/runtime-session-review/findings/AS05-tool-runtime-controller-boundary.md) |

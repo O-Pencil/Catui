@@ -1,5 +1,5 @@
 /**
- * [WHO]: AgentSession class, session lifecycle, semantic Run Trace capture/persistence, event emission, in-loop recovery adapter, pruneRecoverableErrorTail()
+ * [WHO]: AgentSession class, session lifecycle, semantic Run Trace capture/persistence, event emission (session-events), compaction decisions (SessionCompactionCoordinator), in-loop recovery adapter, pruneRecoverableErrorTail() re-export
  * [FROM]: Depends on agent-core, ai, core/tools/*, core/session/*, core/platform/config/*
  * [TO]: Consumed by core/index.ts, core/runtime/sdk.ts, modes/interactive/interactive-mode.ts, modes/print-mode.ts, modes/rpc/rpc-mode.ts, modes/acp/acp-mode.ts, modes/rpc/rpc-types.ts, modes/rpc/rpc-client.ts, modes/interactive/components/footer.ts, modes/interactive/components/skill-invocation-message.ts
  * [HERE]: Central runtime hub; all modes delegate to this class
@@ -14,7 +14,6 @@ import type {
   AgentLoopFramework,
   AgentLoopFrameworkInput,
   AgentLoopPolicyOptions,
-  AgentModelErrorRecoveryResult,
   AgentMessage,
   AgentState,
   AgentTool,
@@ -29,7 +28,6 @@ import type {
   Model,
   TextContent,
 } from "@catui/ai/types";
-import { isContextOverflow } from "@catui/ai/overflow";
 import { resetApiProviders } from "@catui/ai/registry";
 import { getDocsPath } from "../../config.js";
 import type { Theme as ThemeContract } from "../theme-contract.js";
@@ -41,7 +39,6 @@ import {
   calculateContextTokens,
   collectEntriesForBranchSummary,
   estimateContextTokens,
-  shouldCompact,
 } from "../session/compaction/index.js";
 import { ToolOrchestrator } from "../tools/orchestrator.js";
 import { DEFAULT_THINKING_LEVEL } from "../platform/config/defaults.js";
@@ -85,6 +82,9 @@ import { BashRunner } from "./bash-runner.js";
 import { Listeners } from "../platform/listeners.js";
 import { ModelController, type ModelCycleResult } from "./model-controller.js";
 import { CompactionController } from "./compaction-controller.js";
+import { SessionCompactionCoordinator } from "./session-compaction-coordinator.js";
+import { mapSubAgentEvent } from "./session-events.js";
+import type { AgentSessionEvent, AgentSessionEventListener } from "./session-events.js";
 import { SessionLifecycleController } from "./session-lifecycle-controller.js";
 import { SessionTreeController } from "./session-tree-controller.js";
 import { ToolRuntimeController } from "./tool-runtime-controller.js";
@@ -107,165 +107,9 @@ import { persistWorkspaceRunTrace } from "./run-trace-jsonl.js";
 export type { SessionSlashCommandDescriptor } from "./slash-command-catalog.js";
 export { CycleModelError } from "./model-controller.js";
 export type { ModelCycleResult } from "./model-controller.js";
-
-// ============================================================================
-// Skill Block Parsing
-// ============================================================================
-
-/** Parsed skill block from a user message */
-export interface ParsedSkillBlock {
-  name: string;
-  location: string;
-  content: string;
-  userMessage: string | undefined;
-}
-
-/**
- * Parse a skill block from message text.
- * Returns null if the text doesn't contain a skill block.
- */
-export function parseSkillBlock(text: string): ParsedSkillBlock | null {
-  const match = text.match(
-    /^<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n<\/skill>(?:\n\n([\s\S]+))?$/,
-  );
-  if (!match) return null;
-  return {
-    name: match[1],
-    location: match[2],
-    content: match[3],
-    userMessage: match[4]?.trim() || undefined,
-  };
-}
-
-export function pruneRecoverableErrorTail(
-  messages: AgentMessage[],
-  assistantMessage: AssistantMessage,
-): AgentMessage[] {
-  const interruptedToolCallIds = new Set(
-    assistantMessage.content
-      .filter((part) => part.type === "toolCall")
-      .map((part) => part.id),
-  );
-  let end = messages.length;
-
-  while (
-    end > 0 &&
-    isRecoverableTailToolResult(messages[end - 1], interruptedToolCallIds)
-  ) {
-    end--;
-  }
-
-  if (
-    end > 0 &&
-    isSameRecoverableAssistantMessage(messages[end - 1], assistantMessage)
-  ) {
-    end--;
-  }
-
-  return messages.slice(0, end);
-}
-
-function isRecoverableTailToolResult(
-  message: AgentMessage,
-  interruptedToolCallIds: ReadonlySet<string>,
-): boolean {
-  return (
-    message.role === "toolResult" &&
-    interruptedToolCallIds.has(message.toolCallId)
-  );
-}
-
-function isSameRecoverableAssistantMessage(
-  message: AgentMessage,
-  assistantMessage: AssistantMessage,
-): boolean {
-  return (
-    message.role === "assistant" &&
-    message.stopReason === assistantMessage.stopReason &&
-    message.timestamp === assistantMessage.timestamp &&
-    message.provider === assistantMessage.provider &&
-    message.model === assistantMessage.model &&
-    message.api === assistantMessage.api &&
-    message.errorMessage === assistantMessage.errorMessage
-  );
-}
-
-/** Session-specific events that extend the core AgentEvent */
-export type AgentSessionEvent =
-  | AgentEvent
-  | { type: "auto_compaction_start"; reason: "threshold" | "overflow" }
-  | {
-      type: "auto_compaction_end";
-      result: CompactionResult | undefined;
-      aborted: boolean;
-      willRetry: boolean;
-      errorMessage?: string;
-    }
-  | {
-      type: "auto_retry_start";
-      attempt: number;
-      maxAttempts: number;
-      delayMs: number;
-      errorMessage: string;
-    }
-  | {
-      type: "auto_retry_end";
-      success: boolean;
-      attempt: number;
-      finalError?: string;
-    }
-  | {
-      type: "sdk:error";
-      source: "soul" | "mcp" | "eventbus";
-      error: unknown;
-    }
-  | {
-      // Emitted when deferred (non-blocking) MCP tool loading finishes and the
-      // tools have been merged into the active runtime. Lets the UI surface a
-      // "MCP ready" status without blocking startup. See warmupMcpTools().
-      type: "sdk:mcp_ready";
-      toolCount: number;
-      /** Full list of active tool names at the time of emission. */
-      tools: string[];
-      /** Current model ID, if any. */
-      model?: string;
-      /** Names of MCP-powered tools (subset of tools[]). */
-      mcpTools: string[];
-    }
-  // Sub-agent lifecycle events (forwarded from SubAgentEvent)
-  | { type: "sub_agent_start"; subAgentId: string; agentType: string; description: string; isAsync: boolean; parentToolCallId?: string }
-  | { type: "sub_agent_tool_start"; subAgentId: string; toolName: string; input?: unknown; parentToolCallId?: string }
-  | { type: "sub_agent_tool_end"; subAgentId: string; toolName: string; isError: boolean; output?: unknown; durationMs?: number; parentToolCallId?: string }
-  | { type: "sub_agent_end"; subAgentId: string; success: boolean; parentToolCallId?: string }
-  | { type: "tool_input_delta"; toolCallId: string; toolName: string; delta: string }
-  | { type: "session_state_changed"; state: "idle" | "running" | "compacting" | "retrying"; timestamp: number }
-  | {
-      type: "debug";
-      level: "basic" | "verbose";
-      source: "session" | "mcp" | "model" | "tool" | "resource" | "extension";
-      message: string;
-      data?: Record<string, unknown>;
-      timestamp: number;
-    };
-
-/** Listener function for agent session events */
-export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
-
-/** Map SubAgentEvent to AgentSessionEvent for TUI display. */
-function mapSubAgentEvent(event: SubAgentEvent): AgentSessionEvent | undefined {
-  switch (event.type) {
-    case "agent_start":
-      return { type: "sub_agent_start", subAgentId: event.subAgentId, agentType: event.agentType, description: event.description, isAsync: event.isAsync, parentToolCallId: event.parentToolCallId };
-    case "tool_start":
-      return { type: "sub_agent_tool_start", subAgentId: event.subAgentId, toolName: event.toolName, input: event.args, parentToolCallId: event.parentToolCallId };
-    case "tool_end":
-      return { type: "sub_agent_tool_end", subAgentId: event.subAgentId, toolName: event.toolName, isError: event.isError, output: event.result, durationMs: event.durationMs, parentToolCallId: event.parentToolCallId };
-    case "agent_end":
-      return { type: "sub_agent_end", subAgentId: event.subAgentId, success: event.success, parentToolCallId: event.parentToolCallId };
-    default:
-      return undefined;
-  }
-}
+export { parseSkillBlock, pruneRecoverableErrorTail } from "./session-recovery.js";
+export type { ParsedSkillBlock } from "./session-recovery.js";
+export type { AgentSessionEvent, AgentSessionEventListener } from "./session-events.js";
 
 // ============================================================================
 // Types
@@ -463,6 +307,7 @@ export class AgentSession {
   // Controllers/coordinators (AgentSession responsibility decomposition)
   private readonly _modelController: ModelController;
   private readonly _compactionController: CompactionController;
+  private readonly _compactionCoordinator: SessionCompactionCoordinator;
   private readonly _sessionTreeController: SessionTreeController;
   private readonly _lifecycleController: SessionLifecycleController;
   private readonly _toolOrchestrator: ToolOrchestrator;
@@ -573,6 +418,22 @@ export class AgentSession {
       getAutoCompactionEnabled: () => this.settingsManager.getCompactionEnabled(),
       setAutoCompactionEnabled: (enabled) => this.settingsManager.setCompactionEnabled(enabled),
     });
+    this._compactionCoordinator = new SessionCompactionCoordinator({
+      getCompactionSettings: () => this.settingsManager.getCompactionSettings(),
+      getModel: () => this.model,
+      getBranch: () => this.sessionManager.getBranch(),
+      getAgentMessages: () => this.agent.state.messages,
+      replaceAgentMessages: (messages) => this.agent.replaceMessages(messages),
+      hasQueuedMessages: () => this.agent.hasQueuedMessages(),
+      continueAgentLoop: () => {
+        setTimeout(() => {
+          this.agent.continue().catch(() => {});
+        }, 100);
+      },
+      runAutoCompaction: (reason, willRetry) => this._compactionController.runAuto(reason, willRetry),
+      isRetryableError: (message) => this._retryCoordinator.isRetryableError(message),
+      handleErrorInLoop: (message) => this._retryCoordinator.handleErrorInLoop(message),
+    });
     this._sessionTreeController = new SessionTreeController({
       getModel: () => this.model,
       getApiKey: (model) => this._modelRegistry.getApiKey(model),
@@ -629,7 +490,7 @@ export class AgentSession {
       extractUserMessageText: (content) => this._extractUserMessageText(content),
     });
     this.agent.setModelErrorRecovery((event) =>
-      this._recoverModelErrorInLoop(event),
+      this._compactionCoordinator.recoverModelErrorInLoop(event),
     );
 
     // Always subscribe to agent events for internal handling
@@ -846,7 +707,7 @@ export class AgentSession {
         if (didRetry) return; // Retry was initiated, don't proceed to compaction
       }
 
-      await this._checkCompaction(msg);
+      await this._compactionCoordinator.check(msg);
 
       // Record interaction for Soul (AI personality evolution)
       if (this._soulManager) {
@@ -1242,7 +1103,7 @@ export class AgentSession {
     // Check if we need to compact before sending (catches aborted responses)
     const lastAssistant = this._findLastAssistantMessage();
     if (lastAssistant) {
-      await this._checkCompaction(lastAssistant, false);
+      await this._compactionCoordinator.check(lastAssistant, false);
     }
 
     // Build messages array (custom message if any, then user message)
@@ -2012,184 +1873,6 @@ export class AgentSession {
    */
   abortBranchSummary(): void {
     this._sessionTreeController.abortBranchSummary();
-  }
-
-  /**
-   * Check if compaction is needed and run it.
-   * Called after agent_end and before prompt submission.
-   *
-   * Two cases:
-   * 1. Overflow: LLM returned context overflow error, remove error message from agent state, compact, auto-retry
-   * 2. Threshold: Context over threshold, compact, NO auto-retry (user continues manually)
-   *
-   * @param assistantMessage The assistant message to check
-   * @param skipAbortedCheck If false, include aborted messages (for pre-prompt check). Default: true
-   */
-  private async _checkCompaction(
-    assistantMessage: AssistantMessage,
-    skipAbortedCheck = true,
-  ): Promise<void> {
-    const settings = this.settingsManager.getCompactionSettings();
-    if (!settings.enabled) return;
-
-    // Skip if message was aborted (user cancelled) - unless skipAbortedCheck is false
-    if (skipAbortedCheck && assistantMessage.stopReason === "aborted") return;
-
-    const contextWindow = this.model?.contextWindow ?? 0;
-
-    // Skip overflow check if the message came from a different model.
-    // This handles the case where user switched from a smaller-context model (e.g. opus)
-    // to a larger-context model (e.g. codex) - the overflow error from the old model
-    // shouldn't trigger compaction for the new model.
-    const sameModel =
-      this.model &&
-      assistantMessage.provider === this.model.provider &&
-      assistantMessage.model === this.model.id;
-
-    // Skip overflow check if the error is from before a compaction in the current path.
-    // This handles the case where an error was kept after compaction (in the "kept" region).
-    // The error shouldn't trigger another compaction since we already compacted.
-    // Example: opus fails → switch to codex → compact → switch back to opus → opus error
-    // is still in context but shouldn't trigger compaction again.
-    const compactionEntry = getLatestCompactionEntry(
-      this.sessionManager.getBranch(),
-    );
-    const errorIsFromBeforeCompaction =
-      compactionEntry !== null &&
-      assistantMessage.timestamp <
-        new Date(compactionEntry.timestamp).getTime();
-
-    // Case 1: Overflow - LLM returned context overflow error
-    if (
-      sameModel &&
-      !errorIsFromBeforeCompaction &&
-      isContextOverflow(assistantMessage, contextWindow)
-    ) {
-      // Remove the error message from agent state (it IS saved to session for history,
-      // but we don't want it in context for the retry)
-      const messages = this.agent.state.messages;
-      if (
-        messages.length > 0 &&
-        messages[messages.length - 1].role === "assistant"
-      ) {
-        this.agent.replaceMessages(messages.slice(0, -1));
-      }
-      await this._runAutoCompaction("overflow", true);
-      return;
-    }
-
-    // Case 2: Threshold - turn succeeded but context is getting large
-    // Skip if this was an error (non-overflow errors don't have usage data)
-    if (assistantMessage.stopReason === "error") return;
-
-    const contextTokens = calculateContextTokens(assistantMessage.usage);
-    if (shouldCompact(contextTokens, contextWindow, settings)) {
-      await this._runAutoCompaction("threshold", false);
-    }
-  }
-
-  private async _recoverModelErrorInLoop(event: {
-    message: AgentMessage;
-    messages: AgentMessage[];
-    errorSubtype: string;
-    attempt: number;
-  }): Promise<AgentModelErrorRecoveryResult> {
-    const settings = this.settingsManager.getCompactionSettings();
-    if (event.message.role !== "assistant") return { action: "stop" };
-
-    const assistantMessage = event.message as AssistantMessage;
-    if (event.errorSubtype !== "context_overflow") {
-      if (!this._retryCoordinator.isRetryableError(assistantMessage)) {
-        return { action: "stop" };
-      }
-      const shouldRetry =
-        await this._retryCoordinator.handleErrorInLoop(assistantMessage);
-      if (!shouldRetry) return { action: "stop" };
-      const retryMessages = pruneRecoverableErrorTail(
-        this.agent.state.messages,
-        assistantMessage,
-      );
-      this.agent.replaceMessages(retryMessages);
-      return {
-        action: "retry",
-        messages: retryMessages,
-        transition: {
-          reason: "model_error_recovery",
-          subtype: event.errorSubtype,
-          attempt: event.attempt,
-        },
-      };
-    }
-
-    if (!settings.enabled) return { action: "stop" };
-
-    const contextWindow = this.model?.contextWindow ?? 0;
-    const sameModel =
-      this.model &&
-      assistantMessage.provider === this.model.provider &&
-      assistantMessage.model === this.model.id;
-    if (!sameModel || !isContextOverflow(assistantMessage, contextWindow)) {
-      return { action: "stop" };
-    }
-
-    const compactionEntry = getLatestCompactionEntry(
-      this.sessionManager.getBranch(),
-    );
-    const errorIsFromBeforeCompaction =
-      compactionEntry !== null &&
-      assistantMessage.timestamp < new Date(compactionEntry.timestamp).getTime();
-    if (errorIsFromBeforeCompaction) return { action: "stop" };
-
-    const messages = this.agent.state.messages;
-    this.agent.replaceMessages(
-      pruneRecoverableErrorTail(messages, assistantMessage),
-    );
-
-    const recoveredMessages = await this._runAutoCompaction("overflow", true, {
-      triggerContinue: false,
-    });
-    if (!recoveredMessages) return { action: "stop" };
-    return {
-      action: "retry",
-      messages: recoveredMessages,
-      transition: {
-        reason: "model_error_recovery",
-        subtype: event.errorSubtype,
-        attempt: event.attempt,
-      },
-    };
-  }
-
-  /**
-   * Internal: Run auto-compaction with events.
-   */
-  private async _runAutoCompaction(
-    reason: "overflow" | "threshold",
-    willRetry: boolean,
-    options?: { triggerContinue?: boolean },
-  ): Promise<AgentMessage[] | undefined> {
-    const triggerContinue = options?.triggerContinue ?? true;
-    const messages = await this._compactionController.runAuto(reason, willRetry);
-    if (messages === undefined) return undefined;
-
-    // Loop continuation (owned by AgentSession): retry the failed turn or kick the queue.
-    if (willRetry && triggerContinue) {
-      const current = this.agent.state.messages;
-      const lastMsg = current[current.length - 1];
-      if (lastMsg?.role === "assistant" && (lastMsg as AssistantMessage).stopReason === "error") {
-        this.agent.replaceMessages(current.slice(0, -1));
-      }
-      setTimeout(() => {
-        this.agent.continue().catch(() => {});
-      }, 100);
-    } else if (!willRetry && this.agent.hasQueuedMessages()) {
-      // Auto-compaction can complete while follow-up/steering/custom messages are waiting.
-      // Kick the loop so queued messages are actually delivered.
-      setTimeout(() => {
-        this.agent.continue().catch(() => {});
-      }, 100);
-    }
-    return messages;
   }
 
   /**
