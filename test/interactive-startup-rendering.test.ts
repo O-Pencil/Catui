@@ -27,6 +27,7 @@ test("interactive startup builds the initial transcript once before the first vi
 		terminal: {
 			columns: 80,
 			rows: 24,
+			write: () => {},
 		},
 		addChild: (child: unknown) => {
 			calls.addedChildren.push(child);
@@ -86,9 +87,15 @@ test("interactive startup builds the initial transcript once before the first vi
 
 	await mode.init();
 
+	// Startup transcript fill is fire-and-forget since the async-first-frame
+	// redesign: flush pending microtasks before asserting on call counts.
+	await new Promise((resolve) => setImmediate(resolve));
+
 	assert.equal(calls.starts, 1);
 	assert.equal(calls.renders, 1);
-	assert.equal(calls.chatClears, 0);
+	// init() intentionally clears the chat once before the async transcript
+	// fill, dropping placeholder content written before initExtensions finished.
+	assert.equal(calls.chatClears, 1);
 	assert.equal(
 		calls.addedChildren.filter((child) => child === mode.footer).length,
 		1,
@@ -107,6 +114,7 @@ test("initial transcript build does not request a render before the terminal sta
 		terminal: {
 			columns: 80,
 			rows: 24,
+			write: () => {},
 		},
 		requestRender: () => {
 			calls.requests += 1;
