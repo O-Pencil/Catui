@@ -50,7 +50,11 @@ test("live extension events reach durable sidecar state and unconfigured session
 	await atomicJson(join(observedRoot, "config.json"), config);
 	const release = await supervisorLease(observedRoot); t.after(async () => { await release(); });
 	const handlers = new Map<string, Function>();
-	registerSourceEvolution({ on: (name: string, fn: Function) => handlers.set(name, fn), sendMessage: () => {} } as unknown as ExtensionAPI);
+	const worker = process.env.CATUI_EVOLUTION_WORKER;
+	try {
+		delete process.env.CATUI_EVOLUTION_WORKER;
+		registerSourceEvolution({ on: (name: string, fn: Function) => handlers.set(name, fn), sendMessage: () => {} } as unknown as ExtensionAPI);
+	} finally { if (worker !== undefined) process.env.CATUI_EVOLUTION_WORKER = worker; }
 	const context = { agentDir: root, cwd: root, model: { id: "model" }, sessionManager: { getSessionId: () => "session" } };
 	handlers.get("session_start")!({}, context);
 	handlers.get("before_agent_start")!({ prompt: "Fix incorrect tool behavior" }, context);
