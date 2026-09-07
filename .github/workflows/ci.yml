@@ -69,6 +69,11 @@ jobs:
         env:
           CI: true
 
+      - name: Run context continuity tests
+        run: node --test --import tsx test/context-management.test.ts test/context-window.test.ts
+        env:
+          CI: true
+
       - name: Run critical harness state and eval gate
         run: npm run test:harness-critical
         env:

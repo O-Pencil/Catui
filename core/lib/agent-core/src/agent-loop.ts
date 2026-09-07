@@ -3,7 +3,7 @@
  * Transforms to Message[] only at the LLM call boundary.
  */
 /**
- * [WHO]: Provides agentLoop(), agentLoopContinue(), standard loop/trace emission, continuation recovery, recovered-error tombstoning, and serial tool execution.
+ * [WHO]: Provides agentLoop(), agentLoopContinue(), standard loop/trace emission, continuation recovery, recovered-error tombstoning, and serial tool execution.; committed context preparation before provider requests
  * [FROM]: Depends on @catui/ai streams/messages, ./types contracts, ./errors, and shared loop helpers.
  * [TO]: Consumed by agent.ts and package exports as the default agent execution loop.
  * [HERE]: core/lib/agent-core/src/agent-loop.ts within agent-core; standard counterpart to structured-adaptive-agent-loop.ts.
@@ -766,6 +766,9 @@ async function streamAssistantResponse(
 	timing?: LoopTiming,
 ): Promise<AssistantMessage> {
 	// Apply context transform if configured (AgentMessage[] → AgentMessage[])
+	if (!signal?.aborted && config.prepareContext) {
+		context.messages = config.prepareContext(context.messages);
+	}
 	let messages = context.messages;
 	if (config.transformContext) {
 		const transformedMessages = await waitForAbortableOperation(config.transformContext(messages, signal), signal);

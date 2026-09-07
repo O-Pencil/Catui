@@ -1,5 +1,5 @@
 /**
- * [WHO]: createAgentSession(options) → AgentSession + load results, loop framework/policy override wiring
+ * [WHO]: createAgentSession(options) → AgentSession + load results, loop framework/policy override wiring; committed context preparation binding
  * [FROM]: Depends on agent-core, ai, core/platform/config/*, core/tools/*, core/session/*, core/mcp-*, i18n/*
  * [TO]: Consumed by index.ts, main.ts, test/presence-opening.test.ts, extensions/builtin/team/index.ts
  * [HERE]: SDK factory; creates all services with DI, wires up extensions
@@ -680,6 +680,7 @@ export async function createAgentSession(
     },
     convertToLlm: convertToLlmWithBlockImages,
     sessionId: sessionManager.getSessionId(),
+    prepareContext: (messages) => session.prepareContextWindow(messages),
     transformContext: async (messages) => {
       const runner = extensionRunnerRef.current;
       if (!runner) return messages;

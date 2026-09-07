@@ -1,5 +1,5 @@
 /**
- * [WHO]: SessionManager class, session persistence, branching, forking
+ * [WHO]: SessionManager class, session persistence, branching, forking; rollback of failed in-memory appends
  * [FROM]: Depends on agent-core, ai, node:fs, node:crypto, config.ts
  * [TO]: Consumed by index.ts, main.ts, core/runtime/sdk.ts, core/runtime/agent-session.ts, modes/interactive/interactive-mode.ts, modes/acp/acp-mode.ts, cli/session-picker.ts, modes/interactive/components/session-selector.ts, extensions/optional/export-html/index.ts, extensions/builtin/team/index.ts, extensions/builtin/interview/index.ts, and test files
  * [HERE]: core/session/session-manager.ts - session state persistence to JSONL
@@ -917,10 +917,18 @@ export class SessionManager {
 	}
 
 	private _appendEntry(entry: SessionEntry): void {
+		const previousLeaf = this.leafId;
 		this.fileEntries.push(entry);
 		this.byId.set(entry.id, entry);
 		this.leafId = entry.id;
-		this._persist(entry);
+		try {
+			this._persist(entry);
+		} catch (error) {
+			this.fileEntries.pop();
+			this.byId.delete(entry.id);
+			this.leafId = previousLeaf;
+			throw error;
+		}
 	}
 
 	/** Append a message as child of current leaf, then advance leaf. Returns entry id.

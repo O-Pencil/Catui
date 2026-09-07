@@ -1,5 +1,5 @@
 /**
- * [WHO]: Provides bindExtensionCore() — wires AgentSession host methods, read-only replay/eval evidence, and LLM call telemetry to ExtensionRunner APIs
+ * [WHO]: Provides bindExtensionCore() — wires AgentSession host methods, read-only replay/eval evidence, and LLM call telemetry to ExtensionRunner APIs; optional same-session window request forwarding
  * [FROM]: Depends on ExtensionRunner, model/session/resource abstractions, slash command metadata, core/platform/telemetry (getExtCallerContext for caller attribution + LlmCallEventInput shape)
  * [TO]: Consumed by AgentSession when initializing extension runtime capabilities
  * [HERE]: core/runtime/extension-core-bindings.ts - the LLM-call instrumentation point; reads AsyncLocalStorage context pushed by runner.invokeCommand (user-initiated=true) or runner.invokeHookHandler (user-initiated=false) to attribute each call. is_user_initiated=false rows grouped by extension_name + caller_context are the idle-thinking bug detector.
@@ -90,6 +90,7 @@ export interface ExtensionCoreBindingHost {
 	abort(): Promise<void> | void;
 	clearFollowUpQueue(): void;
 	getContextUsage(): ContextUsage | undefined;
+	requestContextWindow?(handoff: string): boolean;
 	compact(customInstructions?: string): Promise<CompactionResult>;
 	getLastRunTrace(): readonly unknown[] | undefined;
 }
@@ -334,6 +335,7 @@ export function bindExtensionCore(runner: ExtensionRunner, host: ExtensionCoreBi
 				host.shutdownHandler?.();
 			},
 			getContextUsage: () => host.getContextUsage(),
+			requestContextWindow: host.requestContextWindow?.bind(host),
 			compact: (options) => {
 				void (async () => {
 					try {

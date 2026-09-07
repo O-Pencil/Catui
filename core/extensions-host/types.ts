@@ -1,5 +1,5 @@
 /**
- * [WHO]: All extension types: Extension, ExtensionContext, HookEvent types, ToolDefinition, etc.
+ * [WHO]: All extension types: Extension, ExtensionContext, HookEvent types, ToolDefinition, etc.; optional safe context-window request contract
  * [FROM]: Depends on agent-core, ai, tui - all extension-related types
  * [TO]: Consumed by core/extensions-host/index.ts, core/extensions-host/runner.ts, core/extensions-host/wrapper.ts, all extension entry points (builtin/loop, builtin/team, builtin/mcp, builtin/soul, builtin/presence, builtin/security-audit, builtin/link-world, builtin/interview, optional/simplify, optional/export-html), modes/interactive/components/tool-execution.ts, modes/interactive/components/custom-message.ts, modes/acp/acp-mode.ts
  * [HERE]: core/extensions-host/types.ts - type definitions for extension system API
@@ -357,6 +357,8 @@ export interface ExtensionContext {
 	shutdown(): void;
 	/** Get current context usage for the active model. */
 	getContextUsage(): ContextUsage | undefined;
+	/** Queue a same-session handoff for the next safe model-request boundary. */
+	requestContextWindow?(handoff: string): boolean;
 	/** Trigger compaction without awaiting completion. */
 	compact(options?: CompactOptions): void;
 	/** Get the current effective system prompt. */
@@ -1446,6 +1448,7 @@ export interface ExtensionContextActions {
 	hasPendingMessages: () => boolean;
 	shutdown: () => void;
 	getContextUsage: () => ContextUsage | undefined;
+	requestContextWindow?: (handoff: string) => boolean;
 	compact: (options?: CompactOptions) => void;
 	getSystemPrompt: () => string;
 	getSoulManager: () => unknown | undefined;

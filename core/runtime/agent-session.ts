@@ -1,5 +1,5 @@
 /**
- * [WHO]: AgentSession class, session lifecycle, semantic Run Trace capture/persistence, event emission (session-events), compaction decisions (SessionCompactionCoordinator), in-loop recovery adapter, pruneRecoverableErrorTail() re-export
+ * [WHO]: AgentSession class, session lifecycle, semantic Run Trace capture/persistence, event emission (session-events), compaction decisions (SessionCompactionCoordinator), in-loop recovery adapter, pruneRecoverableErrorTail() re-export; safe context handoffs and pre-hook message journaling
  * [FROM]: Depends on agent-core, ai, core/tools/*, core/session/*, core/platform/config/*
  * [TO]: Consumed by core/index.ts, core/runtime/sdk.ts, modes/interactive/interactive-mode.ts, modes/print-mode.ts, modes/rpc/rpc-mode.ts, modes/acp/acp-mode.ts, modes/rpc/rpc-types.ts, modes/rpc/rpc-client.ts, modes/interactive/components/footer.ts, modes/interactive/components/skill-invocation-message.ts
  * [HERE]: Central runtime hub; all modes delegate to this class
@@ -82,6 +82,7 @@ import { BashRunner } from "./bash-runner.js";
 import { Listeners } from "../platform/listeners.js";
 import { ModelController, type ModelCycleResult } from "./model-controller.js";
 import { CompactionController } from "./compaction-controller.js";
+import { ContextWindowController } from "./context-window-controller.js";
 import { SessionCompactionCoordinator } from "./session-compaction-coordinator.js";
 import { mapSubAgentEvent } from "./session-events.js";
 import type { AgentSessionEvent, AgentSessionEventListener } from "./session-events.js";
@@ -307,6 +308,7 @@ export class AgentSession {
   // Controllers/coordinators (AgentSession responsibility decomposition)
   private readonly _modelController: ModelController;
   private readonly _compactionController: CompactionController;
+  private readonly _contextWindowController: ContextWindowController;
   private readonly _compactionCoordinator: SessionCompactionCoordinator;
   private readonly _sessionTreeController: SessionTreeController;
   private readonly _lifecycleController: SessionLifecycleController;
@@ -388,6 +390,18 @@ export class AgentSession {
           source,
         });
       },
+    });
+    this._contextWindowController = new ContextWindowController({
+      getSessionId: () => this.sessionManager.getSessionId(),
+      getBranch: () => this.sessionManager.getBranch(),
+      getContextWindow: () => this.model?.contextWindow ?? 0,
+      getPromptTokens: () => Math.ceil((this.systemPrompt.length + JSON.stringify(
+        this.agent.state.tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
+      ).length) / 2),
+      appendCheckpoint: (summary, firstKept, tokensBefore, details) => {
+        this.sessionManager.appendCompaction(summary, firstKept, tokensBefore, details, true);
+      },
+      rebuildContext: () => this.sessionManager.buildSessionContext(),
     });
     this._compactionController = new CompactionController({
       getModel: () => this.model,
@@ -608,6 +622,17 @@ export class AgentSession {
 
   /** Internal handler for agent events - shared by subscribe and reconnect */
   private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
+    // Journal completed messages before asynchronous extension hooks. A model-request
+    // boundary may commit a new working window as soon as the tool batch completes.
+    if (event.type === "message_end") {
+      if (event.message.role === "custom") {
+        this.sessionManager.appendCustomMessageEntry(
+          event.message.customType, event.message.content, event.message.display, event.message.details,
+        );
+      } else if (event.message.role === "user" || event.message.role === "assistant" || event.message.role === "toolResult") {
+        this.sessionManager.appendMessage(event.message);
+      }
+    }
     // When a user message starts, check if it's from either queue and remove it BEFORE emitting
     // This ensures the UI sees the updated queue state
     if (event.type === "message_start" && event.message.role === "user") {
@@ -665,25 +690,6 @@ export class AgentSession {
     }
 
     if (event.type === "message_end") {
-      // Check if this is a custom message from extensions
-      if (event.message.role === "custom") {
-        // Persist as CustomMessageEntry
-        this.sessionManager.appendCustomMessageEntry(
-          event.message.customType,
-          event.message.content,
-          event.message.display,
-          event.message.details,
-        );
-      } else if (
-        event.message.role === "user" ||
-        event.message.role === "assistant" ||
-        event.message.role === "toolResult"
-      ) {
-        // Regular LLM message - persist as SessionMessageEntry
-        this.sessionManager.appendMessage(event.message);
-      }
-      // Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere
-
       // Track assistant message for auto-compaction (checked on agent_end)
       if (event.message.role === "assistant") {
         this._lastAssistantMessage = event.message;
@@ -1479,6 +1485,7 @@ export class AgentSession {
    * Abort current operation and wait for agent to become idle.
    */
   async abort(): Promise<void> {
+    this._contextWindowController.cancel();
     this.abortRetry();
     this.agent.abort();
     await this.agent.waitForIdle();
@@ -1859,7 +1866,25 @@ export class AgentSession {
    * @param customInstructions Optional instructions for the compaction summary
    */
   async compact(customInstructions?: string): Promise<CompactionResult> {
+    this._contextWindowController.cancel();
     return this._compactionController.compact(customInstructions);
+  }
+
+  /** Request a handoff without interrupting the active tool batch. */
+  requestContextWindow(handoff: string): boolean {
+    if (this.isCompacting) return false;
+    return this._contextWindowController.request(handoff);
+  }
+
+  /** Commit a queued handoff before the next model request; preserve context on failure. */
+  prepareContextWindow(messages: AgentMessage[]): AgentMessage[] {
+    if (this.isCompacting) return messages;
+    try {
+      return this._contextWindowController.prepare(messages);
+    } catch (error) {
+      this._logger.warn("Context handoff could not be saved; retaining current context", { error });
+      return messages;
+    }
   }
 
   /**
@@ -2032,6 +2057,7 @@ export class AgentSession {
         this._followUpMessages = [];
       },
       getContextUsage: () => this.getContextUsage(),
+      requestContextWindow: (handoff) => this.requestContextWindow(handoff),
       compact: (customInstructions) => this.compact(customInstructions),
       getLastRunTrace: () => this.getLastRunTrace(),
     });
