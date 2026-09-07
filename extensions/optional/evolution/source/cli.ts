@@ -16,22 +16,27 @@ export async function sourceEvolutionCli(args: string[]): Promise<void> {
 	const option = (name: string) => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
 	const root = resolve(option("--root") ?? sourceRoot(getAgentDir()));
 	const command = args[0] ?? "status";
-	if (["--help", "-h", "help"].includes(command)) { console.log("Usage: catui evolve init --model provider/model | start | stop | status | run | install-service | launch [-- args]"); return; }
+	if (["--help", "-h", "help"].includes(command)) { console.log("Usage: catui evolve init --model provider/model --review-model provider/model | configure [--review-model provider/model] [--scope source|adaptive] | start | stop | status | run | install-service | launch [-- args]"); return; }
 	if (command === "init") {
 		if (loadConfig(root)) throw new Error(`Source evolution already configured: ${join(root, "config.json")}`);
 		const model = option("--model");
 		if (!model) throw new Error("Usage: catui evolve init --model provider/model [--root path]");
-		await atomicJson(join(root, "config.json"), validateConfig(defaultConfig(getAgentDir(), model)));
+		await atomicJson(join(root, "config.json"), validateConfig(defaultConfig(getAgentDir(), model, option("--review-model"))));
 		console.log(`Source evolution configured at ${root}. Autonomous merge, publish and update enabled; daily worker runs: 8 (up to 24 turns each), repair jobs: 1. Run catui evolve start or install-service.`); return;
 	}
 	if (command === "status") {
 		const config = loadConfig(root);
 		if (!config) { console.log("Source evolution is not configured. Run catui evolve init --model provider/model."); return; }
 		const state = await loadState(root);
-		console.log(JSON.stringify({ root, enabled: config.enabled, schedule: `${config.hour}:00 ${config.timeZone}`, autoMerge: config.autoMerge, autoPublish: config.autoPublish, autoUpdate: config.autoUpdate, heartbeat: state.heartbeat, paused: state.paused, error: state.error, dropped: state.dropped, observations: state.observations.length, budgets: state.budgets, installed: await readInstalled(root), jobs: state.jobs.map(({ evidence, ...job }) => ({ ...job, evidenceCount: evidence.length })) }, null, 2)); return;
+		console.log(JSON.stringify({ root, enabled: config.enabled, model: config.model, reviewModel: config.reviewModel ?? null, reviewerReady: Boolean(config.reviewModel), repairScope: config.repairScope ?? "source", audit: state.audit && { day: state.audit.day, runs: state.audit.runs.length, error: state.audit.error }, schedule: `${config.hour}:00 ${config.timeZone}`, autoMerge: config.autoMerge, autoPublish: config.autoPublish, autoUpdate: config.autoUpdate, heartbeat: state.heartbeat, paused: state.paused, error: state.error, dropped: state.dropped, observations: state.observations.length, budgets: state.budgets, installed: await readInstalled(root), jobs: state.jobs.map(({ evidence, baselineRuns, observedRuns, ...job }) => ({ ...job, evidenceCount: evidence.length, baselineRuns: baselineRuns?.length ?? 0, observedRuns: observedRuns?.length ?? 0 })) }, null, 2)); return;
 	}
 	const config = loadConfig(root);
 	if (!config) throw new Error("Source evolution is not configured");
+	if (command === "configure") {
+		const next = validateConfig({ ...config, model: option("--model") ?? config.model, reviewModel: option("--review-model") ?? config.reviewModel, repairScope: option("--scope") ?? config.repairScope });
+		await atomicJson(join(root, "config.json"), next);
+		console.log(`Source evolution configured. Repair: ${next.model}; review: ${next.reviewModel ?? "not configured (new repairs blocked)"}; scope: ${next.repairScope ?? "source"}.`); return;
+	}
 	if (command === "worker") {
 		const chunks: Buffer[] = []; let length = 0;
 		for await (const chunk of process.stdin) { length += chunk.length; if (length > 400000) throw new Error("Worker input too large"); chunks.push(Buffer.from(chunk)); }

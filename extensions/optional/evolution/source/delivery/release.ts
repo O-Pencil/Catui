@@ -13,6 +13,7 @@ import { checked } from "../runtime/process.js";
 import { verifyRepository } from "./repair.js";
 import { saveState } from "../runtime/state.js";
 import { verificationRunner } from "./sandbox.js";
+import { verifyHoldout } from "../assessment/holdout.js";
 
 export async function publishCandidate(run: RunCommand, root: string, config: SourceConfig, state: SourceState, job: SourceJob): Promise<void> {
 	if (!config.autoPublish) return;
@@ -35,6 +36,7 @@ export async function publishCandidate(run: RunCommand, root: string, config: So
 		await checked(run, "npm", ["ci", "--ignore-scripts"], { cwd, timeoutMs: 600000 });
 		await verifyRepository(run, cwd, root, `${job.id}-merged`);
 		await checked(verificationRunner(run), process.execPath, ["--test", "--import", "tsx", job.testPath!], { cwd, timeoutMs: 120000 });
+		if (!await verifyHoldout(run, root, job, cwd)) throw new Error("Merged source failed independent held-out acceptance");
 		if (await checked(run, "git", ["status", "--porcelain", "--untracked-files=no"], { cwd })) throw new Error("Merged verification changed source before packaging");
 		const packed = JSON.parse(await checked(run, "npm", ["pack", "--json", "--ignore-scripts"], { cwd })) as { filename: string; integrity: string }[];
 		if (packed.length !== 1 || !/^[\w.-]+\.tgz$/.test(packed[0].filename)) throw new Error("Unexpected package artifact");
