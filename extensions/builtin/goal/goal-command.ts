@@ -2,7 +2,7 @@
  * [WHO]: Goal slash command handler - dispatches /goal subcommands (show/clear/edit/pause/resume/set), manages ConfirmIfExists confirmation dialog, and renders the multi-line summary
  * [FROM]: Depends on core/extensions-host/types, ./goal-controller, ./goal-parser, ./goal-types, ./goal-format
  * [TO]: Consumed by ./index via registerCommand
- * [HERE]: extensions/builtin/goal/goal-command.ts - UI + persistence boundary for /goal
+ * [HERE]: extensions/builtin/goal/goal-command.ts - UI, persistence and idempotent resume dispatch for /goal
  */
 
 import type { ExtensionCommandContext } from "../../../core/extensions-host/types.js";
@@ -133,6 +133,7 @@ async function setStatus(
 	}
 	const verb = status === "active" ? "resumed" : status === "paused" ? "paused" : `set to ${goalStatusLabel(status)}`;
 	ctx.ui.notify(`Goal ${verb}.\n${summarizeGoal(updated)}`, "info");
+	if (status === "active") controller.kickOffContinuation();
 }
 
 async function setObjective(

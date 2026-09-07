@@ -2,7 +2,7 @@
  * [WHO]: AgentSession class, session lifecycle, semantic Run Trace capture/persistence, event emission (session-events), compaction decisions (SessionCompactionCoordinator), in-loop recovery adapter, pruneRecoverableErrorTail() re-export; safe context handoffs and pre-hook message journaling
  * [FROM]: Depends on agent-core, ai, core/tools/*, core/session/*, core/platform/config/*
  * [TO]: Consumed by core/index.ts, core/runtime/sdk.ts, modes/interactive/interactive-mode.ts, modes/print-mode.ts, modes/rpc/rpc-mode.ts, modes/acp/acp-mode.ts, modes/rpc/rpc-types.ts, modes/rpc/rpc-client.ts, modes/interactive/components/footer.ts, modes/interactive/components/skill-invocation-message.ts
- * [HERE]: Central runtime hub; all modes delegate to this class
+ * [HERE]: Central runtime hub; all modes delegate here; scoped cancellation keeps engine and UI queues consistent
  */
 import { randomUUID } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
@@ -2050,11 +2050,12 @@ export class AgentSession {
       setModel: (model) => this.setModel(model),
       setThinkingLevel: (level) => this.setThinkingLevel(level),
       abort: () => this.abort(),
-      clearFollowUpQueue: () => {
-        this.agent.clearFollowUpQueue();
+      clearFollowUpQueue: (matches) => {
+        this.agent.clearFollowUpQueue(matches ? (message) =>
+          message.role === "user" && matches(this._getUserMessageText(message)) : undefined);
         // Keep the UI mirror in sync: cleared messages will never be delivered,
         // so the message_start removal path can never prune them.
-        this._followUpMessages = [];
+        this._followUpMessages = matches ? this._followUpMessages.filter(text => !matches(text)) : [];
       },
       getContextUsage: () => this.getContextUsage(),
       requestContextWindow: (handoff) => this.requestContextWindow(handoff),

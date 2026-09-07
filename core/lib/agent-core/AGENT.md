@@ -2,6 +2,8 @@
 
 > P2 | Parent: ../AGENT.md
 
+Queue contract: agent.ts clearFollowUpQueue optionally removes only messages matching its predicate; omitted predicates retain full-clear compatibility.
+
 Member List
 agent.ts: Agent class, AgentOptions, AgentLoopPolicyOptions, main agent with message loop, coordinates execution, resumes durable approval checkpoints with paired tool results, stores last run result including transition history, runtime-settable loop policy plumbing; prepareContext commits working state at provider boundaries
 agent-loop.ts: agentLoop and agentLoopContinue, agent execution loop and state machine, transforms to Message[] at LLM boundary, emits request/result telemetry and semantic transition traces, recovers model/output errors with paired failed-turn traces, tombstones recovered error turns, enforces standard tool lifecycle and tool-result budget gates; applies committed prepareContext before transient transforms

@@ -3,6 +3,7 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
+grub/grub-dispatch.ts: GrubDispatch, exclusive continuation lease, deferred idle dispatch, exact prompt ownership, cancellation and run attribution
 context-management/index.ts: Default context continuity extension, session_history/working_notes/new_context tools and transient context-budget hints; see context-management/AGENT.md
 context-management/history.ts: Bounded branch-scoped history retrieval and visible text projection
 context-management/notes.ts: Versioned branch-local working note replay and bounded writes

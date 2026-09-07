@@ -34,6 +34,16 @@ resume / budget limits are user-driven and happen exclusively through `/goal`.
 
 ## Lifecycle
 
+`/goal resume` starts work when the agent becomes idle. Repeating it while work
+is queued or running does not enqueue duplicates. Each explicit resume renews
+the continuation allowance (10 consecutive automatic runs, 30 total automatic
+runs between resumes); assistant/tool cycles within a run do not reset it.
+Existing usage totals and token budgets are retained.
+
+Goal and Grub share one session continuation lease. Explicitly starting or
+resuming either pauses the other. Pause, clear and completion cancel only the
+goal's own queued prompts; user follow-ups and other extensions' work survive.
+
 The extension subscribes to `turn_start`, `turn_end`, `message_end`, `tool_execution_end`,
 and `agent_end` to track token usage and time per turn. When a turn ends with an
 `active` goal, the extension injects a follow-up user message containing the

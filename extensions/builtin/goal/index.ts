@@ -2,7 +2,7 @@
  * [WHO]: goalExtension default export - wires the GoalController per thread; registers /goal command + completions; registers GetGoal/CreateGoal/UpdateGoal tools; subscribes to lifecycle hooks for accounting (turn_end), pull-model continuation + run-error blocking (agent_end, mirrors Codex continue_if_idle), and budget-limit steering; renders GOAL_MESSAGE_TYPE custom messages
  * [FROM]: Depends on @catui/agent-core, @catui/tui, core/extensions-host/types, ./goal-controller, ./goal-tools, ./goal-command, ./goal-parser, ./goal-types, ./goal-format
  * [TO]: Auto-loaded by builtin-extensions.ts as a default extension
- * [HERE]: extensions/builtin/goal/index.ts - extension entry; owns the per-thread controller and the controller host singleton
+ * [HERE]: extensions/builtin/goal/index.ts - extension entry; binds run accounting, scoped cancellation, owned input and per-thread controllers
  */
 
 import * as fs from "node:fs";
@@ -78,26 +78,16 @@ function extractContentPreview(message: { role?: string; content?: unknown }): s
  * the event context; we look it up via WeakMap at every hook invocation.
  */
 const controllersByBus = new Map<string, GoalController>();
-let currentKey: string | null = null;
-let activeController: GoalController | null = null;
-/** Guard: tracks the goal ID + terminal status already reported,
- *  preventing the onTurnEnd handler from re-sending the same terminal message
- *  on every subsequent turn (which would cause an infinite loop).
- *  Tracks status so that a transition like paused → complete still reports. */
-let reportedTerminalGoalId: string | null = null;
-let reportedTerminalStatus: string | null = null;
 
 function resolveController(api: unknown, ctx: ExtensionContext | ExtensionCommandContext): GoalController | null {
 	const sessionId = ctx.sessionManager.getSessionId();
 	if (!sessionId) return null;
 	const key = `${ctx.agentDir}/${sessionId}`;
-	currentKey = key;
 	let controller = controllersByBus.get(key);
 	if (!controller) {
 		controller = new GoalController(api as ExtensionAPI, sessionId);
 		controllersByBus.set(key, controller);
 	}
-	activeController = controller;
 	return controller;
 }
 
@@ -143,11 +133,19 @@ function getRunningTotalTokens(messages: AgentMessage[]): number {
 
 export default async function goalExtension(api: ExtensionAPI): Promise<void> {
 	setGoalToolHost(goalToolHost);
+	let currentKey: string | null = null;
+	let activeController: GoalController | null = null;
+	// Reporting and shutdown ownership belong to this host, not the last SDK session.
+	let reportedTerminalGoalId: string | null = null;
+	let reportedTerminalStatus: string | null = null;
 
 	// Resolve the controller eagerly so tool registrations can find it.
 	const ensureController = (ctx: ExtensionContext | ExtensionCommandContext): GoalController | null => {
 		const controller = resolveController(api, ctx);
-		if (controller) activeController = controller;
+		if (controller) {
+			activeController = controller;
+			currentKey = `${ctx.agentDir}/${ctx.sessionManager.getSessionId()}`;
+		}
 		return controller;
 	};
 
@@ -197,17 +195,24 @@ export default async function goalExtension(api: ExtensionAPI): Promise<void> {
 		dbg("session_start");
 		const controller = ensureController(ctx);
 		controller?.resetIdleContinuationFlag();
+		if (controller?.goalStore.get_goal()?.status === "active") controller.activateContinuation();
 		reportedTerminalGoalId = null;
 		reportedTerminalStatus = null;
 	});
 
 	api.on("session_shutdown", () => {
+		activeController?.cancelContinuation();
 		if (currentKey) controllersByBus.delete(currentKey);
 		currentKey = null;
 		activeController = null;
 	});
 
 	// ── Turn lifecycle ───────────────────────────────────────────────
+	api.on("agent_start", (_event, ctx) => { ensureController(ctx)?.on_run_start(); });
+	api.on("input", (event, ctx) => {
+		if (event.source !== "extension" || !event.text.startsWith("[GOAL:")) return;
+		return { action: ensureController(ctx)?.acceptPrompt(event.text) ? "continue" : "handled" };
+	});
 
 	const onTurnStart: ExtensionHandler<TurnStartEvent> = (event, ctx) => {
 		dbg(`turn_start index=${event.turnIndex} timestamp=${event.timestamp}`);
@@ -270,15 +275,12 @@ export default async function goalExtension(api: ExtensionAPI): Promise<void> {
 		const outcome = await controller.on_turn_end();
 		dbg(`turn_end RESULT: reason=${outcome.reason} goalId=${outcome.goal?.goal_id} goalStatus=${outcome.goal?.status} reportedTerminalGoalId=${reportedTerminalGoalId}`);
 		if (outcome.reason !== "not_active_status" || !outcome.goal) return;
-		// If the goal just transitioned to terminal (complete/blocked/paused/budget_limited),
-		// clear stale continuation followUps that were queued in previous turns.
-		// turn_end fires BEFORE the followUp queue is drained in runLoop(),
-		// so clearing here prevents the outer loop from processing them.
+		// Cancel only this goal's prompts; unrelated queued work must survive.
 		const s = outcome.goal.status;
 		if (s === "complete" || s === "blocked" || s === "budget_limited" || s === "paused") {
 			dbg(`turn_end → clearing followUp queue (goal is ${s})`);
 			try {
-				api.clearFollowUpQueue();
+				controller.cancelContinuation();
 			} catch (e) {
 				dbg(`turn_end → clearFollowUpQueue FAILED: ${e}`);
 			}

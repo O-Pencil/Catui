@@ -67,6 +67,7 @@ function isGrubTaskState(value: unknown): value is GrubTaskState {
 	if (task.consecutiveBlockedAttempts !== undefined && !isNonNegativeInteger(task.consecutiveBlockedAttempts)) return false;
 	if (!isPositiveInteger(task.maxIterations) || !isPositiveInteger(task.maxConsecutiveFailures)) return false;
 	if (task.maxInitializerFailures !== undefined && !isPositiveInteger(task.maxInitializerFailures)) return false;
+	if (task.iterationAllowance !== undefined && !isPositiveInteger(task.iterationAllowance)) return false;
 	if (!isNonEmptyString(task.harnessDirectory)) return false;
 	if (!isNonEmptyString(task.featureChecklistPath)) return false;
 	if (!isNonEmptyString(task.featureListPath)) return false;
@@ -129,10 +130,10 @@ export function loadState(stateFilePath: string): PersistedGrubState | null {
 
 /**
  * Scan every ".grub/<id>/state.json" under cwd and return each persisted
- * record whose task.status is "running". Invalid or unreadable files are
- * skipped silently.
+ * running record, or any unfinished record for explicit resume when
+ * includeStopped is true. Invalid or unreadable files are skipped silently.
  */
-export function discoverActiveTasks(cwd: string): PersistedGrubState[] {
+export function discoverActiveTasks(cwd: string, includeStopped = false): PersistedGrubState[] {
 	const root = grubRoot(cwd);
 	if (!existsSync(root)) return [];
 	let entries: string[];
@@ -154,7 +155,7 @@ export function discoverActiveTasks(cwd: string): PersistedGrubState[] {
 		const statePath = stateFilePathFor(harnessDir);
 		const persisted = loadState(statePath);
 		if (!persisted) continue;
-		if (persisted.task.status !== "running") continue;
+		if (persisted.task.status !== "running" && !(includeStopped && persisted.task.status !== "complete")) continue;
 		results.push(persisted);
 	}
 	results.sort((a, b) => b.lastPersistedAt - a.lastPersistedAt);
