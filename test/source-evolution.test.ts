@@ -213,6 +213,13 @@ test("publication resumes after registry success without republishing the versio
 		if (command === "gh" && args[1] === "create" && ++releaseAttempts === 1) return { code: 1, stdout: "", stderr: "temporary GitHub outage" };
 		return { code: 0, stdout: "", stderr: "" };
 	};
+	const conflictingTag: RunCommand = async (command, args, options) => {
+		if (command === "git" && args[0] === "ls-remote") return { code: 0, stdout: `other-commit\trefs/tags/v${j.version}\n`, stderr: "" };
+		return run(command, args, options);
+	};
+	await assert.rejects(publishCandidate(conflictingTag, root, config, state, j), /tag identity conflict/);
+	assert.equal(publishCalls, 0);
+	assert.equal(releaseAttempts, 0);
 	await assert.rejects(publishCandidate(run, root, config, state, j), /gh failed/);
 	assert.equal(j.stage, "merged"); assert.equal(published, true);
 	await publishCandidate(run, root, config, state, j);
