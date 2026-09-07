@@ -3,10 +3,11 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
+context-window-controller.ts: ContextWindowController, queued same-session handoffs, safe persisted checkpoints before model requests; retains tool batches and rejects unsafe or ineffective window changes
 event-bus.ts: EventBus interface, EventBusController, createEventBus(), typed event emission system for extension hooks, key methods: emit(), on() returns unsubscribe function
 event-bridge.ts: ExtensionEventBridge, ExtensionEventBridgeDeps, owns AgentEvent-to-extension-event mapping and extension turn indexing; AgentSession keeps public subscribe, persistence, retry/compaction, and Soul ordering
-sdk.ts: createAgentSession(options) factory, creates all services with dependency injection, wires up extensions, applies loop framework/policy overrides, consumed by all run modes (interactive/print/rpc)
-agent-session.ts: AgentSession class, central session lifecycle manager, wraps Agent from agent-core, captures and persists the latest semantic Run Trace, coordinates compaction decisions via SessionCompactionCoordinator, in-loop recovery and recoverable error-tail pruning (session-recovery.ts), forwards agent_result telemetry to extensions, exposes runtime loop policy updates, emits events, handles model switching, all modes delegate to this class
+sdk.ts: createAgentSession(options) factory, creates all services with dependency injection, wires up extensions, applies loop framework/policy overrides, consumed by all run modes (interactive/print/rpc); binds committed context preparation separately from transient extension transforms
+agent-session.ts: AgentSession class, central session lifecycle manager, wraps Agent from agent-core, captures and persists the latest semantic Run Trace, coordinates compaction decisions via SessionCompactionCoordinator, in-loop recovery and recoverable error-tail pruning (session-recovery.ts), forwards agent_result telemetry to extensions, exposes runtime loop policy updates, emits events, handles model switching, all modes delegate to this class; journals message_end before async hooks and delegates handoffs to ContextWindowController
 turn-context.ts: Generic per-turn hint bus on globalThis, TURN_CONTEXT_GLOBAL_KEY, TurnContext interface (currently structuralAnchor), setTurnContext/getTurnContext/resetTurnContext; producer-side API for SAL→mem-core decoupling (mem-core has read-only mirror at packages/mem-core/src/turn-context.ts using same global key)
 catui-agent.ts: CatuiAgent helper class wrapping Agent core
 retry-coordinator.ts: Retry coordination for transient failures
@@ -19,10 +20,10 @@ session-lifecycle-controller.ts: SessionLifecycleController — owns new/switch/
 tool-runtime-controller.ts: ToolRuntimeController, ToolRuntimeBuildOptions, ToolRuntimeBuildResult, owns runtime tool source merge, extension-tool context adaptation, active tool resolution, and ToolOrchestrator registry updates; lifecycle interception is composed by sdk.ts policies
 prompt-assembly.ts: buildRuntimeSystemPrompt(), getActiveBaseToolNames(), owns runtime prompt resource assembly and base-tool filtering; Soul injection state remains in AgentSession
 default-tools.ts: createDefaultRuntimeTools(), DefaultRuntimeToolsOptions, complete default tool wiring with settings-aware image/shell/write-boundary configuration and optional Bash approval injection
-extension-core-bindings.ts: bindExtensionCore(), adapts AgentSession host capabilities into ExtensionRunner action/context APIs, including lazy deterministic replay and isolated Harness Eval
+extension-core-bindings.ts: bindExtensionCore(), adapts AgentSession host capabilities into ExtensionRunner action/context APIs, including lazy deterministic replay and isolated Harness Eval; forwards optional requestContextWindow capability
 slash-command-catalog.ts: buildSessionSlashCommands(), buildExtensionSlashCommands(), shared slash command catalog assembly for runtime and extension views
 export-bridge.ts: exportSessionHtml(), getLastAssistantText(), owns HTML export wiring and last assistant text extraction; Theme remains injected through AgentSessionConfig
-plan-mode-permissions.ts: createPlanModeCanUseTool(), composePlanModeCanUseTool(), SDK-level plan mode tool permission enforcement; explicit planFilePath enables strict single-file writes while omitted paths preserve the legacy markdown profile; consumed by sdk.ts when permissionMode === 'plan'
+plan-mode-permissions.ts: createPlanModeCanUseTool(), composePlanModeCanUseTool(), SDK-level plan mode tool permission enforcement; explicit planFilePath enables strict single-file writes while omitted paths preserve the legacy markdown profile; consumed by sdk.ts when permissionMode === 'plan'; allows session-local continuity without workspace write access
 checkpoint-store.ts: FileCheckpointStore, path-confined atomic JSON persistence with cross-process at-most-once checkpoint consumption
 run-trace-jsonl.ts: JsonlRunTraceSink, persistWorkspaceRunTrace(), readRunTraceJsonl(), and redactWorkspaceRunTraceEvent(), symlink-confined owner-only bounded/retained JSONL persistence with defense-in-depth redaction and process-safe serialized workspace `.catui/traces/latest.jsonl` export
 thinking-levels.ts: pure thinking-level logic extracted from AgentSession (P4.2) — THINKING_LEVELS(_WITH_XHIGH), modelSupportsThinking/Xhigh, availableThinkingLevels, clampThinkingLevel, nextThinkingLevel; no session state, reusable by rpc/print
@@ -41,6 +42,7 @@ session-compaction-coordinator.ts: SessionCompactionCoordinator — loop-driven 
 
 | Concern | Owner | Capability contract | Why (review card) |
 |---------|-------|---------------------|-------------------|
+| model-requested working window transition | `context-window-controller.ts` | private named persistence/model capabilities; AgentSession facade and SDK prepareContext binding | [CW01](../../.dev-docs/architecture-review/context-window-review/findings/CW01-boundaries.md) |
 | model set/cycle + thinking level | `model-controller.ts` | `ModelControllerContext` | [AS02](../../.dev-docs/architecture-review/runtime-session-review/findings/AS02-model-controller-boundary.md), [AS03](../../.dev-docs/architecture-review/runtime-session-review/findings/AS03-session-switch-state-restore.md) |
 | manual + auto compaction (+ abort slots) | `compaction-controller.ts` | `CompactionControllerContext` | [AS04](../../.dev-docs/architecture-review/runtime-session-review/findings/AS04-compaction-coordinator-placeholder.md) |
 | loop-driven compaction decisions (overflow/threshold) + in-loop model-error recovery | `session-compaction-coordinator.ts` | `SessionCompactionCoordinatorContext` | [AS04](../../.dev-docs/architecture-review/runtime-session-review/findings/AS04-compaction-coordinator-placeholder.md) |

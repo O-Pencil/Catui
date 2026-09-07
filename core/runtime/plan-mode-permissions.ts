@@ -1,5 +1,5 @@
 /**
- * [WHO]: createPlanModeCanUseTool() — SDK-level plan mode permission enforcement
+ * [WHO]: createPlanModeCanUseTool() — SDK-level plan mode permission enforcement; session-local continuity allowance
  * [FROM]: Permission logic derived from extensions/builtin/plan/plan-permissions.ts
  * [TO]: Consumed by core/runtime/sdk.ts when permissionMode === 'plan'
  * [HERE]: core/runtime/plan-mode-permissions.ts — standalone plan mode tool gating for SDK consumers
@@ -24,6 +24,7 @@ const READ_ONLY_TOOLS = new Set([
   "WebSearch",
   "WebFetch",
   "GetGoal",
+  "session_history",
 ]);
 
 const PLAN_SAFE_AGENT_TYPES = new Set(["Explore", "Plan", "explore", "plan"]);
@@ -181,6 +182,8 @@ export function evaluatePlanModeToolCall(
     return { decision: "allow" };
   }
   if (READ_ONLY_TOOLS.has(toolName)) return { decision: "allow" };
+  // Session-local continuity does not mutate workspace files or grant execution permissions.
+  if (toolName === "working_notes" || toolName === "new_context") return { decision: "allow" };
 
   if (toolName === "write" || toolName === "Write" || toolName === "edit" || toolName === "Edit") {
     const allowed = options.planFilePath

@@ -3,7 +3,7 @@
  * No transport abstraction - calls streamSimple via the loop.
  */
 /**
- * [WHO]: AgentOptions, Agent, and loop policy option plumbing
+ * [WHO]: AgentOptions, Agent, and loop policy option plumbing; committed prepareContext hook
  * [FROM]: Depends on ./agent-loop.js and ./structured-adaptive-agent-loop.js
  * [TO]: Consumed by core/lib/agent-core/src/index.ts
  * [HERE]: core/lib/agent-core/src/agent.ts -
@@ -62,6 +62,8 @@ export interface AgentOptions {
 	 * Use for context pruning, injecting external context, etc.
 	 */
 	transformContext?: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
+	/** Commit a persisted context boundary between completed tool batches. */
+	prepareContext?: (messages: AgentMessage[]) => AgentMessage[];
 
 	/**
 	 * Steering mode: "all" = send all steering messages at once, "one-at-a-time" = one per turn
@@ -208,6 +210,7 @@ export class Agent {
 	private abortController?: AbortController;
 	private convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
 	private transformContext?: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
+	private prepareContext?: AgentOptions["prepareContext"];
 	private steeringQueue: AgentMessage[] = [];
 	private followUpQueue: AgentMessage[] = [];
 	private steeringMode: "all" | "one-at-a-time";
@@ -245,6 +248,7 @@ export class Agent {
 		this._state = { ...this._state, ...opts.initialState };
 		this.convertToLlm = opts.convertToLlm || defaultConvertToLlm;
 		this.transformContext = opts.transformContext;
+		this.prepareContext = opts.prepareContext;
 		this.steeringMode = opts.steeringMode || "one-at-a-time";
 		this.followUpMode = opts.followUpMode || "one-at-a-time";
 		this.streamFn = opts.streamFn || streamSimple;
@@ -769,6 +773,11 @@ export class Agent {
 			maxRetryDelayMs: this._maxRetryDelayMs,
 			convertToLlm: this.convertToLlm,
 			transformContext: this.transformContext,
+			prepareContext: (messages) => {
+				const prepared = this.prepareContext?.(messages) ?? messages;
+				if (prepared !== messages) this.replaceMessages(prepared);
+				return prepared;
+			},
 			getApiKey: this.getApiKey,
 			canUseTool: this.canUseTool,
 			maxToolResultBatchSizeChars: this.maxToolResultBatchSizeChars,

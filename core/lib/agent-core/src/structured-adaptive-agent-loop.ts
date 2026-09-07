@@ -4,7 +4,7 @@
  * state machine with ordered tool-result pairing and safe tool batching.
  */
 /**
- * [WHO]: structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue, weak-model-compatible loop/trace emission
+ * [WHO]: structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue, weak-model-compatible loop/trace emission; committed context preparation before provider requests
  * [FROM]: Depends on @catui/ai, ./types, ./errors, structured-adaptive tool executors, and shared loop helpers.
  * [TO]: Consumed by core/lib/agent-core/src/agent.ts and index.ts
  * [HERE]: core/lib/agent-core/src/structured-adaptive-agent-loop.ts - selectable structured-adaptive query loop framework with recovered-error tombstoning
@@ -658,6 +658,9 @@ async function streamAssistantResponse(
 	streamingToolExecutor?: StructuredAdaptiveStreamingToolExecutor,
 	timing?: LoopTiming,
 ): Promise<AssistantMessage> {
+	if (!signal?.aborted && config.prepareContext) {
+		context.messages = config.prepareContext(context.messages);
+	}
 	let messages = context.messages;
 	if (config.transformContext) {
 		const transformedMessages = await waitForAbortableOperation(config.transformContext(messages, signal), signal);

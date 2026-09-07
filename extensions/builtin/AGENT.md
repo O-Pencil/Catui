@@ -3,6 +3,9 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
+context-management/index.ts: Default context continuity extension, session_history/working_notes/new_context tools and transient context-budget hints; see context-management/AGENT.md
+context-management/history.ts: Bounded branch-scoped history retrieval and visible text projection
+context-management/notes.ts: Versioned branch-local working note replay and bounded writes
 diagnostics/index.ts: Diagnostics extension entry, subscribes to diagnostic:event, buffers session-local diagnostic records, prompts only after threshold at agent_end, registers /report-issue
 goal/index.ts: Goal extension entry, per-thread GoalController, /goal command and goal subcommand autocomplete, get_goal/create_goal/update_goal tools, turn/account lifecycle hooks, idle-continuation prompt dispatch, GOAL_MESSAGE_TYPE renderer, session_start/shutdown hooks, persistent per-thread status footer indicator
 goal/goal-types.ts: ThreadGoalStatus enum (active/paused/blocked/usage_limited/budget_limited/complete), ThreadGoal record, GoalSetMode, GoalAccountingMode, GoalTurnAccounting, GoalControllerState, validation constants

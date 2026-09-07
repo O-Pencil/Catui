@@ -30,6 +30,7 @@ const BUNDLED_DIAGNOSTICS_EXTENSION = join(__dirname, "extensions", "builtin", "
 const BUNDLED_SAL_EXTENSION = join(__dirname, "extensions", "builtin", "sal", "index.js");
 const BUNDLED_GRUB_EXTENSION = join(__dirname, "extensions", "builtin", "grub", "index.js");
 const BUNDLED_GOAL_EXTENSION = join(__dirname, "extensions", "builtin", "goal", "index.js");
+const BUNDLED_CONTEXT_EXTENSION = join(__dirname, "extensions", "builtin", "context-management", "index.js");
 const BUNDLED_SUBAGENT_EXTENSION = join(__dirname, "extensions", "builtin", "subagent", "index.js");
 const BUNDLED_TEAM_EXTENSION = join(__dirname, "extensions", "builtin", "team", "index.js");
 const BUNDLED_IDLE_THINK_EXTENSION = join(__dirname, "extensions", "builtin", "idle-think", "index.js");
@@ -64,6 +65,7 @@ export interface BuiltinExtension {
 }
 
 export const builtInExtensions: readonly BuiltinExtension[] = [
+	{ id: "context-management", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/context-management.test.ts", "test/context-window.test.ts"] },
 	{ id: "diagnostics", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: true, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/diagnostic-buffer-throttle.test.ts", "test/diagnostics-runtime.test.ts"] },
 	{ id: "sal", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/sal-lifecycle.test.ts"] },
 	{ id: "nanomem", category: "package", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["packages/mem-core/test/extension-commands.test.ts"] },
@@ -96,7 +98,7 @@ export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "catail", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, resourceDiscovery: true, testContracts: ["resource-discovery"], testFiles: ["test/catail-extension.test.ts"] },
 	{ id: "simplify", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: true, testContracts: ["external-process", "write-guard"], testFiles: ["test/simplify-extension.test.ts"] },
 	{ id: "export-html", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false, testContracts: ["write-guard"], testFiles: ["test/extension-smoke.test.ts", "test/export-html-branch-navigation.test.ts"] },
-	{ id: "evolution", category: "optional", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/evolution-store.test.ts", "test/evolution-extension.test.ts"] },
+	{ id: "evolution", category: "optional", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, testContracts: ["lifecycle", "external-process"], testFiles: ["test/evolution-store.test.ts", "test/evolution-extension.test.ts", "test/source-evolution.test.ts"] },
 ];
 
 function isBrowserExtensionEnvEnabled(): boolean {
@@ -283,6 +285,13 @@ export function getBuiltinExtensionPaths(): string[] {
 	}
 
 	// === Goal extension (/goal long-running task with idle continuation) ===
+	if (existsSync(BUNDLED_CONTEXT_EXTENSION)) {
+		paths.push(BUNDLED_CONTEXT_EXTENSION);
+	} else {
+		const contextTs = join(__dirname, "extensions", "builtin", "context-management", "index.ts");
+		if (existsSync(contextTs)) paths.push(contextTs);
+	}
+
 	if (existsSync(BUNDLED_GOAL_EXTENSION)) {
 		paths.push(BUNDLED_GOAL_EXTENSION);
 	} else {

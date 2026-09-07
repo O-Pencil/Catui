@@ -1,6 +1,6 @@
 /**
- * [WHO]: AgentLoopFramework, AgentLoopTransition, AgentRunResult with transition history, AgentModelErrorRecoveryResult, AgentLoopConfig, CustomAgentMessages, AgentState, AgentToolResult, AgentTool, AgentToolConcurrencySafety, AgentToolInterruptBehavior
- * [FROM]: No external dependencies
+ * [WHO]: AgentLoopFramework, AgentLoopTransition, AgentRunResult with transition history, AgentModelErrorRecoveryResult, AgentLoopConfig, CustomAgentMessages, AgentState, AgentToolResult, AgentTool, AgentToolConcurrencySafety, AgentToolInterruptBehavior; synchronous committed context preparation contract
+ * [FROM]: Depends on ai message/stream/schema types and local tool-policy, checkpoint, and trace contracts
  * [TO]: Consumed by core/lib/agent-core/src/index.ts
  * [HERE]: core/lib/agent-core/src/types.ts -
  */
@@ -172,6 +172,8 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * ```
 	 */
 	transformContext?: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
+	/** Commit a persisted working-context boundary before transient transforms. Must be synchronous. */
+	prepareContext?: (messages: AgentMessage[]) => AgentMessage[];
 
 	/**
 	 * Resolves an API key dynamically for each LLM call.

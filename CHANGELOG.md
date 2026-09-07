@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.23] - 2026-09-08
+
+### Added
+
+- Configurable recursive source evolution with live observation, isolated repair,
+  executable baseline/candidate verification and daily CI-gated pull requests.
+- Autonomous merge, verified publication, managed self-update and post-adoption
+  measurement with rollback, plus macOS/Linux supervisor service commands.
+
 ## [1.2.22] - 2026-09-06
 
 ### Added

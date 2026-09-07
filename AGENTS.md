@@ -315,6 +315,7 @@ Extensions can:
 |-----------|---------|
 | `interview` | Requirement clarification through guided Q&A |
 | `grub` | `/grub` autonomous long-running task harness with feature-list validation |
+| `context-management` | Default budget hints, branch-history retrieval, working notes, and safe same-session context handoffs |
 | `loop` | `/loop` session-scoped scheduled prompts |
 | `link-world` | Internet access via agent-reach |
 | `browser` | Opt-in direct browser automation via vendored Browser Harness CDP bridge |
@@ -397,6 +398,12 @@ Built-in commands (`core/slash-commands.ts`):
 | `/settings` | Open settings |
 | `/link-world` | Install internet access extension |
 | `/grub` | Start/status/resume/stop an autonomous long-running task harness |
+
+Source evolution is configured separately with `catui evolve init --model provider/model`.
+`catui evolve start|stop|status|run|install-service|launch` manages the independent
+usage observer, verified source repair, daily PR delivery, automatic merge/release,
+and managed version adoption. Owner: `extensions/optional/evolution/source/`;
+see its README for operating budgets, OS verification requirements and recovery.
 
 ---
 

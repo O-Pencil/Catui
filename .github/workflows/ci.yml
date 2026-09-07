@@ -7,6 +7,19 @@ on:
     branches: [main]
 
 jobs:
+  source-evolution:
+    name: Source evolution (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:deps
+      - run: npm run test:source-evolution
+
   test:
     name: Test on Node.js ${{ matrix.node-version }}
 
@@ -66,6 +79,11 @@ jobs:
 
       - name: Run tool boundary tests
         run: npm run test:tools
+        env:
+          CI: true
+
+      - name: Run context continuity tests
+        run: node --test --import tsx test/context-management.test.ts test/context-window.test.ts
         env:
           CI: true
 
