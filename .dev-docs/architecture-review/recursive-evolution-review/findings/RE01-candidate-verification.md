@@ -1,6 +1,6 @@
 # RE01: Candidate-specific evidence is required
 
-status: open
+status: addressed for source evolution; legacy declarative gate unchanged
 severity: load-bearing design constraint
 
 `extensions/optional/evolution/evolution-gate.ts:runEvolutionGate()` currently
@@ -19,3 +19,8 @@ must not pass the improvement gate.
 
 Acceptance: a real Catui defect fails before the patch, passes after the patch,
 and remains covered by an executable regression test through version adoption.
+
+Implemented in source/delivery/repair.ts and release.ts: freeze the test hash,
+require baseline assertion failure and candidate success, recheck merged source
+and test before packaging. Native Git/Node integration tests cover the transition.
+Live naturally occurring product defects remain subject to the same acceptance.

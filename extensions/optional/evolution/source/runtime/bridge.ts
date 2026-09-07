@@ -30,6 +30,7 @@ export function registerSourceEvolution(api: ExtensionAPI): void {
 			}).finally(() => pending--);
 	};
 	api.on("session_start", (_event, ctx) => {
+		root = undefined;
 		try {
 			const candidate = sourceRoot(ctx.agentDir);
 			if (!loadConfig(candidate)?.enabled) return;
@@ -67,8 +68,7 @@ export function registerSourceEvolution(api: ExtensionAPI): void {
 	});
 	api.on("agent_result", (event, ctx) => {
 		if (!root) return;
-		const result = event as unknown as { stopReason?: string; errorMessage?: string };
-		emit({ kind: "result", session: ctx.sessionManager.getSessionId(), workspace: digest(ctx.cwd), version: VERSION, model: ctx.model?.id ?? "unknown", failed: Boolean(result.errorMessage), summary: sanitize(result.errorMessage ?? result.stopReason ?? "Completed") });
+		emit({ kind: "result", session: ctx.sessionManager.getSessionId(), workspace: digest(ctx.cwd), version: VERSION, model: ctx.model?.id ?? "unknown", failed: Boolean(event.errorMessage), summary: sanitize(event.errorMessage ?? event.stopReason ?? "Completed"), durationMs: event.durationMs });
 	});
 	api.on("session_shutdown", () => { root = undefined; starts.clear(); });
 }

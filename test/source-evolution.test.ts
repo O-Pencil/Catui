@@ -21,6 +21,9 @@ import { acceptedReview, repairable } from "../extensions/optional/evolution/sou
 import { sandboxCommand, verificationEnvironment } from "../extensions/optional/evolution/source/delivery/sandbox.js";
 import { publishCandidate } from "../extensions/optional/evolution/source/delivery/release.js";
 import type { Observation, SourceJob, RunCommand } from "../extensions/optional/evolution/source/types.js";
+import { registerSourceEvolution } from "../extensions/optional/evolution/source/runtime/bridge.js";
+import { sourceRoot } from "../extensions/optional/evolution/source/runtime/config.js";
+import type { ExtensionAPI } from "../core/extensions-host/types.js";
 
 async function fixture(t: test.TestContext) {
 	const root = await mkdtemp(join(tmpdir(), "catui-source-test-"));
@@ -40,6 +43,30 @@ test("configuration is explicit, validated and absent by default", async t => {
 	assert.equal(loadConfig(root), undefined);
 	assert.equal(validateConfig(config).autoMerge, true);
 	for (const change of [{ model: "" }, { repository: "../repo" }, { hour: 24 }, { maxWorkerRunsPerDay: 0 }, { requiredChecks: [] }, { timeZone: "not/a-zone" }]) assert.throws(() => validateConfig({ ...config, ...change }));
+});
+test("live extension events reach durable sidecar state and unconfigured sessions stop observation", async t => {
+	const { root, config } = await fixture(t);
+	const observedRoot = sourceRoot(root);
+	await atomicJson(join(observedRoot, "config.json"), config);
+	const release = await supervisorLease(observedRoot); t.after(async () => { await release(); });
+	const handlers = new Map<string, Function>();
+	registerSourceEvolution({ on: (name: string, fn: Function) => handlers.set(name, fn), sendMessage: () => {} } as unknown as ExtensionAPI);
+	const context = { agentDir: root, cwd: root, model: { id: "model" }, sessionManager: { getSessionId: () => "session" } };
+	handlers.get("session_start")!({}, context);
+	handlers.get("before_agent_start")!({ prompt: "Fix incorrect tool behavior" }, context);
+	handlers.get("tool_execution_start")!({ toolCallId: "call", toolName: "edit", args: { path: "file" } }, context);
+	handlers.get("tool_execution_end")!({ toolCallId: "call", toolName: "edit", isError: true, result: { content: [{ type: "text", text: "Invalid replacement" }] } }, context);
+	handlers.get("agent_result")!({ errorMessage: "Task failed", stopReason: "error", durationMs: 5 }, context);
+	const state = await loadState(observedRoot);
+	for (let i = 0; i < 100 && state.observations.length < 3; i++) { await new Promise(r => setTimeout(r, 10)); await ingest(observedRoot, state); }
+	assert.equal(state.observations.length, 3);
+	assert.equal(state.observations.find(e => e.kind === "tool")?.failed, true);
+	assert.equal(state.observations.find(e => e.kind === "result")?.summary, "Task failed");
+	assert.equal(new Set(state.observations.map(e => e.run)).size, 1);
+	handlers.get("session_start")!({}, { ...context, agentDir: join(root, "unconfigured") });
+	handlers.get("before_agent_start")!({ prompt: "Do not observe this" }, context);
+	await new Promise(r => setTimeout(r, 30)); await ingest(observedRoot, state);
+	assert.equal(state.observations.length, 3);
 });
 test("daily schedule uses configured local date, including UTC day boundary", async t => {
 	const { config } = await fixture(t);

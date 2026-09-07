@@ -25,6 +25,11 @@ export async function publishCandidate(run: RunCommand, root: string, config: So
 	await checked(run, "git", ["checkout", "--detach", job.merge], { cwd });
 	const pkg = JSON.parse(await readFile(join(cwd, "package.json"), "utf8"));
 	if (pkg.name !== config.packageName || pkg.version !== job.version) throw new Error("Merged package identity does not match verified candidate");
+	const tag = `v${job.version}`;
+	const refs = await checked(run, "git", ["ls-remote", "origin", `refs/tags/${tag}`, `refs/tags/${tag}^{}`], { cwd });
+	const tagLines = refs.split("\n").filter(Boolean);
+	const tagged = (tagLines.find(line => line.endsWith("^{}")) ?? tagLines[0])?.split(/\s+/)[0];
+	if (tagged && tagged !== job.merge) throw new Error("Release tag identity conflict with verified merge");
 	if (createHash("sha256").update(await readFile(join(cwd, job.testPath!), "utf8")).digest("hex") !== job.testHash) throw new Error("Merged regression differs from the frozen contract");
 	if (!job.artifact) {
 		await checked(run, "npm", ["ci", "--ignore-scripts"], { cwd, timeoutMs: 600000 });
@@ -46,7 +51,6 @@ export async function publishCandidate(run: RunCommand, root: string, config: So
 	}
 	const published = JSON.parse(await checked(run, "npm", ["view", spec, "dist.integrity", "--json"], { cwd }));
 	if (published !== job.integrity) throw new Error("Registry version belongs to a different artifact");
-	const tag = `v${job.version}`;
 	const release = await run("gh", ["release", "view", tag, "--repo", config.repository, "--json", "tagName"], { cwd });
 	if (release.code !== 0) {
 		await checked(run, "gh", ["release", "create", tag, "--repo", config.repository, "--target", job.merge, "--title", tag, "--notes", `Automated Catui improvement from PR #${job.pr}. Frozen baseline/candidate regression and repository gates passed. Real-world effectiveness is being measured.`], { cwd });

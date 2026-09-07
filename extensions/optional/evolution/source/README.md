@@ -18,9 +18,8 @@ automatic delivery does not use admin bypass or fabricate reviewer approval.
 
 ```sh
 catui evolve init --model custom-anthropic/MiniMax-M3
-catui evolve start
-catui evolve status
 catui evolve install-service
+catui evolve status
 ```
 
 `start` detaches a supervisor and normal configured Catui sessions reconnect to it.
@@ -36,7 +35,7 @@ and ten minutes. This is a worker/time budget, **not a dollar or token cap**.
 Each invocation is durably reserved before launch, including failed calls.
 
 The supervisor observes continuously and delivers only qualified findings in the
-daily window. Two distinct failing runs are required. A day with no reproducible
+daily window. Two distinct runs with repeated failures or inefficiencies are required. A day with no reproducible
 Catui defect produces no PR. External service failures and project-specific bugs
 are rejected during triage. Existing submitted jobs reconcile independently of
 the daily creation window.
@@ -66,9 +65,10 @@ must match that artifact exactly. Retries reconcile publication before writing.
 No `npm version`/`postversion` push hook is used; version metadata is part of the PR.
 
 The new package is installed in `<root>/versions/<version>/`, smoke-tested, and
-selected via an atomic pointer. Normal `catui` launches use the managed version;
+selected via an atomic pointer. Normal installed `catui` launches use the managed version;
 running sessions remain pinned. Evolution workers also use the adopted version,
 while the supervisor's acceptance policy stays independent of generated patches.
+Development source launches and explicit `--agent` launches retain their selected installation.
 
 At least 30 matching tool/outcome observations are required by default before
 classifying post-adoption behavior. Model, workspace, tool and source version must
@@ -94,6 +94,7 @@ lifecycle step under the same exclusive lease and respects the daily schedule.
 errors, retries and measurements. `spool/` holds bounded foreground events;
 `logs/` holds private model/verification evidence; `jobs/` and `releases/` hold
 isolated checkouts. A single supervisor lease prevents duplicate publishers.
+Audit logs and checkouts are retained; monitor disk usage during prolonged operation.
 Raw user conversations and trace files are not uploaded; PRs contain a reviewed
 reproduction, patch and verification summary. Observation summaries are bounded
 and redact common secret/path patterns, but are still private local task data.
