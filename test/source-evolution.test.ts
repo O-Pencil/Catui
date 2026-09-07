@@ -75,7 +75,7 @@ test("daily audit can discover repeated quality issues in successful runs withou
 	};
 	await auditCompletedRuns(run, root, config, state); await auditCompletedRuns(run, root, config, state);
 	assert.equal(calls, 1); assert.equal(state.audit?.runs.length, 2);
-	const j = enqueue(state, config, root); assert.equal(j?.metric, "quality"); assert.equal(j?.baselineRuns?.length, 2);
+	const j = enqueue(state, config, root); assert.equal(j?.metric, "quality"); assert.equal(j?.baselineRuns?.length, 2); assert.equal(j?.baselineRate, 1); assert.equal(j?.baselineCount, 2);
 	assert.equal(Object.values(state.budgets)[0].calls, 1);
 });
 test("completed-run samples resist tool-event inflation and preserve matching strata", () => {
@@ -190,7 +190,7 @@ test("one failing run cannot manufacture repeated evidence", async t => {
 });
 test("daily enqueue persists cohort denominators and prevents duplicate jobs", async t => {
 	const { root, state, config } = await fixture(t);
-	state.observations.push(event(), event(), event({ failed: false }));
+	state.observations = [true, true, false].flatMap((failed, i) => [event({ run: `run-${i}`, failed }), event({ run: `run-${i}`, kind: "result", tool: undefined, failed: false, taskCategory: "repair", inputBucket: "short", toolCalls: 1 })]);
 	const created = enqueue(state, config, root, new Date("2026-09-08T04:00:00Z"));
 	assert.equal(created?.baselineRate, 2 / 3); assert.equal(created?.baselineCount, 3);
 	assert.equal(enqueue(state, config, root, new Date("2026-09-08T05:00:00Z")), undefined);

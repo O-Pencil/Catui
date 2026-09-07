@@ -41,11 +41,10 @@ export function enqueue(state: SourceState, config: SourceConfig, root: string, 
 	requireReviewModel(config);
 	const failure = evidence.find(e => e.failed || e.inefficient)!;
 	const metric = failure.kind === "quality" ? "quality" : failure.failed ? "failure" : "inefficiency";
-	const cohort = state.observations.filter(e => e.kind === failure.kind && e.tool === failure.tool && e.model === failure.model && e.workspace === failure.workspace && e.version === failure.version);
+	const baselineRuns = collectRuns(state.observations, failure, failure.version, metric).slice(-config.measurementSamples * 8);
 	const id = `${day}-${randomUUID().slice(0, 8)}`;
-	const job: SourceJob = { id, day, stage: "queued", createdAt: now.toISOString(), evidence, fingerprint: failure.fingerprint, title: "Investigating repeated execution issue", branch: `evolution/${id}`, checkout: join(root, "jobs", id), attempts: 0, metric, baselineRate: cohort.filter(e => metric === "failure" ? e.failed : e.inefficient).length / cohort.length, baselineCount: cohort.length };
+	const job: SourceJob = { id, day, stage: "queued", createdAt: now.toISOString(), evidence, fingerprint: failure.fingerprint, title: "Investigating repeated execution issue", branch: `evolution/${id}`, checkout: join(root, "jobs", id), attempts: 0, metric, baselineRuns, baselineRate: baselineRuns.length ? baselineRuns.filter(r => r.failed).length / baselineRuns.length : undefined, baselineCount: baselineRuns.length };
 	state.jobs.push(job); budget.jobs++;
-	job.baselineRuns = collectRuns(state.observations, failure, failure.version, metric).slice(-config.measurementSamples * 8);
 	return job;
 }
 export async function deliveryTick(root: string, state: SourceState, config: SourceConfig, run: RunCommand = runCommand): Promise<void> {
