@@ -24,12 +24,93 @@ import type { Observation, SourceJob, RunCommand } from "../extensions/optional/
 import { registerSourceEvolution } from "../extensions/optional/evolution/source/runtime/bridge.js";
 import { sourceRoot } from "../extensions/optional/evolution/source/runtime/config.js";
 import type { ExtensionAPI } from "../core/extensions-host/types.js";
+import { auditObservations, auditCompletedRuns } from "../extensions/optional/evolution/source/learning/audit.js";
+import { collectRuns, matchRuns } from "../extensions/optional/evolution/source/assessment/measurement.js";
+import { askWorker } from "../extensions/optional/evolution/source/delivery/model.js";
+import { requireReviewModel } from "../extensions/optional/evolution/source/runtime/config.js";
 
 async function fixture(t: test.TestContext) {
 	const root = await mkdtemp(join(tmpdir(), "catui-source-test-"));
 	t.after(() => rm(root, { recursive: true, force: true }));
-	return { root, config: defaultConfig(root, "test/model"), state: await loadState(root) };
+	return { root, config: defaultConfig(root, "test/model", "dashscope-coding/qwen3.7-plus"), state: await loadState(root) };
 }
+test("independent reviewer identity and adaptive scope cannot relax acceptance authority", async t => {
+	const { config } = await fixture(t);
+	assert.equal(requireReviewModel(config), "dashscope-coding/qwen3.7-plus");
+	assert.throws(() => requireReviewModel({ ...config, reviewModel: undefined }), /independent review/);
+	assert.throws(() => validateConfig({ ...config, reviewModel: "other/model" }), /different model/);
+	for (const file of ["detectors.ts", "repair-strategy.ts"]) {
+		const path = `extensions/optional/evolution/source/learning/${file}`;
+		assert.equal(repairable(path), false); assert.equal(repairable(path, "adaptive"), true);
+	}
+	for (const file of ["learning/audit.ts", "assessment/measurement.ts", "delivery/policy.ts", "runtime/config.ts"]) assert.equal(repairable(`extensions/optional/evolution/source/${file}`, "adaptive"), false);
+});
+test("review uses bootstrap CLI and never retries through the adopted repairer", async t => {
+	const { root, state, config } = await fixture(t);
+	const cli = join(root, "versions/1.0.1/node_modules/catui-agent/dist/cli.js");
+	await atomicJson(join(root, "current.json"), { job: "old", version: "1.0.1", merge: "head", cli });
+	const invocations: string[][] = [];
+	const run: RunCommand = async (_command, args) => { invocations.push(args); return { code: args.includes("review") ? 1 : 0, stdout: "ok", stderr: "review unavailable" }; };
+	await askWorker(run, root, state, config, "repair", root, "repair");
+	await assert.rejects(askWorker(run, root, state, config, "review", root, "review"), /failed \(1\)/);
+	assert.equal(invocations[0][0], cli); assert.equal(invocations[1].includes(cli), false); assert.equal(invocations.length, 2);
+});
+test("quality audit requires run-local citations and emits explicit clean denominators", () => {
+	const result = event({ kind: "result", tool: undefined, failed: false, taskCategory: "repair", inputBucket: "short" });
+	const response = (evidenceIds: string[]) => JSON.stringify({ evaluations: [{ run: result.run, issues: [{ category: "verification-gap", summary: "Final answer explicitly states tests were omitted", evidenceIds }] }] });
+	assert.throws(() => auditObservations(response(["unknown"]), [[result]]), /citations/);
+	const quality = auditObservations(response([result.id]), [[result]]);
+	assert.equal(quality.length, 5); assert.equal(quality.filter(e => e.failed).length, 1);
+	assert.equal(collectRuns([result], quality[0], result.version, "quality").length, 0);
+	assert.equal(collectRuns([result, ...quality], quality[0], result.version, "quality").length, 1);
+	assert.throws(() => auditObservations(JSON.stringify({ evaluations: [] }), [[result]]), /every supplied run/);
+});
+test("daily audit can discover repeated quality issues in successful runs without duplicate calls", async t => {
+	const { root, state, config } = await fixture(t); config.hour = 0;
+	state.observations = ["first", "second"].flatMap(run => [event({ run, kind: "task", tool: undefined, failed: false }), event({ run, kind: "result", tool: undefined, failed: false, taskCategory: "repair", inputBucket: "short", toolCalls: 0 })]);
+	let calls = 0;
+	const run: RunCommand = async (_command, args) => {
+		calls++; assert.equal(args[args.indexOf("--phase") + 1], "audit");
+		return { code: 0, stderr: "", stdout: JSON.stringify({ evaluations: state.observations.filter(e => e.kind === "result").map(e => ({ run: e.run, issues: [{ category: "incomplete", summary: "Final answer explicitly leaves the requested step unfinished", evidenceIds: [e.id] }] })) }) };
+	};
+	await auditCompletedRuns(run, root, config, state); await auditCompletedRuns(run, root, config, state);
+	assert.equal(calls, 1); assert.equal(state.audit?.runs.length, 2);
+	const j = enqueue(state, config, root); assert.equal(j?.metric, "quality"); assert.equal(j?.baselineRuns?.length, 2); assert.equal(j?.baselineRate, 1); assert.equal(j?.baselineCount, 2);
+	assert.equal(Object.values(state.budgets)[0].calls, 1);
+});
+test("completed-run samples resist tool-event inflation and preserve matching strata", () => {
+	const anchor = event();
+	const tools = Array.from({ length: 20 }, () => event({ run: "one" }));
+	const result = event({ run: "one", kind: "result", tool: undefined, taskCategory: "repair", inputBucket: "short", toolCalls: 20 });
+	assert.equal(collectRuns([...tools, result], anchor, anchor.version, "failure").length, 1);
+	assert.equal(collectRuns([...tools.slice(1), result], anchor, anchor.version, "failure").length, 0);
+	const sample = { run: "x", stratum: "a", failed: false, tokens: 1, durationMs: 1 };
+	assert.equal(matchRuns([sample], [{ ...sample, stratum: "b" }]).candidate.length, 0);
+	const matched = matchRuns([sample, sample, { ...sample, stratum: "b" }], [sample, sample, { ...sample, stratum: "b" }]);
+	assert.deepEqual(matched.candidate.map(r => r.stratum), ["a", "b", "a"]);
+});
+test("measurement uses four fixed windows and cannot infer improvement from missing usage", async t => {
+	const { root, state, config } = await fixture(t); config.measurementSamples = 30;
+	const j = job(root); j.stage = "adopted"; j.adoptedAt = "2026-01-01T00:00:00Z";
+	const sample = { stratum: "a", failed: true, tokens: 100, durationMs: 100, usageKnown: true };
+	j.baselineRuns = Array.from({ length: 240 }, (_, i) => ({ ...sample, run: `old-${i}` }));
+	j.observedRuns = Array.from({ length: 30 }, (_, i) => ({ ...sample, failed: false, usageKnown: false, run: `new-${i}` }));
+	await measureAdoption(root, state, config, j); assert.equal(j.stage, "adopted"); assert.equal(j.measurementLook, 1);
+	await measureAdoption(root, state, config, j); assert.equal(j.measurementLook, 1);
+	j.observedRuns = Array.from({ length: 60 }, (_, i) => ({ ...sample, failed: false, run: `new-${i}` }));
+	await measureAdoption(root, state, config, j); assert.equal(j.stage, "effective"); assert.equal(j.measurementLook, 2);
+	const legacy = job(root); legacy.stage = "adopted"; legacy.adoptedAt = j.adoptedAt;
+	await measureAdoption(root, state, config, legacy); assert.equal(legacy.stage, "adopted"); assert.match(legacy.lastResult!, /legacy/);
+});
+test("a frequent task stratum cannot evict the matched samples of other tasks", async t => {
+	const { root, state, config } = await fixture(t); config.measurementSamples = 2;
+	const j = job(root); j.stage = "adopted"; j.adoptedAt = "2026-01-01T00:00:00Z";
+	const sample = { stratum: "frequent", failed: false, tokens: 100, durationMs: 100 };
+	j.baselineRuns = [{ ...sample, run: "old-a" }, { ...sample, stratum: "rare", run: "old-b" }];
+	j.observedRuns = [...Array.from({ length: 16 }, (_, i) => ({ ...sample, run: `frequent-${i}` })), { ...sample, stratum: "rare", run: "rare-1" }];
+	await measureAdoption(root, state, config, j);
+	assert.equal(j.measuredCount, 2); assert.deepEqual(j.observedRuns.map(r => r.stratum), ["frequent", "rare"]);
+});
 function event(overrides: Partial<Observation> = {}): Observation {
 	return { id: randomUUID(), run: randomUUID(), session: "s", workspace: "workspace-hash", time: new Date().toISOString(), version: "1.0.0", model: "m", kind: "tool", tool: "edit", failed: true, summary: "Invalid replacement", fingerprint: "failure-a", ...overrides };
 }
@@ -109,7 +190,7 @@ test("one failing run cannot manufacture repeated evidence", async t => {
 });
 test("daily enqueue persists cohort denominators and prevents duplicate jobs", async t => {
 	const { root, state, config } = await fixture(t);
-	state.observations.push(event(), event(), event({ failed: false }));
+	state.observations = [true, true, false].flatMap((failed, i) => [event({ run: `run-${i}`, failed }), event({ run: `run-${i}`, kind: "result", tool: undefined, failed: false, taskCategory: "repair", inputBucket: "short", toolCalls: 1 })]);
 	const created = enqueue(state, config, root, new Date("2026-09-08T04:00:00Z"));
 	assert.equal(created?.baselineRate, 2 / 3); assert.equal(created?.baselineCount, 3);
 	assert.equal(enqueue(state, config, root, new Date("2026-09-08T05:00:00Z")), undefined);
@@ -165,16 +246,18 @@ test("adoption refuses a different registry artifact before installation", async
 	assert.equal(calls, 1);
 });
 test("post-adoption regression rolls back and feeds subsequent daily evidence", async t => {
-	const { root, state, config } = await fixture(t); config.measurementSamples = 3;
+	const { root, state, config } = await fixture(t); config.measurementSamples = 30;
 	const j = job(root); j.stage = "adopted"; j.adoptedAt = "2026-01-01T00:00:00Z"; j.baselineRate = 0.1;
 	await atomicJson(join(root, "current.json"), { job: j.id, version: "1.0.1", merge: "m", cli: join(root, "versions/1.0.1/node_modules/catui-agent/dist/cli.js"), previous: { job: "old", version: "1.0.0", merge: "b", cli: join(root, "versions/1.0.0/node_modules/catui-agent/dist/cli.js") } });
-	state.observations = [event({ version: "1.0.1" }), event({ version: "1.0.1" }), event({ version: "1.0.1" })];
+	j.baselineRuns = Array.from({ length: 30 }, (_, i) => ({ run: `old-${i}`, stratum: JSON.stringify(["repair", "short", "m", "workspace-hash"]), failed: false, tokens: 100, durationMs: 100 }));
+	state.observations = Array.from({ length: 30 }, (_, i) => [event({ run: `new-${i}`, version: "1.0.1" }), event({ run: `new-${i}`, version: "1.0.1", kind: "result", tool: undefined, taskCategory: "repair", inputBucket: "short", toolCalls: 1 })]).flat();
 	await measureAdoption(root, state, config, j);
 	assert.equal(j.stage, "regressed"); assert.equal((await readInstalled(root))?.version, "1.0.0"); assert.notEqual(state.paused, true);
 });
 test("different models or workspaces cannot establish post-adoption effectiveness", async t => {
 	const { root, state, config } = await fixture(t); config.measurementSamples = 2;
 	const j = job(root); j.stage = "adopted"; j.adoptedAt = "2026-01-01T00:00:00Z"; j.baselineRate = 1;
+	j.baselineRuns = [{ run: "old", stratum: "old", failed: true, tokens: 100, durationMs: 100 }];
 	state.observations = [event({ version: "1.0.1", failed: false, model: "different" }), event({ version: "1.0.1", failed: false, workspace: "different" })];
 	await measureAdoption(root, state, config, j); assert.equal(j.stage, "adopted"); assert.equal(j.measuredCount, 0);
 });

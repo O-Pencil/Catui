@@ -31,9 +31,12 @@ test("OS verifier rejects writes outside the candidate checkout", { skip: !suppo
 	assert.notEqual(denied.code, 0); assert.equal(existsSync(join(root, "outside.txt")), false);
 	const gitWrite = await run(process.execPath, ["-e", "require('fs').writeFileSync('.git/authority','bad')"], { cwd });
 	assert.notEqual(gitWrite.code, 0);
+	await writeFile(join(cwd, "hidden.test.ts"), "frozen");
+	const immutable = await verificationRunner(runCommand, ["hidden.test.ts"])(process.execPath, ["-e", "require('fs').writeFileSync('hidden.test.ts','tampered')"], { cwd });
+	assert.notEqual(immutable.code, 0); assert.equal(await readFile(join(cwd, "hidden.test.ts"), "utf8"), "frozen");
 });
 
-test("actual Git checkout evolves from failing assertion to verified committed patch", { skip: !supported, timeout: 120000 }, async t => {
+for (const repair of ["general", "overfit", "break-compatibility"]) test(`actual Git verification: ${repair} repair`, { skip: !supported, timeout: 120000 }, async t => {
 	const root = await realpath(await mkdtemp(join(tmpdir(), "source-repair-test-")));
 	t.after(() => rm(root, { recursive: true, force: true }));
 	const upstream = join(root, "upstream"); await mkdir(join(upstream, "core"), { recursive: true });
@@ -48,7 +51,7 @@ test("actual Git checkout evolves from failing assertion to verified committed p
 	await checked(runCommand, "git", ["init", "-b", "main"], { cwd: upstream });
 	await checked(runCommand, "git", ["add", "core/sum.ts", "package.json", "package-lock.json", "tsconfig.json", ".gitignore"], { cwd: upstream });
 	await checked(runCommand, "git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.com", "-c", "core.hooksPath=/dev/null", "commit", "-m", "test: seed real defective implementation"], { cwd: upstream });
-	const config = defaultConfig(root, "fixture/model");
+	const config = defaultConfig(root, "fixture/model", "dashscope-coding/qwen3.7-plus");
 	const state = await loadState(root);
 	const j: SourceJob = { id: "local-proof", day: "2026-09-08", stage: "queued", createdAt: new Date().toISOString(), evidence: [], fingerprint: "sum-failure", title: "sum defect", branch: "evolution/local-proof", checkout: join(root, "jobs", "local-proof"), attempts: 0 };
 	state.jobs.push(j);
@@ -67,7 +70,17 @@ test("actual Git checkout evolves from failing assertion to verified committed p
 				await mkdir(join(options.cwd, "test"), { recursive: true });
 				await writeFile(join(options.cwd, args[args.indexOf("--test") + 1]), "import test from 'node:test'; import assert from 'node:assert/strict'; import {sum} from '../core/sum.js'; test('sum adds distinct operands', () => assert.equal(sum(2,3),5));\n");
 			}
-			if (phase === "repair") await writeFile(join(options.cwd, "core", "sum.ts"), "export function sum(a: number, b: number): number { return a + b; }\n");
+			if (phase === "repair") {
+				assert.equal(existsSync(join(options.cwd, `test/source-evolution-${j.id}-holdout.test.ts`)), false);
+				const body = repair === "overfit" ? "return a === 2 && b === 3 ? 5 : a - b" : repair === "break-compatibility" ? "return b === 0 ? 99 : a + b" : "return a + b";
+				await writeFile(join(options.cwd, "core", "sum.ts"), `export function sum(a: number, b: number): number { ${body}; }\n`);
+			}
+			if (phase === "holdout") {
+				const path = args[args.indexOf("--test") + 1];
+				await mkdir(join(options.cwd, "test"), { recursive: true });
+				await writeFile(join(options.cwd, path), "import test from 'node:test'; import assert from 'node:assert/strict'; import {sum} from '../core/sum.js'; test('generalization', () => assert.equal(sum(-2,7),5));\n");
+				await writeFile(join(options.cwd, path.replace(/\.test\.ts$/, ".compat.test.ts")), "import test from 'node:test'; import assert from 'node:assert/strict'; import {sum} from '../core/sum.js'; test('compatibility', () => assert.equal(sum(4,0),4));\n");
+			}
 			if (phase === "review") stdout = JSON.stringify({ approved: true, reproducesRealDefect: true, preservesBehavior: true, publishable: true, reason: "Production function corrected with independent regression" });
 			return { code: 0, stdout, stderr: "" };
 		}
@@ -78,8 +91,11 @@ test("actual Git checkout evolves from failing assertion to verified committed p
 	const baseline = JSON.parse(await readFile(join(root, "logs", `${j.id}-baseline.json`), "utf8"));
 	assert.equal(baseline.code, 1); assert.match(baseline.stdout, /ERR_ASSERTION/);
 	await repairCandidate(run, root, config, state, j);
+	if (repair !== "general") {
+		assert.equal(j.stage, "rejected"); assert.equal(j.holdout?.passed, false); assert.equal(phases.includes("review"), false); assert.equal(j.head, undefined); return;
+	}
 	assert.equal(j.stage, "verified"); assert.equal(j.version, "1.0.1"); assert.notEqual(j.base, j.head);
-	assert.deepEqual(phases, ["triage", "reproduce", "repair", "review"]);
+	assert.deepEqual(phases, ["triage", "reproduce", "holdout", "repair", "review"]);
 	assert.equal(await checked(runCommand, "git", ["status", "--porcelain"], { cwd: j.checkout }), "");
 	const candidate = JSON.parse(await readFile(join(root, "logs", `${j.id}-candidate.json`), "utf8"));
 	assert.equal(candidate.code, 0);

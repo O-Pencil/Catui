@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.25] - 2026-09-08
+
+### Added
+
+- Independent source-evolution review, private generalization and compatibility tests, and daily task-quality retrospectives.
+- Matched completed-run adoption measurements and opt-in evolution of detection and repair methods.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

@@ -12,6 +12,8 @@ export interface SourceConfig {
 	packageName: string;
 	agentDir: string;
 	model: string;
+	reviewModel?: string;
+	repairScope?: "source" | "adaptive";
 	timeZone: string;
 	hour: number;
 	autoMerge: boolean;
@@ -35,13 +37,19 @@ export interface Observation {
 	time: string;
 	version: string;
 	model: string;
-	kind: "task" | "tool" | "result" | "usage";
+	kind: "task" | "tool" | "result" | "usage" | "quality";
+	taskCategory?: string;
+	inputBucket?: string;
+	qualityCategory?: string;
+	evidenceIds?: string[];
 	tool?: string;
 	failed: boolean;
 	summary: string;
 	durationMs?: number;
 	inefficient?: boolean;
 	tokens?: number;
+	toolCalls?: number;
+	turns?: number;
 	fingerprint: string;
 }
 export type JobStage = "queued" | "prepared" | "verified" | "submitted" | "merged" | "published" | "adopted" | "effective" | "regressed" | "rejected" | "failed";
@@ -59,6 +67,13 @@ export interface SourceJob {
 	checkout: string;
 	testPath?: string;
 	testHash?: string;
+	holdout?: { checkout: string; regression: string; compatibility: string; regressionHash: string; compatibilityHash: string; model: string; passed?: boolean };
+	baselineRuns?: RunSample[];
+	observedRuns?: RunSample[];
+	measurementLook?: number;
+	measurementInterval?: [number, number];
+	measurementTokensRatio?: number;
+	measurementLatencyRatio?: number;
 	version?: string;
 	pr?: number;
 	merge?: string;
@@ -66,7 +81,7 @@ export interface SourceJob {
 	integrity?: string;
 	baselineRate?: number;
 	baselineCount?: number;
-	metric?: "failure" | "inefficiency";
+	metric?: "failure" | "inefficiency" | "quality";
 	adoptedAt?: string;
 	previousVersion?: string;
 	previousHead?: string;
@@ -88,6 +103,15 @@ export interface SourceState {
 	heartbeat?: string;
 	error?: string;
 	paused?: boolean;
+	audit?: { day?: string; runs: string[]; error?: string };
+}
+export interface RunSample {
+	run: string;
+	stratum: string;
+	failed: boolean;
+	tokens: number;
+	durationMs: number;
+	usageKnown?: boolean;
 }
 export interface InstalledVersion {
 	version: string;

@@ -387,7 +387,9 @@ Built-in commands (`core/slash-commands.ts`):
 | `/link-world` | Install internet access extension |
 | `/grub` | Start/status/resume/stop an autonomous long-running task harness |
 
-Source evolution is configured separately with `catui evolve init --model provider/model`.
+Source evolution is configured separately with `catui evolve init --model provider/model --review-model provider/model`.
+`catui evolve configure --review-model provider/model --scope adaptive` enables
+independent review and bounded evolution of detection/repair methods.
 `catui evolve start|stop|status|run|install-service|launch` manages the independent
 usage observer, verified source repair, daily PR delivery, automatic merge/release,
 and managed version adoption. Owner: `extensions/optional/evolution/source/`;
