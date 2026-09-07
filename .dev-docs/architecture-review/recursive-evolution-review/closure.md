@@ -21,6 +21,9 @@ status: local acceptance passed on current main; remote delivery pending
 - Final DIP, quality, static/dist package boundary, build and TypeScript gates passed.
 - Integrated critical harness: 220 tests passed, zero failures, both loop evals passed.
 - Remote PR checks, publication and service activation are separate delivery steps.
+- CI exposed a legacy test assuming distinct millisecond usage timestamps. The
+  test now identifies success/error records by outcome and verifies both artifact
+  identities, preserving assertions without relying on directory enumeration order.
 
 ## Explicit limits and reopen conditions
 
