@@ -15,6 +15,11 @@ The final source snapshot resets observation on unconfigured session switches
 and rejects conflicting release tags. Consolidation preserves both source repair
 and declarative benchmark contracts and updates the historical finding accordingly.
 
+Linux CI exposed a usage-test ordering assumption: two records can share a
+timestamp, so their returned order cannot identify success versus error. The test
+now selects each record by its asserted outcome before checking feedback linkage.
+Product behavior and the required success/error assertions remain unchanged.
+
 Remote CI is the remaining merge gate. No registry publication or background
 service activation is performed by this consolidation. Existing dirty worktrees
 and historical experiment branches remain available without destructive cleanup.

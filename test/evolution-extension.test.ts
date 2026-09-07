@@ -337,16 +337,18 @@ test("evolution extension exposes promoted tool specs through controlled evolved
 		assert.equal(details.plan?.steps?.[0]?.name, "Read failure output");
 		const usageInspection = inspectEvolution(root);
 		assert.equal(usageInspection.usages.length, 2);
-		assert.equal(usageInspection.usages[0]?.artifactId, "evolved:tool_spec:collect-failure-evidence");
-		assert.equal(usageInspection.usages[0]?.status, "success");
-		assert.equal(usageInspection.usages[1]?.status, "error");
-		assert.equal(usageInspection.usages[1]?.error, "missing_required_input");
+		const successfulUsage = usageInspection.usages.find(usage => usage.status === "success");
+		const failedUsage = usageInspection.usages.find(usage => usage.status === "error");
+		assert.ok(successfulUsage);
+		assert.ok(failedUsage);
+		assert.equal(successfulUsage.artifactId, "evolved:tool_spec:collect-failure-evidence");
+		assert.equal(failedUsage.error, "missing_required_input");
 		const changes = formatEvolutionChanges(usageInspection);
 		assert.match(changes, /Usage:/);
 		assert.match(changes, /evolved:tool_spec:collect-failure-evidence: success/);
 		assert.match(changes, /missing_required_input/);
 
-		const usageId = usageInspection.usages[0]?.id ?? "";
+		const usageId = successfulUsage.id;
 		await refineCommand(`--session feedback ${usageId} useful reduced repeated triage steps`, ctx);
 		assert.match(harness.messages.at(-1) ?? "", /feedback recorded/i);
 		const feedbackInspection = inspectEvolution(root);
@@ -364,7 +366,7 @@ test("evolution extension exposes promoted tool specs through controlled evolved
 		assert.match(review, /useful 1/);
 		assert.match(review, /Recommendation: keep/);
 
-		const errorUsageId = usageInspection.usages[1]?.id ?? "";
+		const errorUsageId = failedUsage.id;
 		await refineCommand(`--session feedback ${errorUsageId} not-useful missing required input interrupted reuse`, ctx);
 		await refineCommand("--session review", ctx);
 		const negativeReview = harness.messages.at(-1) ?? "";
