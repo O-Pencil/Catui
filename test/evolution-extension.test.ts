@@ -337,11 +337,13 @@ test("evolution extension exposes promoted tool specs through controlled evolved
 		assert.equal(details.plan?.steps?.[0]?.name, "Read failure output");
 		const usageInspection = inspectEvolution(root);
 		assert.equal(usageInspection.usages.length, 2);
+		// Calls can share a millisecond timestamp; directory order is not invocation order.
 		const successfulUsage = usageInspection.usages.find(usage => usage.status === "success");
 		const failedUsage = usageInspection.usages.find(usage => usage.status === "error");
 		assert.ok(successfulUsage);
 		assert.ok(failedUsage);
 		assert.equal(successfulUsage.artifactId, "evolved:tool_spec:collect-failure-evidence");
+		assert.equal(failedUsage.artifactId, "evolved:tool_spec:collect-failure-evidence");
 		assert.equal(failedUsage.error, "missing_required_input");
 		const changes = formatEvolutionChanges(usageInspection);
 		assert.match(changes, /Usage:/);
