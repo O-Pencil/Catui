@@ -1,6 +1,6 @@
 /**
- * [WHO]: evolutionExtension registers /refine, model tools, automatic activation, turn observation, and active evolved harness prompt injection
- * [FROM]: Depends on core extension APIs plus local evolution store/refiner/format/tool/observer modules
+ * [WHO]: evolutionExtension registers declarative refinement, active harness prompt injection and configured live source-evolution observation
+ * [FROM]: Depends on core extension APIs plus local refinement modules and source/runtime/bridge
  * [TO]: Loaded explicitly as optional extension through Catui extension configuration or --extension
  * [HERE]: extensions/optional/evolution/index.ts - controlled self-evolution feature entry
  */
@@ -40,6 +40,7 @@ import { createEvolvedTool } from "./evolution-tool.js";
 import { createEvolvedExecutableTool } from "./evolution-executable-tool.js";
 import { EvolutionAutoObserver } from "./evolution-auto.js";
 import type { EvolutionCandidate, EvolutionScope, EvolutionScopeSelector } from "./evolution-types.js";
+import { registerSourceEvolution } from "./source/runtime/bridge.js";
 
 const MESSAGE_TYPE = "evolution";
 
@@ -261,4 +262,5 @@ export default async function evolutionExtension(api: ExtensionAPI): Promise<voi
 			// Auto-observation must never fail the agent loop; invalid lessons simply do not evolve.
 		}
 	});
+	registerSourceEvolution(api);
 }
