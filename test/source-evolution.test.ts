@@ -150,6 +150,8 @@ test("a PR created before a crash is recovered without a second push or PR", asy
 	await submitPullRequest(async (_cmd, args) => { calls.push(args); return { code: 0, stderr: "", stdout: JSON.stringify([{ number: 12, headRefOid: "head", state: "OPEN" }]) }; }, root, config, j);
 	assert.equal(j.pr, 12); assert.equal(calls.length, 2);
 	assert.ok(calls.every(c => !c.includes("create") && !c.includes("push")));
+	assert.deepEqual(calls[1].slice(0, 4), ["api", "--method", "PATCH", "repos/O-Pencil/Catui/pulls/12"]);
+	assert.ok(calls[1].includes(`body=@${join(root, "jobs", `${j.id}-pr.md`)}`));
 });
 test("repair cannot rewrite verifier authority or existing tests", () => {
 	for (const p of ["scripts/verify-quality.ts", ".github/workflows/ci.yml", "test/existing.test.ts", "package.json", "packages/protocol/src/index.ts", "../outside.ts", "extensions/optional/evolution/source/delivery/policy.ts"]) assert.equal(repairable(p), false, p);

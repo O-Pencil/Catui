@@ -53,7 +53,7 @@ export async function publishCandidate(run: RunCommand, root: string, config: So
 	if (published !== job.integrity) throw new Error("Registry version belongs to a different artifact");
 	const release = await run("gh", ["release", "view", tag, "--repo", config.repository, "--json", "tagName"], { cwd });
 	if (release.code !== 0) {
-		await checked(run, "gh", ["release", "create", tag, "--repo", config.repository, "--target", job.merge, "--title", tag, "--notes", `Automated Catui improvement from PR #${job.pr}. Frozen baseline/candidate regression and repository gates passed. Real-world effectiveness is being measured.`], { cwd });
+		await checked(run, "gh", ["release", "create", tag, "--repo", config.repository, "--target", job.merge, "--title", tag, "--notes", `Automated Catui improvement from PR #${job.pr}. Frozen baseline/candidate regression and repository gates passed. Real-world effectiveness is being measured.\n\nSource commit: ${job.merge}\nIntegrity: ${job.integrity}`], { cwd });
 	}
 	job.stage = "published";
 }
