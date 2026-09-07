@@ -1,5 +1,5 @@
 /**
- * [WHO]: ExtensionRunner class, lifecycle management, event emission, slash-command dispatch chokepoint (invokeCommand), telemetry sink wiring (setTelemetrySink)
+ * [WHO]: ExtensionRunner class, lifecycle management, event emission, slash-command dispatch chokepoint (invokeCommand), telemetry sink wiring (setTelemetrySink); optional context-window capability forwarding
  * [FROM]: Depends on agent-core, ai, tui, modes/theme, session-manager, types.ts, core/platform/telemetry (ExtensionTelemetrySink + classifyArgsSignature for the P1 ext_command_events writer)
  * [TO]: Consumed by core/extensions-host/index.ts, core/extensions-host/wrapper.ts, core/runtime/agent-session.ts (delegates command dispatch via invokeCommand)
  * [HERE]: core/extensions-host/runner.ts - extension execution and lifecycle management; owns the single try/catch around command.handler so telemetry can wrap every invocation regardless of caller mode
@@ -238,6 +238,7 @@ export class ExtensionRunner {
 	private clearFollowUpQueueFn: () => void = () => {};
 	private hasPendingMessagesFn: () => boolean = () => false;
 	private getContextUsageFn: () => ContextUsage | undefined = () => undefined;
+	private requestContextWindowFn: ExtensionContextActions["requestContextWindow"];
 	private compactFn: (options?: CompactOptions) => void = () => {};
 	private getSystemPromptFn: () => string = () => "";
 	private getSoulManagerFn: () => unknown | undefined = () => undefined;
@@ -337,6 +338,7 @@ export class ExtensionRunner {
 		this.hasPendingMessagesFn = contextActions.hasPendingMessages;
 		this.shutdownHandler = contextActions.shutdown;
 		this.getContextUsageFn = contextActions.getContextUsage;
+		this.requestContextWindowFn = contextActions.requestContextWindow;
 		this.compactFn = contextActions.compact;
 		this.getSystemPromptFn = contextActions.getSystemPrompt;
 		this.getSoulManagerFn = contextActions.getSoulManager;
@@ -814,6 +816,7 @@ export class ExtensionRunner {
 			hasPendingMessages: () => this.hasPendingMessagesFn(),
 			shutdown: () => this.shutdownHandler(),
 			getContextUsage: () => this.getContextUsageFn(),
+			requestContextWindow: this.requestContextWindowFn,
 			compact: (options) => this.compactFn(options),
 			getSystemPrompt: () => this.getSystemPromptFn(),
 			getSoulManager: () => this.getSoulManagerFn(),

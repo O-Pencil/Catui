@@ -303,6 +303,7 @@ Extensions can:
 |-----------|---------|
 | `interview` | Requirement clarification through guided Q&A |
 | `grub` | `/grub` autonomous long-running task harness with feature-list validation |
+| `context-management` | Default budget hints, branch-history retrieval, working notes, and safe same-session context handoffs |
 | `loop` | `/loop` session-scoped scheduled prompts |
 | `link-world` | Internet access via agent-reach |
 | `browser` | Opt-in direct browser automation via vendored Browser Harness CDP bridge |
