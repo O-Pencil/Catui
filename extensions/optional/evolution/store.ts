@@ -55,15 +55,6 @@ function sha256(value: unknown): string {
 	return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-function composeRevisionArtifacts(baseline: readonly EvolutionArtifact[], changes: readonly EvolutionArtifact[]): EvolutionArtifact[] {
-	const selected = new Map(baseline.map((artifact) => [artifact.id, artifact]));
-	for (const artifact of changes) {
-		if (artifact.overrides) selected.delete(artifact.overrides);
-		selected.set(artifact.id, artifact);
-	}
-	return [...selected.values()];
-}
-
 async function writeExclusive(path: string, value: unknown): Promise<void> {
 	try {
 		const handle = await open(path, "wx", 0o600);
@@ -190,44 +181,6 @@ export class EvolutionStore {
 		return readJson<EvolutionProposal>(path);
 	}
 
-	private async readEvidence(scope: EvolutionScope, candidateId: string, gate: GateEvidence["gate"]): Promise<GateEvidence | undefined> {
-		const paths = await this.scopePaths(scope);
-		const path = join(paths.candidatesDir, safeSegment(candidateId, "Candidate id"), "evidence", `${gate}-validation.json`);
-		await this.assertSafe(path);
-		return (await exists(path)) ? readJson<GateEvidence>(path) : undefined;
-	}
-
-	private async assertPromotionEvidence(scope: EvolutionScope, candidateId: string): Promise<void> {
-		const [staticGate, replayGate, evalGate, reviewerGate] = await Promise.all([
-			this.readEvidence(scope, candidateId, "static"),
-			this.readEvidence(scope, candidateId, "replay"),
-			this.readEvidence(scope, candidateId, "eval"),
-			this.readEvidence(scope, candidateId, "reviewer"),
-		]);
-		if (staticGate?.passed !== true) throw new Error("Promotion evidence is missing a passing static gate");
-		if (
-			replayGate?.passed !== true
-			|| replayGate.details.lifecyclePreserved !== true
-			|| replayGate.details.toolPairsPreserved !== true
-			|| replayGate.details.policyPreserved !== true
-			|| replayGate.details.harnessEvalPassed !== true
-		) {
-			throw new Error("Promotion evidence is missing a passing replay safety gate");
-		}
-		const scenarios = evalGate?.details.matchedScenarios;
-		const evalPassed = evalGate?.passed === true
-			&& Array.isArray(scenarios)
-			&& scenarios.length > 0
-			&& evalGate.details.nonInferior === true
-			&& evalGate.details.improvement === true;
-		const manualOverride = reviewerGate?.passed === true
-			&& reviewerGate.details.actor === "human"
-			&& reviewerGate.details.overrideMissingEffectiveness === true;
-		if (reviewerGate?.passed === false) throw new Error("Candidate was explicitly rejected and cannot be promoted");
-		if (!evalPassed && !manualOverride) throw new Error("Promotion evidence is missing candidate-specific effectiveness proof or an explicit human override");
-		if (scope === "global" && reviewerGate?.passed !== true) throw new Error("Global promotion evidence requires explicit human approval");
-	}
-
 	async getCurrent(scope: EvolutionScope): Promise<CurrentPointer | undefined> {
 		const paths = await this.scopePaths(scope);
 		if (!(await exists(paths.currentPath))) return (await this.recoverCurrentFromHistory(paths)) ?? undefined;
@@ -345,71 +298,11 @@ export class EvolutionStore {
 	}
 
 	async promote(
-		scope: EvolutionScope,
-		candidateId: string,
-		options: { beforeActivate?: () => void } = {},
+		_scope: EvolutionScope,
+		_candidateId: string,
+		_options: { beforeActivate?: () => void } = {},
 	): Promise<ActivationResult> {
-		return this.withActivationLock(scope, async (paths) => {
-			const proposal = await this.readProposal(scope, candidateId);
-			const validation = validateProposal(proposal);
-			if (!validation.ok) throw new Error(`Candidate validation failed: ${validation.issues.join("; ")}`);
-			await this.assertPromotionEvidence(scope, candidateId);
-			const current = await this.getCurrent(scope);
-			if ((current?.revisionId ?? null) !== proposal.baselineRevisionId) throw new Error("Candidate baseline revision is stale");
-			const baseline = current ? await this.readRevisionManifest(paths, current.revisionId) : undefined;
-			const revisionArtifacts = composeRevisionArtifacts(baseline?.artifacts ?? [], proposal.artifacts);
-			const digest = sha256({ candidateId: proposal.id, artifacts: revisionArtifacts });
-			const revisionId = `rev_${digest.slice(0, 32)}`;
-			const revisionDir = join(paths.revisionsDir, revisionId);
-			await this.assertSafe(paths.revisionsDir);
-			await this.assertSafe(revisionDir);
-			await mkdir(paths.revisionsDir, { recursive: true, mode: 0o700 });
-			try {
-				await mkdir(revisionDir, { mode: 0o700 });
-			} catch (error: unknown) {
-				if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error(`Revision already exists: ${revisionId}`);
-				throw error;
-			}
-			for (const artifact of revisionArtifacts) {
-				const kindDir = join(revisionDir, "artifacts", ARTIFACT_DIRS[artifact.kind]);
-				await mkdir(kindDir, { recursive: true, mode: 0o700 });
-				await writeExclusive(join(kindDir, artifactFileName(artifact.id)), artifact);
-				if (artifact.kind === "skill_manifest") {
-					const skillDir = join(kindDir, skillDirectoryName(artifact.id));
-					await mkdir(skillDir, { mode: 0o700 });
-					const handle = await open(join(skillDir, "SKILL.md"), "wx", 0o600);
-					try {
-						await handle.writeFile(skillMarkdown(artifact), "utf8");
-					} finally {
-						await handle.close();
-					}
-				}
-			}
-			const manifest: RevisionManifest = {
-				schemaVersion: 1,
-				revisionId,
-				candidateId: proposal.id,
-				scope,
-				createdAt: new Date().toISOString(),
-				previousRevisionId: current?.revisionId ?? null,
-				contentHash: `sha256:${sha256(revisionArtifacts)}`,
-				artifacts: revisionArtifacts,
-			};
-			await writeExclusive(join(revisionDir, "manifest.json"), manifest);
-			await this.writePointer(paths, {
-				schemaVersion: 1,
-				revisionId,
-				previousRevisionId: current?.revisionId ?? null,
-				updatedAt: new Date().toISOString(),
-			}, options.beforeActivate);
-			try {
-				await this.appendHistory(paths, { event: "promoted", candidateId, revisionId, previousRevisionId: current?.revisionId ?? null, createdAt: new Date().toISOString() });
-			} catch (error: unknown) {
-				await this.restorePointer(paths, current);
-				throw error;
-			}
-			return { revisionId, previousRevisionId: current?.revisionId ?? null };
-		});
+		throw new Error("Legacy EvolutionStore promotion is disabled; use the evidence-gated evolution store");
 	}
 
 	async rollback(scope: EvolutionScope, revisionId: string): Promise<ActivationResult> {
