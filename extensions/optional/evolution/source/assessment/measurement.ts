@@ -45,7 +45,13 @@ export async function measureAdoption(root: string, state: SourceState, config: 
 	if (!job.baselineRuns?.length) { job.lastResult = "Inconclusive: no frozen completed-run baseline for this legacy job"; return; }
 	const accumulated = new Map((job.observedRuns ?? []).map(r => [r.run, r]));
 	for (const sample of collectRuns(state.observations, anchor, job.version, job.metric, job.adoptedAt)) accumulated.set(sample.run, sample);
-	job.observedRuns = [...accumulated.values()].filter(r => job.baselineRuns!.some(b => b.stratum === r.stratum)).slice(0, config.measurementSamples * 8);
+	const capacity = new Map<string, number>();
+	for (const baseline of job.baselineRuns) capacity.set(baseline.stratum, (capacity.get(baseline.stratum) ?? 0) + 1);
+	job.observedRuns = [...accumulated.values()].filter(r => {
+		const remaining = capacity.get(r.stratum) ?? 0;
+		if (!remaining) return false;
+		capacity.set(r.stratum, remaining - 1); return true;
+	}).slice(0, config.measurementSamples * 8);
 	const matched = matchRuns(job.baselineRuns, job.observedRuns);
 	job.measuredCount = matched.candidate.length;
 	const look = job.measurementLook ?? 0;

@@ -102,6 +102,15 @@ test("measurement uses four fixed windows and cannot infer improvement from miss
 	const legacy = job(root); legacy.stage = "adopted"; legacy.adoptedAt = j.adoptedAt;
 	await measureAdoption(root, state, config, legacy); assert.equal(legacy.stage, "adopted"); assert.match(legacy.lastResult!, /legacy/);
 });
+test("a frequent task stratum cannot evict the matched samples of other tasks", async t => {
+	const { root, state, config } = await fixture(t); config.measurementSamples = 2;
+	const j = job(root); j.stage = "adopted"; j.adoptedAt = "2026-01-01T00:00:00Z";
+	const sample = { stratum: "frequent", failed: false, tokens: 100, durationMs: 100 };
+	j.baselineRuns = [{ ...sample, run: "old-a" }, { ...sample, stratum: "rare", run: "old-b" }];
+	j.observedRuns = [...Array.from({ length: 16 }, (_, i) => ({ ...sample, run: `frequent-${i}` })), { ...sample, stratum: "rare", run: "rare-1" }];
+	await measureAdoption(root, state, config, j);
+	assert.equal(j.measuredCount, 2); assert.deepEqual(j.observedRuns.map(r => r.stratum), ["frequent", "rare"]);
+});
 function event(overrides: Partial<Observation> = {}): Observation {
 	return { id: randomUUID(), run: randomUUID(), session: "s", workspace: "workspace-hash", time: new Date().toISOString(), version: "1.0.0", model: "m", kind: "tool", tool: "edit", failed: true, summary: "Invalid replacement", fingerprint: "failure-a", ...overrides };
 }
