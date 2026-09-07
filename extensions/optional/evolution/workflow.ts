@@ -81,7 +81,7 @@ export function advanceCandidate(record: CandidateRecord, event: CandidateEvent)
 			if (record.state !== "awaiting_approval") transitionError(record, event);
 			if (event.actor !== "human") transitionError(record, event, "approval actor must be human");
 			const hasEval = record.evidence.eval?.passed === true;
-			if (!hasEval && !event.overrideMissingEffectiveness) transitionError(record, event, "missing effectiveness evidence requires an explicit override");
+			if (!hasEval) transitionError(record, event, "missing effectiveness evidence cannot be overridden");
 			return {
 				...record,
 				state: "eval_validated",
@@ -89,7 +89,7 @@ export function advanceCandidate(record: CandidateRecord, event: CandidateEvent)
 				approval: {
 					actor: event.actor,
 					approvedAt: new Date().toISOString(),
-					overrideMissingEffectiveness: event.overrideMissingEffectiveness === true,
+					overrideMissingEffectiveness: false,
 				},
 			};
 		}

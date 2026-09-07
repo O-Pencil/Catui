@@ -19,7 +19,7 @@ import {
 	loadActiveEvalFixtureArtifacts,
 	loadActiveEvolutionArtifacts,
 	loadCurrentEvolution,
-	promoteEvolutionCandidate,
+	promoteEvolutionCandidate as promoteStoredEvolutionCandidate,
 	recordEvolutionAttribution,
 	recordEvolutionAttributionAndMaybeRollback,
 	recordEvolutionFeedback,
@@ -29,6 +29,27 @@ import {
 } from "../extensions/optional/evolution/evolution-store.js";
 import type { EvolutionCandidateInput, EvolutionGateReport } from "../extensions/optional/evolution/evolution-types.js";
 import { formatCandidate, formatRevision } from "../extensions/optional/evolution/evolution-format.js";
+import { passingEvolutionGate } from "./helpers/evolution-benchmark.js";
+
+function promoteEvolutionCandidate(
+	root: string,
+	candidateId: string,
+	options: Parameters<typeof promoteStoredEvolutionCandidate>[2] = {},
+) {
+	const candidate = inspectEvolution(root).candidates.find((item) => item.id === candidateId);
+	const pureFixture = candidate?.artifacts.every((artifact) => artifact.kind === "eval_fixture") === true;
+	const gateReport = pureFixture
+		? options?.gateReport ?? {
+			name: "candidate-eval-fixture",
+			passed: true,
+			checkedAt: "2026-08-25T01:00:00.000Z",
+			metrics: { passRate: 1, replayDivergences: 0, policyViolations: 0, unpairedToolCalls: 0 },
+		}
+		: options?.gateReport
+			? { ...options.gateReport, ...(options.gateReport.passed && candidate ? { benchmark: passingEvolutionGate(candidateId, candidate.contentHash).benchmark } : {}) }
+			: passingEvolutionGate(candidateId, candidate?.contentHash ?? `sha256:${"0".repeat(64)}`);
+	return promoteStoredEvolutionCandidate(root, candidateId, { ...options, gateReport });
+}
 
 function withTempAgentDir(fn: (agentDir: string) => void | Promise<void>): Promise<void> | void {
 	const agentDir = mkdtempSync(join(tmpdir(), "catui-evolution-test-"));

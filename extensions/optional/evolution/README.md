@@ -29,7 +29,58 @@ The declarative workflow below does not itself modify source or model weights.
 
 New candidates stop after static validation and remain inactive: neither prompts nor skills are loaded from `candidates/` or `quarantine/`. `verify` replays the latest completed semantic Run Trace and runs Catui's isolated, network-disabled Harness Eval corpus. Both safety results are persisted together as immutable replay evidence.
 
-The built-in corpus proves lifecycle, tool-pairing, policy, and baseline regression safety; it does not claim that a candidate-specific behavior improved. Shadow and guarded reviews also request a scenario-grounded model critique, but that critique is advisory and can never authorize activation by itself. V1 guarded authority is deliberately narrow and deterministic: it may auto-promote only an exact active-artifact override whose sole behavioral change is adding a non-overlapping negative-applicability condition explicitly authored by the user as `[evolution-exclude evolved:<kind>:<id>] <condition>`. The resulting revision carries forward every untouched champion artifact. New behavior, content edits, generated skills, global changes, executable resources, and permission changes remain manual-only. A user may explicitly `approve` broader missing-effectiveness evidence after safety verification; that one-time human decision is stored as immutable reviewer evidence before atomic promotion. `reject` is also immutable and blocks later promotion. Global candidates always require explicit human approval.
+The built-in corpus proves lifecycle, tool-pairing, policy, and baseline regression safety; it does not claim that a candidate-specific behavior improved. Shadow and guarded reviews also request a scenario-grounded model critique, but that critique is advisory and can never authorize activation by itself. Every behavioral candidate remains inactive until it has both passing replay/safety evidence and a passing, integrity-bound real-task benchmark report. Human approval cannot override either requirement. Pure `eval_fixture` candidates are verifier data rather than runtime behavior, so they require their candidate-specific fixture replay gate but no real-task effectiveness report. `reject` is immutable and blocks later promotion. Global candidates additionally require explicit human approval.
+
+## Held-out real-task evidence
+
+PawBench or another trusted runner produces versioned baseline and candidate snapshots. For PawBench, use the same frozen 150-task corpus, concealed held-out assignment, model/provider version, temperature, token and timeout limits, total budget, and at least three predeclared repetitions for both revisions. In PawBench terms, both paired runs must use `--runs >=3`; a one-off checkpoint or an unpaired candidate snapshot is not promotion evidence. The candidate snapshot must use both the candidate id and `Content hash` shown by `/refine inspect`; this binds the result to the exact proposed artifacts. Do not use best-of-N selection.
+
+### PawBench import trust boundary
+
+The private offline importer does not run PawBench, call a model, access the network, or infer benchmark provenance. A trusted benchmark runner must produce a sidecar manifest for each checkpoint. That manifest binds the checkpoint's exact UTF-8 bytes by SHA-256 and explicitly attests the role, candidate identity when applicable, frozen corpus and execution envelope, result indexes, repetitions, concealed splits, per-run costs, and safety trace-audit counts. The importer deliberately rejects missing cost, split, repetition, or safety evidence instead of treating absence as zero or deriving values from result order.
+
+Import the paired baseline and candidate checkpoints with explicit paths:
+
+```bash
+npm run eval:evolution-pawbench -- import \
+  --checkpoint ./pawbench-baseline-checkpoint.json \
+  --manifest ./pawbench-baseline-manifest.json \
+  --output ./pawbench-baseline.json
+
+npm run eval:evolution-pawbench -- import \
+  --checkpoint ./pawbench-candidate-checkpoint.json \
+  --manifest ./pawbench-candidate-manifest.json \
+  --output ./pawbench-candidate.json
+```
+
+Checkpoint and snapshot inputs are capped at 64 MiB; manifests are capped at 16 MiB. Inputs must be regular files: symlinks, FIFOs, devices, and directories are rejected without being followed. Existing output symlinks, non-regular paths, and paths or hardlinks that alias any input are also rejected. Outputs replace prior regular artifacts atomically through an owner-only `0600` same-directory temporary file, and the CLI prints only compact role/run or cohort counts rather than evidence contents.
+
+Failure diagnosis is optional and advisory:
+
+```bash
+npm run eval:evolution-pawbench -- diagnose \
+  --snapshot ./pawbench-candidate.json \
+  --output ./pawbench-candidate-diagnosis.json
+```
+
+The diagnosis report contains sanitized deterministic cohorts for planning the next candidate. It cannot mutate a candidate, authorize activation, or substitute for the paired held-out comparator and promotion gate.
+
+After both runs finish, generate the private report at the path consumed by `/refine promote`:
+
+```bash
+npm run eval:evolution-benchmark -- \
+  --baseline ./pawbench-baseline.json \
+  --candidate ./pawbench-candidate.json \
+  --candidate-id candidate-0123456789abcdef \
+  --output ./.catui/evolution/benchmarks/candidate-0123456789abcdef.json
+
+catui
+# Then run: /refine --workspace promote candidate-0123456789abcdef
+```
+
+The comparator pairs held-out runs by task and repetition, aggregates repetitions per task, and uses a deterministic task-cluster bootstrap. Promotion requires at least a 5-point pass-rate gain with a positive 95% lower bound, no slice regression beyond 2 points, zero policy/replay/tool-pair failures, cost per success within 10%, and P95 latency within 15%. Snapshot or report contents are never printed by the CLI; reports are written with owner-only permissions.
+
+Evidence is invalid when baseline and candidate differ in corpus digest or execution envelope. Changing graders/verifiers, specializing behavior to task names, exposing the held-out split, inflating timeouts or budgets, or choosing the best of repeated runs also invalidates the comparison. This release imports and verifies trusted PawBench results; it does not yet orchestrate PawBench, conceal/sign reports, generate mutations, or schedule canaries.
 
 Automatic review runs only after the agent becomes idle or after compaction. A mode/scope change, a new agent turn, or session shutdown invalidates any in-flight activation; guarded authorization is re-read under lock at the final atomic boundary. Shutdown never waits for opportunistic model work. The default trigger is every 25 turns, with a 20-minute cooldown and conservative daily reservations of 8,000 estimated tokens / $0.40 per two-call review, capped at 40,000 tokens / $2.00. `off` and `manual` make no automatic model calls. Trigger fingerprints and accounting are kept in private atomic state under the evolution root.
 
@@ -50,7 +101,7 @@ Only an active revision can contribute context. Applicable promoted prompt notes
 
 When promoted tool, workflow, or executable-tool assets are invoked, the extension writes append-only usage records under the same private scope. Usage records store artifact id, kind, revision id, status, timestamp, caller, input hash, and a short result/error summary; they do not persist raw task input. `/refine feedback <usage-id> useful|not-useful [note]` adds append-only usefulness feedback for a usage record without mutating it, and secret-like note fragments are redacted before persistence. `/refine status` and `/refine changes` surface usage and feedback counts plus revision-level evidence, while `/refine review` summarizes active evolved assets, including never-used assets, with keep/watch/review/no-usage recommendations so stale or harmful assets can be evaluated later.
 
-Workspace-scoped `executable_tool` artifacts are a restricted prototype, not arbitrary generated code. `evolution_refine` can propose them only as inactive workspace candidates. Activation through `/refine --workspace promote <candidate-id>` runs the evolution gate first, then stores the approved revision hash. Invocation goes through `evolved_executable_tool`, which re-checks the approved content hash and no-IO permission manifest before interpreting a small JSON step manifest. The runtime supports only safe in-memory DSL transforms: template rendering, bounded regex extraction, and JSON path extraction. It has no shell, package install, network, file read, or file write capability.
+Workspace-scoped `executable_tool` artifacts are a restricted prototype, not arbitrary generated code. `evolution_refine` can propose them only as inactive workspace candidates. Activation through `/refine --workspace promote <candidate-id>` runs replay/safety and held-out effectiveness gates first, then stores the approved revision hash. Invocation goes through `evolved_executable_tool`, which re-checks the approved content hash and no-IO permission manifest before interpreting a small JSON step manifest. The runtime supports only safe in-memory DSL transforms: template rendering, bounded regex extraction, and JSON path extraction. It has no shell, package install, network, file read, or file write capability.
 
 ## Trust boundary
 

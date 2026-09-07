@@ -35,7 +35,7 @@ import {
 } from "./evolution-format.js";
 import { planEvolutionCandidate } from "./evolution-refiner.js";
 import { createEvolutionRefineTool } from "./evolution-refine-tool.js";
-import { runEvolutionGate } from "./evolution-gate.js";
+import { runCandidateEvalFixtureGate, runEvolutionGate } from "./evolution-gate.js";
 import { createEvolvedTool } from "./evolution-tool.js";
 import { createEvolvedExecutableTool } from "./evolution-executable-tool.js";
 import { EvolutionAutoObserver } from "./evolution-auto.js";
@@ -71,6 +71,16 @@ function send(api: ExtensionAPI, content: string): void {
 	api.sendMessage({ customType: MESSAGE_TYPE, content, display: true });
 }
 
+async function runCandidatePromotionGate(candidate: EvolutionCandidate, ctx: ExtensionCommandContext) {
+	const pureFixture = candidate.artifacts.length > 0 && candidate.artifacts.every((artifact) => artifact.kind === "eval_fixture");
+	if (pureFixture) {
+		const fixture = candidate.artifacts[0]!;
+		const scenarioId = typeof fixture.metadata?.scenarioId === "string" ? fixture.metadata.scenarioId : fixture.id;
+		return runCandidateEvalFixtureGate(fixture.content, scenarioId);
+	}
+	return runEvolutionGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId: ctx.sessionManager.getSessionId() });
+}
+
 function parseFeedbackOutcome(value: string | undefined): "useful" | "not_useful" {
 	if (value === "useful") return "useful";
 	if (value === "not_useful" || value === "not-useful") return "not_useful";
@@ -89,16 +99,13 @@ async function activateCandidate(
 		send(api, `Evolution candidate ${candidate.id} remains inactive: ${globalPolicy.reason ?? "global auto-activation policy blocked it"}.`);
 		return;
 	}
-	const hasExecutableTool = candidate.artifacts.some((artifact) => artifact.kind === "executable_tool");
-	const gateReport = hasExecutableTool
-		? await runEvolutionGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId: ctx.sessionManager.getSessionId() })
-		: undefined;
-	if (gateReport && !gateReport.passed) {
+	const gateReport = await runCandidatePromotionGate(candidate, ctx);
+	if (!gateReport.passed) {
 		recordEvolutionGateFailure(root, candidate.id, { gateReport });
 		send(api, `Evolution candidate ${candidate.id} remains inactive: eval gate failed (${gateReport.failure ?? gateReport.name}).`);
 		return;
 	}
-	const revision = promoteEvolutionCandidate(root, candidate.id, { approvedBy: "auto", ...(gateReport ? { gateReport } : {}) });
+	const revision = promoteEvolutionCandidate(root, candidate.id, { approvedBy: "auto", gateReport });
 	api.appendEntry("catui.evolution.promoted", { scope, candidateId: candidate.id, revisionId: revision.id, automatic: true });
 	await ctx.reload();
 	send(api, `Evolution revision ${revision.id} is now active.`);
@@ -171,16 +178,13 @@ async function handleRefineCommand(args: string, ctx: ExtensionCommandContext, a
 		if (!id) throw new Error("Usage: /refine promote <candidate-id>");
 		const candidate = inspectEvolution(root).candidates.find((item) => item.id === id);
 		if (!candidate) throw new Error(`Evolution candidate not found: ${id}`);
-		const hasExecutableTool = candidate.artifacts.some((artifact) => artifact.kind === "executable_tool");
-		const gateReport = hasExecutableTool
-			? await runEvolutionGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId: ctx.sessionManager.getSessionId() })
-			: undefined;
-		if (gateReport && !gateReport.passed) {
+		const gateReport = await runCandidatePromotionGate(candidate, ctx);
+		if (!gateReport.passed) {
 			recordEvolutionGateFailure(root, id, { gateReport });
 			send(api, `Evolution candidate ${id} remains inactive: eval gate failed (${gateReport.failure ?? gateReport.name}).`);
 			return;
 		}
-		const revision = promoteEvolutionCandidate(root, id, { approvedBy: "user", ...(gateReport ? { gateReport } : {}) });
+		const revision = promoteEvolutionCandidate(root, id, { approvedBy: "user", gateReport });
 		api.appendEntry("catui.evolution.promoted", { scope: parsed.scope, candidateId: id, revisionId: revision.id });
 		await ctx.reload();
 		send(api, `Evolution revision ${revision.id} is now active.`);

@@ -1,15 +1,20 @@
 # RE01: Candidate-specific evidence is required
 
-status: addressed for source evolution; legacy declarative gate unchanged
+status: addressed for source evolution; declarative benchmark evidence integrated separately
 severity: load-bearing design constraint
 
-`extensions/optional/evolution/evolution-gate.ts:runEvolutionGate()` currently
-accepts `_candidate` without executing that candidate. Project/evolved fixture
+At intake, `extensions/optional/evolution/evolution-gate.ts:runEvolutionGate()`
+accepted `_candidate` without executing that candidate. Project/evolved fixture
 adapters return recorded data. `evolution-fixture.ts:evalFixtureContent()` creates
 observed events by cloning recorded events.
 
 These mechanisms support record validation and existing harness health checks.
 They do not establish that a proposed source patch improves task execution.
+
+The branch consolidation also integrates HAP-52: behavioral declarative candidates
+now require held-out benchmark reports bound to their identity and artifact hash.
+This complements the executable source verifier; the two paths have distinct
+candidate contracts and neither substitutes for the other's evidence.
 
 Before source PR automation, run baseline and candidate artifacts in independent
 workspaces against a frozen reproduction and regression set. Bind reports to

@@ -8,6 +8,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
+import { evolutionCandidateContentHash, verifyEvolutionBenchmarkReport } from "./benchmark-comparison.js";
 import type {
 	EvolutionArtifact,
 	EvolutionArtifactKind,
@@ -461,6 +462,10 @@ export function validateEvolutionCandidateInput(
 	if (input.artifacts.length > MAX_ARTIFACTS_PER_CANDIDATE) errors.push("too many artifacts in one candidate");
 	const seen = new Set<string>();
 	for (const artifact of input.artifacts ?? []) errors.push(...validateArtifact(artifact, seen));
+	const evalFixtureCount = input.artifacts.filter((artifact) => artifact.kind === "eval_fixture").length;
+	if (evalFixtureCount > 0 && (evalFixtureCount !== 1 || input.artifacts.length !== 1)) {
+		errors.push("eval_fixture verifier candidates must contain exactly one artifact and cannot mix behavioral artifacts");
+	}
 	if (input.artifacts.some((artifact) => artifact.kind === "executable_tool") && input.scope !== "workspace") {
 		errors.push("executable_tool artifacts must be workspace-scoped");
 	}
@@ -565,6 +570,7 @@ export function createEvolutionCandidate(
 		...input,
 		schemaVersion: EVOLUTION_SCHEMA_VERSION,
 		id,
+		contentHash: evolutionCandidateContentHash(input.artifacts),
 		status: "proposed",
 		createdAt,
 		updatedAt: createdAt,
@@ -674,6 +680,9 @@ function loadCandidate(scopeRoot: string, candidateId: string): EvolutionCandida
 	const candidate = readJson<EvolutionCandidate>(candidatePath(scopeRoot, candidateId));
 	if (!candidate) throw new Error(`Evolution candidate not found: ${candidateId}`);
 	if (candidate.schemaVersion !== EVOLUTION_SCHEMA_VERSION) throw new Error(`Unsupported evolution candidate schema: ${candidate.schemaVersion}`);
+	if (candidate.contentHash !== evolutionCandidateContentHash(candidate.artifacts)) {
+		throw new Error(`Evolution candidate content hash mismatch: ${candidateId}`);
+	}
 	return candidate;
 }
 
@@ -742,8 +751,28 @@ export function promoteEvolutionCandidate(
 	if (candidate.status === "promoted") throw new Error(`Evolution candidate is already promoted: ${candidateId}`);
 	const validation = validateEvolutionCandidateInput(candidate, options);
 	if (!validation.passed) throw new Error(`Evolution candidate failed validation: ${validation.errors.join("; ")}`);
-	if (candidate.artifacts.some((artifact) => artifact.kind === "executable_tool") && options?.gateReport?.passed !== true) {
-		throw new Error("Executable tool promotion requires a passing gate report");
+	if (options?.gateReport?.passed !== true) {
+		throw new Error("Evolution promotion requires a passing gate report");
+	}
+	if (
+		options.gateReport.metrics.passRate !== 1
+		|| options.gateReport.metrics.replayDivergences !== 0
+		|| options.gateReport.metrics.policyViolations !== 0
+		|| options.gateReport.metrics.unpairedToolCalls !== 0
+	) {
+		throw new Error("Evolution promotion requires a perfect replay and safety gate");
+	}
+	const requiresBenchmark = candidate.artifacts.some((artifact) => artifact.kind !== "eval_fixture");
+	if (requiresBenchmark && (
+		options.gateReport.benchmark?.passed !== true
+		|| !verifyEvolutionBenchmarkReport(options.gateReport.benchmark, candidate.id, candidate.contentHash)
+	)) {
+		throw new Error("Behavioral evolution promotion requires passing integrity-bound benchmark evidence");
+	}
+	if (!requiresBenchmark && (
+		options.gateReport.name !== "candidate-eval-fixture"
+	)) {
+		throw new Error("eval_fixture promotion requires a passing candidate fixture replay gate");
 	}
 	const current = loadCurrentEvolution(scopeRoot);
 	const revisionId = nextId("revision", options);
