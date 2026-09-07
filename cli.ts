@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * [WHO]: CLI entry point, sets process.title, calls main()
- * [FROM]: Depends on main.ts
+ * [WHO]: CLI entry point, version/help fast paths, source evolution dispatch and adopted-version launch
+ * [FROM]: Depends on main.ts and lazy source evolution CLI
  * [TO]: Consumed by bin/catui and bin/catui (npm binaries)
  * [HERE]: Entry point; orchestrates argument parsing and mode selection
  */
@@ -16,7 +16,21 @@ installOutputDisconnectHandlers();
 
 const args = process.argv.slice(2);
 
-// Fast path: --version, --help don't need full module loading
+if (args[0] === "evolve") {
+	try {
+		const { sourceEvolutionCli } = await import("./extensions/optional/evolution/source/cli.js");
+		await sourceEvolutionCli(args.slice(1));
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		process.exitCode = 1;
+	}
+	process.exit(process.exitCode ?? 0);
+}
+
+const { launchAdoptedVersion } = await import("./extensions/optional/evolution/source/cli.js");
+if (await launchAdoptedVersion(args)) process.exit(process.exitCode ?? 0);
+
+// Fast path: --version, --help don't need full application loading
 if (args.includes("--version")) {
 	const __filename = fileURLToPath(import.meta.url);
 	const __dirname = dirname(__filename);
@@ -31,6 +45,7 @@ if (args.includes("--help") || args.includes("-h")) {
 	console.log(`Catui AI coding agent`);
 	console.log(`Usage: catui [options]`);
 	console.log(`       catui [command] [options]`);
+	console.log(`       catui evolve init|start|stop|status|run|install-service|launch`);
 	console.log(`Options:`);
 	console.log(`  --version    Show version`);
 	console.log(`  --help, -h   Show this help`);
