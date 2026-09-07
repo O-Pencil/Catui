@@ -3,6 +3,7 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
+source/: Independently configured source evolution sidecar, evidence-driven repair, verified automatic PR merge/release and managed version adoption
 index.ts: Optional evolution extension entry, registers /refine status/inspect/changes/review/feedback/promote/reject/rollback, evolution_refine, evolved_tool, evolved_executable_tool, resources_discover skill path exposure, before_agent_start prompt injection, and turn_end observation
 automation.ts: Earlier guarded automation policy, mode state, authorization reservation, and symlink safety helpers retained for compatibility tests
 consumers.ts: Earlier promoted prompt/resource rendering helpers retained for compatibility with v1 active artifact consumers
@@ -25,6 +26,6 @@ evolution-tool.ts: Controlled evolved_tool registration, lists promoted declarat
 evolution-executable-tool.ts: Controlled evolved_executable_tool registration, lists workspace executable_tool artifacts, verifies approved content hash and no-IO permission manifests, and runs safe DSL transform steps in a restricted interpreter
 evolution-auto.ts: Deterministic turn_end observer that converts explicit reusable-lesson markers and structured catui_evolution JSON proposals into candidates; session/workspace proposals may auto-promote, low-risk global prompt_note/memory and bounded tool_spec may auto-promote, workspace eval_fixture proposals may auto-promote only after current gate plus candidate fixture replay, broader global artifacts remain approval-gated
 
-Rule: Generated artifacts are untrusted data; no executable artifact is activated by this extension.
+Rule: Declarative artifacts remain untrusted data. Source evolution uses a separately configured subprocess/verifier/delivery boundary; model workers cannot change that authority.
 
 [COVENANT]: Update this file on member changes and verify against parent AGENT.md

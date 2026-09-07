@@ -98,7 +98,7 @@ export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "catail", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, resourceDiscovery: true, testContracts: ["resource-discovery"], testFiles: ["test/catail-extension.test.ts"] },
 	{ id: "simplify", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: true, testContracts: ["external-process", "write-guard"], testFiles: ["test/simplify-extension.test.ts"] },
 	{ id: "export-html", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false, testContracts: ["write-guard"], testFiles: ["test/extension-smoke.test.ts", "test/export-html-branch-navigation.test.ts"] },
-	{ id: "evolution", category: "optional", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/evolution-store.test.ts", "test/evolution-extension.test.ts"] },
+	{ id: "evolution", category: "optional", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, testContracts: ["lifecycle", "external-process"], testFiles: ["test/evolution-store.test.ts", "test/evolution-extension.test.ts", "test/source-evolution.test.ts"] },
 ];
 
 function isBrowserExtensionEnvEnabled(): boolean {

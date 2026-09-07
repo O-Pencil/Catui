@@ -1,6 +1,10 @@
 # Controlled Harness Evolution
 
-This default-loaded extension gives Catui a separate, auditable place to learn reusable declarative behavior from its own sessions. It does not modify Catui source, built-in tools, the base system prompt, user-authored resources, or model weights.
+This default-loaded extension learns reusable declarative behavior from sessions.
+The separately configured [source evolution service](source/README.md) observes
+live usage, repairs Catui in isolated checkouts, verifies improvements, creates
+daily PRs, automatically merges/releases qualified changes, and adopts new versions.
+The declarative workflow below does not itself modify source or model weights.
 
 ## Default Loading
 
