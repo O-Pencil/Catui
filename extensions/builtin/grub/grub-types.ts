@@ -33,6 +33,8 @@ export interface GrubTaskState {
 	 *  Only allowed to actually block after reaching the threshold (default 3). */
 	consecutiveBlockedAttempts: number;
 	maxIterations: number;
+	/** Number of iterations granted by an explicit start/resume. */
+	iterationAllowance?: number;
 	maxConsecutiveFailures: number;
 	/** Failure budget during the initializer phase; falls back to a default when absent (older saved tasks). */
 	maxInitializerFailures?: number;

@@ -3,7 +3,7 @@
  * No transport abstraction - calls streamSimple via the loop.
  */
 /**
- * [WHO]: AgentOptions, Agent, and loop policy option plumbing; committed prepareContext hook
+ * [WHO]: AgentOptions, Agent, loop policy plumbing, committed prepareContext, and predicate-scoped follow-up cancellation
  * [FROM]: Depends on ./agent-loop.js and ./structured-adaptive-agent-loop.js
  * [TO]: Consumed by core/lib/agent-core/src/index.ts
  * [HERE]: core/lib/agent-core/src/agent.ts -
@@ -448,8 +448,8 @@ export class Agent {
 		this.steeringQueue = [];
 	}
 
-	clearFollowUpQueue() {
-		this.followUpQueue = [];
+	clearFollowUpQueue(matches?: (message: AgentMessage) => boolean) {
+		this.followUpQueue = matches ? this.followUpQueue.filter(message => !matches(message)) : [];
 	}
 
 	clearAllQueues() {

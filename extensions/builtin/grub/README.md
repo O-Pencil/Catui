@@ -16,6 +16,18 @@ even across fresh context windows and full process restarts.
 
 ## Harness artifacts
 
+Cancellation pauses the task durably and prevents automatic restart. `/grub
+resume` can recover running, stopped, blocked or failed tasks, keeping their
+identity, artifacts and cumulative usage. Resuming stopped work renews the
+configured iteration allowance and resets consecutive failure/block counters.
+Completed tasks are not resumed.
+
+Repeated resume commands do not duplicate an iteration. Dispatch waits for the
+current run and pending user messages to finish; unrelated runs do not advance
+the task or add to its usage. Each dispatched prompt has a unique identity.
+Goal and Grub share a continuation lease: explicitly starting or resuming one
+pauses the other, and cancellation removes only the owning task's queued prompt.
+
 Each task owns a directory at `.grub/<task-id>/`:
 
 | File | Purpose | Who may write |

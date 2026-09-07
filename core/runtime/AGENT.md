@@ -2,6 +2,8 @@
 
 > P2 | Parent: ../AGENT.md
 
+Queue contract: agent-session.ts and extension-core-bindings.ts forward optional text predicates for cancellation, preserving unrelated agent messages and the UI queue mirror.
+
 Member List
 context-window-controller.ts: ContextWindowController, queued same-session handoffs, safe persisted checkpoints before model requests; retains tool batches and rejects unsafe or ineffective window changes
 event-bus.ts: EventBus interface, EventBusController, createEventBus(), typed event emission system for extension hooks, key methods: emit(), on() returns unsubscribe function

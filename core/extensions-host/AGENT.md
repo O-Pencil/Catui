@@ -2,6 +2,8 @@
 
 > P2 | Parent: ../AGENT.md
 
+Continuation contract: loader.ts supplies session-local exclusive claimContinuation leases; types.ts declares ContinuationLease; runner.ts forwards predicate-scoped follow-up cancellation while retaining no-argument compatibility.
+
 Member List
 index.ts: Extension system public API, re-exports from loader.ts, runner.ts, types.ts, wrapper.ts, consumed by SDK and extensions themselves
 wrapper.ts: wrapRegisteredTool(), wraps RegisteredTool into AgentTool, uses runner's createContext() for consistent context and converts extension tool_call blocks into typed permission denials
