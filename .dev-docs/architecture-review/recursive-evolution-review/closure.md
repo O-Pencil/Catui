@@ -1,6 +1,6 @@
 # Recursive Source Evolution Acceptance
 
-status: local acceptance passed on current main; remote delivery pending
+status: initial release deployed; GitHub reconciliation compatibility fix under acceptance
 
 ## Implemented
 
@@ -21,6 +21,15 @@ status: local acceptance passed on current main; remote delivery pending
 - Final DIP, quality, static/dist package boundary, build and TypeScript gates passed.
 - Integrated critical harness: 220 tests passed, zero failures, both loop evals passed.
 - Remote PR checks, publication and service activation are separate delivery steps.
+- PR #15 merged; 1.2.23 was published with matching registry integrity and installed.
+  The login service is running and a real model session produced three observations.
+- Deployment exposed legacy GitHub CLI `pr edit` requests to retired Projects
+  fields. Reconciliation now updates PR metadata through the verified REST PATCH
+  endpoint; this avoids blocking later retries and CI-driven repair revisions.
+- Creating a release also triggers the existing tag workflow. It now reconciles
+  published integrity and source SHA from release provenance before skipping its
+  second publisher. Unmatched registry artifacts fail closed; new manual tags
+  retain their previous build/publish path.
 - CI exposed a legacy test assuming distinct millisecond usage timestamps. The
   test now identifies success/error records by outcome and verifies both artifact
   identities, preserving assertions without relying on directory enumeration order.

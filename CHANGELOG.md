@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.24] - 2026-09-08
+
+### Fixed
+
+- Update autonomous pull requests through REST to support GitHub CLI installations
+  whose `pr edit` command still requests retired Projects fields.
+- Reconcile source/integrity provenance in tag workflows so an autonomous release
+  does not start a second npm publisher for the same version.
+
 ## [1.2.23] - 2026-09-08
 
 ### Added

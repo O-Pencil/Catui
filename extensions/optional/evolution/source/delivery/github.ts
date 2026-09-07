@@ -39,7 +39,7 @@ export async function submitPullRequest(run: RunCommand, root: string, config: S
 			await checked(run, "git", ["push", `--force-with-lease=refs/heads/${job.branch}:${job.previousHead}`, "origin", `${job.head}:refs/heads/${job.branch}`], { cwd: job.checkout, timeoutMs: 180000 });
 		}
 		job.pr = list[0].number;
-		if (list[0].state === "OPEN") await checked(run, "gh", ["pr", "edit", String(job.pr), "--repo", config.repository, "--title", `fix(evolution): ${job.title}`, "--body-file", body], { cwd: job.checkout });
+		if (list[0].state === "OPEN") await checked(run, "gh", ["api", "--method", "PATCH", `repos/${config.repository}/pulls/${job.pr}`, "--raw-field", `title=fix(evolution): ${job.title}`, "--field", `body=@${body}`, "--silent"], { cwd: job.checkout });
 		job.stage = "submitted"; return;
 	}
 	await checked(run, "git", ["push", "origin", `${job.head}:refs/heads/${job.branch}`], { cwd: job.checkout, timeoutMs: 180000 });

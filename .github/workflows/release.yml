@@ -23,18 +23,46 @@ jobs:
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Reconcile autonomous publication
+        id: reconcile
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node <<'NODE'
+          const { execFileSync } = require('node:child_process');
+          const { appendFileSync } = require('node:fs');
+          const pkg = require('./package.json');
+          let integrity;
+          try {
+            integrity = JSON.parse(execFileSync('npm', ['view', `${pkg.name}@${pkg.version}`, 'dist.integrity', '--json'], { encoding: 'utf8' }));
+          } catch (error) {
+            if (!String(error.stderr).includes('E404')) throw error;
+          }
+          if (integrity) {
+            const release = JSON.parse(execFileSync('gh', ['release', 'view', process.env.GITHUB_REF_NAME, '--json', 'body'], { encoding: 'utf8' }));
+            if (!release.body.includes(`Integrity: ${integrity}`) || !release.body.includes(`Source commit: ${process.env.GITHUB_SHA}`)) {
+              throw new Error('Existing registry artifact lacks matching release provenance');
+            }
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `published=${Boolean(integrity)}\n`);
+          NODE
+
       - name: Install dependencies
+        if: steps.reconcile.outputs.published != 'true'
         run: npm ci
 
       - name: Build project
+        if: steps.reconcile.outputs.published != 'true'
         run: npm run build
 
       - name: Publish to npm
+        if: steps.reconcile.outputs.published != 'true'
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
+        if: steps.reconcile.outputs.published != 'true'
         uses: softprops/action-gh-release@v1
         with:
           generate_release_notes: true
