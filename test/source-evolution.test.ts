@@ -24,7 +24,7 @@ import type { Observation, SourceJob, RunCommand } from "../extensions/optional/
 import { registerSourceEvolution } from "../extensions/optional/evolution/source/runtime/bridge.js";
 import { sourceRoot } from "../extensions/optional/evolution/source/runtime/config.js";
 import type { ExtensionAPI } from "../core/extensions-host/types.js";
-import { auditObservations } from "../extensions/optional/evolution/source/learning/audit.js";
+import { auditObservations, auditCompletedRuns } from "../extensions/optional/evolution/source/learning/audit.js";
 import { collectRuns, matchRuns } from "../extensions/optional/evolution/source/assessment/measurement.js";
 import { askWorker } from "../extensions/optional/evolution/source/delivery/model.js";
 import { requireReviewModel } from "../extensions/optional/evolution/source/runtime/config.js";
@@ -64,6 +64,19 @@ test("quality audit requires run-local citations and emits explicit clean denomi
 	assert.equal(collectRuns([result], quality[0], result.version, "quality").length, 0);
 	assert.equal(collectRuns([result, ...quality], quality[0], result.version, "quality").length, 1);
 	assert.throws(() => auditObservations(JSON.stringify({ evaluations: [] }), [[result]]), /every supplied run/);
+});
+test("daily audit can discover repeated quality issues in successful runs without duplicate calls", async t => {
+	const { root, state, config } = await fixture(t); config.hour = 0;
+	state.observations = ["first", "second"].flatMap(run => [event({ run, kind: "task", tool: undefined, failed: false }), event({ run, kind: "result", tool: undefined, failed: false, taskCategory: "repair", inputBucket: "short", toolCalls: 0 })]);
+	let calls = 0;
+	const run: RunCommand = async (_command, args) => {
+		calls++; assert.equal(args[args.indexOf("--phase") + 1], "audit");
+		return { code: 0, stderr: "", stdout: JSON.stringify({ evaluations: state.observations.filter(e => e.kind === "result").map(e => ({ run: e.run, issues: [{ category: "incomplete", summary: "Final answer explicitly leaves the requested step unfinished", evidenceIds: [e.id] }] })) }) };
+	};
+	await auditCompletedRuns(run, root, config, state); await auditCompletedRuns(run, root, config, state);
+	assert.equal(calls, 1); assert.equal(state.audit?.runs.length, 2);
+	const j = enqueue(state, config, root); assert.equal(j?.metric, "quality"); assert.equal(j?.baselineRuns?.length, 2);
+	assert.equal(Object.values(state.budgets)[0].calls, 1);
 });
 test("completed-run samples resist tool-event inflation and preserve matching strata", () => {
 	const anchor = event();

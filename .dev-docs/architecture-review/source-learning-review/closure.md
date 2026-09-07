@@ -1,13 +1,15 @@
 # Source Learning Acceptance
 
-status: implemented; final rebased validation and CI pending
+status: implemented; local acceptance passed; PR #19 tracks remote acceptance
 
 Implemented protected independent model selection, daily cited quality audits,
 private baseline-failing generalization and baseline-passing compatibility tests,
 fixed-window completed-run measurements, and explicit adaptive method scope.
 
-Local acceptance: DIP, quality, package boundary, build and type checks passed
-before rebasing onto the goal/grub lifecycle fix. Real Git and native macOS
+Local acceptance: DIP, quality, package boundary (including dist), build and type
+checks passed after rebasing onto the goal/grub lifecycle fix. The critical suite
+passed 227 tests; an additional daily-audit integration regression also passed.
+Real Git and native macOS
 verification accepted a general repair and rejected both an overfit repair and
 an adjacent-behavior regression. A read-only Ali Coding Plan Qwen 3.7 Plus probe
 completed successfully. Final CI receipts belong to the PR.
