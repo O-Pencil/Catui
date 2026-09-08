@@ -1027,6 +1027,44 @@ export function rollbackEvolution(
 	return pointer;
 }
 
+export function autoEvaluateAndRollback(scopeRoot: string): { rolledBack: string[] } {
+	const inspection = inspectEvolution(scopeRoot);
+	const current = inspection.current;
+	if (!current) return { rolledBack: [] };
+
+	// Group feedbacks by revisionId, sorted by recordedAt ascending
+	const feedbackByRevision = new Map<string, EvolutionFeedbackRecord[]>();
+	for (const fb of inspection.feedbacks) {
+		if (!fb.revisionId) continue;
+		const list = feedbackByRevision.get(fb.revisionId) ?? [];
+		list.push(fb);
+		feedbackByRevision.set(fb.revisionId, list);
+	}
+
+	const rolledBack: string[] = [];
+	for (const [revisionId, feedbacks] of feedbackByRevision) {
+		// Skip if this is already the current revision or it's the rollback target
+		if (revisionId === current.revisionId) continue;
+		// Count consecutive not_useful from the most recent
+		const sorted = [...feedbacks].sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
+		let consecutiveNotUseful = 0;
+		for (const fb of sorted) {
+			if (fb.outcome === "not_useful") consecutiveNotUseful++;
+			else break;
+		}
+		if (consecutiveNotUseful >= 3) {
+			// Check if not already rolled back away from this revision
+			if (current.rollbackOf !== revisionId) {
+				try {
+					rollbackEvolution(scopeRoot, current.revisionId, { requestedBy: "auto-feedback" });
+					rolledBack.push(revisionId);
+				} catch { /* skip if rollback fails */ }
+			}
+		}
+	}
+	return { rolledBack };
+}
+
 export function loadActiveEvolutionArtifacts(scopeRoot: string): EvolutionArtifact[] {
 	const current = loadCurrentEvolution(scopeRoot);
 	if (!current) return [];
@@ -1048,6 +1086,40 @@ export function loadActiveEvolutionSkillPaths(scopeRoot: string): string[] {
 		writeFileSync(join(skillDir, "SKILL.md"), skillMarkdown(artifact), { encoding: "utf8", mode: SAFE_FILE_MODE });
 	}
 	return [skillRoot];
+}
+
+/**
+ * Scan all revision directories under <scopeRoot>/revisions/ for SKILL.md files.
+ * Unlike loadActiveEvolutionSkillPaths (which only materializes the current active
+ * revision's skills), this discovers every skill that was ever promoted, enabling
+ * local-only users to benefit from all their accumulated skills without needing
+ * remote push or global auto-promotion.
+ */
+export function discoverLocalSkillPaths(scopeRoot: string): string[] {
+	const revisionsDir = join(scopeRoot, "revisions");
+	if (!existsSync(revisionsDir)) return [];
+	const skillRoot = join(scopeRoot, "resources", "skills", "_local");
+	const discovered: string[] = [];
+	for (const revEntry of readdirSync(revisionsDir, { withFileTypes: true })) {
+		if (!revEntry.isDirectory()) continue;
+		const manifestPath = join(revisionsDir, revEntry.name, "manifest.json");
+		if (!existsSync(manifestPath)) continue;
+		try {
+			const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+			if (!manifest?.artifacts) continue;
+			const skills = manifest.artifacts.filter((a: Record<string, string>) => a.kind === "skill_manifest");
+			if (skills.length === 0) continue;
+			const revSkillRoot = join(skillRoot, revEntry.name);
+			mkdirSync(revSkillRoot, { recursive: true, mode: 0o700 });
+			for (const skill of skills) {
+				const skillDir = join(revSkillRoot, evolvedSkillName(skill.id));
+				mkdirSync(skillDir, { recursive: true, mode: 0o700 });
+				writeFileSync(join(skillDir, "SKILL.md"), skillMarkdown({ id: skill.id, title: skill.title, content: skill.content, applicability: skill.applicability, nonApplicability: skill.nonApplicability } as EvolutionArtifact), { encoding: "utf8", mode: SAFE_FILE_MODE });
+			}
+			discovered.push(revSkillRoot);
+		} catch { /* skip corrupted manifests */ }
+	}
+	return discovered;
 }
 
 export function loadActiveEvalFixtureArtifacts(scopeRoot: string): EvolutionArtifact[] {

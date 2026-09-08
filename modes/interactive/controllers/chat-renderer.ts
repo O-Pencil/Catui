@@ -274,6 +274,10 @@ export class ChatRendererController {
           component.updateResult(message);
           this.ctx.state.pendingTools.delete(message.toolCallId);
         }
+      } else if (message.role === "custom") {
+        // Custom messages are rendered in real-time via the message_start event
+        // (stream-render-controller). Skip them here to avoid duplicates during
+        // renderInitialMessages / session rebuilds.
       } else {
         // All other messages use standard rendering
         this.ctx.addMessageToChat(message, options);

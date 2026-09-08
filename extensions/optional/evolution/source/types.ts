@@ -19,6 +19,7 @@ export interface SourceConfig {
 	autoMerge: boolean;
 	autoPublish: boolean;
 	autoUpdate: boolean;
+	allowRemotePush: boolean;
 	maxWorkerRunsPerDay: number;
 	maxJobsPerDay: number;
 	maxWorkerSeconds: number;
@@ -52,7 +53,7 @@ export interface Observation {
 	turns?: number;
 	fingerprint: string;
 }
-export type JobStage = "queued" | "prepared" | "verified" | "submitted" | "merged" | "published" | "adopted" | "effective" | "regressed" | "rejected" | "failed";
+export type JobStage = "queued" | "prepared" | "verified" | "verified-local" | "submitted" | "merged" | "published" | "adopted" | "effective" | "regressed" | "rejected" | "failed";
 export interface SourceJob {
 	id: string;
 	day: string;

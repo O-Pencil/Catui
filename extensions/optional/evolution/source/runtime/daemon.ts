@@ -23,9 +23,18 @@ export async function advanceJob(run: RunCommand, root: string, config: SourceCo
 	switch (job.stage) {
 		case "queued": await prepareCandidate(run, root, config, state, job); break;
 		case "prepared": if (!job.holdout) { job.stage = "queued"; break; } await repairCandidate(run, root, config, state, job); break;
-		case "verified": await submitPullRequest(run, root, config, job); break;
-		case "submitted": await reconcilePullRequest(run, config, job); break;
-		case "merged": await publishCandidate(run, root, config, state, job); break;
+		case "verified":
+			if (!config.allowRemotePush) { job.stage = "verified-local"; job.lastResult = "Remote push disabled; candidate verified but not submitted"; break; }
+			await submitPullRequest(run, root, config, job);
+			break;
+		case "submitted":
+			if (!config.allowRemotePush) { job.lastResult = "Remote push disabled; PR reconciliation skipped"; break; }
+			await reconcilePullRequest(run, config, job);
+			break;
+		case "merged":
+			if (!config.allowRemotePush) { job.lastResult = "Remote push disabled; publication skipped"; break; }
+			await publishCandidate(run, root, config, state, job);
+			break;
 		case "published": await adoptCandidate(run, root, config, job); break;
 		case "adopted": await measureAdoption(root, state, config, job); break;
 	}
@@ -33,7 +42,7 @@ export async function advanceJob(run: RunCommand, root: string, config: SourceCo
 export function enqueue(state: SourceState, config: SourceConfig, root: string, now = new Date()): SourceJob | undefined {
 	const { day, due } = calendar(config, now);
 	if (!due || state.paused) return;
-	if (state.jobs.some(j => !["effective", "regressed", "rejected", "failed", "adopted"].includes(j.stage))) return;
+	if (state.jobs.some(j => !["effective", "regressed", "rejected", "failed", "adopted", "verified-local"].includes(j.stage))) return;
 	const budget = state.budgets[day] ??= { calls: 0, jobs: 0 };
 	if (budget.jobs >= config.maxJobsPerDay || budget.calls + 5 > config.maxWorkerRunsPerDay) return;
 	const evidence = selectEvidence(state, config);
@@ -55,7 +64,7 @@ export async function deliveryTick(root: string, state: SourceState, config: Sou
 	await saveState(root, state);
 	for (const job of state.jobs) {
 		if (job.retryAfter && Date.parse(job.retryAfter) > Date.now()) continue;
-		if (["effective", "regressed", "rejected", "failed"].includes(job.stage)) continue;
+		if (["effective", "regressed", "rejected", "failed", "verified-local"].includes(job.stage)) continue;
 		const before = job.stage;
 		try {
 			await advanceJob(run, root, config, state, job);

@@ -13,7 +13,7 @@ export function defaultConfig(agentDir: string, model: string, reviewModel?: str
 	return {
 		version: 1, enabled: true, repository: "O-Pencil/Catui", branch: "main", packageName: "catui-agent",
 		agentDir, model, reviewModel, repairScope: "source", timeZone: "Asia/Shanghai", hour: 3,
-		autoMerge: true, autoPublish: true, autoUpdate: true,
+		autoMerge: true, autoPublish: true, autoUpdate: true, allowRemotePush: false,
 		maxWorkerRunsPerDay: 8, maxJobsPerDay: 1, maxWorkerSeconds: 600, maxTurns: 24,
 		maxAttempts: 3, minimumFailures: 2, measurementSamples: 30, regressionMargin: 0.1,
 		requiredChecks: ["Test on Node.js 20", "Test on Node.js 22", "Test Packages", "architecture-boundaries", "Source evolution (macOS)"],
@@ -27,7 +27,7 @@ export function validateConfig(value: unknown): SourceConfig {
 	if (typeof c.model !== "string" || !c.model.trim()) throw new Error("Configure an explicit model before enabling source evolution");
 	if (c.reviewModel !== undefined && (typeof c.reviewModel !== "string" || !c.reviewModel.trim() || modelFamily(c.reviewModel) === modelFamily(c.model))) throw new Error("Review requires a different model identity from repair");
 	if (c.repairScope !== undefined && !["source", "adaptive"].includes(c.repairScope)) throw new Error("Invalid repair scope");
-	for (const key of ["enabled", "autoMerge", "autoPublish", "autoUpdate"] as const) if (typeof c[key] !== "boolean") throw new Error(`Invalid ${key}`);
+	for (const key of ["enabled", "autoMerge", "autoPublish", "autoUpdate", "allowRemotePush"] as const) if (typeof c[key] !== "boolean") throw new Error(`Invalid ${key}`);
 	for (const key of ["maxWorkerRunsPerDay", "maxJobsPerDay", "maxWorkerSeconds", "maxTurns", "maxAttempts", "minimumFailures", "measurementSamples"] as const) {
 		if (!Number.isSafeInteger(c[key]) || c[key] < 1 || c[key] > 10000) throw new Error(`Invalid ${key}`);
 	}
