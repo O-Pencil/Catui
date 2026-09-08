@@ -87,9 +87,20 @@ test("default tools save handoffs, bound note reads, and inject transient budget
   assert.equal(messages.length, 1);
   assert.equal(session.getEntries().length, before);
   ctx.getContextUsage = () => ({ tokens: null, contextWindow: 32000, percent: null });
-  assert.match(hooks.get("context")!({ messages }, ctx).messages.at(-1).content, /remaining_work_tokens="unknown"/);
+  assert.equal(hooks.get("context")!({ messages }, ctx), undefined);
   ctx.getContextUsage = () => undefined;
   assert.equal(hooks.get("context")!({ messages }, ctx), undefined);
+});
+
+test("budget hints stay silent while the window is ample and the prompt forbids acknowledging them", (t) => {
+  const { hooks, ctx } = fixture(t);
+  const messages = [{ role: "user", content: "Continue", timestamp: 1 }];
+  ctx.getContextUsage = () => ({ tokens: 10000, contextWindow: 32000, percent: 31 });
+  assert.equal(hooks.get("context")!({ messages }, ctx), undefined);
+  ctx.getContextUsage = () => ({ tokens: 25000, contextWindow: 32000, percent: 78 });
+  delete (ctx as { requestContextWindow?: unknown }).requestContextWindow;
+  assert.equal(hooks.get("context")!({ messages }, ctx), undefined);
+  assert.match(hooks.get("before_agent_start")!().appendSystemPrompt, /internal telemetry; never acknowledge or mention it in user-visible output/);
 });
 
 test("continuity tools remain usable in plan mode without granting workspace writes", () => {
