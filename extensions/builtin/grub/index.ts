@@ -2,7 +2,7 @@
  * [WHO]: grubExtension default export - registers /grub command, completions, dual-phase prompts, resume support, feature-list validation, and grub renderer
  * [FROM]: Depends on @catui/agent-core, @catui/tui, core/extensions-host/types, core/runtime/event-bus, ./grub-controller, ./grub-format, ./grub-parser, ./grub-types, ./grub-harness, ./grub-prompts, ./grub-persistence, ./grub-turn
  * [TO]: Auto-loaded by builtin-extensions.ts as a default extension
- * [HERE]: extensions/builtin/grub/index.ts - autonomous iterative task runner with Anthropic-style long-running harness (feature-list.json + durable state + phase-specialized prompts)
+ * [HERE]: extensions/builtin/grub/index.ts - durable task lifecycle; GrubDispatch owns exact iteration prompts, abort and exclusive continuation
  */
 
 import type { AgentMessage } from "@catui/agent-core";
@@ -11,6 +11,7 @@ import type { ExtensionAPI, ExtensionCommandContext } from "../../../core/extens
 import { getLocale, type Locale } from "../../../core/platform/i18n/index.js";
 import type { EventBus } from "../../../core/runtime/event-bus.js";
 import { GrubController } from "./grub-controller.js";
+import { GrubDispatch } from "./grub-dispatch.js";
 import {
 	describeTaskState,
 	formatSnapshot,
@@ -117,16 +118,6 @@ function getLastAssistantMessage(messages: AgentMessage[]): AgentMessage | undef
 	return undefined;
 }
 
-function dispatchNextIteration(api: ExtensionAPI, bus: EventBus, controller: GrubController): void {
-	const task = controller.getActiveTask();
-	if (!task) return;
-
-	const prompt = controller.buildPrompt();
-	controller.markDispatched();
-	publishGrubUpdate(api, bus, grubText(task.locale).startingIteration(task.currentIteration, task.id), "info");
-	api.sendUserMessage(prompt, { deliverAs: "followUp" });
-}
-
 function resumeSummary(task: GrubTaskState): string {
 	const text = grubText(task.locale ?? "en");
 	return [
@@ -139,6 +130,10 @@ function resumeSummary(task: GrubTaskState): string {
 export default async function grubExtension(api: ExtensionAPI) {
 	const bus = api.events;
 	const controller = getController(bus);
+	const dispatch = new GrubDispatch(api, controller, () => {
+		const task = controller.getActiveTask()!;
+		publishGrubUpdate(api, bus, grubText(task.locale).startingIteration(task.currentIteration, task.id), "info");
+	});
 
 	// Opportunistic cleanup of long-abandoned harnesses (best effort).
 	try {
@@ -183,6 +178,7 @@ export default async function grubExtension(api: ExtensionAPI) {
 	});
 
 	api.on("session_shutdown", () => {
+		dispatch.cancel();
 		// Persist is already called on every state transition; we only need to
 		// unbind the in-memory bindings so a future session starts fresh.
 		controllersByBus.delete(bus);
@@ -190,7 +186,8 @@ export default async function grubExtension(api: ExtensionAPI) {
 	});
 
 	api.on("before_agent_start", (event) => {
-		if (!controller.isGrubPrompt(event.prompt)) return;
+		if (!dispatch.accepts(event.prompt)) return;
+		dispatch.begin(event.prompt);
 		const task = controller.getActiveTask();
 		const phase = task?.phase ?? "execution";
 		const locale = localeForTask(task);
@@ -201,7 +198,7 @@ export default async function grubExtension(api: ExtensionAPI) {
 
 	api.on("input", (event) => {
 		if (event.source !== "extension" || !event.text.startsWith("[GRUB:")) return;
-		if (!controller.isGrubPrompt(event.text)) return { action: "handled" };
+		if (!dispatch.accepts(event.text)) return { action: "handled" };
 		return { action: "continue" };
 	});
 
@@ -216,16 +213,20 @@ export default async function grubExtension(api: ExtensionAPI) {
 	api.on("agent_result", (event) => {
 		// Only fold into the running grub task. Stale events after the task has
 		// already terminated would otherwise pollute the next run.
-		if (!controller.hasActiveTask()) return;
+		const taskId = dispatch.takeResultTask();
+		if (!taskId) return;
 		controller.accumulateRunResult({
 			turnCount: event.turnCount,
 			toolCallCount: event.toolCallCount,
 			durationMs: event.durationMs,
 			usage: event.usage,
-		});
+		}, taskId);
+		if (event.stopReason === "aborted") dispatch.pause("Paused after cancellation. Use /grub resume to continue.");
 	});
 
-	api.on("agent_end", (event) => {
+	api.on("agent_abort", () => { dispatch.pause("Paused by user. Use /grub resume to continue."); });
+	api.on("agent_end", (event, ctx) => {
+		if (!dispatch.end()) { dispatch.flush(ctx.hasPendingMessages()); return; }
 		const activeTask = controller.getActiveTask();
 		if (!activeTask?.awaitingTurn) return;
 		currentGrubLocale = activeTask.locale;
@@ -235,7 +236,8 @@ export default async function grubExtension(api: ExtensionAPI) {
 		for (const update of turn.events) {
 			publishGrubUpdate(api, bus, update.message, update.level);
 		}
-		if (turn.dispatchNext) dispatchNextIteration(api, bus, controller);
+		if (turn.dispatchNext) dispatch.request(ctx.hasPendingMessages());
+		else dispatch.cancel();
 	});
 
 	const handleGrubCommand = async (args: string, ctx: ExtensionCommandContext) => {
@@ -276,8 +278,10 @@ export default async function grubExtension(api: ExtensionAPI) {
 				return;
 			}
 
+			const ownsRun = dispatch.ownsRun;
 			controller.stop(locale === "zh" ? "用户请求停止。" : "Stopped by user request.", "stopped");
-			if (!ctx.isIdle()) {
+			dispatch.cancel();
+			if (ownsRun && !ctx.isIdle()) {
 				ctx.abort();
 			}
 			publishGrubUpdate(api, bus, text.stopped(activeTask.id), "info");
@@ -286,15 +290,16 @@ export default async function grubExtension(api: ExtensionAPI) {
 
 		if (parsed.type === "resume") {
 			let activeTask = controller.getActiveTask();
+			if (activeTask?.awaitingTurn) return;
 			let locale = localeForTask(activeTask);
 			if (!activeTask) {
-				const persisted = discoverActiveTasks(ctx.cwd);
+				const persisted = discoverActiveTasks(ctx.cwd, true);
 				if (persisted.length === 0) {
 					publishGrubUpdate(api, bus, `${grubText(settingsLocale).prefix} ${grubText(settingsLocale).noPersisted}`, "warning");
 					return;
 				}
 				try {
-					activeTask = controller.adoptResumedTask(persisted[0].task);
+					activeTask = controller.adoptResumedTask(persisted[0].task, true);
 					locale = activeTask.locale ?? settingsLocale;
 					currentGrubLocale = locale;
 				} catch (error) {
@@ -305,7 +310,8 @@ export default async function grubExtension(api: ExtensionAPI) {
 			}
 			ensureHarnessArtifacts(activeTask);
 			publishGrubUpdate(api, bus, grubText(locale).resuming(activeTask.id), "info");
-			dispatchNextIteration(api, bus, controller);
+			dispatch.claim();
+			dispatch.request(ctx.hasPendingMessages());
 			return;
 		}
 
@@ -332,7 +338,8 @@ export default async function grubExtension(api: ExtensionAPI) {
 				].join("\n"),
 				"info",
 			);
-			dispatchNextIteration(api, bus, controller);
+			dispatch.claim();
+			dispatch.request(ctx.hasPendingMessages());
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			publishGrubUpdate(api, bus, `${grubText(settingsLocale).prefix} ${message}`, "error");

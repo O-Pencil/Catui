@@ -1,5 +1,5 @@
 /**
- * [WHO]: All extension types: Extension, ExtensionContext, HookEvent types, ToolDefinition, etc.; optional safe context-window request contract
+ * [WHO]: Extension, ExtensionContext, HookEvent, ToolDefinition, ContinuationLease; scoped follow-up cancellation and safe context-window contracts
  * [FROM]: Depends on agent-core, ai, tui - all extension-related types
  * [TO]: Consumed by core/extensions-host/index.ts, core/extensions-host/runner.ts, core/extensions-host/wrapper.ts, all extension entry points (builtin/loop, builtin/team, builtin/mcp, builtin/soul, builtin/presence, builtin/security-audit, builtin/link-world, builtin/interview, optional/simplify, optional/export-html), modes/interactive/components/tool-execution.ts, modes/interactive/components/custom-message.ts, modes/acp/acp-mode.ts
  * [HERE]: core/extensions-host/types.ts - type definitions for extension system API
@@ -347,10 +347,9 @@ export interface ExtensionContext {
 	isIdle(): boolean;
 	/** Abort the current agent operation */
 	abort(): void;
-	/** Clear the agent's follow-up message queue. Useful when an extension
-	 *  transitions to a terminal state and wants to prevent stale follow-ups
-	 *  from triggering additional turns. */
-	clearFollowUpQueue(): void;
+	/** Remove matching user-text follow-ups, or all follow-ups when omitted.
+	 * Predicates must be pure; both engine and UI queues apply the same match. */
+	clearFollowUpQueue(matches?: (text: string) => boolean): void;
 	/** Whether there are queued messages waiting */
 	hasPendingMessages(): boolean;
 	/** Gracefully shutdown Catui and exit. Available in all contexts. */
@@ -1163,9 +1162,12 @@ export interface ExtensionAPI {
 	/** Whether the agent is idle (not streaming). For queueing loop tasks use with sendUserMessage. */
 	isIdle(): boolean;
 
-	/** Clear the agent's follow-up message queue. Prevents stale follow-ups
-	 *  from triggering additional turns after a terminal state transition. */
-	clearFollowUpQueue(): void;
+	/** Remove matching user-text follow-ups, or all follow-ups when omitted.
+	 * Predicates must be pure; both engine and UI queues apply the same match. */
+	clearFollowUpQueue(matches?: (text: string) => boolean): void;
+
+	/** Claim exclusive automatic continuation. A new claim revokes the old lease. */
+	claimContinuation(onRevoked: () => void): ContinuationLease;
 
 	/** Append a custom entry to the session for state persistence (not sent to LLM). */
 	appendEntry<T = unknown>(customType: string, data?: T): void;
@@ -1444,7 +1446,7 @@ export interface ExtensionContextActions {
 	) => Promise<string | undefined>;
 	isIdle: () => boolean;
 	abort: () => void;
-	clearFollowUpQueue: () => void;
+	clearFollowUpQueue: (matches?: (text: string) => boolean) => void;
 	hasPendingMessages: () => boolean;
 	shutdown: () => void;
 	getContextUsage: () => ContextUsage | undefined;
@@ -1478,15 +1480,19 @@ export interface ExtensionCommandContextActions {
 	reload: () => Promise<void>;
 }
 
-/**
- * Full runtime = state + actions.
- * Created by loader with throwing action stubs, completed by runner.initialize().
- */
+/** Session-local exclusive ownership of automatic continuation. */
+export interface ContinuationLease {
+	isCurrent(): boolean;
+	release(): void;
+}
+
+/** Full runtime = state + actions; bound by the runner after loading. */
 export interface ExtensionRuntime extends ExtensionRuntimeState, ExtensionActions {
 	/** Bound in runner.bindCore from ExtensionContextActions.isIdle */
 	isIdle: () => boolean;
 	/** Bound in runner.bindCore from ExtensionContextActions.clearFollowUpQueue */
-	clearFollowUpQueue: () => void;
+	clearFollowUpQueue: (matches?: (text: string) => boolean) => void;
+	claimContinuation: (onRevoked: () => void) => ContinuationLease;
 }
 
 /** Loaded extension with all registered items. */

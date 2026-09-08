@@ -2,7 +2,7 @@
  * [WHO]: ExtensionRunner class, lifecycle management, event emission, slash-command dispatch chokepoint (invokeCommand), telemetry sink wiring (setTelemetrySink); optional context-window capability forwarding
  * [FROM]: Depends on agent-core, ai, tui, modes/theme, session-manager, types.ts, core/platform/telemetry (ExtensionTelemetrySink + classifyArgsSignature for the P1 ext_command_events writer)
  * [TO]: Consumed by core/extensions-host/index.ts, core/extensions-host/wrapper.ts, core/runtime/agent-session.ts (delegates command dispatch via invokeCommand)
- * [HERE]: core/extensions-host/runner.ts - extension execution and lifecycle management; owns the single try/catch around command.handler so telemetry can wrap every invocation regardless of caller mode
+ * [HERE]: core/extensions-host/runner.ts - extension lifecycle and predicate-scoped queue forwarding; owns command error and telemetry dispatch
  */
 import type { AgentMessage } from "@catui/agent-core";
 import type { ImageContent, Model } from "@catui/ai/types";
@@ -235,7 +235,7 @@ export class ExtensionRunner {
 	private isIdleFn: () => boolean = () => true;
 	private waitForIdleFn: () => Promise<void> = async () => {};
 	private abortFn: () => void = () => {};
-	private clearFollowUpQueueFn: () => void = () => {};
+	private clearFollowUpQueueFn: ExtensionContextActions["clearFollowUpQueue"] = () => {};
 	private hasPendingMessagesFn: () => boolean = () => false;
 	private getContextUsageFn: () => ContextUsage | undefined = () => undefined;
 	private requestContextWindowFn: ExtensionContextActions["requestContextWindow"];
@@ -334,7 +334,7 @@ export class ExtensionRunner {
 		this.runtime.isIdle = () => this.isIdleFn();
 		this.abortFn = contextActions.abort;
 		this.clearFollowUpQueueFn = contextActions.clearFollowUpQueue;
-		this.runtime.clearFollowUpQueue = () => this.clearFollowUpQueueFn();
+		this.runtime.clearFollowUpQueue = (matches) => this.clearFollowUpQueueFn(matches);
 		this.hasPendingMessagesFn = contextActions.hasPendingMessages;
 		this.shutdownHandler = contextActions.shutdown;
 		this.getContextUsageFn = contextActions.getContextUsage;
@@ -812,7 +812,7 @@ export class ExtensionRunner {
 				: undefined,
 			isIdle: () => this.isIdleFn(),
 			abort: () => this.abortFn(),
-			clearFollowUpQueue: () => this.clearFollowUpQueueFn(),
+			clearFollowUpQueue: (matches) => this.clearFollowUpQueueFn(matches),
 			hasPendingMessages: () => this.hasPendingMessagesFn(),
 			shutdown: () => this.shutdownHandler(),
 			getContextUsage: () => this.getContextUsageFn(),

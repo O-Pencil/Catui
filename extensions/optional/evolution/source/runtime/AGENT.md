@@ -3,6 +3,7 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
+install-state.ts: Validated managed installation pointer reads shared by launch, workers and assessment
 config.ts: Validated operational policy, schedule identity and root paths
 state.ts: Private atomic state, supervisor lease and model-call reservations
 process.ts: Bounded argv-only subprocess execution and Catui worker command discovery

@@ -1,7 +1,7 @@
 /**
  * [WHO]: Provides bindExtensionCore() — wires AgentSession host methods, read-only replay/eval evidence, and LLM call telemetry to ExtensionRunner APIs; optional same-session window request forwarding
  * [FROM]: Depends on ExtensionRunner, model/session/resource abstractions, slash command metadata, core/platform/telemetry (getExtCallerContext for caller attribution + LlmCallEventInput shape)
- * [TO]: Consumed by AgentSession when initializing extension runtime capabilities
+ * [TO]: Consumed by AgentSession when initializing extension capabilities, including predicate-scoped queue cancellation
  * [HERE]: core/runtime/extension-core-bindings.ts - the LLM-call instrumentation point; reads AsyncLocalStorage context pushed by runner.invokeCommand (user-initiated=true) or runner.invokeHookHandler (user-initiated=false) to attribute each call. is_user_initiated=false rows grouped by extension_name + caller_context are the idle-thinking bug detector.
  */
 import type {
@@ -88,7 +88,7 @@ export interface ExtensionCoreBindingHost {
 	setModel(model: Model<any>): Promise<void>;
 	setThinkingLevel(level: ThinkingLevel): void;
 	abort(): Promise<void> | void;
-	clearFollowUpQueue(): void;
+	clearFollowUpQueue(matches?: (text: string) => boolean): void;
 	getContextUsage(): ContextUsage | undefined;
 	requestContextWindow?(handoff: string): boolean;
 	compact(customInstructions?: string): Promise<CompactionResult>;
@@ -329,7 +329,7 @@ export function bindExtensionCore(runner: ExtensionRunner, host: ExtensionCoreBi
 			abort: () => {
 				void host.abort();
 			},
-			clearFollowUpQueue: () => host.clearFollowUpQueue(),
+			clearFollowUpQueue: (matches) => host.clearFollowUpQueue(matches),
 			hasPendingMessages: () => host.pendingMessageCount > 0,
 			shutdown: () => {
 				host.shutdownHandler?.();

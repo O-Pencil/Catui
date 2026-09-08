@@ -78,6 +78,7 @@ export function formatCandidate(candidate: EvolutionCandidate): string {
 	const errors = candidate.validation.errors.length > 0 ? `\nValidation errors:\n${candidate.validation.errors.map((error) => `- ${error}`).join("\n")}` : "";
 	return [
 		`Candidate ${candidate.id} (${candidate.status})`,
+		`Content hash: ${candidate.contentHash}`,
 		candidate.summary,
 		`Rationale: ${candidate.rationale}`,
 		`Expected: ${candidate.expectedOutcome}`,

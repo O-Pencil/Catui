@@ -13,6 +13,7 @@ import { checked } from "../runtime/process.js";
 import { verifyRepository } from "./repair.js";
 import { saveState } from "../runtime/state.js";
 import { verificationRunner } from "./sandbox.js";
+import { verifyHoldout } from "../assessment/holdout.js";
 
 export async function publishCandidate(run: RunCommand, root: string, config: SourceConfig, state: SourceState, job: SourceJob): Promise<void> {
 	if (!config.autoPublish) return;
@@ -35,6 +36,7 @@ export async function publishCandidate(run: RunCommand, root: string, config: So
 		await checked(run, "npm", ["ci", "--ignore-scripts"], { cwd, timeoutMs: 600000 });
 		await verifyRepository(run, cwd, root, `${job.id}-merged`);
 		await checked(verificationRunner(run), process.execPath, ["--test", "--import", "tsx", job.testPath!], { cwd, timeoutMs: 120000 });
+		if (!await verifyHoldout(run, root, job, cwd)) throw new Error("Merged source failed independent held-out acceptance");
 		if (await checked(run, "git", ["status", "--porcelain", "--untracked-files=no"], { cwd })) throw new Error("Merged verification changed source before packaging");
 		const packed = JSON.parse(await checked(run, "npm", ["pack", "--json", "--ignore-scripts"], { cwd })) as { filename: string; integrity: string }[];
 		if (packed.length !== 1 || !/^[\w.-]+\.tgz$/.test(packed[0].filename)) throw new Error("Unexpected package artifact");
@@ -53,7 +55,7 @@ export async function publishCandidate(run: RunCommand, root: string, config: So
 	if (published !== job.integrity) throw new Error("Registry version belongs to a different artifact");
 	const release = await run("gh", ["release", "view", tag, "--repo", config.repository, "--json", "tagName"], { cwd });
 	if (release.code !== 0) {
-		await checked(run, "gh", ["release", "create", tag, "--repo", config.repository, "--target", job.merge, "--title", tag, "--notes", `Automated Catui improvement from PR #${job.pr}. Frozen baseline/candidate regression and repository gates passed. Real-world effectiveness is being measured.`], { cwd });
+		await checked(run, "gh", ["release", "create", tag, "--repo", config.repository, "--target", job.merge, "--title", tag, "--notes", `Automated Catui improvement from PR #${job.pr}. Frozen baseline/candidate regression and repository gates passed. Real-world effectiveness is being measured.\n\nSource commit: ${job.merge}\nIntegrity: ${job.integrity}`], { cwd });
 	}
 	job.stage = "published";
 }

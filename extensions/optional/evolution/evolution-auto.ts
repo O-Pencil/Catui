@@ -107,10 +107,6 @@ function structuredProposal(text: string):
 	return undefined;
 }
 
-function needsGate(kind: EvolutionArtifactKind): boolean {
-	return kind === "executable_tool";
-}
-
 export class EvolutionAutoObserver {
 	#lastCandidateTurnBySession = new Map<string, number>();
 	#runGate: EvolutionGateRunner;
@@ -191,15 +187,11 @@ export class EvolutionAutoObserver {
 			const candidate = createEvolutionCandidate(root, input);
 			const globalPolicy = structured.scope === "global" ? canAutoPromoteGlobalEvolution(input) : { allowed: true };
 			if (globalPolicy.allowed) {
-				if (needsGate(structured.kind)) {
-					const gateReport = await this.#runGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId });
-					if (gateReport.passed) {
-						promoteEvolutionCandidate(root, candidate.id, { approvedBy: "structured-turn-end", gateReport });
-					} else {
-						recordEvolutionGateFailure(root, candidate.id, { gateReport });
-					}
+				const gateReport = await this.#runGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId });
+				if (gateReport.passed) {
+					promoteEvolutionCandidate(root, candidate.id, { approvedBy: "structured-turn-end", gateReport });
 				} else {
-					promoteEvolutionCandidate(root, candidate.id, { approvedBy: "structured-turn-end" });
+					recordEvolutionGateFailure(root, candidate.id, { gateReport });
 				}
 			}
 			this.#lastCandidateTurnBySession.set(sessionId, event.turnIndex);
@@ -229,7 +221,12 @@ export class EvolutionAutoObserver {
 				turnIndex: event.turnIndex,
 			},
 		});
-		promoteEvolutionCandidate(root, candidate.id, { approvedBy: "turn-end-auto" });
+		const gateReport = await this.#runGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId });
+		if (gateReport.passed) {
+			promoteEvolutionCandidate(root, candidate.id, { approvedBy: "turn-end-auto", gateReport });
+		} else {
+			recordEvolutionGateFailure(root, candidate.id, { gateReport });
+		}
 		this.#lastCandidateTurnBySession.set(sessionId, event.turnIndex);
 		return { candidateId: candidate.id };
 	}

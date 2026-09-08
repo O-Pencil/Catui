@@ -15,6 +15,8 @@ import { askWorker } from "./model.js";
 import { acceptedReview, parseObject, repairable } from "./policy.js";
 import { verificationRunner } from "./sandbox.js";
 import lockfile from "proper-lockfile";
+import { requireReviewModel } from "../runtime/config.js";
+import { prepareHoldout, verifyHoldout } from "../assessment/holdout.js";
 
 export const GATES: readonly [string, string[]][] = [
 	["npm", ["run", "verify:dip"]], ["npm", ["run", "verify:quality"]],
@@ -39,6 +41,7 @@ async function assertPlainFiles(cwd: string, paths: string[]): Promise<void> {
 	}
 }
 export async function prepareCandidate(run: RunCommand, root: string, config: SourceConfig, state: SourceState, job: SourceJob): Promise<void> {
+	requireReviewModel(config);
 	await mkdir(join(root, "jobs"), { recursive: true, mode: 0o700 });
 	if (!existsSync(join(job.checkout, ".git"))) {
 		await checked(run, "git", ["clone", "--single-branch", "--branch", config.branch, `https://github.com/${config.repository}.git`, job.checkout], { cwd: root, timeoutMs: 300000 });
@@ -47,6 +50,9 @@ export async function prepareCandidate(run: RunCommand, root: string, config: So
 	if (job.previousHead) {
 		await checked(run, "git", ["fetch", "origin", config.branch], { cwd: job.checkout, timeoutMs: 180000 });
 		await checked(run, "git", ["reset", "--hard", "FETCH_HEAD"], { cwd: job.checkout });
+		await checked(run, "git", ["clean", "-fd"], { cwd: job.checkout });
+	} else if (job.base) {
+		await checked(run, "git", ["reset", "--hard", job.base], { cwd: job.checkout });
 		await checked(run, "git", ["clean", "-fd"], { cwd: job.checkout });
 	}
 	job.base = await checked(run, "git", ["rev-parse", "HEAD"], { cwd: job.checkout });
@@ -68,6 +74,7 @@ export async function prepareCandidate(run: RunCommand, root: string, config: So
 	await atomicJson(join(root, "jobs", `${job.id}-contract.json`), { base: job.base, testPath: job.testPath, testHash: job.testHash, test, hypothesis: triage.hypothesis });
 	const baseline = await verificationRunner(run)(process.execPath, ["--test", "--import", "tsx", job.testPath], { cwd: job.checkout, timeoutMs: 120000, log: join(root, "logs", `${job.id}-baseline.json`) });
 	if (baseline.code !== 1 || !/ERR_ASSERTION|AssertionError/.test(baseline.stdout + baseline.stderr)) throw new Error("Reproduction must fail with an assertion on baseline");
+	await prepareHoldout(run, root, config, state, job, triage.hypothesis);
 	job.stage = "prepared";
 	await saveState(root, state);
 }
@@ -79,13 +86,15 @@ export async function repairCandidate(run: RunCommand, root: string, config: Sou
 	const oldChangelog = await run("git", ["show", `${job.base}:CHANGELOG.md`], { cwd: job.checkout });
 	if (oldChangelog.code === 0) await writeFile(join(job.checkout, "CHANGELOG.md"), oldChangelog.stdout);
 	else await unlink(join(job.checkout, "CHANGELOG.md")).catch(e => { if (e.code !== "ENOENT") throw e; });
+	const scope = config.repairScope === "adaptive" ? " Adaptive scope also permits learning/detectors.ts and learning/repair-strategy.ts within the source-evolution module, but no acceptance authority." : "";
 	await askWorker(run, root, state, config, "repair", job.checkout,
-		`Fix the demonstrated Catui defect: ${job.title}. The external verifier ran ${job.testPath} and confirmed assertion failure on baseline ${job.base}. Read this frozen regression and relevant code. Implement the smallest general fix; do not detect test runners or change tests, package metadata, scripts, workflow rules, or source-evolution control code. Update DIP maps/headers and add a focused .dev-docs/architecture-review/ review before changing load-bearing code. You may read prior verification logs only if supplied. Return a brief explanation. Evidence: ${JSON.stringify(job.evidence)}\nPrevious failure: ${job.error ?? "none"}`, job.testPath);
+		`Fix the demonstrated Catui defect: ${job.title}. The external verifier ran ${job.testPath} and confirmed assertion failure on baseline ${job.base}. Read this frozen regression and relevant code. Implement the smallest general fix; do not detect test runners or change tests, package metadata, scripts, workflow rules, or source-evolution control code.${scope} Update DIP maps/headers and add a focused .dev-docs/architecture-review/ review before changing load-bearing code. You may read prior verification logs only if supplied. Return a brief explanation. Evidence: ${JSON.stringify(job.evidence)}\nPrevious failure: ${job.error ?? "none"}`, job.testPath);
 	if (digest(await readFile(join(job.checkout, job.testPath), "utf8")) !== job.testHash) throw new Error("Frozen regression was modified");
 	const changes = await changedPaths(run, job.checkout);
-	if (!changes.some(p => p !== job.testPath) || changes.some(p => p !== job.testPath && !repairable(p))) throw new Error("Candidate modified protected paths or contains no source fix");
+	if (!changes.some(p => p !== job.testPath) || changes.some(p => p !== job.testPath && !repairable(p, config.repairScope))) throw new Error("Candidate modified protected paths or contains no source fix");
 	await assertPlainFiles(job.checkout, changes);
 	await checked(verificationRunner(run), process.execPath, ["--test", "--import", "tsx", job.testPath], { cwd: job.checkout, timeoutMs: 120000, log: join(root, "logs", `${job.id}-candidate.json`) });
+	if (!await verifyHoldout(run, root, job)) { job.stage = "rejected"; job.lastResult = "Independent hidden generalization or compatibility failed; candidate rejected without exposing hidden cases to repair"; return; }
 	const diff = await checked(run, "git", ["diff", "HEAD", "--", ...changes], { cwd: job.checkout });
 	const added = await Promise.all(changes.filter(p => p !== job.testPath).map(async p => {
 		const tracked = await run("git", ["ls-files", "--error-unmatch", "--", p], { cwd: job.checkout });
@@ -112,7 +121,7 @@ export async function repairCandidate(run: RunCommand, root: string, config: Sou
 	const beforeHashes = new Map(await Promise.all(beforePaths.map(async p => [p, await contentHash(p)] as const)));
 	await verifyRepository(run, job.checkout, root, job.id);
 	const finalPaths = await changedPaths(run, job.checkout);
-	if (finalPaths.some(p => p !== job.testPath && !["package.json", "package-lock.json", "CHANGELOG.md"].includes(p) && !repairable(p))) throw new Error("Verification mutated protected source files");
+	if (finalPaths.some(p => p !== job.testPath && !["package.json", "package-lock.json", "CHANGELOG.md"].includes(p) && !repairable(p, config.repairScope))) throw new Error("Verification mutated protected source files");
 	if (finalPaths.length !== beforePaths.length) throw new Error("Verification changed the candidate file set");
 	for (const path of finalPaths) if (beforeHashes.get(path) !== await contentHash(path)) throw new Error("Verification changed candidate source after independent review");
 	if (digest(await readFile(join(job.checkout, job.testPath), "utf8")) !== job.testHash) throw new Error("Verification changed the frozen test");

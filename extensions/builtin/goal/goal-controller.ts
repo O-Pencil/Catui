@@ -2,10 +2,10 @@
  * [WHO]: GoalController class - per-thread runtime; serializes goal mutations via mutex; tracks per-turn accounting (on_turn_end); dispatches pull-model continuations at the agent idle point (maybe_dispatch_continuation) and budget-limit steering
  * [FROM]: Depends on ./goal-store, ./goal-types, ./goal-prompts, ./goal-format, core/extensions-host/types (ExtensionAPI)
  * [TO]: Consumed by ./index (lifecycle hooks) and ./goal-tools / ./goal-command (mutations)
- * [HERE]: extensions/builtin/goal/goal-controller.ts - thin per-thread state owner; pure logic, no I/O beyond the store
+ * [HERE]: extensions/builtin/goal/goal-controller.ts - per-thread state, exclusive continuation ownership, scoped cancellation and run-level limits
  */
 
-import type { ExtensionAPI } from "../../../core/extensions-host/types.js";
+import type { ContinuationLease, ExtensionAPI } from "../../../core/extensions-host/types.js";
 import {
 	isActiveStatus,
 	isStoppedStatus,
@@ -59,7 +59,7 @@ export class GoalController {
 	};
 	private mutex: Promise<void> = Promise.resolve();
 	/** Monotonic counter of all continuation dispatches for the current goal.
-	 *  Never resets on user turns — only resets when the goal itself changes. */
+	 *  Resets on explicit resume or goal edits, never on ordinary user turns. */
 	private totalContinuationTurns = 0;
 	/** Set when the goal transitions to a terminal status during the current turn.
 	 *  Prevents on_turn_end from dispatching a continuation for a just-completed goal. */
@@ -67,6 +67,52 @@ export class GoalController {
 	/** stopReason of the most recent agent run (from agent_result).
 	 *  Consulted at agent_end before dispatching a continuation. */
 	private lastRunStopReason: string | null = null;
+	private lease: ContinuationLease | undefined;
+	private suspended = false;
+	private readonly queuedPrompts = new Set<string>();
+	private dispatchId = 0;
+	private requested = false;
+
+	/** Only explicit activation may take continuation ownership from another driver. */
+	activateContinuation(): void {
+		this.suspended = false;
+		if (!this.lease?.isCurrent()) this.lease = this.api.claimContinuation?.(() => this.suspendContinuation());
+	}
+
+	suspendContinuation(): void {
+		this.suspended = true;
+		this.requested = false;
+		this.cancelContinuation();
+		if (this.store.get_goal()?.status === "active") this.store.set_status("paused");
+	}
+
+	cancelContinuation(): void {
+		const prompts = new Set(this.queuedPrompts);
+		this.queuedPrompts.clear();
+		this.api.clearFollowUpQueue?.(text => prompts.has(text));
+		this.state.pendingContinuationDispatch = false;
+		this.state.idleContinuationDispatched = false;
+		this.lease?.release();
+		this.lease = undefined;
+	}
+
+	acceptPrompt(text: string): boolean {
+		return this.queuedPrompts.has(text) && !this.suspended && this.store.get_goal()?.status === "active";
+	}
+
+	on_run_start(): void {
+		if (!this.state.pendingContinuationDispatch) this.state.consecutiveIdleContinuations = 0;
+		this.state.pendingContinuationDispatch = false;
+		this.state.idleContinuationDispatched = false;
+		this.lastRunStopReason = null;
+	}
+
+	private dispatch(prompt: string): void {
+		const goal = this.store.get_goal()!;
+		const tagged = `[GOAL:${goal.goal_id}:${++this.dispatchId}]\n${prompt}`;
+		this.queuedPrompts.add(tagged);
+		this.api.sendUserMessage(tagged, { deliverAs: "followUp" });
+	}
 
 	constructor(private readonly api: ExtensionAPI, private readonly threadId: string) {
 		this.store = new GoalStore(api.agentDir, threadId);
@@ -123,7 +169,9 @@ export class GoalController {
 				if (existing && existing.status !== "complete") {
 					return { kind: "confirm_required" as const, goal: existing, replaced: false };
 				}
-			const created = this.store.replace_goal(objective, "active", options.tokenBudget ?? null);
+				const created = this.store.replace_goal(objective, "active", options.tokenBudget ?? null);
+				this.cancelContinuation();
+				this.activateContinuation();
 				this.state.idleContinuationDispatched = false;
 				this.state.pendingContinuationDispatch = false;
 				this.state.consecutiveIdleContinuations = 0;
@@ -132,6 +180,8 @@ export class GoalController {
 			}
 			if (mode === "ReplaceExisting") {
 				const replaced = this.store.replace_goal(objective, "active", options.tokenBudget ?? null);
+				this.cancelContinuation();
+				this.activateContinuation();
 				this.state.idleContinuationDispatched = false;
 				this.state.pendingContinuationDispatch = false;
 				this.state.consecutiveIdleContinuations = 0;
@@ -146,6 +196,8 @@ export class GoalController {
 			if (!next) {
 				return { kind: "blocked_existing" as const, goal: null, replaced: false };
 			}
+			this.cancelContinuation();
+			if (isActiveStatus(next.status)) this.activateContinuation();
 			this.state.idleContinuationDispatched = false;
 			this.state.pendingContinuationDispatch = false;
 			this.state.consecutiveIdleContinuations = 0;
@@ -158,6 +210,8 @@ export class GoalController {
 	async clear(): Promise<boolean> {
 		return this.withLock(() => {
 			const ok = this.store.delete_goal();
+			this.cancelContinuation();
+			this.requested = false;
 			this.state.currentTurn = null;
 			this.state.budgetLimitReportedGoalId = null;
 			this.state.idleContinuationDispatched = false;
@@ -171,12 +225,19 @@ export class GoalController {
 	/** Public API: pause / resume. */
 	async set_status(status: ThreadGoalStatus): Promise<ThreadGoal | null> {
 		return this.withLock(() => {
+			const existing = this.store.get_goal();
+			if (status === "active" && existing?.status === "active" &&
+				(this.state.idleContinuationDispatched || this.requested || (this.api.isIdle && !this.api.isIdle()))) return existing;
 			const result = this.store.set_status(status);
 			if (result && status === "active") {
+				this.totalContinuationTurns = 0;
+				this.state.consecutiveBlocked = 0;
+				this.activateContinuation();
 				this.state.consecutiveIdleContinuations = 0;
 				this.state.idleContinuationDispatched = false;
 				this.state.pendingContinuationDispatch = false;
 			}
+			if (result && status !== "active") { this.requested = false; this.cancelContinuation(); }
 			return result;
 		});
 	}
@@ -186,6 +247,7 @@ export class GoalController {
 		return this.withLock(() => {
 			const created = this.store.insert_goal(objective, "active", tokenBudget);
 			if (created) {
+				this.activateContinuation();
 				this.state.idleContinuationDispatched = false;
 				this.state.pendingContinuationDispatch = false;
 				this.state.consecutiveIdleContinuations = 0;
@@ -208,6 +270,8 @@ export class GoalController {
 			}
 			const next = this.store.update_goal({ status: args.status });
 			if (next) {
+				this.requested = false;
+				this.cancelContinuation();
 				this.goalJustTransitionedToTerminal = true;
 				this.clearActiveTurn();
 			}
@@ -222,16 +286,7 @@ export class GoalController {
 	 *  counter; continuation turns increment it. */
 	on_turn_start(turnId: string, runKind: GoalRunKind, totalTokensAtStart: number): void {
 		// Distinguish user turns from continuation turns
-		const isContinuationTurn = this.state.pendingContinuationDispatch;
-		this.state.pendingContinuationDispatch = false;
 		this.state.idleContinuationDispatched = false;
-		if (isContinuationTurn) {
-			// This turn was triggered by a goal continuation dispatch
-			// (counter was already incremented at dispatch time in on_turn_end)
-		} else {
-			// User-initiated turn — reset consecutive continuation counter
-			this.state.consecutiveIdleContinuations = 0;
-		}
 		const goal = this.store.get_goal();
 		const isPlan = runKind === "plan";
 		const isReview = runKind === "review";
@@ -280,7 +335,6 @@ export class GoalController {
 				if (outcome.goal.status === "budget_limited" && !turn.budgetLimitReported) {
 					if (this.state.budgetLimitReportedGoalId !== outcome.goal.goal_id) {
 						turn.budgetLimitReported = true;
-						this.state.budgetLimitReportedGoalId = outcome.goal.goal_id;
 						return { crossed: true, goal: outcome.goal };
 					}
 				}
@@ -359,6 +413,9 @@ export class GoalController {
 		if (!isActiveStatus(goal.status)) {
 			return { dispatched: false, reason: "not_active_status", goal };
 		}
+		if (this.suspended || (this.lease && !this.lease.isCurrent()) || (this.api.isIdle && !this.api.isIdle())) {
+			return { dispatched: false, reason: "pending_messages", goal };
+		}
 		if (this.state.idleContinuationDispatched) {
 			return { dispatched: false, reason: "already_dispatched", goal };
 		}
@@ -392,7 +449,8 @@ export class GoalController {
 			this.state.pendingContinuationDispatch = true;
 			// The agent is idle here, so sendUserMessage starts a fresh turn
 			// directly instead of sitting in the followUp queue.
-			this.api.sendUserMessage(prompt, { deliverAs: "followUp" });
+			this.dispatch(prompt);
+			this.requested = false;
 			this.state.idleContinuationDispatched = true;
 			this.state.consecutiveIdleContinuations += 1;
 			this.totalContinuationTurns += 1;
@@ -474,11 +532,12 @@ export class GoalController {
 	 *  requirements against the updated objective. */
 	inject_objective_updated_steering(): boolean {
 		const goal = this.store.get_goal();
-		if (!goal) return false;
+		if (!goal || !isActiveStatus(goal.status) || this.suspended) return false;
 		const prompt = buildObjectiveUpdatedPrompt(goal);
 		try {
+			if (this.api.isIdle && !this.api.isIdle()) { this.requested = true; return false; }
 			this.state.pendingContinuationDispatch = true;
-			this.api.sendUserMessage(prompt, { deliverAs: "followUp" });
+			this.dispatch(prompt);
 			this.state.idleContinuationDispatched = true;
 			return true;
 		} catch {
@@ -493,12 +552,15 @@ export class GoalController {
 	kickOffContinuation(): boolean {
 		const goal = this.store.get_goal();
 		if (!goal || !isActiveStatus(goal.status)) return false;
+		if (this.suspended) return false;
+		if (this.api.isIdle && !this.api.isIdle()) { this.requested = true; return false; }
 		if (this.state.idleContinuationDispatched) return false;
 		if (this.totalContinuationTurns >= MAX_TOTAL_CONTINUATION_TURNS) return false;
 		const prompt = buildContinuationPrompt(goal);
 		try {
 			this.state.pendingContinuationDispatch = true;
-			this.api.sendUserMessage(prompt, { deliverAs: "followUp" });
+			this.dispatch(prompt);
+			this.requested = false;
 			this.state.idleContinuationDispatched = true;
 			this.state.consecutiveIdleContinuations += 1;
 			this.totalContinuationTurns += 1;

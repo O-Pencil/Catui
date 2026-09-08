@@ -1,3 +1,9 @@
+/**
+ * [WHO]: Agent lifecycle, queue and loop-adapter regression tests
+ * [FROM]: Agent runtime and deterministic assistant streams
+ * [TO]: Agent-core Vitest suite
+ * [HERE]: core/lib/agent-core/test/agent.test.ts - runtime behavior contracts
+ */
 import type { AssistantMessage, AssistantMessageEvent, Model } from "@catui/ai/types";
 import { EventStream } from "@catui/ai/events";
 import { getModel } from "@catui/ai/models";
@@ -56,6 +62,28 @@ function createToolUseMessage(content: AssistantMessage["content"]): AssistantMe
 }
 
 describe("Agent", () => {
+	it.each(["standard", "weak-model-compatible"] as const)("selective cancellation preserves foreign follow-ups in %s", async framework => {
+		const agent = new Agent({
+			initialState: { model: { ...getModel("openai", "gpt-4o-mini"), agentLoopFramework: framework } as Model<any> },
+			streamFn: () => {
+				const stream = new MockAssistantStream();
+				queueMicrotask(() => stream.push({ type: "done", reason: "stop", message: createAssistantMessage("done") }));
+				return stream;
+			},
+		});
+		for (const content of ["owned", "user follow-up", "foreign extension"]) {
+			agent.followUp({ role: "user", content, timestamp: Date.now() });
+		}
+		agent.clearFollowUpQueue(message => message.role === "user" && message.content === "owned");
+		await agent.prompt("start");
+		const messages = agent.state.messages.filter(message => message.role === "user").map(message => message.content);
+		expect(messages).toContain("user follow-up");
+		expect(messages).toContain("foreign extension");
+		expect(messages).not.toContain("owned");
+		agent.followUp({ role: "user", content: "clear all", timestamp: Date.now() });
+		agent.clearFollowUpQueue();
+		expect(agent.hasQueuedMessages()).toBe(false);
+	});
 	it.each(["standard", "weak-model-compatible"] as const)("resumes an approved checkpoint exactly once in %s and pairs skipped siblings", async (framework) => {
 		const schema = Type.Object({ value: Type.String() });
 		let deployExecutions = 0;

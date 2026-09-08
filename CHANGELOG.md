@@ -1,11 +1,27 @@
 # Changelog
 
+## [1.2.25] - 2026-09-08
+
+### Added
+
+- Independent source-evolution review, private generalization and compatibility tests, and daily task-quality retrospectives.
+- Matched completed-run adoption measurements and opt-in evolution of detection and repair methods.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+
+## [1.2.24] - 2026-09-08
+
+### Fixed
+
+- Update autonomous pull requests through REST to support GitHub CLI installations
+  whose `pr edit` command still requests retired Projects fields.
+- Reconcile source/integrity provenance in tag workflows so an autonomous release
+  does not start a second npm publisher for the same version.
 
 ## [1.2.23] - 2026-09-08
 

@@ -5,6 +5,8 @@
  * [HERE]: extensions/optional/evolution/evolution-types.ts - narrow optional evolution type surface
  */
 
+import type { EvolutionBenchmarkPromotionReportV1 } from "./benchmark-types.js";
+
 export type EvolutionScope = "session" | "workspace" | "global";
 
 export type EvolutionArtifactKind =
@@ -103,12 +105,14 @@ export interface EvolutionGateReport {
 		passed: boolean;
 		metrics: EvolutionGateReport["metrics"];
 	}[];
+	benchmark?: EvolutionBenchmarkPromotionReportV1;
 	failure?: string;
 }
 
 export interface EvolutionCandidate extends EvolutionCandidateInput {
 	schemaVersion: 1;
 	id: string;
+	contentHash: string;
 	status: EvolutionCandidateStatus;
 	createdAt: string;
 	updatedAt: string;

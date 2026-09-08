@@ -9,10 +9,10 @@ import { join, isAbsolute } from "node:path";
 import type { SourceConfig } from "../types.js";
 
 export function sourceRoot(agentDir: string): string { return join(agentDir, "evolution", "source"); }
-export function defaultConfig(agentDir: string, model: string): SourceConfig {
+export function defaultConfig(agentDir: string, model: string, reviewModel?: string): SourceConfig {
 	return {
 		version: 1, enabled: true, repository: "O-Pencil/Catui", branch: "main", packageName: "catui-agent",
-		agentDir, model, timeZone: "Asia/Shanghai", hour: 3,
+		agentDir, model, reviewModel, repairScope: "source", timeZone: "Asia/Shanghai", hour: 3,
 		autoMerge: true, autoPublish: true, autoUpdate: true,
 		maxWorkerRunsPerDay: 8, maxJobsPerDay: 1, maxWorkerSeconds: 600, maxTurns: 24,
 		maxAttempts: 3, minimumFailures: 2, measurementSamples: 30, regressionMargin: 0.1,
@@ -25,6 +25,8 @@ export function validateConfig(value: unknown): SourceConfig {
 	if (c.version !== 1 || !/^[A-Za-z0-9][\w.-]*\/[A-Za-z0-9][\w.-]*$/.test(c.repository) || c.packageName !== "catui-agent") throw new Error("Invalid source repository or package");
 	if (!/^[\w/-]+$/.test(c.branch) || c.branch.includes("..") || !isAbsolute(c.agentDir)) throw new Error("Invalid branch or agent directory");
 	if (typeof c.model !== "string" || !c.model.trim()) throw new Error("Configure an explicit model before enabling source evolution");
+	if (c.reviewModel !== undefined && (typeof c.reviewModel !== "string" || !c.reviewModel.trim() || modelFamily(c.reviewModel) === modelFamily(c.model))) throw new Error("Review requires a different model identity from repair");
+	if (c.repairScope !== undefined && !["source", "adaptive"].includes(c.repairScope)) throw new Error("Invalid repair scope");
 	for (const key of ["enabled", "autoMerge", "autoPublish", "autoUpdate"] as const) if (typeof c[key] !== "boolean") throw new Error(`Invalid ${key}`);
 	for (const key of ["maxWorkerRunsPerDay", "maxJobsPerDay", "maxWorkerSeconds", "maxTurns", "maxAttempts", "minimumFailures", "measurementSamples"] as const) {
 		if (!Number.isSafeInteger(c[key]) || c[key] < 1 || c[key] > 10000) throw new Error(`Invalid ${key}`);
@@ -34,6 +36,11 @@ export function validateConfig(value: unknown): SourceConfig {
 	if (!Array.isArray(c.requiredChecks) || c.requiredChecks.length === 0 || c.requiredChecks.some(x => typeof x !== "string" || !x.trim())) throw new Error("Explicit required CI checks are mandatory");
 	new Intl.DateTimeFormat("en-US", { timeZone: c.timeZone }).format();
 	return c;
+}
+export function modelFamily(identity: string): string { return identity.slice(identity.indexOf("/") + 1).toLowerCase().replace(/[^a-z0-9]/g, ""); }
+export function requireReviewModel(config: SourceConfig): string {
+	if (!config.reviewModel || modelFamily(config.reviewModel) === modelFamily(config.model)) throw new Error("Configure an independent review model with catui evolve configure --review-model provider/model");
+	return config.reviewModel;
 }
 export function loadConfig(root: string): SourceConfig | undefined {
 	try { return validateConfig(JSON.parse(readFileSync(join(root, "config.json"), "utf8"))); }

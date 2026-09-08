@@ -15,8 +15,9 @@ existing repository protection rules and registry authentication remain binding.
 ## Evidence behind the design
 
 The previous declarative evolution gate does not execute a source candidate.
-`evolution-fixture.ts` replays recorded events and `evolution-gate.ts` does not use
-its candidate parameter. Reflection alone cannot establish that a source change
+At intake, `evolution-fixture.ts` replayed recorded events and `evolution-gate.ts`
+did not use its candidate parameter. HAP-52 now adds candidate-bound held-out
+evidence for declarative promotion. Reflection alone cannot establish that a source change
 fixes a defect. See findings/RE01-candidate-verification.md. Finalized trace files
 also cannot provide live observation during a task.
 

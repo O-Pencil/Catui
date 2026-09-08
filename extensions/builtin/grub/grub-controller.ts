@@ -9,7 +9,7 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { allPassing, firstPending, readFeatureList, readFeatureListResult, sanitizeInitializerFeatureList, validateFeatureListDiff, writeFeatureList } from "./grub-feature-list.js";
 import { type GrubLocale } from "./grub-i18n.js";
-import { persistState, stateFilePathFor } from "./grub-persistence.js";
+import { loadState, persistState, stateFilePathFor } from "./grub-persistence.js";
 import { buildGrubTaskPrompt, getPromptPrefix } from "./grub-prompts.js";
 import type {
 	FeatureList,
@@ -110,6 +110,7 @@ export class GrubController {
 			consecutiveFailures: 0,
 			consecutiveBlockedAttempts: 0,
 			maxIterations: options.maxIterations ?? DEFAULT_MAX_ITERATIONS,
+			iterationAllowance: options.maxIterations ?? DEFAULT_MAX_ITERATIONS,
 			maxConsecutiveFailures: options.maxConsecutiveFailures ?? DEFAULT_MAX_CONSECUTIVE_FAILURES,
 			maxInitializerFailures: options.maxInitializerFailures ?? DEFAULT_MAX_INITIALIZER_FAILURES,
 			harnessDirectory,
@@ -133,14 +134,19 @@ export class GrubController {
 	 * Adopt a previously persisted task, e.g. after process restart. Does not
 	 * auto-dispatch the next iteration; the caller decides whether to continue.
 	 */
-	adoptResumedTask(task: GrubTaskState): GrubTaskState {
+	adoptResumedTask(task: GrubTaskState, renewAllowance = false): GrubTaskState {
 		if (this.activeTask && this.activeTask.id !== task.id) {
 			throw new Error(`Cannot adopt task ${task.id}; ${this.activeTask.id} is already active.`);
 		}
 		const resumed: GrubTaskState = {
 			...task,
+			status: "running",
+			consecutiveFailures: renewAllowance ? 0 : task.consecutiveFailures,
+			currentIteration: renewAllowance ? task.currentIteration + 1 : task.currentIteration,
+			iterationAllowance: task.iterationAllowance ?? task.maxIterations,
+			maxIterations: renewAllowance ? task.currentIteration + (task.iterationAllowance ?? task.maxIterations) : task.maxIterations,
 			locale: task.locale ?? "en",
-			consecutiveBlockedAttempts: task.consecutiveBlockedAttempts ?? 0,
+			consecutiveBlockedAttempts: renewAllowance ? 0 : task.consecutiveBlockedAttempts ?? 0,
 			awaitingTurn: false,
 			updatedAt: Date.now(),
 			cumulativeTurnCount: task.cumulativeTurnCount ?? 0,
@@ -194,24 +200,31 @@ export class GrubController {
 	}
 
 	/**
-	 * Fold a single agent-run result into the active task's cumulative totals.
-	 * Called by the extension when an `agent_result` event fires while a grub
-	 * task is in flight. No-op when there is no active task (e.g. between
-	 * consecutive grub runs) so old events do not pollute the next run.
+	 * Fold an owned run into its task, including a just-cancelled task. An
+	 * explicit task identity prevents late results from charging a new task.
 	 */
 	accumulateRunResult(input: {
 		turnCount?: number;
 		toolCallCount?: number;
 		durationMs?: number;
 		usage?: Usage;
-	}): void {
-		const task = this.activeTask;
+	}, taskId?: string): void {
+		const terminal = taskId && this.lastTerminalTask?.id === taskId ? this.lastTerminalTask : undefined;
+		const task = this.activeTask && (!taskId || this.activeTask.id === taskId)
+			? this.activeTask : terminal ? loadState(terminal.stateFilePath)?.task : undefined;
 		if (!task) return;
 		task.cumulativeTurnCount += input.turnCount ?? 0;
 		task.cumulativeToolCallCount += input.toolCallCount ?? 0;
 		task.cumulativeDurationMs += input.durationMs ?? 0;
 		task.cumulativeUsage = addUsage(task.cumulativeUsage, input.usage);
 		task.updatedAt = Date.now();
+		if (terminal) Object.assign(terminal, {
+			cumulativeTurnCount: task.cumulativeTurnCount,
+			cumulativeToolCallCount: task.cumulativeToolCallCount,
+			cumulativeDurationMs: task.cumulativeDurationMs,
+			cumulativeUsage: task.cumulativeUsage,
+			updatedAt: task.updatedAt,
+		});
 		this.safePersist(task);
 	}
 
