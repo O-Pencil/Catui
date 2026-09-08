@@ -17,6 +17,7 @@ import type { AgentSession } from "../../../core/runtime/agent-session.js";
 import type { SettingsManager } from "../../../core/platform/config/settings-manager.js";
 import { getAvailableThemes, setTheme } from "../theme/theme.js";
 import { SettingsSelectorComponent } from "../components/settings-selector.js";
+import { readEvolutionRemotePush, setEvolutionRemotePush } from "../services/evolution-settings.js";
 
 export interface SettingsOverlaySurface {
   showSelector(
@@ -99,6 +100,7 @@ export class SettingsOverlayController {
           showMemoryTrace: settingsManager.getShowMemoryTrace(),
           presenceEnabled: settingsManager.getPresenceEnabled(),
           nextStepEnabled: settingsManager.getNextStepEnabled(),
+          evolutionRemotePush: readEvolutionRemotePush(),
         },
         {
           onAutoCompactChange: (enabled) => {
@@ -213,6 +215,20 @@ export class SettingsOverlayController {
           },
           onNextStepEnabledChange: (enabled) => {
             settingsManager.setNextStepEnabled(enabled);
+          },
+          onEvolutionRemotePushChange: (enabled) => {
+            try {
+              setEvolutionRemotePush(enabled);
+              this.ctx.surface.showStatus(
+                enabled
+                  ? "Evolution remote push enabled: verified repairs will be pushed and delivered automatically."
+                  : "Evolution remote push disabled: repairs stop at local verification.",
+              );
+            } catch (error) {
+              this.ctx.surface.showError(
+                `Failed to update evolution config: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
           },
           onCancel: () => {
             done();

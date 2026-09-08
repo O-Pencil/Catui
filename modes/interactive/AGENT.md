@@ -35,6 +35,7 @@ footer-data-provider.ts: FooterDataProvider class, supplies model/session/branch
 at-mentions.ts: extractAtMentionedFiles, buildAtMentionContext — @-mention file reference parser for user input, supports @filename and @file:line-range syntax (CC §XI)
 user-query-dedupe.ts: isSameVisibleUserQuery — shared predicate for reconciling optimistic user echoes with runtime/session-context user messages, including @-mention expanded prompts
 services/loaded-resources-view.ts: pure loaded-resource listing formatters (formatDisplayPath, getShortPath, getDisplaySourceInfo, getScopeGroup, isPackageSource, buildScopeGroups, formatScopeGroups, findMetadata, formatPathWithSource, formatDiagnostics) — zero-state, extracted from InteractiveMode (P7 C-3b); showLoadedResources view assembly stays in interactive-mode.ts
+services/evolution-settings.ts: readEvolutionRemotePush, setEvolutionRemotePush — source-evolution config.json IO for the /settings remote-push toggle; returns undefined when evolution is unconfigured so the toggle stays hidden; atomic write preserves other config fields
 theme/theme.ts: Theme loader and definitions, ThemeJson schema validation, chalk-based color system
 components/index.ts: Component barrel exports, re-exports all UI components for extensions
 components/extension-selector.ts: Extension selector UI, keyboard navigation with timeout support
