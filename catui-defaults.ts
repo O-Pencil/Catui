@@ -430,7 +430,7 @@ export const CATUI_DEFAULT_MODELS_JSON = {
 					id: "qwen-audio-3.0-asr-flash",
 					name: "Qwen Audio 3.0 ASR Flash (Ali Token Plan OpenAI)",
 					reasoning: false,
-					input: ["audio"],
+					input: ["text"],
 					compat: {
 						supportsStore: false,
 						supportsDeveloperRole: false,
@@ -443,7 +443,7 @@ export const CATUI_DEFAULT_MODELS_JSON = {
 					id: "qwen-audio-3.0-realtime-plus",
 					name: "Qwen Audio 3.0 Realtime Plus (Ali Token Plan OpenAI)",
 					reasoning: false,
-					input: ["audio"],
+					input: ["text"],
 					compat: {
 						supportsStore: false,
 						supportsDeveloperRole: false,
@@ -469,7 +469,7 @@ export const CATUI_DEFAULT_MODELS_JSON = {
 					id: "happyhorse-1.1-i2v",
 					name: "HappyHorse 1.1 I2V (Ali Token Plan OpenAI)",
 					reasoning: false,
-					input: ["image", "text"],
+					input: ["text", "image"],
 					compat: {
 						supportsStore: false,
 						supportsDeveloperRole: false,
@@ -495,7 +495,7 @@ export const CATUI_DEFAULT_MODELS_JSON = {
 					id: "happyhorse-1.1-r2v",
 					name: "HappyHorse 1.1 R2V (Ali Token Plan OpenAI)",
 					reasoning: false,
-					input: ["image", "text"],
+					input: ["text", "image"],
 					compat: {
 						supportsStore: false,
 						supportsDeveloperRole: false,
