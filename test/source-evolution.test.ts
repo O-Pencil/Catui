@@ -125,6 +125,14 @@ test("configuration is explicit, validated and absent by default", async t => {
 	assert.equal(validateConfig(config).autoMerge, true);
 	for (const change of [{ model: "" }, { repository: "../repo" }, { hour: 24 }, { maxWorkerRunsPerDay: 0 }, { requiredChecks: [] }, { timeZone: "not/a-zone" }]) assert.throws(() => validateConfig({ ...config, ...change }));
 });
+test("loadConfig backfills policy fields added after a config was written", async t => {
+	const { root, config } = await fixture(t);
+	const { allowRemotePush: _dropped, ...legacy } = config;
+	await atomicJson(join(root, "config.json"), legacy);
+	assert.equal(loadConfig(root)?.allowRemotePush, false);
+	await atomicJson(join(root, "config.json"), { ...legacy, allowRemotePush: true });
+	assert.equal(loadConfig(root)?.allowRemotePush, true);
+});
 test("live extension events reach durable sidecar state and unconfigured sessions stop observation", async t => {
 	const { root, config } = await fixture(t);
 	const observedRoot = sourceRoot(root);

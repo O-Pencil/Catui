@@ -43,8 +43,11 @@ export function requireReviewModel(config: SourceConfig): string {
 	return config.reviewModel;
 }
 export function loadConfig(root: string): SourceConfig | undefined {
-	try { return validateConfig(JSON.parse(readFileSync(join(root, "config.json"), "utf8"))); }
-	catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw e; }
+	try {
+		const parsed = JSON.parse(readFileSync(join(root, "config.json"), "utf8"));
+		// Configs written by older versions predate later policy fields; backfill defaults before validation.
+		return validateConfig(parsed && typeof parsed === "object" ? { allowRemotePush: false, ...parsed } : parsed);
+	} catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw e; }
 }
 export function calendar(config: SourceConfig, now = new Date()): { day: string; due: boolean } {
 	const parts = new Intl.DateTimeFormat("en-CA", { timeZone: config.timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(now);
