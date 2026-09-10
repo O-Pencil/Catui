@@ -60,8 +60,8 @@
 - `README.md` (更新)
 
 ### 文档文件（2 个）
-- `docs/loop 重构计划.md`
-- `docs/loop 重构完成总结.md`
+- `.dev-docs/arch/loop 重构计划.md`
+- `.dev-docs/arch/loop 重构完成总结.md`
 
 ## 🧪 测试结果
 

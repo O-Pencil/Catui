@@ -1,7 +1,7 @@
 # `/loop` 重构方案 vs 当前实现对比分析
 
 > 生成时间: 2026-04-18
-> 方案文档: `docs/loop 重构方案.md` (基于 Claude Code v2.1.88 反编译)
+> 方案文档: `.dev-docs/arch/loop 重构方案.md` (基于 Claude Code v2.1.88 反编译)
 > 当前实现: `extensions/defaults/loop/` (已按方案改造)
 
 ---
