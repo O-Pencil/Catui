@@ -275,9 +275,10 @@ test("disabled automation invokes no delivery commands", async t => {
 	assert.equal(state.jobs[0].stage, "submitted");
 });
 test("transient delivery failure is persisted and backs off without losing the job", async t => {
-	const { root, state, config } = await fixture(t); config.maxAttempts = 1; state.jobs.push(job(root));
+	const { root, state, config } = await fixture(t); config.maxAttempts = 1; config.allowRemotePush = true;
+	const j = job(root); j.stage = "verified"; state.jobs.push(j);
 	await deliveryTick(root, state, config, async () => { throw new Error("offline"); });
-	assert.equal((await loadState(root)).jobs[0].stage, "submitted");
+	assert.equal((await loadState(root)).jobs[0].stage, "verified");
 	assert.ok(Date.parse((await loadState(root)).jobs[0].retryAfter!) > Date.now() + 3600000);
 });
 test("process runner uses literal argv and kills timed-out processes", async t => {
