@@ -60,7 +60,7 @@ function getActualFiles(dir: string): string[] {
     try {
       const entries = readdirSync(currentDir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git") continue;
+        if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git" || entry.name === ".tmp") continue;
         if (entry.name === P2_DOC || entry.name === "AGENTS.md" || entry.name === LEGACY_DOC) continue;
 
         const fullPath = join(currentDir, entry.name);
@@ -187,7 +187,7 @@ function findP2Modules(): P2Module[] {
     try {
       const entries = readdirSync(startDir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git") continue;
+        if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git" || entry.name === ".tmp") continue;
         if (!entry.isDirectory()) continue;
 
         // Skip certain directories

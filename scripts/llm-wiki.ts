@@ -147,6 +147,7 @@ const SKIP_DIRS = new Set([
 	".git",
 	".grub",
 	".catui",
+	".tmp",
 	"node_modules",
 	"dist",
 	"coverage",

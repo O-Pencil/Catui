@@ -60,7 +60,7 @@ function toRepoPath(abs: string): string {
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
-    if (entry === "node_modules" || entry === "dist" || entry === ".git" || entry === ".baseline-out") continue;
+    if (entry === "node_modules" || entry === "dist" || entry === ".git" || entry === ".baseline-out" || entry === ".tmp") continue;
     const abs = join(dir, entry);
     const st = statSync(abs);
     if (st.isDirectory()) {
