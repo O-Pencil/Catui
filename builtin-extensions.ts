@@ -45,6 +45,7 @@ const BUNDLED_NOTEBOOK_EXTENSION = join(__dirname, "extensions", "builtin", "not
 const BUNDLED_SKILL_TOOL_EXTENSION = join(__dirname, "extensions", "builtin", "skill-tool", "index.js");
 const BUNDLED_CATPAW_EXTENSION = join(__dirname, "extensions", "builtin", "catpaw", "index.js");
 const BUNDLED_CATAIL_EXTENSION = join(__dirname, "extensions", "builtin", "catail", "index.js");
+const BUNDLED_ARENA_EXTENSION = join(__dirname, "extensions", "builtin", "arena", "index.js");
 const BUNDLED_EVOLUTION_EXTENSION = join(__dirname, "extensions", "optional", "evolution", "index.js");
 
 export type BuiltinExtensionRiskLevel = "passive" | "command" | "tool" | "background" | "write-capable";
@@ -96,6 +97,7 @@ export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "skill-tool", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "catpaw", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, resourceDiscovery: true },
 	{ id: "catail", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, resourceDiscovery: true, testContracts: ["resource-discovery"], testFiles: ["test/catail-extension.test.ts"] },
+	{ id: "arena", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: true },
 	{ id: "simplify", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: true, testContracts: ["external-process", "write-guard"], testFiles: ["test/simplify-extension.test.ts"] },
 	{ id: "export-html", category: "optional", defaultEnabled: false, riskLevel: "write-capable", requiresUI: false, startsTimers: false, writesWorkspace: true, externalProcess: false, testContracts: ["write-guard"], testFiles: ["test/extension-smoke.test.ts", "test/export-html-branch-navigation.test.ts"] },
 	{ id: "evolution", category: "optional", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, testContracts: ["lifecycle", "external-process"], testFiles: ["test/evolution-store.test.ts", "test/evolution-extension.test.ts", "test/source-evolution.test.ts"] },
@@ -433,6 +435,14 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const catailTs = join(__dirname, "extensions", "builtin", "catail", "index.ts");
 		if (existsSync(catailTs)) paths.push(catailTs);
+	}
+
+	// === Arena extension (parallel subagent racing) ===
+	if (existsSync(BUNDLED_ARENA_EXTENSION)) {
+		paths.push(BUNDLED_ARENA_EXTENSION);
+	} else {
+		const arenaTs = join(__dirname, "extensions", "builtin", "arena", "index.ts");
+		if (existsSync(arenaTs)) paths.push(arenaTs);
 	}
 
 	// === Evolution extension (controlled self-evolution, default-on after product approval) ===

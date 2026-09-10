@@ -87,6 +87,7 @@ export function createGrepTool(cwd: string, options?: GrepToolOptions): AgentToo
 		description: `Search file contents for a pattern. Supports multiple output modes (content, files_with_matches, count), file type filters, multiline matching, and per-side context control (-A/-B). Respects .gitignore. Output is truncated to ${DEFAULT_LIMIT} matches or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Long lines are truncated to ${GREP_MAX_LINE_LENGTH} chars.`,
 		parameters: grepSchema,
 		isConcurrencySafe: true,
+		readOnly: true,
 		execute: async (
 			_toolCallId: string,
 			{

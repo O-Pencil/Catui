@@ -70,6 +70,8 @@ export interface ToolContract<TParams extends TSchema = TSchema, TDetails = unkn
   aliases?: string[];
   /** Whether the tool can safely run alongside other concurrency-safe tools. */
   isConcurrencySafe?: boolean;
+  /** Whether the tool only reads data without modifying filesystem or system state. */
+  readOnly?: boolean;
   /** Optional usage guidance injected into the system prompt. */
   guidance?: string;
   /** Execute the tool. Trailing parameters are optional for simple tools. */

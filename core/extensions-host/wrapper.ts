@@ -21,6 +21,7 @@ export function wrapRegisteredTool(registeredTool: RegisteredTool, runner: Exten
 		parameters: definition.parameters,
 		aliases: definition.aliases,
 		isConcurrencySafe: definition.isConcurrencySafe,
+		readOnly: definition.readOnly,
 		interruptBehavior: definition.interruptBehavior,
 		validateInput: definition.validateInput,
 		maxResultSizeChars: definition.maxResultSizeChars,

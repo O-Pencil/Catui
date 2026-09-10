@@ -186,17 +186,13 @@ export function evaluatePlanModeToolCall(
   if (toolName === "working_notes" || toolName === "new_context") return { decision: "allow" };
 
   if (toolName === "write" || toolName === "Write" || toolName === "edit" || toolName === "Edit") {
-    const allowed = options.planFilePath
-      ? targetsPlanFile(input, options.planFilePath, cwd)
-      : isMarkdownFile(input);
+    if (!options.planFilePath) {
+      return { decision: "deny", reason: `In plan mode, ${toolName} is blocked. No plan file is configured.` };
+    }
+    const allowed = targetsPlanFile(input, options.planFilePath, cwd);
     return allowed
       ? { decision: "allow" }
-      : {
-          decision: "deny",
-          reason: options.planFilePath
-            ? `In plan mode, ${toolName} is only allowed for the plan file: ${options.planFilePath}`
-            : `In plan mode, ${toolName} is only allowed for .md files.`,
-        };
+      : { decision: "deny", reason: `In plan mode, ${toolName} is only allowed for the plan file: ${options.planFilePath}` };
   }
 
   if (toolName === "bash" || toolName === "Bash") {

@@ -427,6 +427,8 @@ export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any
 	 * stateful tools such as edit/write/bash serialized.
 	 */
 	isConcurrencySafe?: AgentToolConcurrencySafety<TParameters>;
+	/** Whether the tool only reads data without modifying filesystem or system state. */
+	readOnly?: boolean;
 	interruptBehavior?: AgentToolInterruptBehavior<TParameters>;
 	/** Optional semantic validation after schema validation and before execute. */
 	validateInput?: (params: Static<TParameters>) => void | string | Promise<void | string>;

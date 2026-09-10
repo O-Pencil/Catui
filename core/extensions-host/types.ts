@@ -440,6 +440,8 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	aliases?: string[];
 	/** Whether the tool can safely run alongside other concurrency-safe tools. */
 	isConcurrencySafe?: boolean;
+	/** Whether the tool only reads data without modifying filesystem or system state. Used for permission filtering and subagent capability restrictions. */
+	readOnly?: boolean;
 	/** How the tool should behave if the user interrupts while it is running. */
 	interruptBehavior?: "cancel" | "block";
 	/** Optional semantic validation after schema validation and before execute. */

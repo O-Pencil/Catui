@@ -65,6 +65,7 @@ export function createReadTool(cwd: string, options?: ReadToolOptions): AgentToo
 		description: `Read the contents of a file. Supports text files, images (jpg, png, gif, webp), and PDFs. Images are sent as attachments. PDFs are sent as document content blocks (max 100 pages). For text files, output is truncated to ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Use offset/limit for large files. Use pages param for PDF page ranges.`,
 		parameters: readSchema,
 		isConcurrencySafe: true,
+		readOnly: true,
 		execute: async (
 			_toolCallId: string,
 			rawArgs: Record<string, unknown>,

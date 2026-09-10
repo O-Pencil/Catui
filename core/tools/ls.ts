@@ -64,6 +64,7 @@ export function createLsTool(cwd: string, options?: LsToolOptions): AgentTool<ty
 		description: `List directory contents. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to ${DEFAULT_LIMIT} entries or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first).`,
 		parameters: lsSchema,
 		isConcurrencySafe: true,
+		readOnly: true,
 		execute: async (
 			_toolCallId: string,
 			{ path, limit }: { path?: string; limit?: number },

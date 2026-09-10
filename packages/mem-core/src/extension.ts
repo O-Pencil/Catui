@@ -788,6 +788,65 @@ export default function nanomemExtension(api: ExtensionAPI) {
 		},
 	});
 
+	api.registerCommand("flush", {
+		description: "Save current session context to persistent memory. Usage: /flush",
+		handler: async (_args, ctx) => {
+			bindLlm(ctx);
+			ctx.ui.notify("NanoMem: saving session context...", "info");
+
+			const entries = ctx.sessionManager.getEntries() as ReadonlyArray<{ type?: string; message?: { role: string; content?: unknown } }>;
+			const messages: Array<{ role: string; content?: unknown }> = [];
+			for (const entry of entries) {
+				if (entry.type === "message" && entry.message) {
+					messages.push(entry.message);
+				}
+			}
+
+			if (messages.length < 2) {
+				ctx.ui.notify("NanoMem: not enough conversation to save yet.", "warning");
+				return;
+			}
+
+			const transcript = buildTranscript(messages, getSystemTimeSnapshot(), messages.length, 24000);
+			if (!transcript.trim()) {
+				ctx.ui.notify("NanoMem: no meaningful content to save.", "warning");
+				return;
+			}
+
+			try {
+				await engine.extractAndStore(transcript, project);
+				await engine.extractAndStoreWork(transcript, project, sessionGoal);
+
+				const now = getSystemTimeSnapshot();
+				await engine.saveEpisode({
+					sessionId,
+					project,
+					date: now.date,
+					startedAt: sessionStartedAt.iso,
+					endedAt: now.iso,
+					timeZone: now.timeZone,
+					summary: observations.slice(0, 10).join("; ") || sessionGoal?.slice(0, 100) || "Mid-session flush",
+					userGoal: sessionGoal,
+					filesModified: [...filesModified],
+					toolsUsed: { ...toolsUsed },
+					keyObservations: observations.slice(0, 20),
+					errors: [...errors],
+					tags: [...extractTags(project), ...extractTags([...filesModified].join(" ")), "flush"],
+					importance: Math.min(10, 4 + errors.length * 2 + Math.min(observations.length, 5)),
+					consolidated: false,
+				});
+
+				const memoryCount = await engine.getStats().then((s) => s.knowledge + s.lessons + s.events + s.preferences);
+				ctx.ui.notify(
+					`NanoMem: saved session context (${messages.length} messages, ${observations.length} observations, ${errors.length} errors). Total memories: ${memoryCount}`,
+					"info",
+				);
+			} catch (err) {
+				ctx.ui.notify(`NanoMem: flush failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+			}
+		},
+	});
+
 	api.registerCommand("mem-search", {
 		description: "Search NanoMem memories",
 		handler: async (query, ctx) => {
