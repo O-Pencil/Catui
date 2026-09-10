@@ -49,7 +49,7 @@ updated_at: 2026-06-13
 
 | 已拿到 | 证据 | 意义 |
 |--------|------|------|
-| god 文件拆解 | `agent-session.ts` → 7 runtime 子模块；`interactive-mode.ts` → 12 controller/state/mount 切片 | 降低单文件理解成本；形成单 owner 和 capability-context 组合根 |
+| god 文件拆解 | `agent-session.ts` → 7 runtime 子模块（P4）+ settings accessor 面 53 成员 → mixin（2026-09-11，agent-session-split-review）；`interactive-mode.ts` → controllers/state/mount 子目录切片（P5，scope C） | 降低单文件理解成本；形成单 owner 和 capability-context 组合根。**注意口径**：拆的是"面"与"子模块"，主文件未瘦身（`agent-session.ts` 2440 行，63 个逻辑方法仍在 `AgentSessionBase`；`interactive-mode.ts` 2482 行主 facade 未动） |
 | 0 循环依赖 | `verify-quality` SCC = 0 | 依赖方向从"能跑"变成可守门的结构约束 |
 | public API 不变 | public symbols 296=296 | P0-P6 是行为不变结构重构，不强迫外部消费者迁移 |
 | 冷启动下降 | §6 cold-start：HEAD vs main 显著下降 | P6 lazy import/provider lazy 拿到用户可感知收益 |

@@ -1,0 +1,31 @@
+# AS02: 上次 P4 拆分只抽了 helper 模块，类体未瘦身
+
+## 现象
+
+REFACTOR-LEDGER 记录 P4「`agent-session.ts` 拆 7 子模块」✅ done，但拆分提交 `ee6a51d`（2026-09-06）前后文件尺寸几乎不变（2696 → 2696 行）。当前 HEAD 仍是 2724 行。
+
+抽查确认：`core/runtime/` 目录下有 30+ 子模块（`session-recovery.ts`、`session-events.ts`、`compaction-controller.ts` 等），但它们大多是**辅助函数/控制器类**，`AgentSession` 主类的 115 个方法仍全部留在主文件里。子模块的引入者主要是 `agent-session.ts` 自己——外部消费方仍全部经过主文件。
+
+## 根因
+
+上次拆分抽的是"类用到的依赖"，不是"类身上的方法"。依赖的搬移 ≠ 方法的搬移。类体本身没有切片。
+
+## 影响
+
+- 「god 文件拆解 ✅」的记录与实际不符，账本口径失真
+- 单文件理解成本仍是重构前的水平
+- 后续迭代继续在同一文件里堆方法（本轮 115 个方法就是证据）
+
+## 方案
+
+本次评审以**方法切片**为单元（而非依赖搬移）：
+
+1. 纯转发 accessor → mixin（AS01）
+2. 后续（本次不做）：按 capability 切逻辑方法群（session 生命周期 / bash / model / compaction / extension bridge）
+3. 完成后更新 REFACTOR-LEDGER 的口径，把"拆解完成度"修正为可验证的状态
+
+## 验收
+
+- [x] 拆分单元 = 方法群而不是依赖
+- [x] 每个切片有可验证的行数减少
+- [x] 账本口径与实际一致
