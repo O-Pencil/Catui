@@ -164,8 +164,6 @@ export default async function grubExtension(api: ExtensionAPI) {
 		if (controller.hasActiveTask()) return;
 		const active = discoverActiveTasks(api.cwd);
 		if (active.length === 0) return;
-		// Adopt only the most recently persisted task; ignore any others so the
-		// user is not forcibly pulled into multiple stale harnesses at once.
 		const persisted = active[0];
 		try {
 			controller.adoptResumedTask(persisted.task);

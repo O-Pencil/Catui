@@ -23,6 +23,8 @@ import {
 	rejectEvolutionCandidate,
 	recordEvolutionGateFailure,
 	rollbackEvolution,
+	discoverLocalSkillPaths,
+	autoEvaluateAndRollback,
 } from "./evolution-store.js";
 import {
 	buildEvolutionPromptAppend,
@@ -237,12 +239,16 @@ function discoverResources(ctx: ExtensionContext): { skillPaths?: string[] } | u
 		rootFor(ctx, { scope: "workspace", cwd: ctx.cwd }),
 		rootFor(ctx, { scope: "session", sessionId: ctx.sessionManager.getSessionId() }),
 	];
-	const skillPaths = roots.flatMap((root) => loadActiveEvolutionSkillPaths(root));
+	const skillPaths = roots.flatMap((root) => [
+		...loadActiveEvolutionSkillPaths(root),
+		...discoverLocalSkillPaths(root),
+	]);
 	return skillPaths.length > 0 ? { skillPaths } : undefined;
 }
 
 export default async function evolutionExtension(api: ExtensionAPI): Promise<void> {
 	const autoObserver = new EvolutionAutoObserver();
+	let turnCountSinceRollbackCheck = 0;
 	api.registerTool(createEvolutionRefineTool());
 	api.registerTool(createEvolvedTool());
 	api.registerTool(createEvolvedExecutableTool());
@@ -264,6 +270,26 @@ export default async function evolutionExtension(api: ExtensionAPI): Promise<voi
 			await autoObserver.observeTurnEnd(event, ctx);
 		} catch {
 			// Auto-observation must never fail the agent loop; invalid lessons simply do not evolve.
+		}
+		// Check for auto-rollback every 10 turns (debounce)
+		turnCountSinceRollbackCheck++;
+		if (turnCountSinceRollbackCheck >= 10) {
+			turnCountSinceRollbackCheck = 0;
+			try {
+				const roots = [
+					rootFor(ctx, { scope: "global" }),
+					rootFor(ctx, { scope: "workspace", cwd: ctx.cwd }),
+					rootFor(ctx, { scope: "session", sessionId: ctx.sessionManager.getSessionId() }),
+				];
+				for (const root of roots) {
+					const { rolledBack } = autoEvaluateAndRollback(root);
+					for (const revisionId of rolledBack) {
+						api.sendMessage({ customType: MESSAGE_TYPE, content: `Evolution revision ${revisionId} was automatically rolled back due to repeated not-useful feedback. Use /refine to propose a replacement.`, display: true });
+					}
+				}
+			} catch {
+				// Auto-rollback must never fail the agent loop
+			}
 		}
 	});
 	registerSourceEvolution(api);

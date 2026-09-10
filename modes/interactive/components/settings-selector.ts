@@ -61,6 +61,7 @@ export interface SettingsConfig {
 	showMemoryTrace: boolean;
 	presenceEnabled: boolean;
 	nextStepEnabled: boolean;
+	evolutionRemotePush?: boolean;
 }
 
 export interface SettingsCallbacks {
@@ -91,6 +92,7 @@ export interface SettingsCallbacks {
 	onShowMemoryTraceChange: (enabled: boolean) => void;
 	onPresenceEnabledChange: (enabled: boolean) => void;
 	onNextStepEnabledChange: (enabled: boolean) => void;
+	onEvolutionRemotePushChange: (enabled: boolean) => void;
 	onCancel: () => void;
 }
 
@@ -438,6 +440,18 @@ export class SettingsSelectorComponent extends Container {
 			values: ["true", "false"],
 		});
 
+		// Evolution remote-push toggle (only when source evolution is configured)
+		if (config.evolutionRemotePush !== undefined) {
+			const nextStepIndex = items.findIndex((item) => item.id === "next-step-enabled");
+			items.splice(nextStepIndex + 1, 0, {
+				id: "evolution-remote-push",
+				label: "Evolution remote push",
+				description: "Allow source evolution to push verified repairs and open PRs without manual review",
+				currentValue: config.evolutionRemotePush ? "true" : "false",
+				values: ["true", "false"],
+			});
+		}
+
 		// Add borders
 		this.addChild(new DynamicBorder());
 
@@ -518,6 +532,9 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "next-step-enabled":
 						callbacks.onNextStepEnabledChange(newValue === "true");
+						break;
+					case "evolution-remote-push":
+						callbacks.onEvolutionRemotePushChange(newValue === "true");
 						break;
 				}
 			},
