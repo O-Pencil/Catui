@@ -9,11 +9,15 @@
 
 ---
 
-## Outstanding (auto-regenerated 2026-05-27)
+## Outstanding (auto-regenerated 2026-05-29)
 
 _No outstanding entries._
 
-The previous-run date is recorded as 2026-05-27, on which the day was SKIPPED due to InsForge MCP unavailability. No fingerprints were classified.
+Previous run dates and outcomes:
+- 2026-05-27 — SKIPPED (InsForge MCP unavailable)
+- 2026-05-29 — SKIPPED (InsForge MCP unavailable; first fire under SOP v5)
+
+No fingerprints have been classified since the ledger was bootstrapped. All events in the log so far are terminal (`skipped`), so the Outstanding section is empty by definition.
 
 | First seen | Latest event | Fingerprint | Severity | Class | Ref |
 |------------|--------------|-------------|----------|-------|-----|
@@ -26,6 +30,7 @@ The previous-run date is recorded as 2026-05-27, on which the day was SKIPPED du
 | Date | Event | Fingerprint | Severity | Class | Ref |
 |------|-------|-------------|----------|-------|-----|
 | 2026-05-27 | skipped | * | — | — | runs/2026-05-27.md |
+| 2026-05-29 | skipped | * | — | — | runs/2026-05-29.md |
 
 ---
 
