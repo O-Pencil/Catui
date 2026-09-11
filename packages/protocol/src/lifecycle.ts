@@ -27,8 +27,6 @@ export interface SessionManagerContract {
     sinceMs: number,
     options?: { sessionDir?: string; excludeBasename?: string; concurrency?: number },
   ): Promise<number>;
-  /** Return the active branch's session entries (messages, compactions, etc). */
-  getEntries(): readonly unknown[];
 }
 
 /** UI affordances available to an extension (no-ops / undefined-safe when `hasUI` is false). */
