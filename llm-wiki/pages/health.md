@@ -1,1 +1,86 @@
---- id: wiki:health title: DIP Health sources:   - AGENTS.md   - llm-wiki/graph.json   - cli/AGENT.md   - core/AGENT.md   - core/agent-dir/AGENT.md   - core/export-html/AGENT.md   - core/extensions-host/AGENT.md   - core/lib/agent-core/AGENT.md   - core/lib/ai/AGENT.md   - core/lib/tui/AGENT.md   - core/mcp/AGENT.md   - core/model/AGENT.md   - core/persona/AGENT.md   - core/platform/i18n/AGENT.md   - core/platform/telemetry/AGENT.md   - core/platform/utils/AGENT.md   - core/prompt/AGENT.md   - core/runtime/AGENT.md   - core/session/AGENT.md   - core/sub-agent/AGENT.md   - core/tools/AGENT.md   - core/workspace/AGENT.md   - extensions/AGENT.md   - extensions/builtin/AGENT.md   - extensions/builtin/browser/AGENT.md   - extensions/builtin/browser/src/browser_harness/AGENT.md   - extensions/builtin/context-management/AGENT.md   - extensions/builtin/recap/AGENT.md   - extensions/builtin/team/AGENT.md   - extensions/optional/AGENT.md   - extensions/optional/evolution/AGENT.md   - extensions/optional/evolution/source/AGENT.md   - extensions/optional/evolution/source/assessment/AGENT.md   - extensions/optional/evolution/source/delivery/AGENT.md   - extensions/optional/evolution/source/runtime/AGENT.md   - modes/AGENT.md   - modes/acp/AGENT.md   - modes/interactive/AGENT.md   - modes/rpc/AGENT.md   - modes/utils/AGENT.md   - packages/AGENT.md   - packages/protocol/AGENT.md   - packages/soul-core/AGENT.md   - scripts/dev-loop/AGENT.md generatedFromGraphHash: 6650b6829ae8df62c52068b7522c7f8298fdbf55bbecd0571f17151e7b66e695 generatedAt: 2026-09-10T16:21:57.178Z ---  # DIP Health  This page keeps document drift visible without turning generated details into hand-maintained prose.  ## Hard Gates  - Indexed sources with P3 contracts: 744/744 - P2 modules indexed: 42 - P1 document indexed: yes - Virtual file entries required: 744 - Virtual module entries required: 42  ## P2 Count Differences  These are review signals, not automatic failures, because P2 lists may include directories, generated files, or non-source artifacts.  | Module | Source Files | Listed Members | P2 | | --- | ---: | ---: | --- | | `core` | 26 | 83 | `core/AGENT.md` | | `core/lib/agent-core` | 22 | 19 | `core/lib/agent-core/AGENT.md` | | `core/lib/ai` | 50 | 49 | `core/lib/ai/AGENT.md` | | `core/lib/tui` | 33 | 32 | `core/lib/tui/AGENT.md` | | `core/model` | 6 | 9 | `core/model/AGENT.md` | | `core/session` | 5 | 1 | `core/session/AGENT.md` | | `extensions` | 0 | 71 | `extensions/AGENT.md` | | `extensions/builtin` | 129 | 106 | `extensions/builtin/AGENT.md` | | `extensions/builtin/browser` | 1 | 4 | `extensions/builtin/browser/AGENT.md` | | `extensions/builtin/team` | 18 | 19 | `extensions/builtin/team/AGENT.md` | | `extensions/optional` | 7 | 3 | `extensions/optional/AGENT.md` | | `extensions/optional/evolution` | 26 | 27 | `extensions/optional/evolution/AGENT.md` | | `extensions/optional/evolution/source` | 5 | 6 | `extensions/optional/evolution/source/AGENT.md` | | `modes` | 2 | 3 | `modes/AGENT.md` | | `modes/interactive` | 85 | 76 | `modes/interactive/AGENT.md` | | `packages` | 41 | 10 | `packages/AGENT.md` |
+---
+id: wiki:health
+title: DIP Health
+sources:
+  - AGENTS.md
+  - llm-wiki/graph.json
+  - cli/AGENT.md
+  - core/AGENT.md
+  - core/agent-dir/AGENT.md
+  - core/export-html/AGENT.md
+  - core/extensions-host/AGENT.md
+  - core/lib/agent-core/AGENT.md
+  - core/lib/ai/AGENT.md
+  - core/lib/tui/AGENT.md
+  - core/mcp/AGENT.md
+  - core/model/AGENT.md
+  - core/persona/AGENT.md
+  - core/platform/i18n/AGENT.md
+  - core/platform/telemetry/AGENT.md
+  - core/platform/utils/AGENT.md
+  - core/prompt/AGENT.md
+  - core/runtime/AGENT.md
+  - core/session/AGENT.md
+  - core/sub-agent/AGENT.md
+  - core/tools/AGENT.md
+  - core/workspace/AGENT.md
+  - extensions/AGENT.md
+  - extensions/builtin/AGENT.md
+  - extensions/builtin/browser/AGENT.md
+  - extensions/builtin/browser/src/browser_harness/AGENT.md
+  - extensions/builtin/context-management/AGENT.md
+  - extensions/builtin/recap/AGENT.md
+  - extensions/builtin/team/AGENT.md
+  - extensions/optional/AGENT.md
+  - extensions/optional/evolution/AGENT.md
+  - extensions/optional/evolution/source/AGENT.md
+  - extensions/optional/evolution/source/assessment/AGENT.md
+  - extensions/optional/evolution/source/delivery/AGENT.md
+  - extensions/optional/evolution/source/runtime/AGENT.md
+  - modes/AGENT.md
+  - modes/acp/AGENT.md
+  - modes/interactive/AGENT.md
+  - modes/rpc/AGENT.md
+  - modes/utils/AGENT.md
+  - packages/AGENT.md
+  - packages/protocol/AGENT.md
+  - packages/soul-core/AGENT.md
+  - scripts/dev-loop/AGENT.md
+generatedFromGraphHash: 6650b6829ae8df62c52068b7522c7f8298fdbf55bbecd0571f17151e7b66e695
+generatedAt: 2026-09-10T16:21:57.178Z
+---
+
+# DIP Health
+
+This page keeps document drift visible without turning generated details into hand-maintained prose.
+
+## Hard Gates
+
+- Indexed sources with P3 contracts: 744/744
+- P2 modules indexed: 42
+- P1 document indexed: yes
+- Virtual file entries required: 744
+- Virtual module entries required: 42
+
+## P2 Count Differences
+
+These are review signals, not automatic failures, because P2 lists may include directories, generated files, or non-source artifacts.
+
+| Module | Source Files | Listed Members | P2 |
+| --- | ---: | ---: | --- |
+| `core` | 26 | 83 | `core/AGENT.md` |
+| `core/lib/agent-core` | 22 | 19 | `core/lib/agent-core/AGENT.md` |
+| `core/lib/ai` | 50 | 49 | `core/lib/ai/AGENT.md` |
+| `core/lib/tui` | 33 | 32 | `core/lib/tui/AGENT.md` |
+| `core/model` | 6 | 9 | `core/model/AGENT.md` |
+| `core/session` | 5 | 1 | `core/session/AGENT.md` |
+| `extensions` | 0 | 71 | `extensions/AGENT.md` |
+| `extensions/builtin` | 129 | 106 | `extensions/builtin/AGENT.md` |
+| `extensions/builtin/browser` | 1 | 4 | `extensions/builtin/browser/AGENT.md` |
+| `extensions/builtin/team` | 18 | 19 | `extensions/builtin/team/AGENT.md` |
+| `extensions/optional` | 7 | 3 | `extensions/optional/AGENT.md` |
+| `extensions/optional/evolution` | 26 | 27 | `extensions/optional/evolution/AGENT.md` |
+| `extensions/optional/evolution/source` | 5 | 6 | `extensions/optional/evolution/source/AGENT.md` |
+| `modes` | 2 | 3 | `modes/AGENT.md` |
+| `modes/interactive` | 85 | 76 | `modes/interactive/AGENT.md` |
+| `packages` | 41 | 10 | `packages/AGENT.md` |

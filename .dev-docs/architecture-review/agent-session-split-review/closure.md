@@ -1,1 +1,45 @@
-# AgentSession Split Review — Closure  > 评审关闭记录：`core/runtime/agent-session.ts` settings accessor 面拆分  ```yaml doc: agent-session-split-review status: closed closed: 2026-09-11 verification: tsc --noEmit / test:harness-critical / verify:dip / verify:quality / verify:package-boundary / build ```  ## 实施了什么  - 新建 `core/runtime/session-settings-accessors.ts`：`SessionSettingsAccessors(Base)` mixin，提供 **53 个成员**（52 个 getter/setter 方法 + `autoRetryEnabled` getter），全部是单行 `this.settingsManager.X(...)` 纯委托。 - `core/runtime/agent-session.ts`：原类改名 `AgentSessionBase`（不导出），文件尾导出组合类 `export class AgentSession extends SessionSettingsAccessors(AgentSessionBase) {}`。   - 2724 行 → 2440 行（类体 −284 行）。   - 删除方式：方法级精确删除；每个方法先验证"非注释代码行恰好 1 行且包含 `settingsManager.`"，且删除块内部不得包含非删除集成员（安全断言，防止误吞）。 - 公共 API 面不变：mixin 落在原型链上，`session.getTheme()` 等调用方无感知（tsc + 242 项 harness-critical 集成测试验证）。 - P2 登记：`core/runtime/AGENT.md` 成员列表新增 `session-settings-accessors.ts` 条目。  ## 与 AS01 数字差异说明（55 → 53）  AS01 计划移出 55 个 accessor；实际移出 53。差异来源：`setSteeringMode` / `setFollowUpMode` 是**双写委托**（同时写 `this.agent` 和 `this.settingsManager`），预检严格判定为"非纯委托"正确排除——它们有真实同步逻辑，留在主类是对的。  ## Deferred（本次不做）  - 主类内部逻辑方法（`prompt` / `compact` / `fork` / `reload` / `_buildRuntime` 等 63 个）仍在 `AgentSessionBase`，未拆分。 - `interactive-mode.ts`（2482 行）未动，另立评审。 - mixin 面只覆盖 settings 委托；`abortRetry` 等单行 collaborator 委托在 README 决策中明确本次不处理（避免额外间接层）。  ## 验收结果  | 门 | 结果 | |----|------| | `tsc --noEmit` | ✅ 0 错误 | | `npm run test:harness-critical` | ✅ 242/242 | | `npm run verify:dip` | ✅ 0 FATAL 0 SEVERE | | `npm run verify:quality` | ✅ 757 文件 | | `npm run verify:package-boundary` | ✅ | | `npm run build` | ✅ EXIT 0（minify 723 文件） |  ## 后续建议  - 逻辑方法拆分可参考 AS02 结论另行立项（目标：主类 ≤800 行）。 - REFACTOR-LEDGER §1b"god 文件拆解"口径已同步修正：accessor 面已拆，逻辑方法与 interactive-mode 未拆。
+# AgentSession Split Review — Closure
+
+> 评审关闭记录：`core/runtime/agent-session.ts` settings accessor 面拆分
+
+```yaml
+doc: agent-session-split-review
+status: closed
+closed: 2026-09-11
+verification: tsc --noEmit / test:harness-critical / verify:dip / verify:quality / verify:package-boundary / build
+```
+
+## 实施了什么
+
+- 新建 `core/runtime/session-settings-accessors.ts`：`SessionSettingsAccessors(Base)` mixin，提供 **53 个成员**（52 个 getter/setter 方法 + `autoRetryEnabled` getter），全部是单行 `this.settingsManager.X(...)` 纯委托。
+- `core/runtime/agent-session.ts`：原类改名 `AgentSessionBase`（不导出），文件尾导出组合类 `export class AgentSession extends SessionSettingsAccessors(AgentSessionBase) {}`。
+  - 2724 行 → 2440 行（类体 −284 行）。
+  - 删除方式：方法级精确删除；每个方法先验证"非注释代码行恰好 1 行且包含 `settingsManager.`"，且删除块内部不得包含非删除集成员（安全断言，防止误吞）。
+- 公共 API 面不变：mixin 落在原型链上，`session.getTheme()` 等调用方无感知（tsc + 242 项 harness-critical 集成测试验证）。
+- P2 登记：`core/runtime/AGENT.md` 成员列表新增 `session-settings-accessors.ts` 条目。
+
+## 与 AS01 数字差异说明（55 → 53）
+
+AS01 计划移出 55 个 accessor；实际移出 53。差异来源：`setSteeringMode` / `setFollowUpMode` 是**双写委托**（同时写 `this.agent` 和 `this.settingsManager`），预检严格判定为"非纯委托"正确排除——它们有真实同步逻辑，留在主类是对的。
+
+## Deferred（本次不做）
+
+- 主类内部逻辑方法（`prompt` / `compact` / `fork` / `reload` / `_buildRuntime` 等 63 个）仍在 `AgentSessionBase`，未拆分。
+- `interactive-mode.ts`（2482 行）未动，另立评审。
+- mixin 面只覆盖 settings 委托；`abortRetry` 等单行 collaborator 委托在 README 决策中明确本次不处理（避免额外间接层）。
+
+## 验收结果
+
+| 门 | 结果 |
+|----|------|
+| `tsc --noEmit` | ✅ 0 错误 |
+| `npm run test:harness-critical` | ✅ 242/242 |
+| `npm run verify:dip` | ✅ 0 FATAL 0 SEVERE |
+| `npm run verify:quality` | ✅ 757 文件 |
+| `npm run verify:package-boundary` | ✅ |
+| `npm run build` | ✅ EXIT 0（minify 723 文件） |
+
+## 后续建议
+
+- 逻辑方法拆分可参考 AS02 结论另行立项（目标：主类 ≤800 行）。
+- REFACTOR-LEDGER §1b"god 文件拆解"口径已同步修正：accessor 面已拆，逻辑方法与 interactive-mode 未拆。
