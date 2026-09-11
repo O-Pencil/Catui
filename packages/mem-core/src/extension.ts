@@ -794,7 +794,7 @@ export default function nanomemExtension(api: ExtensionAPI) {
 			bindLlm(ctx);
 			ctx.ui.notify("NanoMem: saving session context...", "info");
 
-			const entries = ctx.sessionManager.getEntries() as ReadonlyArray<{ type?: string; message?: { role: string; content?: unknown } }>;
+			const entries = (ctx.sessionManager as unknown as { getEntries: () => ReadonlyArray<{ type?: string; message?: { role: string; content?: unknown } }> }).getEntries();
 			const messages: Array<{ role: string; content?: unknown }> = [];
 			for (const entry of entries) {
 				if (entry.type === "message" && entry.message) {
