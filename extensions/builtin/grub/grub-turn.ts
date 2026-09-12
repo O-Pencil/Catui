@@ -7,7 +7,7 @@
 
 import { GrubController } from "./grub-controller.js";
 import { extractGrubDecision } from "./grub-decision.js";
-import { describeDecision, describeTerminalSnapshot } from "./grub-format.js";
+import { buildCompletionReport, describeDecision, describeTerminalSnapshot } from "./grub-format.js";
 import { grubText } from "./grub-i18n.js";
 
 export interface GrubTurnEvent {
@@ -57,6 +57,15 @@ export function resolveGrubTurn(controller: GrubController, assistantText: strin
 
 	const next = controller.finishTurn(decision);
 	if (next.action === "stop") {
+		// A completed run gets a one-line stats report in the chat stream;
+		// other terminal states keep the detailed snapshot as the primary
+		// diagnostic surface.
+		if (decision.status === "complete" && next.snapshot) {
+			const report = buildCompletionReport(next.snapshot);
+			if (report) {
+				events.push({ message: report, level: "info" });
+			}
+		}
 		events.push({
 			message: describeTerminalSnapshot(next.snapshot, activeTask.locale),
 			level: decision.status === "complete" ? "info" : "warning",

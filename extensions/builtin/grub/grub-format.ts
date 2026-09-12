@@ -1,5 +1,5 @@
 /**
- * [WHO]: Provides formatTaskState(), formatSnapshot(), describeDecision(), describeTerminalSnapshot(), describeTaskState()
+ * [WHO]: Provides formatTaskState(), formatSnapshot(), describeDecision(), describeTerminalSnapshot(), describeTaskState(), buildCompletionReport()
  * [FROM]: Depends on ./grub-feature-list, ./grub-i18n, ./grub-types for human-readable /grub TUI copy
  * [TO]: Consumed by ./index.ts and tests for status/result rendering
  * [HERE]: extensions/builtin/grub/grub-format.ts - user-facing formatting boundary for Grub status messages
@@ -133,6 +133,23 @@ export function describeDecision(decision: GrubDecision, locale: GrubLocale): st
 		lines.push(`${text.nextStep}: ${decision.nextStep}`);
 	}
 	return lines.join("\n");
+}
+
+/**
+ * One-line completion report for the chat stream: runtime, turns, tool calls,
+ * and token totals. Returns undefined when the task did not complete or no
+ * run metrics were accumulated (e.g. metric folding was skipped).
+ */
+export function buildCompletionReport(snapshot: GrubTaskSnapshot): string | undefined {
+	if (snapshot.status !== "complete" || !hasRunStats(snapshot)) return undefined;
+	const text = grubText(snapshot.locale ?? "en");
+	const usage = snapshot.cumulativeUsage ?? EMPTY_USAGE;
+	return text.completionReport(
+		formatDuration(snapshot.cumulativeDurationMs ?? 0),
+		snapshot.cumulativeTurnCount ?? 0,
+		snapshot.cumulativeToolCallCount ?? 0,
+		{ input: usage.input, output: usage.output, totalTokens: usage.totalTokens },
+	);
 }
 
 export function describeTerminalSnapshot(snapshot: GrubTaskSnapshot | undefined, locale: GrubLocale): string {

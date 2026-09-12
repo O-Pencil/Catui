@@ -19,11 +19,19 @@
   continue/stopped/failed/blocked, where remaining work is legitimate info.
 - `core/lib/tui/src/components/markdown.ts` — HTML comment tokens are skipped
   in both block and inline positions; other raw HTML still renders as text.
+- `extensions/builtin/grub/grub-i18n.ts` — added `completionReport` one-line
+  report templates (en/zh): runtime, turns, tool calls, token totals.
+- `extensions/builtin/grub/grub-format.ts` — added `buildCompletionReport()`,
+  which renders the one-line completion report from cumulative run metrics
+  (returns undefined unless status is complete and metrics exist).
+- `extensions/builtin/grub/grub-turn.ts` — completed runs publish the report
+  event in the chat stream before the detailed terminal snapshot.
 
 ## Verifications
 
-- `test/grub-controller.test.ts` — 51/51 pass (added: comment-wrapped parse,
-  protocol-exit events, complete hides nextStep, prompt wording).
+- `test/grub-controller.test.ts` — 54/54 pass (added: comment-wrapped parse,
+  protocol-exit events, complete hides nextStep, prompt wording, completion
+  report en/zh + undefined-without-stats).
 - `core/lib/tui/test/markdown.test.ts` — 39/39 pass (added: HTML comment
   hiding block/inline + non-comment HTML still visible).
 - `npm run verify:dip` / `verify:quality` / `verify:package-boundary` — green.

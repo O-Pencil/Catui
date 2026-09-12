@@ -12,7 +12,7 @@ import {
 	validateFeatureListDiff,
 	writeFeatureList,
 } from "../extensions/builtin/grub/grub-feature-list.js";
-import { describeDecision, formatSnapshot, formatTaskState } from "../extensions/builtin/grub/grub-format.js";
+import { buildCompletionReport, describeDecision, formatSnapshot, formatTaskState } from "../extensions/builtin/grub/grub-format.js";
 import {
 	discoverActiveTasks,
 	loadState,
@@ -272,6 +272,19 @@ test("resolveGrubTurn stops when complete decision matches fully passing checkli
 			...baseline,
 			features: baseline.features.map((feature) => ({ ...feature, passes: true, evidence: "verified" })),
 		});
+		controller.accumulateRunResult({
+			turnCount: 18,
+			toolCallCount: 76,
+			durationMs: 1112000,
+			usage: {
+				input: 32109,
+				output: 13122,
+				cacheRead: 500,
+				cacheWrite: 200,
+				totalTokens: 45231,
+				cost: { input: 0.1, output: 0.2, cacheRead: 0.01, cacheWrite: 0.02, total: 0.33 },
+			},
+		});
 		controller.markDispatched();
 
 		const result = resolveGrubTurn(
@@ -284,6 +297,9 @@ test("resolveGrubTurn stops when complete decision matches fully passing checkli
 		assert.equal(controller.getState().lastTerminal?.status, "complete");
 		const joined = result.events.map((event) => event.message).join("\n");
 		assert.match(joined, /State: finished/);
+		// A completed run publishes a one-line completion report with runtime,
+		// turn count, and token totals.
+		assert.match(joined, /Task complete: 18m 32s, 18 turns, 76 tool calls, 45,231 tokens/);
 		// The terminal events must carry the explicit protocol-exit notice so
 		// later turns in this conversation stop emitting loop-state blocks.
 		assert.match(joined, /grub protocol has ended/i);
@@ -333,6 +349,105 @@ test("formatSnapshot omits next step for completed tasks", () => {
 		assert.match(formatted, /State: finished/);
 		assert.match(formatted, /Last update: Everything verified\./);
 		assert.doesNotMatch(formatted, /commit 2 \+ push/);
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("buildCompletionReport returns a concise English report for a completed task with stats", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		const task = controller.start("Compile the completion report", cwd);
+		writeFeatureList(task.featureListPath, {
+			...featureList(task.goal, 3),
+			features: featureList(task.goal, 3).features.map((feature) => ({ ...feature, passes: true, evidence: "ok" })),
+		});
+		controller.accumulateRunResult({
+			turnCount: 18,
+			toolCallCount: 76,
+			durationMs: 1112000,
+			usage: {
+				input: 32109,
+				output: 13122,
+				cacheRead: 500,
+				cacheWrite: 200,
+				totalTokens: 45231,
+				cost: { input: 0.1, output: 0.2, cacheRead: 0.01, cacheWrite: 0.02, total: 0.33 },
+			},
+		});
+		controller.markDispatched();
+		controller.finishTurn({ status: "complete", summary: "All good." });
+
+		const snapshot = controller.getState().lastTerminal;
+		assert.ok(snapshot);
+		const report = buildCompletionReport(snapshot);
+		assert.ok(report);
+		assert.match(report, /Task complete: 18m 32s/);
+		assert.match(report, /18 turns/);
+		assert.match(report, /76 tool calls/);
+		assert.match(report, /45,231 tokens \(in 32,109 \/ out 13,122\)/);
+		// One line only.
+		assert.equal(report.includes("\n"), false);
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("buildCompletionReport returns a concise Chinese report for zh tasks", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		const task = controller.start("生成中文汇报", cwd, { locale: "zh" });
+		writeFeatureList(task.featureListPath, {
+			...featureList(task.goal, 3),
+			features: featureList(task.goal, 3).features.map((feature) => ({ ...feature, passes: true, evidence: "ok" })),
+		});
+		controller.accumulateRunResult({
+			turnCount: 18,
+			toolCallCount: 76,
+			durationMs: 1112000,
+			usage: {
+				input: 32109,
+				output: 13122,
+				cacheRead: 500,
+				cacheWrite: 200,
+				totalTokens: 45231,
+				cost: { input: 0.1, output: 0.2, cacheRead: 0.01, cacheWrite: 0.02, total: 0.33 },
+			},
+		});
+		controller.markDispatched();
+		controller.finishTurn({ status: "complete", summary: "全部通过。" });
+
+		const snapshot = controller.getState().lastTerminal;
+		assert.ok(snapshot);
+		const report = buildCompletionReport(snapshot);
+		assert.ok(report);
+		assert.match(report, /任务完成/);
+		assert.match(report, /18m 32s/);
+		assert.match(report, /18 轮/);
+		assert.match(report, /76 次/);
+		assert.match(report, /Token 45,231（输入 32,109 \/ 输出 13,122）/);
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("buildCompletionReport returns undefined without run stats", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		const task = controller.start("No stats yet", cwd);
+		writeFeatureList(task.featureListPath, {
+			...featureList(task.goal, 3),
+			features: featureList(task.goal, 3).features.map((feature) => ({ ...feature, passes: true, evidence: "ok" })),
+		});
+		controller.markDispatched();
+		controller.finishTurn({ status: "complete", summary: "Done." });
+
+		const snapshot = controller.getState().lastTerminal;
+		assert.ok(snapshot);
+		assert.equal(buildCompletionReport(snapshot), undefined);
 	} finally {
 		cleanup(cwd);
 	}

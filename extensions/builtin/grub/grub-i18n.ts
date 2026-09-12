@@ -116,6 +116,8 @@ const GRUB_TEXT = {
 		statTokens: (usage: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number }) =>
 			`Tokens: ${usage.totalTokens.toLocaleString("en-US")} (in ${usage.input.toLocaleString("en-US")} / out ${usage.output.toLocaleString("en-US")} / cache read ${usage.cacheRead.toLocaleString("en-US")} / cache write ${usage.cacheWrite.toLocaleString("en-US")})`,
 		statCost: (cost: number) => `Estimated cost: $${cost.toFixed(4)}`,
+		completionReport: (duration: string, turns: number, toolCalls: number, usage: { input: number; output: number; totalTokens: number }) =>
+			`[Grub] Task complete: ${duration}, ${turns} turns, ${toolCalls} tool calls, ${usage.totalTokens.toLocaleString("en-US")} tokens (in ${usage.input.toLocaleString("en-US")} / out ${usage.output.toLocaleString("en-US")}).`,
 		recapHeading: "Recap",
 		recapEmpty: "(No decision summary recorded.)",
 		harnessCreated: "- Harness created by /grub.",
@@ -219,6 +221,8 @@ const GRUB_TEXT = {
 		statTokens: (usage: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number }) =>
 			`Token 消耗：${usage.totalTokens.toLocaleString("zh-CN")}（输入 ${usage.input.toLocaleString("zh-CN")} / 输出 ${usage.output.toLocaleString("zh-CN")} / 缓存读 ${usage.cacheRead.toLocaleString("zh-CN")} / 缓存写 ${usage.cacheWrite.toLocaleString("zh-CN")}）`,
 		statCost: (cost: number) => `估算费用：$${cost.toFixed(4)}`,
+		completionReport: (duration: string, turns: number, toolCalls: number, usage: { input: number; output: number; totalTokens: number }) =>
+			`[Grub] 任务完成：耗时 ${duration}，共 ${turns} 轮，工具调用 ${toolCalls} 次，Token ${usage.totalTokens.toLocaleString("zh-CN")}（输入 ${usage.input.toLocaleString("zh-CN")} / 输出 ${usage.output.toLocaleString("zh-CN")}）。`,
 		recapHeading: "Recap",
 		recapEmpty: "（没有记录到本轮决策摘要。）",
 		harnessCreated: "- Harness 由 /grub 创建。",
