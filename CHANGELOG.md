@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.30] - 2026-09-12
+
+### Added
+- feat(humanizer): bundle humanizer writing-quality skill as default extension
+- feat(grub): report completion stats in one line
+- feat: add remote mode, RPC mode, mobile app (Capacitor/Android), and architecture review docs
+
+### Fixed
+- fix(changelog): scope last-tag lookup to the current minor line
+- fix(self-update): respect user's update choice and surface failures
+- fix(grub): stop loop-state protocol after task terminates
+- fix(tui): hide HTML comments in markdown rendering
+
+### Changed
+- refactor(goal): remove unused blocked-turn accounting and dead helpers
+
+
 ## [1.2.29] - 2026-09-10
 
 ### Added
