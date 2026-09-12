@@ -12,7 +12,7 @@ import {
 	validateFeatureListDiff,
 	writeFeatureList,
 } from "../extensions/builtin/grub/grub-feature-list.js";
-import { formatSnapshot, formatTaskState } from "../extensions/builtin/grub/grub-format.js";
+import { describeDecision, formatSnapshot, formatTaskState } from "../extensions/builtin/grub/grub-format.js";
 import {
 	discoverActiveTasks,
 	loadState,
@@ -21,6 +21,7 @@ import {
 } from "../extensions/builtin/grub/grub-persistence.js";
 import { parseGrubCommand } from "../extensions/builtin/grub/grub-parser.js";
 import { buildGrubHelp } from "../extensions/builtin/grub/grub-parser.js";
+import { buildGrubCodingPrompt, buildGrubInitializerPrompt } from "../extensions/builtin/grub/grub-prompts.js";
 import { resolveGrubTurn } from "../extensions/builtin/grub/grub-turn.js";
 
 function createTempWorkspace(): string {
@@ -200,6 +201,21 @@ test("extractGrubDecision ignores dangling or malformed loop-state text", () => 
 	assert.equal(extractGrubDecision('<loop-state>{not json}</loop-state>'), undefined);
 });
 
+test("extractGrubDecision parses comment-wrapped loop-state blocks", () => {
+	const decision = extractGrubDecision([
+		"round summary text",
+		'<!-- <loop-state>{"status":"continue","summary":"wrapped","nextStep":"next item"}</loop-state> -->',
+	].join("\n"));
+	assert.deepEqual(decision, { status: "continue", summary: "wrapped", nextStep: "next item" });
+
+	// Comment-wrapped blocks are hidden from the user, not from the parser:
+	// a complete decision inside a comment still ends the task.
+	const done = extractGrubDecision(
+		'<!-- <loop-state>{"status":"complete","summary":"all done"}</loop-state> -->',
+	);
+	assert.deepEqual(done, { status: "complete", summary: "all done" });
+});
+
 test("resolveGrubTurn retries with readable update when loop-state is missing", () => {
 	const cwd = createTempWorkspace();
 	try {
@@ -266,10 +282,74 @@ test("resolveGrubTurn stops when complete decision matches fully passing checkli
 		assert.equal(result.dispatchNext, false);
 		assert.equal(controller.getActiveTask(), undefined);
 		assert.equal(controller.getState().lastTerminal?.status, "complete");
-		assert.match(result.events.map((event) => event.message).join("\n"), /State: finished/);
+		const joined = result.events.map((event) => event.message).join("\n");
+		assert.match(joined, /State: finished/);
+		// The terminal events must carry the explicit protocol-exit notice so
+		// later turns in this conversation stop emitting loop-state blocks.
+		assert.match(joined, /grub protocol has ended/i);
 	} finally {
 		cleanup(cwd);
 	}
+});
+
+test("resolveGrubTurn failure stop also emits the protocol exit notice", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		enterExecutionPhase(controller, "Fail out of the harness", cwd);
+
+		// Drive three consecutive invalid rounds to exhaust the execution
+		// failure budget and force a terminal failed stop.
+		let result: ReturnType<typeof resolveGrubTurn> | undefined;
+		for (let attempt = 0; attempt < 3; attempt += 1) {
+			controller.markDispatched();
+			result = resolveGrubTurn(controller, "No structured summary at all.");
+		}
+
+		assert.equal(result?.dispatchNext, false);
+		assert.equal(controller.getState().lastTerminal?.status, "failed");
+		const joined = result?.events.map((event) => event.message).join("\n") ?? "";
+		assert.match(joined, /grub protocol has ended/i);
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("formatSnapshot omits next step for completed tasks", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		const task = controller.start("Completed task with stray next step", cwd);
+		writeFeatureList(task.featureListPath, {
+			...featureList(task.goal, 3),
+			features: featureList(task.goal, 3).features.map((feature) => ({ ...feature, passes: true, evidence: "ok" })),
+		});
+		controller.markDispatched();
+		controller.finishTurn({ status: "complete", summary: "Everything verified.", nextStep: "commit 2 + push" });
+
+		const snapshot = controller.getState().lastTerminal;
+		assert.ok(snapshot);
+		const formatted = formatSnapshot(snapshot);
+		assert.match(formatted, /State: finished/);
+		assert.match(formatted, /Last update: Everything verified\./);
+		assert.doesNotMatch(formatted, /commit 2 \+ push/);
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("describeDecision omits next step for completed decisions but keeps it while running", () => {
+	const completed = describeDecision(
+		{ status: "complete", summary: "All checks passing.", nextStep: "leftover push" },
+		"en",
+	);
+	assert.doesNotMatch(completed, /Next step/);
+
+	const running = describeDecision(
+		{ status: "continue", summary: "Feature 3 done.", nextStep: "feature 4" },
+		"en",
+	);
+	assert.match(running, /Next step: feature 4/);
 });
 
 test("feature list diff rejects mutations to immutable fields", () => {
@@ -1149,4 +1229,23 @@ test("adoptResumedTask backfills missing cumulative fields", () => {
 	} finally {
 		cleanup(cwd);
 	}
+});
+
+test("grub prompts require comment-wrapped loop-state blocks and a protocol exit clause", () => {
+	const codingEn = buildGrubCodingPrompt("en");
+	assert.match(codingEn, /HTML comment so the\n\s*user never sees it/);
+	assert.match(codingEn, /<!-- <loop-state>/);
+	assert.match(codingEn, /never emit <loop-state>/i);
+
+	const codingZh = buildGrubCodingPrompt("zh");
+	assert.match(codingZh, /中文/);
+	assert.match(codingZh, /never emit <loop-state>/i);
+
+	const initEn = buildGrubInitializerPrompt("en");
+	assert.match(initEn, /<!-- <loop-state>/);
+	assert.doesNotMatch(initEn, /\n<loop-state>/);
+
+	const initZh = buildGrubInitializerPrompt("zh");
+	assert.match(initZh, /<!-- <loop-state>/);
+	assert.doesNotMatch(initZh, /\n<loop-state>/);
 });

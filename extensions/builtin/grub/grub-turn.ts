@@ -61,6 +61,9 @@ export function resolveGrubTurn(controller: GrubController, assistantText: strin
 			message: describeTerminalSnapshot(next.snapshot, activeTask.locale),
 			level: decision.status === "complete" ? "info" : "warning",
 		});
+		// Explicit protocol exit: once a terminal decision is reached, the loop
+		// state requirement must not leak into the rest of the conversation.
+		events.push({ message: text.protocolExit, level: "info" });
 		return { events, dispatchNext: false };
 	}
 
@@ -77,7 +80,10 @@ function handleFailure(
 	const failure = controller.recordFailure(failureMessage);
 	if (failure.action === "stop") {
 		return {
-			events: [{ message: describeTerminalSnapshot(failure.snapshot, locale), level: "warning" }],
+			events: [
+				{ message: describeTerminalSnapshot(failure.snapshot, locale), level: "warning" },
+				{ message: grubText(locale).protocolExit, level: "info" },
+			],
 			dispatchNext: false,
 		};
 	}

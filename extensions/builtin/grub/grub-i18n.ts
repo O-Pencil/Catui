@@ -97,6 +97,8 @@ const GRUB_TEXT = {
 			`Safety limits: up to ${maxIterations} rounds; stops after ${maxFailures} failed rounds in a row.`,
 		resuming: (id: string) => `[Grub] Continuing task ${id}.`,
 		stopped: (id: string) => `[Grub] Stopped task ${id}.`,
+		protocolExit:
+			"[Grub] The grub protocol has ended for this task. From now on, work like a normal assistant: carry out the user's instructions directly, and do NOT output any more <loop-state> blocks.",
 		noActiveRunning: "No active grub task is running.",
 		noPersisted: "There is no saved grub task to continue.",
 		failedResume: (id: string, message: string) => `[Grub] Could not continue task ${id}: ${message}`,
@@ -199,6 +201,8 @@ const GRUB_TEXT = {
 			`安全上限：最多 ${maxIterations} 轮；连续 ${maxFailures} 轮失败后停止。`,
 		resuming: (id: string) => `[Grub] 继续任务 ${id}。`,
 		stopped: (id: string) => `[Grub] 已停止任务 ${id}。`,
+		protocolExit:
+			"[Grub] 该任务的 grub 协议到此结束。从现在起按普通对话方式工作：直接执行用户指令，禁止再输出 <loop-state> 块。",
 		noActiveRunning: "当前没有正在运行的 grub 任务。",
 		noPersisted: "没有可继续的已保存 grub 任务。",
 		failedResume: (id: string, message: string) => `[Grub] 无法继续任务 ${id}：${message}`,

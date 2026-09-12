@@ -61,8 +61,9 @@ Rules for later coding agents (document them in progress-log.md):
 - Do not create git commits unless the user explicitly asks for them. Record
   verification evidence in feature-list.json and progress-log.md instead.
 
-End with exactly one XML block:
-<loop-state>{"status":"continue","summary":"harness ready","nextStep":"begin execution phase"}</loop-state>
+End with exactly one protocol state block wrapped in an HTML comment so the
+user never sees it:
+<!-- <loop-state>{"status":"continue","summary":"harness ready","nextStep":"begin execution phase"}</loop-state> -->
 ${languageLine}
 `.trim();
 }
@@ -88,8 +89,16 @@ Every turn you MUST:
 5) Append one dated line to progress-log.md describing what changed.
 6) Do not create git commits by default. Keep changes visible in the working
    tree and use evidence strings/progress-log.md as the reversible checkpoint.
-7) End with exactly one XML block:
-   <loop-state>{"status":"continue|complete|blocked","summary":"...","nextStep":"..."}</loop-state>
+7) Protocol state block rules:
+   - While the task is UNFINISHED and you need another autonomous pass, end
+     with exactly one protocol state block wrapped in an HTML comment so the
+     user never sees it:
+     <!-- <loop-state>{"status":"continue|complete|blocked","summary":"...","nextStep":"..."}</loop-state> -->
+   - If the task is finished (status:"complete") or genuinely blocked
+     (status:"blocked"), that block is the LAST one. The harness will end the
+     protocol: from that point on you are a normal assistant in this
+     conversation. Never emit <loop-state> again; just carry out the user's
+     messages directly.
 
 Completion audit:
 Before deciding status:"complete", treat completion as unproven and verify
@@ -114,7 +123,8 @@ Blocked audit:
   uncertain.
 
 Do not remove or rewrite tests. Treat tests as ground truth.
-Do not wrap the loop-state JSON in markdown fences.
+Do not wrap the loop-state JSON in markdown fences; wrap the whole block in an
+HTML comment (<!-- ... -->) instead.
 
 ## Autonomous Work Principles
 
@@ -236,8 +246,8 @@ export function buildGrubTaskPrompt(task: GrubTaskState): string {
 			? "不要因为一次查询结束就停止。只有 feature-list.json 中每个 feature 都 passes:true 时，才可以决定 `complete`。"
 			: "Do not stop just because one query finished. Only decide `complete` when every feature in feature-list.json has passes:true.",
 		task.locale === "zh"
-			? "如果还需要下一轮自主推进，请以有效的 <loop-state> 块结束，让系统自动继续。"
-			: "If you need another autonomous pass, end with a valid <loop-state> block so the system can continue automatically.",
+			? "如果还需要下一轮自主推进，请以有效的 <loop-state> 块结束（把整个块用 <!-- --> 注释包起来，用户看不到），让系统自动继续。一旦输出 complete/blocked，协议即结束：此后禁止再输出 loop-state 块，按普通方式直接执行用户指令。"
+			: "If you need another autonomous pass, end with a valid <loop-state> block (wrap the whole block in an HTML comment <!-- ... --> so the user never sees it) and the system continues automatically. Once you declare complete/blocked, the protocol ends: from then on never output loop-state again and just execute user messages directly.",
 	);
 
 	return sections.join("\n");

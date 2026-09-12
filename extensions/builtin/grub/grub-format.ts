@@ -98,7 +98,12 @@ export function formatSnapshot(snapshot: GrubTaskSnapshot): string {
 	}
 
 	if (snapshot.lastDecision?.summary) lines.push(`${text.lastUpdate}: ${snapshot.lastDecision.summary}`);
-	if (snapshot.lastDecision?.nextStep) lines.push(`${text.next}: ${snapshot.lastDecision.nextStep}`);
+	// A completed task must not echo a "next step": the protocol has ended and
+	// echoing remaining work keeps steering later conversation back into grub
+	// mode. Other terminal states legitimately show what remains.
+	if (snapshot.status !== "complete" && snapshot.lastDecision?.nextStep) {
+		lines.push(`${text.next}: ${snapshot.lastDecision.nextStep}`);
+	}
 	if (snapshot.lastError) lines.push(`${text.lastIssue}: ${snapshot.lastError}`);
 	lines.push(`${text.savedIn}: ${snapshot.harnessDirectory}`);
 	lines.push(`${text.taskFiles}: ${snapshot.featureListPath}, ${snapshot.progressLogPath}`);
@@ -123,7 +128,10 @@ function hasRunStats(snapshot: GrubTaskSnapshot): boolean {
 export function describeDecision(decision: GrubDecision, locale: GrubLocale): string {
 	const text = grubText(locale);
 	const lines = [`${text.prefix} ${text.lastUpdate}: ${decision.summary}`];
-	if (decision.nextStep) lines.push(`${text.nextStep}: ${decision.nextStep}`);
+	// Same rule as for terminal snapshots: a completed task has no next step.
+	if (decision.status !== "complete" && decision.nextStep) {
+		lines.push(`${text.nextStep}: ${decision.nextStep}`);
+	}
 	return lines.join("\n");
 }
 

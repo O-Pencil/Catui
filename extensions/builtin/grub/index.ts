@@ -219,10 +219,24 @@ export default async function grubExtension(api: ExtensionAPI) {
 			durationMs: event.durationMs,
 			usage: event.usage,
 		}, taskId);
-		if (event.stopReason === "aborted") dispatch.pause("Paused after cancellation. Use /grub resume to continue.");
+		if (event.stopReason === "aborted") {
+			const hadActiveTask = controller.hasActiveTask();
+			const locale = controller.getActiveTask()?.locale ?? currentGrubLocale;
+			if (hadActiveTask) {
+				dispatch.pause("Paused after cancellation. Use /grub resume to continue.");
+				publishGrubUpdate(api, bus, grubText(locale).protocolExit, "info");
+			}
+		}
 	});
 
-	api.on("agent_abort", () => { dispatch.pause("Paused by user. Use /grub resume to continue."); });
+	api.on("agent_abort", () => {
+		const hadActiveTask = controller.hasActiveTask();
+		const locale = controller.getActiveTask()?.locale ?? currentGrubLocale;
+		if (hadActiveTask) {
+			dispatch.pause("Paused by user. Use /grub resume to continue.");
+			publishGrubUpdate(api, bus, grubText(locale).protocolExit, "info");
+		}
+	});
 	api.on("agent_end", (event, ctx) => {
 		if (!dispatch.end()) { dispatch.flush(ctx.hasPendingMessages()); return; }
 		const activeTask = controller.getActiveTask();
@@ -282,7 +296,7 @@ export default async function grubExtension(api: ExtensionAPI) {
 			if (ownsRun && !ctx.isIdle()) {
 				ctx.abort();
 			}
-			publishGrubUpdate(api, bus, text.stopped(activeTask.id), "info");
+			publishGrubUpdate(api, bus, `${text.stopped(activeTask.id)}\n${text.protocolExit}`, "info");
 			return;
 		}
 
