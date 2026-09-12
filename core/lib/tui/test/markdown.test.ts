@@ -931,4 +931,57 @@ bar`,
 			);
 		});
 	});
+
+	describe("HTML comments", () => {
+		it("should hide standalone HTML comments (invisible protocol markers)", () => {
+			const markdown = new Markdown(
+				`Commit 1 done.
+
+<!-- <loop-state>{"status":"continue","summary":"x","nextStep":"commit 2 + push"}</loop-state> -->`,
+				0,
+				0,
+				defaultMarkdownTheme,
+			);
+
+			const lines = markdown.render(80);
+			const plainLines = lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+			const joinedPlain = plainLines.join("\n");
+
+			assert.ok(joinedPlain.includes("Commit 1 done."), "Visible text should stay");
+			assert.ok(!joinedPlain.includes("loop-state"), "Comment content must be hidden from display");
+			assert.ok(!joinedPlain.includes("commit 2 + push"), "Comment content must be hidden from display");
+		});
+
+		it("should hide inline HTML comments while keeping surrounding text", () => {
+			const markdown = new Markdown(
+				"Work finished. <!-- internal note: verify sha --> Next reply goes here.",
+				0,
+				0,
+				defaultMarkdownTheme,
+			);
+
+			const lines = markdown.render(80);
+			const plainLines = lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+			const joinedPlain = plainLines.join(" ");
+
+			assert.ok(joinedPlain.includes("Work finished."), "Leading text should stay");
+			assert.ok(joinedPlain.includes("Next reply goes here."), "Trailing text should stay");
+			assert.ok(!joinedPlain.includes("internal note"), "Inline comment must be hidden");
+		});
+
+		it("should still render non-comment raw HTML tags as text", () => {
+			const markdown = new Markdown(
+				"This is text with <thinking>content</thinking> that stays visible",
+				0,
+				0,
+				defaultMarkdownTheme,
+			);
+
+			const lines = markdown.render(80);
+			const plainLines = lines.map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+			const joinedPlain = plainLines.join(" ");
+
+			assert.ok(joinedPlain.includes("<thinking>"), "Non-comment HTML tags must still render");
+		});
+	});
 });

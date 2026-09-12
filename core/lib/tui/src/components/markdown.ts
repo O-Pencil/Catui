@@ -369,8 +369,9 @@ export class Markdown implements Component {
 				break;
 
 			case "html":
-				// Render HTML as plain text (escaped for terminal)
-				if ("raw" in token && typeof token.raw === "string") {
+				// HTML comments (<!-- ... -->) are invisible protocol/content
+				// markers; skip them. Other raw HTML renders as plain text.
+				if ("raw" in token && typeof token.raw === "string" && !token.raw.trimStart().startsWith("<!--")) {
 					lines.push(this.applyDefaultStyle(token.raw.trim()));
 				}
 				break;
@@ -460,6 +461,10 @@ export class Markdown implements Component {
 				}
 
 				case "html":
+					// Skip invisible HTML comments in inline positions too.
+					if ("raw" in token && typeof token.raw === "string" && token.raw.trimStart().startsWith("<!--")) {
+						break;
+					}
 					// Render inline HTML as plain text
 					if ("raw" in token && typeof token.raw === "string") {
 						result += applyTextWithNewlines(token.raw);
