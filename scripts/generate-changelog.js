@@ -20,11 +20,17 @@ function getCurrentVersion() {
 
 function getLastTag() {
   try {
+    const pkgVersion = getCurrentVersion();
+    const [major, minor] = pkgVersion.split(".").map(Number);
+    // Only consider tags on the current major.minor line. A higher-line tag
+    // (e.g. v2.0.0-beta.2 while releasing 1.2.x) must not become the base.
+    const prefix = `v${major}.${minor}.`;
     const tags = execSync("git tag --sort=-v:refname", { encoding: "utf-8" });
     const first = tags
       .trim()
       .split("\n")
-      .filter(Boolean)[0];
+      .filter(Boolean)
+      .filter((t) => t.startsWith(prefix))[0];
     return first ?? "v0.0.0";
   } catch {
     return "v0.0.0";
