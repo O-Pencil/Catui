@@ -231,13 +231,6 @@ export class GoalStore {
 		return this.update_goal({ status, expectedGoalId: expectedGoalId ?? null });
 	}
 
-	usage_limit_active(): ThreadGoal | null {
-		const current = this.get_goal();
-		if (!current) return null;
-		if (current.status !== "active" && current.status !== "budget_limited") return current;
-		return this.update_goal({ status: "usage_limited" });
-	}
-
 	stop_active_as_blocked(): ThreadGoal | null {
 		const current = this.get_goal();
 		if (!current) return null;

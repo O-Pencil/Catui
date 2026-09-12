@@ -8,8 +8,6 @@
 import type { ContinuationLease, ExtensionAPI } from "../../../core/extensions-host/types.js";
 import {
 	isActiveStatus,
-	isStoppedStatus,
-	type GoalAccountingMode,
 	type GoalControllerState,
 	type GoalRunKind,
 	type GoalTurnAccounting,
@@ -20,7 +18,6 @@ import {
 import { GoalStore } from "./goal-store.js";
 import { buildBudgetLimitPrompt, buildCompletionAuditPrompt, buildContinuationPrompt, buildObjectiveUpdatedPrompt } from "./goal-prompts.js";
 
-const CONSECUTIVE_BLOCKED_THRESHOLD = 3;
 const CONSECUTIVE_CONTINUATION_THRESHOLD = 10;
 const MAX_TOTAL_CONTINUATION_TURNS = 30;
 
@@ -51,7 +48,6 @@ export class GoalController {
 	private readonly store: GoalStore;
 	private readonly state: GoalControllerState = {
 		currentTurn: null,
-		consecutiveBlocked: 0,
 		consecutiveIdleContinuations: 0,
 		budgetLimitReportedGoalId: null,
 		idleContinuationDispatched: false,
@@ -118,16 +114,8 @@ export class GoalController {
 		this.store = new GoalStore(api.agentDir, threadId);
 	}
 
-	get currentThreadId(): string {
-		return this.threadId;
-	}
-
 	get goalStore(): GoalStore {
 		return this.store;
-	}
-
-	get currentState(): GoalControllerState {
-		return this.state;
 	}
 
 	/** Serialize every mutation through a single in-process mutex. */
@@ -231,7 +219,6 @@ export class GoalController {
 			const result = this.store.set_status(status);
 			if (result && status === "active") {
 				this.totalContinuationTurns = 0;
-				this.state.consecutiveBlocked = 0;
 				this.activateContinuation();
 				this.state.consecutiveIdleContinuations = 0;
 				this.state.idleContinuationDispatched = false;
@@ -261,7 +248,6 @@ export class GoalController {
 	/** Public API: tool-driven UpdateGoal. Only complete/blocked transitions. */
 	async apply_update_goal(args: UpdateGoalArgs): Promise<ThreadGoal | null> {
 		return this.withLock(() => {
-			const mode: GoalAccountingMode = args.status === "complete" ? "ActiveOrComplete" : "ActiveOrStopped";
 			const turn = this.state.currentTurn;
 			if (turn) {
 				const delta = Math.max(0, turn.tokensNow - turn.tokensLastAccounted);
@@ -275,7 +261,6 @@ export class GoalController {
 				this.goalJustTransitionedToTerminal = true;
 				this.clearActiveTurn();
 			}
-			void mode;
 			return next;
 		});
 	}
@@ -385,14 +370,9 @@ export class GoalController {
 			return { reason: "no_active_goal" };
 		}
 		if (!isActiveStatus(goal.status)) {
-			if (isStoppedStatus(goal.status)) {
-				this.state.consecutiveBlocked = 0;
-			}
 			this.state.consecutiveIdleContinuations = 0;
 			return { reason: "not_active_status", goal };
 		}
-		// Active goal on successful turn — reset blocked counter
-		this.state.consecutiveBlocked = 0;
 		return { reason: "active", goal };
 	}
 
@@ -472,22 +452,6 @@ export class GoalController {
 		return this.lastRunStopReason;
 	}
 
-	/** Hook: turn aborted (different from error). Final accounting. */
-	async on_turn_abort(): Promise<void> {
-		const turn = this.state.currentTurn;
-		if (turn && turn.activeGoalId) {
-			const delta = Math.max(0, turn.tokensNow - turn.tokensLastAccounted);
-			const timeDelta = Math.max(0, (Date.now() - turn.lastAccountedAt) / 1000);
-			this.store.account_usage(timeDelta, delta, "ActiveOnly", turn.activeGoalId);
-		}
-		this.clearActiveTurn();
-	}
-
-	/** Hook: usage limit hit. Mark current active goal usage_limited. */
-	on_usage_limit(): ThreadGoal | null {
-		return this.store.usage_limit_active();
-	}
-
 	/** Hook: turn error. Mark current active goal blocked. */
 	on_turn_error(): ThreadGoal | null {
 		const turn = this.state.currentTurn;
@@ -497,24 +461,6 @@ export class GoalController {
 		const outcome = this.store.stop_active_as_blocked();
 		this.clearActiveTurn();
 		return outcome;
-	}
-
-	/**
-	 * Read consecutive-blocked counter; called by tools / commands that need to
-	 * decide whether to escalate a single-turn block into a stored "blocked" state.
-	 */
-	record_blocked_signal(): { escalated: boolean; consecutiveBlocked: number } {
-		this.state.consecutiveBlocked += 1;
-		const escalated = this.state.consecutiveBlocked >= CONSECUTIVE_BLOCKED_THRESHOLD;
-		if (escalated) {
-			this.store.stop_active_as_blocked();
-		}
-		return { escalated, consecutiveBlocked: this.state.consecutiveBlocked };
-	}
-
-	/** Reset consecutive-blocked counter (called from successful turn_end). */
-	reset_blocked_signal(): void {
-		this.state.consecutiveBlocked = 0;
 	}
 
 	/** Inject budget-limit steering into the active prompt if not already surfaced. */
@@ -569,13 +515,6 @@ export class GoalController {
 			this.state.pendingContinuationDispatch = false;
 			return false;
 		}
-	}
-
-	/** Build objective_updated prompt string (for external injection or display). */
-	build_objective_updated_steering(): string | null {
-		const goal = this.store.get_goal();
-		if (!goal) return null;
-		return buildObjectiveUpdatedPrompt(goal);
 	}
 
 	private clearActiveTurn(): void {

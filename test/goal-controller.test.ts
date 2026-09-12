@@ -187,34 +187,6 @@ test("GoalController: clear removes persisted goal and bookkeeping state", async
 	}
 });
 
-test("GoalController: blocked signal escalates only after 3 consecutive turns", async () => {
-	const agentDir = createTempAgentDir();
-	try {
-		const controller = makeController(agentDir);
-		await controller.set_objective("Blockable", "ConfirmIfExists");
-
-		const first = controller.record_blocked_signal();
-		assert.equal(first.escalated, false);
-		assert.equal(first.consecutiveBlocked, 1);
-
-		const second = controller.record_blocked_signal();
-		assert.equal(second.escalated, false);
-		assert.equal(second.consecutiveBlocked, 2);
-
-		const third = controller.record_blocked_signal();
-		assert.equal(third.escalated, true);
-		assert.equal(third.consecutiveBlocked, 3);
-
-		const goal = await controller.get_goal();
-		assert.equal(goal?.status, "blocked");
-
-		controller.reset_blocked_signal();
-		assert.equal(controller.currentState.consecutiveBlocked, 0);
-	} finally {
-		rmSync(agentDir, { recursive: true, force: true });
-	}
-});
-
 test("GoalController: token usage accrues via on_token_usage and budget crosses", async () => {
 	const agentDir = createTempAgentDir();
 	try {

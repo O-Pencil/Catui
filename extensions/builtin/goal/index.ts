@@ -18,7 +18,6 @@ import type {
 	ExtensionContext,
 	ExtensionHandler,
 	MessageEndEvent,
-	MessageStartEvent,
 	ToolExecutionEndEvent,
 	TurnEndEvent,
 	TurnStartEvent,
@@ -37,7 +36,6 @@ import { goalStatusIndicator, goalSummaryLines, goalUsageSummary } from "./goal-
 import { isActiveStatus, type GoalRunKind, type ThreadGoal } from "./goal-types.js";
 
 const GOAL_MESSAGE_TYPE = "goal";
-const PLAN_LOOP_FRAMEWORK = "weak-model-compatible" as const;
 
 const _dbgEnabled = process.env.CATUI_DEBUG === "1";
 const debugLogPath = path.join(os.homedir(), ".catui", "agent", "catui-debug.log");
@@ -98,12 +96,6 @@ const goalToolHost: GoalToolHost = {
 		return controller ?? null;
 	},
 };
-
-function detectRunKind(loopFramework: string | undefined): GoalRunKind {
-	if (!loopFramework) return "normal";
-	if (loopFramework === PLAN_LOOP_FRAMEWORK) return "normal"; // weak-model-compatible is normal for accounting; Plan-mode is detected differently below.
-	return "normal";
-}
 
 /** Heuristic for plan mode: agent_session exposes no first-class Plan signal in hooks,
  *  so we treat turns that started under the plan extension's flag as plan-mode. */
@@ -222,13 +214,6 @@ export default async function goalExtension(api: ExtensionAPI): Promise<void> {
 		controller.on_turn_start(`turn-${event.turnIndex}-${event.timestamp}`, runKind, 0);
 	};
 	api.on("turn_start", onTurnStart);
-
-	const onMessageStart: ExtensionHandler<MessageStartEvent> = (event, ctx) => {
-		ensureController(ctx);
-		const msg = event.message as { role?: string; content?: unknown };
-		dbg(`message_start role=${msg.role ?? "?"}`);
-	};
-	api.on("message_start", onMessageStart);
 
 	const onMessageEnd: ExtensionHandler<MessageEndEvent> = (event, ctx) => {
 		const controller = ensureController(ctx);
@@ -396,9 +381,6 @@ export default async function goalExtension(api: ExtensionAPI): Promise<void> {
 		if (usage && typeof usage.totalTokens === "number") {
 			controller.on_token_usage(usage.totalTokens);
 		}
-		const loopFramework = event.loopFramework;
-		void detectRunKind(loopFramework);
-		// turnIndexFromMessages removed; loop framework not wired yet
 	};
 	api.on("agent_result", onAgentResult);
 
