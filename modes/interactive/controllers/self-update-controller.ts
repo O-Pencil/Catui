@@ -58,6 +58,9 @@ const AUTO_UPDATE_INTERVAL_MS = 30 * 60 * 1000;
 
 export class SelfUpdateController {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  /** Version we already installed silently this session — the running VERSION stays
+   *  stale until restart, so without this the 30-min poll would reinstall forever. */
+  private lastSilentInstallVersion: string | undefined = undefined;
 
   constructor(private readonly ctx: SelfUpdateContext) {}
 
@@ -70,57 +73,6 @@ export class SelfUpdateController {
   }
 
   // ----- public surface (called by mount) -----
-
-  async checkForNewVersion(): Promise<string | undefined> {
-    if (process.env.CATUI_SKIP_VERSION_CHECK || process.env.CATUI_OFFLINE)
-      return undefined;
-
-    try {
-      const response = await fetch(
-        `https://registry.npmjs.org/${encodeURIComponent(PACKAGE_NAME)}`,
-        {
-          signal: AbortSignal.timeout(10000),
-        },
-      );
-      if (!response.ok) return undefined;
-
-      const data = (await response.json()) as {
-        "dist-tags"?: { latest?: string };
-        version?: string;
-      };
-      const latestVersion = data["dist-tags"]?.latest ?? data.version;
-
-      // Only return latestVersion if it's actually newer than current version
-      if (latestVersion && this.compareVersion(latestVersion, VERSION) > 0) {
-        return latestVersion;
-      }
-
-      return undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  async showNewVersionNotification(newVersion: string): Promise<void> {
-    this.chat.addChild(new Spacer(1));
-    this.chat.addChild(
-      new DynamicBorder((text) => theme.fg("warning", text)),
-    );
-    this.chat.addChild(
-      new Text(
-        `${theme.bold(theme.fg("warning", "Update Available"))}\n` +
-          theme.fg("muted", `New version ${newVersion} is available. Updating automatically...`),
-        1,
-        0,
-      ),
-    );
-    this.chat.addChild(
-      new DynamicBorder((text) => theme.fg("warning", text)),
-    );
-    this.render();
-
-    await this.performUpdate(newVersion);
-  }
 
   async handleUpdateCommand(): Promise<void> {
     this.chat.addChild(new Spacer(1));
@@ -382,6 +334,10 @@ export class SelfUpdateController {
 
         if (this.compareVersion(latestVersion, VERSION) <= 0) return;
 
+        // Already installed this version this session (awaiting restart) — don't
+        // reinstall it every 30 minutes.
+        if (latestVersion === this.lastSilentInstallVersion) return;
+
         await this.silentInstall(latestVersion);
       } catch {
         // Silently fail — don't disturb user
@@ -430,6 +386,7 @@ export class SelfUpdateController {
 
       child.on("close", (code) => {
         if (code === 0) {
+          this.lastSilentInstallVersion = latestVersion;
           this.chat.addChild(new Spacer(1));
           this.chat.addChild(
             new DynamicBorder((text) => theme.fg("success", text)),
@@ -444,6 +401,23 @@ export class SelfUpdateController {
           );
           this.chat.addChild(
             new DynamicBorder((text) => theme.fg("success", text)),
+          );
+          this.render();
+        } else {
+          this.chat.addChild(new Spacer(1));
+          this.chat.addChild(
+            new DynamicBorder((text) => theme.fg("warning", text)),
+          );
+          this.chat.addChild(
+            new Text(
+              `${theme.bold(theme.fg("warning", "Background Update Failed"))}\n` +
+                theme.fg("muted", `Couldn't install v${latestVersion} (exit code ${code}). Run /update to retry with details.`),
+              1,
+              0,
+            ),
+          );
+          this.chat.addChild(
+            new DynamicBorder((text) => theme.fg("warning", text)),
           );
           this.render();
         }
@@ -678,9 +652,16 @@ export class SelfUpdateController {
               0,
             ),
           );
+          const detail = errorOutput.trim()
+            ? errorOutput.trim().split("\n").slice(-5).join("\n")
+            : "";
           this.chat.addChild(
             new Text(
-              theme.fg("dim", "This may be a network issue or permissions problem."),
+              theme.fg(
+                "dim",
+                detail ||
+                  "This may be a network issue or permissions problem.",
+              ),
               1,
               0,
             ),

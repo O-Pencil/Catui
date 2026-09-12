@@ -1448,21 +1448,14 @@ export class InteractiveMode {
     process.once("SIGHUP", signalShutdown);
     process.once("SIGTERM", signalShutdown);
 
-    // Check for auto-update on startup (if enabled)
+    // Check for auto-update on startup. This covers every mode:
+    // "always" installs silently, "prompt" asks the user, "never" stays quiet.
+    // No second version check follows — an async re-check here used to
+    // force-install regardless of the user's choice above.
     await this.selfUpdate.checkAutoUpdateOnStartup();
 
     // Start background polling for silent auto-updates (every 30 min, "always" mode only)
     this.selfUpdate.startBackgroundPolling();
-
-    // Start version check asynchronously (for notification only, if auto-update is not enabled)
-    const autoUpdate = this.settingsManager.getAutoUpdate();
-    if (autoUpdate !== "always") {
-      this.selfUpdate.checkForNewVersion().then(async (newVersion) => {
-        if (newVersion) {
-          await this.selfUpdate.showNewVersionNotification(newVersion);
-        }
-      });
-    }
 
     // Show startup warnings
     const {
