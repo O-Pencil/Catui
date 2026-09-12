@@ -21,7 +21,7 @@ The `extensions/` module contains built-in extensions that extend Catui's capabi
 First-party extension source. Default-enabled entries are auto-loaded by `getBuiltinExtensionPaths()`; entries marked optional in `builtInExtensions` require explicit configuration/CLI opt-in even if their source directory is still here. Benchmark/CI harnesses may opt into Browser Harness registration with `CATUI_ENABLE_BROWSER_EXTENSION=1` without changing user config.
 
 Current default extension directories:
-`ask-user-question/`, `btw/`, `catail/`, `catpaw/`, `context-management/`, `debug/`, `diagnostics/`, `discipline/`, `goal/`, `grub/`, `idle-think/`, `insights/`, `link-world/`, `loop/`, `lsp/`, `mcp/`, `next-step/`, `notebook/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `skill-tool/`, `soul/`, `subagent/`, `task/`, `teach/`, `team/`.
+`ask-user-question/`, `btw/`, `catail/`, `catpaw/`, `context-management/`, `debug/`, `diagnostics/`, `discipline/`, `goal/`, `grub/`, `humanizer/`, `idle-think/`, `insights/`, `link-world/`, `loop/`, `lsp/`, `mcp/`, `next-step/`, `notebook/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `skill-tool/`, `soul/`, `subagent/`, `task/`, `teach/`, `team/`.
 
 Current opt-in source still physically under `extensions/builtin/` pending Q2 physical/package decision:
 `browser/`.
@@ -59,6 +59,21 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 **Design Principle:**
 - Engineering discipline is delivered as default skills plus a short prompt reminder, not hard-coded core behavior.
 - Project and user skills remain able to override default skill names through existing resource precedence.
+
+#### humanizer/ — Writing-Quality Skill (vendored)
+
+**P3 Contract:**
+`index.ts`: - [WHO]: Passive extension that discovers the vendored humanizer writing-quality skill and injects a bounded bootstrap reminder
+    - [FROM]: core/extensions-host/types, node path/url/fs
+    - [HERE]: humanizer extension entry
+
+`SKILL.md`: Vendored 25-pattern guide (Wikipedia "Signs of AI writing") for removing AI-writing tells from prose without changing meaning or inventing facts
+
+`LICENSE`: Vendored upstream MIT license
+
+**Design Principle:**
+- Skill content loads on demand via `resources_discover`; the bootstrap note stays under a few hundred tokens.
+- Writing quality, not detection evasion: the skill forbids inventing facts and sources.
 
 #### diagnostics/ — Extension-Owned Issue Reporting
 

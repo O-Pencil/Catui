@@ -322,6 +322,7 @@ Extensions can:
 | `discipline` | Built-in engineering workflow skills, `skill` tool, and lightweight skill-use bootstrap |
 | `catpaw` | Evidence-led UI/UX design craft workflow skill |
 | `catail` | Research-to-publication Skill from framing through human-gated submission readiness |
+| `humanizer` | Vendored writing-quality skill: removes AI-writing tells from prose without changing meaning or inventing facts |
 | `mcp` | MCP protocol support |
 | `security-audit` | Security vulnerability detection |
 | `soul` | AI personality evolution and memory |
