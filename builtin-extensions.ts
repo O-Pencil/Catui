@@ -18,7 +18,6 @@ const BUNDLED_NANOMEM_EXTENSION_PACKAGES = join(__dirname, "packages", "mem-core
 const BUNDLED_LINK_WORLD_EXTENSION = join(__dirname, "extensions", "builtin", "link-world", "index.js");
 const BUNDLED_BROWSER_EXTENSION = join(__dirname, "extensions", "builtin", "browser", "index.js");
 const BUNDLED_SECURITY_AUDIT_EXTENSION = join(__dirname, "extensions", "builtin", "security-audit", "index.js");
-const BUNDLED_SOUL_EXTENSION = join(__dirname, "extensions", "builtin", "soul", "index.js");
 const BUNDLED_PRESENCE_EXTENSION = join(__dirname, "extensions", "builtin", "presence", "index.js");
 const BUNDLED_NEXT_STEP_EXTENSION = join(__dirname, "extensions", "builtin", "next-step", "index.js");
 const BUNDLED_ASK_USER_QUESTION_EXTENSION = join(__dirname, "extensions", "builtin", "ask-user-question", "index.js");
@@ -74,7 +73,6 @@ export const builtInExtensions: readonly BuiltinExtension[] = [
 	{ id: "link-world", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, resourceDiscovery: true, testContracts: ["external-process", "resource-discovery"], testFiles: ["test/link-world-extension-registration.test.ts"] },
 	{ id: "browser", category: "optional", defaultEnabled: false, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, resourceDiscovery: true, testContracts: ["external-process", "resource-discovery"], testFiles: ["test/browser-extension-registration.test.ts"] },
 	{ id: "security-audit", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
-	{ id: "soul", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false },
 	{ id: "presence", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: true, startsTimers: true, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/presence-opening.test.ts", "test/presence-locale.test.ts"] },
 	{ id: "next-step", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/next-step-injection.test.ts"] },
 	{ id: "ask-user-question", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: true, startsTimers: false, writesWorkspace: false, externalProcess: false },
@@ -227,14 +225,6 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const securityAuditTs = join(__dirname, "extensions", "builtin", "security-audit", "index.ts");
 		if (existsSync(securityAuditTs)) paths.push(securityAuditTs);
-	}
-
-	// === Soul extension (personality evolution system) ===
-	if (existsSync(BUNDLED_SOUL_EXTENSION)) {
-		paths.push(BUNDLED_SOUL_EXTENSION);
-	} else {
-		const soulTs = join(__dirname, "extensions", "builtin", "soul", "index.ts");
-		if (existsSync(soulTs)) paths.push(soulTs);
 	}
 
 	// === Next-step extension (default-on Codex-style "suggest next steps" rule injection) ===
