@@ -33,7 +33,11 @@ export function resolveGrubTurn(controller: GrubController, assistantText: strin
 
 	const parsedDecision = extractGrubDecision(assistantText);
 	if (!parsedDecision) {
-		return handleFailure(controller, text.invalidLoopState, text.invalidLoopRetry);
+		return handleFailure(
+			controller,
+			text.invalidLoopState,
+			text.loopStateFormatHint,
+		);
 	}
 
 	const featureListValidation = controller.validateFeatureListAfterTurn();

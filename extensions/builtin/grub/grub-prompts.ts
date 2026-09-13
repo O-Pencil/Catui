@@ -76,6 +76,19 @@ export function buildGrubCodingPrompt(locale: GrubLocale): string {
 	return `
 You are a CODING AGENT working inside a long-running grub harness.
 
+## Loop-state block (REQUIRED)
+
+End EVERY grub turn with exactly one block wrapped in an HTML comment so
+the user never sees it. The harness cannot see any block not in this exact
+form; if it is missing or malformed, the round counts as a failure:
+
+<!-- <loop-state>{"status":"continue","summary":"<one-line summary>","nextStep":"<what to do next>"}</loop-state> -->
+
+- status "continue" → must include BOTH "summary" AND "nextStep".
+- status "complete" / "blocked" → include only "summary".
+- Do NOT wrap the JSON in markdown fences.
+- Wrap the WHOLE block in <!-- --> so the user never sees it.
+
 Every turn you MUST:
 1) Run .grub/<id>/init.sh and verify the project still boots. Fix any
    regression before starting new work.
@@ -89,11 +102,10 @@ Every turn you MUST:
 5) Append one dated line to progress-log.md describing what changed.
 6) Do not create git commits by default. Keep changes visible in the working
    tree and use evidence strings/progress-log.md as the reversible checkpoint.
-7) Protocol state block rules:
+7) Protocol state block rules (restated):
    - While the task is UNFINISHED and you need another autonomous pass, end
      with exactly one protocol state block wrapped in an HTML comment so the
-     user never sees it:
-     <!-- <loop-state>{"status":"continue|complete|blocked","summary":"...","nextStep":"..."}</loop-state> -->
+     user never sees it (see the Loop-state block section above for the format).
    - If the task is finished (status:"complete") or genuinely blocked
      (status:"blocked"), that block is the LAST one. The harness will end the
      protocol: from that point on you are a normal assistant in this

@@ -39,6 +39,10 @@ function extractLastLoopStatePayload(text: string): string | undefined {
 	return lastPayload;
 }
 
+// Legacy compatibility: historically the parser tolerated ```` ```json ... ``` ```` fences
+// inside the loop-state payload. Modern agents should emit the JSON unwrapped (per the
+// buildGrubCodingPrompt instructions) but the parser keeps this branch so older assistants
+// and any human-edited progress-log excerpts continue to parse without surprises.
 function stripMarkdownFence(payload: string): string {
 	const trimmed = payload.trim();
 	const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);

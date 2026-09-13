@@ -108,6 +108,22 @@ const GRUB_TEXT = {
 		invalidLoopState: "I could not read the round summary from the assistant response.",
 		invalidLoopRetry: (iteration: number | undefined) =>
 			`[Grub] I could not read the round summary. Retrying round ${iteration}.`,
+		loopStateExample:
+			'<!-- <loop-state>{"status":"continue","summary":"<one-line summary>","nextStep":"<what to do next>"}</loop-state> -->',
+		loopStateFormatHint: (iteration: number | undefined) =>
+			[
+				`[Grub] I could not read the round summary. Retrying round ${iteration}.`,
+				"",
+				"Your reply did not contain a parseable <loop-state> block. End the turn with exactly one",
+				"block wrapped in an HTML comment so the harness can see it. The harness ignores anything",
+				"outside this exact form:",
+				"",
+				'<!-- <loop-state>{"status":"continue","summary":"<one-line summary>","nextStep":"<what to do next>"}</loop-state> -->',
+				"",
+				"- status: \"continue\" (must include summary AND nextStep), \"complete\" (summary only), or \"blocked\" (summary only).",
+				"- Do NOT wrap the JSON in markdown fences.",
+				"- Wrap the whole block in <!-- --> so the user never sees it.",
+			].join("\n"),
 		prematureComplete: (reason: string) => `[Grub] Not done yet: ${reason}. Continuing.`,
 		statsHeading: "Run summary",
 		statDuration: (ms: number) => `Total time: ${formatDuration(ms)}`,
@@ -213,6 +229,21 @@ const GRUB_TEXT = {
 		iterationFailedRetry: (iteration: number | undefined) => `[Grub] 这一轮没有正常完成，准备重试第 ${iteration} 轮。`,
 		invalidLoopState: "我无法从 assistant 回复中读到本轮总结。",
 		invalidLoopRetry: (iteration: number | undefined) => `[Grub] 我无法读到本轮总结，准备重试第 ${iteration} 轮。`,
+		loopStateExample:
+			'<!-- <loop-state>{"status":"continue","summary":"<一句话总结>","nextStep":"<下一步要做的事>"}</loop-state> -->',
+		loopStateFormatHint: (iteration: number | undefined) =>
+			[
+				`[Grub] 我无法读到本轮总结，准备重试第 ${iteration} 轮。`,
+				"",
+				"你的回复中没有可解析的 <loop-state> 块。请在结尾处输出一个用 HTML 注释包裹的块，",
+				"harness 才能识别。它只识别这一种形式，其他都会被忽略：",
+				"",
+				'<!-- <loop-state>{"status":"continue","summary":"<一句话总结>","nextStep":"<下一步要做的事>"}</loop-state> -->',
+				"",
+				"- status: \"continue\" 必须包含 summary 和 nextStep；\"complete\" 或 \"blocked\" 只带 summary。",
+				"- 不要把 JSON 包在 markdown 代码块里。",
+				"- 整块用 <!-- --> 包裹，用户看不到。",
+			].join("\n"),
 		prematureComplete: (reason: string) => `[Grub] 还不能结束：${reason}。继续执行。`,
 		statsHeading: "本次运行总览",
 		statDuration: (ms: number) => `总耗时：${formatDuration(ms)}`,

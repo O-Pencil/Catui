@@ -1364,3 +1364,67 @@ test("grub prompts require comment-wrapped loop-state blocks and a protocol exit
 	assert.match(initZh, /<!-- <loop-state>/);
 	assert.doesNotMatch(initZh, /\n<loop-state>/);
 });
+
+test("resolveGrubTurn includes loop-state template when assistant omits the block", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		controller.start("Recovery from malformed round output", cwd);
+		controller.markDispatched();
+
+		const result = resolveGrubTurn(controller, "No structured summary at all.");
+
+		const message = result.events[0]?.message ?? "";
+		assert.equal(result.dispatchNext, true);
+		assert.equal(controller.getActiveTask()?.consecutiveFailures, 1);
+		// The retry message must surface a parseable loop-state example so the
+		// assistant can fix its format on the next turn instead of guessing.
+		assert.match(message, /<!-- <loop-state>\{/);
+		assert.match(message, /"summary"/);
+		assert.match(message, /"nextStep"/);
+		// And it must still warn the agent with the legacy wording so existing
+		// log scrapers and operator dashboards keep matching.
+		assert.match(message, /could not read the round summary/i);
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("loop-state format hint is localized for zh tasks", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		controller.start("恢复格式错误的中文任务", cwd, { locale: "zh" });
+		controller.markDispatched();
+
+		const result = resolveGrubTurn(controller, "没有任何结构化总结。");
+
+		const message = result.events[0]?.message ?? "";
+		// Chinese surface wording must appear.
+		assert.match(message, /我无法读到本轮总结/);
+		assert.match(message, /<loop-state>/);
+		// And it must still warn that the agent did not include a block.
+		assert.match(message, /你的回复中没有可解析的/);
+	} finally {
+		cleanup(cwd);
+	}
+});
+
+test("loop-state failure message preserves existing wording for backwards compat", () => {
+	const cwd = createTempWorkspace();
+	try {
+		const controller = new GrubController();
+		controller.start("Legacy log scrapers still match", cwd);
+		controller.markDispatched();
+
+		const result = resolveGrubTurn(controller, "Plain prose reply with no loop-state.");
+
+		// Backwards-compat: the legacy "could not read the round summary"
+		// substring must still appear so external dashboards / log parsers
+		// built before this change keep triggering.
+		const message = result.events[0]?.message ?? "";
+		assert.match(message, /could not read the round summary/i);
+	} finally {
+		cleanup(cwd);
+	}
+});
