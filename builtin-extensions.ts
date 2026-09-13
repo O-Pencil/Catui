@@ -45,7 +45,6 @@ const BUNDLED_SKILL_TOOL_EXTENSION = join(__dirname, "extensions", "builtin", "s
 const BUNDLED_CATPAW_EXTENSION = join(__dirname, "extensions", "builtin", "catpaw", "index.js");
 const BUNDLED_HUMANIZER_EXTENSION = join(__dirname, "extensions", "builtin", "humanizer", "index.js");
 const BUNDLED_CATAIL_EXTENSION = join(__dirname, "extensions", "builtin", "catail", "index.js");
-const BUNDLED_ARENA_EXTENSION = join(__dirname, "extensions", "builtin", "arena", "index.js");
 const BUNDLED_EVOLUTION_EXTENSION = join(__dirname, "extensions", "optional", "evolution", "index.js");
 
 export type BuiltinExtensionRiskLevel = "passive" | "command" | "tool" | "background" | "write-capable";
@@ -434,14 +433,6 @@ export function getBuiltinExtensionPaths(): string[] {
 	} else {
 		const catailTs = join(__dirname, "extensions", "builtin", "catail", "index.ts");
 		if (existsSync(catailTs)) paths.push(catailTs);
-	}
-
-	// === Arena extension (parallel subagent racing) ===
-	if (existsSync(BUNDLED_ARENA_EXTENSION)) {
-		paths.push(BUNDLED_ARENA_EXTENSION);
-	} else {
-		const arenaTs = join(__dirname, "extensions", "builtin", "arena", "index.ts");
-		if (existsSync(arenaTs)) paths.push(arenaTs);
 	}
 
 	// === Evolution extension (controlled self-evolution, default-on after product approval) ===
