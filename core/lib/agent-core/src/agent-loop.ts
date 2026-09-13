@@ -52,6 +52,12 @@ import { buildAgentRunPolicy, resolveAgentRunLoopFramework } from "./agent-run-r
 import { ToolPolicyPipeline } from "./tool-policy.js";
 import { LoopProgressTracker, type LivelockDetection } from "./loop-progress.js";
 import {
+	buildToolMap,
+	partitionStructuredAdaptiveToolCalls,
+	type StructuredAdaptiveToolCall,
+	runToolBatch,
+} from "./structured-adaptive-tool-orchestration.js";
+import {
 	waitForAbortableOperation,
 	waitForAssistantStream,
 	waitForAssistantStreamEvent,
@@ -531,6 +537,7 @@ async function runLoop(
 					config.sessionId,
 					currentContext.messages.length,
 					await config.getProgressMarker?.(),
+					config.maxToolConcurrency,
 				);
 				await traceToolBatch(
 					config.runTrace,
@@ -1088,6 +1095,7 @@ async function executeToolCalls(
 	sessionId?: string,
 	messageCount = 0,
 	progressMarker?: string,
+	maxConcurrency?: number,
 ): Promise<{ toolResults: ToolResultMessage[]; contextMessages: AgentMessage[]; steeringMessages?: AgentMessage[]; livelock?: LivelockDetection; approvalRequired?: { checkpointId: string; policyId?: string; toolCallId: string } }> {
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
 	const toolByName = buildToolMap(tools);
@@ -1096,6 +1104,27 @@ async function executeToolCalls(
 	let steeringMessages: AgentMessage[] | undefined;
 	let livelock: LivelockDetection | undefined;
 	let approvalRequired: { checkpointId: string; policyId?: string; toolCallId: string } | undefined;
+
+	// 无 mayPause policy 时使用并发批次执行（只读安全工具同批并发，有状态工具串行）
+	if (!toolPolicies?.some((policy) => policy.mayPause !== false)) {
+		return executeToolCallsBatched(
+			toolCalls,
+			toolByName,
+			signal,
+			stream,
+			getSteeringMessages,
+			maxConcurrency,
+			canUseTool,
+			toolPolicies,
+			checkpointStore,
+			checkpointTtlMs,
+			sessionId,
+			messageCount,
+			assistantMessage.timestamp,
+			progressTracker,
+			progressMarker,
+		);
+	}
 
 	for (let index = 0; index < toolCalls.length; index++) {
 		const toolCall = toolCalls[index];
@@ -1276,17 +1305,287 @@ async function executeToolCalls(
 	return { toolResults: results, contextMessages, steeringMessages, livelock, approvalRequired };
 }
 
-function buildToolMap(tools: AgentTool<any>[] | undefined): Map<string, AgentTool<any>> {
-	const toolByName = new Map<string, AgentTool<any>>();
-	for (const tool of tools ?? []) {
-		toolByName.set(tool.name, tool);
-		for (const alias of tool.aliases ?? []) {
-			if (!toolByName.has(alias)) {
-				toolByName.set(alias, tool);
+interface SingleToolUseResult {
+	toolResult: ToolResultMessage;
+	contextMessages: AgentMessage[];
+	approvalRequired?: { checkpointId: string; policyId?: string; toolCallId: string };
+}
+
+/**
+ * Concurrent batched tool execution for the standard loop.
+ * Partitions tool calls into concurrency-safe batches, runs each batch with a
+ * bounded worker pool, then applies livelock/approval/steering checks between
+ * batches so the standard loop's control semantics survive batching.
+ */
+async function executeToolCallsBatched(
+	toolCalls: StructuredAdaptiveToolCall[],
+	toolByName: Map<string, AgentTool<any>>,
+	signal: AbortSignal | undefined,
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+	getSteeringMessages?: AgentLoopConfig["getSteeringMessages"],
+	maxConcurrency?: number,
+	canUseTool?: AgentLoopConfig["canUseTool"],
+	toolPolicies?: AgentLoopConfig["toolPolicies"],
+	checkpointStore?: AgentLoopConfig["checkpointStore"],
+	checkpointTtlMs?: number,
+	sessionId?: string,
+	messageCount = 0,
+	conversationTimestamp?: number,
+	progressTracker?: LoopProgressTracker,
+	progressMarker?: string,
+): Promise<{ toolResults: ToolResultMessage[]; contextMessages: AgentMessage[]; steeringMessages?: AgentMessage[]; livelock?: LivelockDetection; approvalRequired?: { checkpointId: string; policyId?: string; toolCallId: string } }> {
+	const results: ToolResultMessage[] = [];
+	const contextMessages: AgentMessage[] = [];
+	let steeringMessages: AgentMessage[] | undefined;
+	let livelock: LivelockDetection | undefined;
+	let approvalRequired: { checkpointId: string; policyId?: string; toolCallId: string } | undefined;
+
+	const batches = partitionStructuredAdaptiveToolCalls(toolCalls, toolByName);
+	let consumed = 0;
+
+	for (const batch of batches) {
+		const batchUses = await runToolBatch(
+			batch,
+			(toolCall) =>
+				executeSingleToolUse(
+					toolCall,
+					toolByName.get(toolCall.name),
+					signal,
+					stream,
+					canUseTool,
+					toolPolicies,
+					checkpointStore,
+					checkpointTtlMs,
+					sessionId,
+					messageCount,
+					conversationTimestamp,
+				),
+			maxConcurrency,
+		);
+
+		for (let index = 0; index < batch.length; index++) {
+			const toolCall = batch[index];
+			const use = batchUses[index];
+			if (!toolCall || !use) continue;
+			if (use.approvalRequired) {
+				approvalRequired = use.approvalRequired;
+				contextMessages.push(...use.contextMessages);
+				break;
+			}
+			contextMessages.push(...use.contextMessages);
+			results.push(use.toolResult);
+			if (progressTracker) {
+				const errorType =
+					use.toolResult.details && typeof use.toolResult.details === "object"
+						? (use.toolResult.details as { errorType?: unknown }).errorType
+						: undefined;
+				livelock = progressTracker.observe({
+					toolName: toolCall.name,
+					input: toolCall.arguments,
+					output: { content: use.toolResult.content, details: use.toolResult.details },
+					outcome: !use.toolResult.isError
+						? "success"
+						: errorType === "permission_denied" || errorType === "approval_required"
+							? "denied"
+							: "error",
+					progressMarker,
+				});
+				if (livelock) break;
+			}
+		}
+
+		consumed += batch.length;
+
+		if (livelock) {
+			for (const skipped of toolCalls.slice(consumed)) {
+				results.push(skipToolCall(skipped, stream, "Skipped because a repeated no-progress cycle was detected.", { errorType: "livelock_detected" }));
+			}
+			break;
+		}
+		if (approvalRequired) {
+			for (const skipped of toolCalls.slice(consumed)) {
+				results.push(skipToolCall(skipped, stream));
+			}
+			break;
+		}
+
+		if (getSteeringMessages) {
+			const steering = await getSteeringMessages();
+			if (steering.length > 0) {
+				steeringMessages = steering;
+				const remainingCalls = toolCalls.slice(consumed);
+				for (const skipped of remainingCalls) {
+					results.push(skipToolCall(skipped, stream));
+				}
+				break;
 			}
 		}
 	}
-	return toolByName;
+
+	return { toolResults: results, contextMessages, steeringMessages, livelock, approvalRequired };
+}
+
+async function executeSingleToolUse(
+	toolCall: StructuredAdaptiveToolCall,
+	tool: AgentTool<any> | undefined,
+	signal: AbortSignal | undefined,
+	stream: EventStream<AgentEvent, AgentMessage[]>,
+	canUseTool?: AgentLoopConfig["canUseTool"],
+	toolPolicies?: AgentLoopConfig["toolPolicies"],
+	checkpointStore?: AgentLoopConfig["checkpointStore"],
+	checkpointTtlMs?: number,
+	sessionId?: string,
+	messageCount = 0,
+	conversationTimestamp?: number,
+): Promise<SingleToolUseResult> {
+	const startedAt = Date.now();
+	_tlog(`tool_exec_start name=${toolCall.name}`);
+
+	stream.push({
+		type: "tool_execution_start",
+		toolCallId: toolCall.id,
+		toolName: toolCall.name,
+		args: toolCall.arguments,
+	});
+
+	let result: AgentToolResult<any>;
+	let isError = false;
+	let executedInput: unknown = toolCall.arguments;
+	let didExecute = false;
+
+	try {
+		if (!tool) throw new ToolNotFoundError(toolCall.name);
+
+		let validatedArgs = validateToolArguments(tool, toolCall);
+		const validationMessage = await tool.validateInput?.(validatedArgs);
+		if (typeof validationMessage === "string" && validationMessage.trim()) {
+			throw new Error(validationMessage);
+		}
+		const policyDecision = toolPolicies?.length
+			? await new ToolPolicyPipeline(toolPolicies, {
+				checkpointStore,
+				checkpointTtlMs,
+				sessionId,
+				conversationBoundary: { messageCount, assistantTimestamp: conversationTimestamp },
+			}).evaluateBefore({
+				toolCallId: toolCall.id,
+				toolName: tool.name,
+				requestedToolName: toolCall.name,
+				input: validatedArgs,
+				rawInput: toolCall.arguments,
+			})
+			: undefined;
+		if (policyDecision?.decision === "allow" && policyDecision.input !== undefined) validatedArgs = policyDecision.input;
+		executedInput = validatedArgs;
+		const permission = policyDecision && policyDecision.decision !== "allow" ? policyDecision : await canUseTool?.({
+			toolCallId: toolCall.id,
+			toolName: tool.name,
+			requestedToolName: toolCall.name,
+			input: validatedArgs,
+			rawInput: toolCall.arguments,
+			tool,
+		});
+		if (permission?.decision === "deny" || permission?.decision === "pause") {
+			const reason = permission.reason?.trim();
+			const policyId = "policyId" in permission ? permission.policyId : undefined;
+			const checkpointId = "checkpointId" in permission ? permission.checkpointId : undefined;
+			result = {
+				content: [
+					{ type: "text", text: reason ? `Permission denied: ${reason}` : `Permission denied for ${tool.name}` },
+				],
+				details: {
+					errorType: permission.decision === "pause" ? "approval_required" : "permission_denied",
+					reason,
+					policyId,
+					checkpointId,
+					toolName: tool.name,
+					toolCallId: toolCall.id,
+				},
+			};
+			isError = true;
+		} else {
+			didExecute = true;
+			result = await tool.execute(toolCall.id, validatedArgs, signal, (partialResult) => {
+				stream.push({
+					type: "tool_execution_update",
+					toolCallId: toolCall.id,
+					toolName: toolCall.name,
+					args: toolCall.arguments,
+					partialResult,
+				});
+			});
+			result = enforceMaxResultSize(result, tool.maxResultSizeChars);
+		}
+	} catch (e) {
+		const message = e instanceof Error ? e.message : String(e);
+		const denied = e instanceof ToolPermissionDeniedError;
+		result = {
+			content: [{ type: "text", text: message }],
+			details: denied || isPermissionDeniedMessage(message)
+				? {
+						errorType: "permission_denied",
+						reason: message,
+						policyId: denied ? e.policyId : undefined,
+						toolName: tool?.name ?? toolCall.name,
+						toolCallId: toolCall.id,
+					}
+				: {},
+		};
+		isError = true;
+	}
+	if (tool && didExecute && toolPolicies?.length) {
+		const evaluated = await new ToolPolicyPipeline(toolPolicies).evaluateAfter({
+			toolCallId: toolCall.id,
+			toolName: tool.name,
+			requestedToolName: toolCall.name,
+			input: executedInput,
+			rawInput: toolCall.arguments,
+			result,
+			isError,
+		});
+		result = evaluated.result;
+		isError = evaluated.isError;
+	}
+
+	const toolDurationMs = Date.now() - startedAt;
+	stream.push({
+		type: "tool_execution_end",
+		toolCallId: toolCall.id,
+		toolName: toolCall.name,
+		result,
+		isError,
+		durationMs: toolDurationMs,
+	});
+	_tlog(`tool_exec_end name=${toolCall.name} duration=${toolDurationMs}ms`);
+
+	const toolResultMessage: ToolResultMessage = {
+		role: "toolResult",
+		toolCallId: toolCall.id,
+		toolName: toolCall.name,
+		content: result.content,
+		details: result.details,
+		isError,
+		timestamp: Date.now(),
+	};
+
+	let approvalRequired: { checkpointId: string; policyId?: string; toolCallId: string } | undefined;
+	const errorType = result.details && typeof result.details === "object" ? (result.details as { errorType?: unknown }).errorType : undefined;
+	if (errorType === "approval_required") {
+		const details = result.details as { checkpointId?: unknown; policyId?: unknown };
+		if (typeof details.checkpointId === "string") {
+			approvalRequired = {
+				checkpointId: details.checkpointId,
+				policyId: typeof details.policyId === "string" ? details.policyId : undefined,
+				toolCallId: toolCall.id,
+			};
+		}
+	}
+
+	return {
+		toolResult: toolResultMessage,
+		contextMessages: result.contextMessages ?? [],
+		approvalRequired,
+	};
 }
 
 function isPermissionDeniedMessage(message: string): boolean {

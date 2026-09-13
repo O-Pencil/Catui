@@ -22,7 +22,6 @@ import {
 import { getModel } from "@catui/ai/models";
 import { streamSimple } from "@catui/ai/stream";
 import { agentLoop, agentLoopContinue } from "./agent-loop.js";
-import { structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue } from "./structured-adaptive-agent-loop.js";
 import { InMemoryCheckpointStore } from "./run-checkpoint.js";
 import { normalizeAgentLoopFramework } from "./types.js";
 import { ToolPolicyPipeline } from "./tool-policy.js";
@@ -810,14 +809,11 @@ export class Agent {
 		let partial: AgentMessage | null = null;
 
 		try {
-			const useStructuredAdaptiveLoop = config.loopFramework === "weak-model-compatible";
+			// Unified loop: standard and weak-model-compatible both run the same
+			// loop implementation; loopFramework only annotates traces/results.
 			const stream = messages
-				? useStructuredAdaptiveLoop
-					? structuredAdaptiveAgentLoop(messages, context, config, this.abortController.signal, this.streamFn)
-					: agentLoop(messages, context, config, this.abortController.signal, this.streamFn)
-				: useStructuredAdaptiveLoop
-					? structuredAdaptiveAgentLoopContinue(context, config, this.abortController.signal, this.streamFn)
-					: agentLoopContinue(context, config, this.abortController.signal, this.streamFn);
+				? agentLoop(messages, context, config, this.abortController.signal, this.streamFn)
+				: agentLoopContinue(context, config, this.abortController.signal, this.streamFn);
 
 			for await (const event of stream) {
 				// Update internal state based on events

@@ -139,7 +139,7 @@ export async function runStructuredAdaptiveTools(
 	return { toolResults: results, contextMessages, permissionDenials };
 }
 
-async function runToolBatch<T, TResult>(
+export async function runToolBatch<T, TResult>(
 	items: T[],
 	run: (item: T) => Promise<TResult>,
 	maxConcurrency: number | undefined,
