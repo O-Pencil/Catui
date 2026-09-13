@@ -464,7 +464,9 @@ function concurrentSafeTools(): HarnessEvalFixture {
 				: assistant([{ type: "text", text: "done" }])),
 			verify: ({ events, trace }) => {
 				assert.deepEqual([...executions].sort(), ["first", "second"]);
-				assert.equal(maxActive, context.framework === "weak-model-compatible" ? 2 : 1);
+				// Both frameworks now run the unified concurrent loop, so concurrency-safe
+				// tools batch and execute in parallel regardless of the configured value.
+				assert.equal(maxActive, 2);
 				assert.equal(agentResult(events).stopReason, "stop");
 				assert.equal(trace.filter((event) => event.kind === "tool.completed").length, 2);
 			},

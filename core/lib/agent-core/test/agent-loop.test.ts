@@ -9,8 +9,8 @@ import { EventStream } from "@catui/ai/events";
 import { Type } from "@catui/ai/schema";
 import { describe, expect, it } from "vitest";
 import { agentLoop, agentLoopContinue } from "../src/agent-loop.js";
-import { structuredAdaptiveAgentLoop } from "../src/structured-adaptive-agent-loop.js";
-import { buildToolMap, partitionStructuredAdaptiveToolCalls, type StructuredAdaptiveToolCall } from "../src/structured-adaptive-tool-orchestration.js";
+import { structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue } from "../src/structured-adaptive-agent-loop.js";
+import { buildToolMap, isStructuredAdaptiveToolCallConcurrencySafe, partitionStructuredAdaptiveToolCalls, resolveMaxToolConcurrency, type StructuredAdaptiveToolCall } from "../src/structured-adaptive-tool-orchestration.js";
 import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, AgentTool } from "../src/types.js";
 import { InMemoryCheckpointStore } from "../src/run-checkpoint.js";
 
@@ -2151,7 +2151,12 @@ describe("agentLoop with AgentMessage", () => {
 	});
 });
 
-describe("structuredAdaptiveAgentLoop", () => {
+describe("structured adaptive tool orchestration", () => {
+	// Pure-function tests for the shared tool orchestration helpers. These
+	// helpers are consumed by the unified standard loop and remain exported
+	// for extension consumers, so the tests live at module scope instead of
+	// inside the SA loop describe block.
+
 	it("should resolve tool aliases in the structured-adaptive tool orchestration layer", () => {
 		const toolSchema = Type.Object({});
 		const tool: AgentTool<typeof toolSchema> = {
@@ -2210,6 +2215,89 @@ describe("structuredAdaptiveAgentLoop", () => {
 
 		expect(batches.map((batch) => batch.map((call) => call.id))).toEqual([["1", "2"], ["3"], ["4"]]);
 	});
+
+	it("should resolve max tool concurrency from config > CATUI env > legacy NANOPENCIL env > default", () => {
+		const previousCatui = process.env.CATUI_MAX_TOOL_USE_CONCURRENCY;
+		const previousLegacy = process.env.NANOPENCIL_MAX_TOOL_USE_CONCURRENCY;
+		try {
+			delete process.env.CATUI_MAX_TOOL_USE_CONCURRENCY;
+			delete process.env.NANOPENCIL_MAX_TOOL_USE_CONCURRENCY;
+			// Default fallback when neither config nor env vars are set.
+			expect(resolveMaxToolConcurrency(undefined)).toBe(10);
+			// Explicit config takes precedence over env vars and default.
+			expect(resolveMaxToolConcurrency(3)).toBe(3);
+			// Non-positive config values: 0 is treated as falsy and falls back to
+			// default; negatives are floored to at least 1.
+			expect(resolveMaxToolConcurrency(0)).toBe(10);
+			expect(resolveMaxToolConcurrency(-5)).toBe(1);
+			// CATUI env var takes precedence over legacy NANOPENCIL env var.
+			process.env.NANOPENCIL_MAX_TOOL_USE_CONCURRENCY = "5";
+			expect(resolveMaxToolConcurrency(undefined)).toBe(5);
+			process.env.CATUI_MAX_TOOL_USE_CONCURRENCY = "7";
+			expect(resolveMaxToolConcurrency(undefined)).toBe(7);
+			// Explicit config still beats both env vars.
+			expect(resolveMaxToolConcurrency(2)).toBe(2);
+		} finally {
+			if (previousCatui === undefined) delete process.env.CATUI_MAX_TOOL_USE_CONCURRENCY;
+			else process.env.CATUI_MAX_TOOL_USE_CONCURRENCY = previousCatui;
+			if (previousLegacy === undefined) delete process.env.NANOPENCIL_MAX_TOOL_USE_CONCURRENCY;
+			else process.env.NANOPENCIL_MAX_TOOL_USE_CONCURRENCY = previousLegacy;
+		}
+	});
+
+	it("should classify concurrency safety via explicit flag, function, or default safe list", () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const safeByFlag: AgentTool<typeof toolSchema> = {
+			name: "safe_explicit",
+			label: "safe explicit", description: "safe", parameters: toolSchema,
+			isConcurrencySafe: true, async execute() { return { content: [], details: {} }; },
+		};
+		const unsafeByFlag: AgentTool<typeof toolSchema> = {
+			name: "unsafe_explicit",
+			label: "unsafe explicit", description: "unsafe", parameters: toolSchema,
+			isConcurrencySafe: false, async execute() { return { content: [], details: {} }; },
+		};
+		const safeByFunction: AgentTool<typeof toolSchema> = {
+			name: "conditional_read",
+			label: "conditional read", description: "safe iff value is short", parameters: toolSchema,
+			isConcurrencySafe: ({ value }) => value.length <= 3,
+			async execute() { return { content: [], details: {} }; },
+		};
+		const toolMap = new Map([
+			[safeByFlag.name, safeByFlag],
+			[unsafeByFlag.name, unsafeByFlag],
+			[safeByFunction.name, safeByFunction],
+		]);
+		const call = (name: string, args: Record<string, unknown>): StructuredAdaptiveToolCall => ({
+			type: "toolCall", id: name, name, arguments: args,
+		});
+
+		// Explicit flag wins regardless of default safe list.
+		expect(isStructuredAdaptiveToolCallConcurrencySafe(call("safe_explicit", {}), safeByFlag)).toBe(true);
+		expect(isStructuredAdaptiveToolCallConcurrencySafe(call("unsafe_explicit", {}), unsafeByFlag)).toBe(false);
+		// Function-based safety delegates with validated arguments.
+		expect(isStructuredAdaptiveToolCallConcurrencySafe(call("conditional_read", { value: "ok" }), safeByFunction)).toBe(true);
+		expect(isStructuredAdaptiveToolCallConcurrencySafe(call("conditional_read", { value: "this is long" }), safeByFunction)).toBe(false);
+		// Undeclared tool name falls back to the default safe list (read is on it).
+		expect(isStructuredAdaptiveToolCallConcurrencySafe(call("read", {}), undefined)).toBe(true);
+		// Unknown name with no tool falls off the default list.
+		expect(isStructuredAdaptiveToolCallConcurrencySafe(call("unknown_tool_xyz", {}), undefined)).toBe(false);
+		// Throwing safety function is treated as not safe.
+		const throwing: AgentTool<typeof toolSchema> = {
+			name: "throwing", label: "throwing", description: "throw", parameters: toolSchema,
+			isConcurrencySafe: () => { throw new Error("boom"); },
+			async execute() { return { content: [], details: {} }; },
+		};
+		expect(isStructuredAdaptiveToolCallConcurrencySafe(call("throwing", {}), throwing)).toBe(false);
+	});
+});
+
+describe("structuredAdaptiveAgentLoop", () => {
+	// Wrapper equivalence regression: structuredAdaptiveAgentLoop is now a thin
+	// wrapper around agentLoop. Tests in this block exercise the public SA entry
+	// point and verify it produces the same observable behavior as the standard
+	// loop. Behavioral overlaps with the standard loop describe blocks above
+	// remain useful as a regression guard against future wrapper drift.
 
 	it("should batch concurrency-safe tools while preserving tool result order", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
@@ -2310,21 +2398,17 @@ describe("structuredAdaptiveAgentLoop", () => {
 		expect(toolEnds.every((event) => typeof event.durationMs === "number")).toBe(true);
 	});
 
-	it("should start concurrency-safe streaming tools before the assistant response is done", async () => {
+	it("should execute streamed tool calls after the assistant response completes", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
-		let toolStarted!: () => void;
-		const toolStartedPromise = new Promise<void>((resolve) => {
-			toolStarted = resolve;
-		});
-		let startedBeforeDone = false;
+		const started: string[] = [];
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "stream_read",
 			label: "Stream read",
-			description: "Safe tool that should start as soon as its streamed call is complete",
+			description: "Safe tool delivered through streamed toolcall events",
 			parameters: toolSchema,
 			isConcurrencySafe: true,
 			async execute(_toolCallId, params) {
-				toolStarted();
+				started.push(params.value);
 				return {
 					content: [{ type: "text", text: params.value }],
 					details: { value: params.value },
@@ -2344,18 +2428,13 @@ describe("structuredAdaptiveAgentLoop", () => {
 		let callIndex = 0;
 		const stream = structuredAdaptiveAgentLoop([createUserMessage("stream read")], context, config, undefined, () => {
 			const mockStream = new MockAssistantStream();
-			queueMicrotask(async () => {
+			queueMicrotask(() => {
 				if (callIndex === 0) {
 					const toolCall = { type: "toolCall" as const, id: "tool-1", name: "stream_read", arguments: { value: "early" } };
 					const partial = createAssistantMessage([toolCall], "toolUse");
 					mockStream.push({ type: "start", partial });
 					mockStream.push({ type: "toolcall_start", contentIndex: 0, partial });
 					mockStream.push({ type: "toolcall_end", contentIndex: 0, toolCall, partial });
-					startedBeforeDone =
-						(await Promise.race([
-							toolStartedPromise.then(() => true),
-							new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 20)),
-						])) === true;
 					mockStream.push({
 						type: "done",
 						reason: "toolUse",
@@ -2378,7 +2457,9 @@ describe("structuredAdaptiveAgentLoop", () => {
 			events.push(event);
 		}
 
-		expect(startedBeforeDone).toBe(true);
+		// Unified loop: streamed toolcall events are consumed fully, then the tool
+		// executes after the assistant response completes and results keep order.
+		expect(started).toEqual(["early"]);
 		const toolResults = events
 			.filter(
 				(event): event is Extract<AgentEvent, { type: "message_end" }> =>
@@ -2388,7 +2469,7 @@ describe("structuredAdaptiveAgentLoop", () => {
 		expect(toolResults).toEqual(["tool-1"]);
 	});
 
-	it("should close streamed tools with error tool results when the assistant stream errors", async () => {
+	it("should synthesize interrupted error results when the assistant stream errors before tool execution", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		let toolObservedAbort = false;
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
@@ -2432,7 +2513,7 @@ describe("structuredAdaptiveAgentLoop", () => {
 				mockStream.push({ type: "start", partial });
 				mockStream.push({ type: "toolcall_start", contentIndex: 0, partial });
 				mockStream.push({ type: "toolcall_end", contentIndex: 0, toolCall, partial });
-				const errorMessage = createAssistantMessage([{ type: "text", text: "" }], "error");
+				const errorMessage = createAssistantMessage([toolCall], "error");
 				errorMessage.errorMessage = "upstream stream failed";
 				mockStream.push({ type: "error", reason: "error", error: errorMessage });
 			});
@@ -2444,7 +2525,9 @@ describe("structuredAdaptiveAgentLoop", () => {
 			events.push(event);
 		}
 
-		expect(toolObservedAbort).toBe(true);
+		// Unified loop: the tool never starts; the errored stream synthesizes an
+		// interrupted tool result instead of executing the tool.
+		expect(toolObservedAbort).toBe(false);
 		const toolResult = events.find(
 			(event): event is Extract<AgentEvent, { type: "message_end" }> =>
 				event.type === "message_end" && event.message.role === "toolResult",
@@ -2452,7 +2535,7 @@ describe("structuredAdaptiveAgentLoop", () => {
 		expect(toolResult?.toolCallId).toBe("tool-1");
 		expect(toolResult?.isError).toBe(true);
 		expect(toolResult?.content[0]?.type === "text" ? toolResult.content[0].text : "").toContain(
-			"assistant stream error",
+			"interrupted",
 		);
 		const turnEnd = events.find((event): event is Extract<AgentEvent, { type: "turn_end" }> =>
 			event.type === "turn_end",
@@ -2460,7 +2543,7 @@ describe("structuredAdaptiveAgentLoop", () => {
 		expect(turnEnd?.toolResults.map((result) => result.toolCallId)).toEqual(["tool-1"]);
 	});
 
-	it("should synthesize error results for queued streamed tools that never started", async () => {
+	it("should synthesize interrupted error results for all pending tool calls when the stream errors", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		let releaseFirst!: () => void;
 		const firstGate = new Promise<void>((resolve) => {
@@ -2499,7 +2582,7 @@ describe("structuredAdaptiveAgentLoop", () => {
 				mockStream.push({ type: "start", partial });
 				mockStream.push({ type: "toolcall_end", contentIndex: 0, toolCall: firstCall, partial });
 				mockStream.push({ type: "toolcall_end", contentIndex: 1, toolCall: secondCall, partial });
-				const errorMessage = createAssistantMessage([{ type: "text", text: "" }], "error");
+				const errorMessage = createAssistantMessage([firstCall, secondCall], "error");
 				errorMessage.errorMessage = "upstream stream failed";
 				mockStream.push({ type: "error", reason: "error", error: errorMessage });
 			});
@@ -2511,7 +2594,9 @@ describe("structuredAdaptiveAgentLoop", () => {
 			events.push(event);
 		}
 
-		expect(started).toEqual(["first"]);
+		// Unified loop: no tool ever starts; every pending tool call in the errored
+		// stream is closed with an interrupted error result.
+		expect(started).toEqual([]);
 		const toolResults = events
 			.filter(
 				(event): event is Extract<AgentEvent, { type: "message_end" }> =>
@@ -2521,11 +2606,11 @@ describe("structuredAdaptiveAgentLoop", () => {
 		expect(toolResults.map((result) => result.toolCallId)).toEqual(["tool-1", "tool-2"]);
 		expect(toolResults.every((result) => result.isError)).toBe(true);
 		expect(toolResults[1].content[0]?.type === "text" ? toolResults[1].content[0].text : "").toContain(
-			"assistant stream error",
+			"interrupted",
 		);
 	});
 
-	it("should let streamed block-interrupt tools finish when the assistant stream aborts", async () => {
+	it("should synthesize interrupted error results when the assistant stream aborts before tool execution", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		let toolObservedAbort = false;
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
@@ -2563,7 +2648,7 @@ describe("structuredAdaptiveAgentLoop", () => {
 				const partial = createAssistantMessage([toolCall], "toolUse");
 				mockStream.push({ type: "start", partial });
 				mockStream.push({ type: "toolcall_end", contentIndex: 0, toolCall, partial });
-				const errorMessage = createAssistantMessage([{ type: "text", text: "" }], "aborted");
+				const errorMessage = createAssistantMessage([toolCall], "aborted");
 				errorMessage.errorMessage = "assistant stream aborted";
 				mockStream.push({ type: "error", reason: "aborted", error: errorMessage });
 			});
@@ -2575,15 +2660,17 @@ describe("structuredAdaptiveAgentLoop", () => {
 			events.push(event);
 		}
 
+		// Unified loop: the tool never starts; an aborted stream closes the turn
+		// with an interrupted error result regardless of interruptBehavior.
 		expect(toolObservedAbort).toBe(false);
 		const toolResult = events.find(
 			(event): event is Extract<AgentEvent, { type: "message_end" }> =>
 				event.type === "message_end" && event.message.role === "toolResult",
 		)?.message;
 		expect(toolResult?.toolCallId).toBe("tool-1");
-		expect(toolResult?.isError).toBe(false);
+		expect(toolResult?.isError).toBe(true);
 		expect(toolResult?.content[0]?.type === "text" ? toolResult.content[0].text : "").toContain(
-			"committed:file",
+			"interrupted",
 		);
 	});
 
@@ -4270,7 +4357,7 @@ describe("structuredAdaptiveAgentLoop", () => {
 		});
 	});
 
-	it("should not carry permission denials from recovered streaming tool attempts", async () => {
+	it("should not carry permission denials from recovered errored streaming attempts", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		let toolExecuted = false;
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
@@ -4346,8 +4433,10 @@ describe("structuredAdaptiveAgentLoop", () => {
 			events.push(event);
 		}
 
+		// Unified loop: tools never start on an errored stream, so the permission
+		// policy is never consulted and recovery succeeds without leftover denials.
 		expect(recoveryCalls).toBe(1);
-		expect(permissionChecks).toBe(1);
+		expect(permissionChecks).toBe(0);
 		expect(toolExecuted).toBe(false);
 		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
 			event.type === "agent_result",
@@ -4708,5 +4797,686 @@ describe("agentLoopContinue with AgentMessage", () => {
 		const messages = await stream.result();
 		expect(messages.length).toBe(1);
 		expect(messages[0].role).toBe("assistant");
+	});
+
+	it.each([
+		["standard", agentLoopContinue],
+		["weak-model-compatible", structuredAdaptiveAgentLoopContinue],
+	] as const)(
+		"%s continue wrapper continues from a checkpointed context identically",
+		async (_framework, run) => {
+			// Continuation path: caller already produced user/tool messages and now
+			// resumes the loop. Both Continue entry points must accept the existing
+			// messages and emit the next assistant response without re-emitting the
+			// last user message events.
+			const userMessage = createUserMessage("Earlier turn");
+			const toolSchema = Type.Object({ value: Type.String() });
+			const readTool: AgentTool<typeof toolSchema, { value: string }> = {
+				name: "read",
+				label: "Read",
+				description: "Read",
+				parameters: toolSchema,
+				isConcurrencySafe: true,
+				async execute(_id, params) {
+					return { content: [{ type: "text", text: params.value }], details: { value: params.value } };
+				},
+			};
+			const context: AgentContext = {
+				systemPrompt: "You are helpful.",
+				messages: [userMessage],
+				tools: [readTool],
+			};
+			const config: AgentLoopConfig = {
+				model: createModel(),
+				convertToLlm: identityConverter,
+			};
+
+			let callIndex = 0;
+			const stream = run(context, config, undefined, () => {
+				const mockStream = new MockAssistantStream();
+				queueMicrotask(() => {
+					if (callIndex === 0) {
+						mockStream.push({
+							type: "done",
+							reason: "toolUse",
+							message: createAssistantMessage(
+								[
+									{
+										type: "toolCall",
+										id: "tool-1",
+										name: "read",
+										arguments: { value: "x" },
+									},
+								],
+								"toolUse",
+							),
+						});
+					} else {
+						mockStream.push({
+							type: "done",
+							reason: "stop",
+							message: createAssistantMessage([{ type: "text", text: "continued" }]),
+						});
+					}
+					callIndex++;
+				});
+				return mockStream;
+			});
+
+			const events: AgentEvent[] = [];
+			for await (const event of stream) {
+				events.push(event);
+			}
+			const returnedMessages = await stream.result();
+
+			// The continuation emits only NEW assistant/tool messages; the existing
+			// user message must not be re-emitted as a message_end event.
+			const messageEndRoles = events
+				.filter((event): event is Extract<AgentEvent, { type: "message_end" }> => event.type === "message_end")
+				.map((event) => event.message.role);
+			expect(messageEndRoles).not.toContain("user");
+			expect(messageEndRoles.filter((role) => role === "assistant").length).toBeGreaterThanOrEqual(1);
+			// returnedMessages contains the new messages produced by this continuation
+			// (no pre-existing user message from the checkpointed context).
+			expect(returnedMessages.some((m) => m.role === "user")).toBe(false);
+			expect(returnedMessages.some((m) => m.role === "toolResult")).toBe(true);
+		},
+	);
+});
+
+describe("standard loop concurrent batching", () => {
+	it("runs concurrency-safe tools in parallel and preserves tool result order", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		let active = 0;
+		let maxActive = 0;
+		const executions: string[] = [];
+		let releaseFast!: () => void;
+		const fastGate = new Promise<void>((resolve) => {
+			releaseFast = resolve;
+		});
+
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "safe_read",
+			label: "Safe read",
+			description: "Safe read",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute(_id, params) {
+				active += 1;
+				maxActive = Math.max(maxActive, active);
+				const waitMs = params.value === "first" ? 25 : 5;
+				await new Promise((resolve) => setTimeout(resolve, waitMs));
+				executions.push(params.value);
+				active -= 1;
+				if (params.value === "second") releaseFast();
+				return { content: [{ type: "text", text: params.value }], details: { value: params.value } };
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+		};
+
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("read both")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.push({
+						type: "done",
+						reason: "toolUse",
+						message: createAssistantMessage(
+							[
+								{ type: "toolCall", id: "tool-1", name: "safe_read", arguments: { value: "first" } },
+								{ type: "toolCall", id: "tool-2", name: "safe_read", arguments: { value: "second" } },
+							],
+							"toolUse",
+						),
+					});
+				} else {
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "done" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) events.push(event);
+		// Wait for fast tool to finish so order assertion is reliable.
+		await fastGate;
+
+		// Both safe tools overlapped (maxActive=2) and results kept call order.
+		expect(maxActive).toBe(2);
+		expect([...executions].sort()).toEqual(["first", "second"]);
+		const toolResultIds = events
+			.filter(
+				(event): event is Extract<AgentEvent, { type: "message_end" }> =>
+					event.type === "message_end" && event.message.role === "toolResult",
+			)
+			.map((event) => event.message.toolCallId);
+		expect(toolResultIds).toEqual(["tool-1", "tool-2"]);
+	});
+
+	it("keeps a stateful write serial while reads batch around it", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		let active = 0;
+		const writeActiveObserved: number[] = [];
+		let releaseWrite!: () => void;
+		const writeGate = new Promise<void>((resolve) => {
+			releaseWrite = resolve;
+		});
+		let releaseFastRead!: () => void;
+		const fastReadGate = new Promise<void>((resolve) => {
+			releaseFastRead = resolve;
+		});
+
+		const readTool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "read",
+			label: "Read",
+			description: "safe read",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute(_id, params) {
+				active += 1;
+				const waitMs = params.value === "fast-read" ? 0 : 30;
+				await new Promise((resolve) => setTimeout(resolve, waitMs));
+				active -= 1;
+				if (params.value === "fast-read") releaseFastRead();
+				return { content: [{ type: "text", text: params.value }], details: { value: params.value } };
+			},
+		};
+		const writeTool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "write",
+			label: "Write",
+			description: "stateful write",
+			parameters: toolSchema,
+			isConcurrencySafe: false,
+			async execute(_id, params) {
+				writeActiveObserved.push(active);
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				active += 0; // write does not affect active read count
+				releaseWrite();
+				return { content: [{ type: "text", text: params.value }], details: { value: params.value } };
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [readTool, writeTool],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+		};
+
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("read, write, read again")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.push({
+						type: "done",
+						reason: "toolUse",
+						message: createAssistantMessage(
+							[
+								{ type: "toolCall", id: "tool-1", name: "read", arguments: { value: "first-read" } },
+								{ type: "toolCall", id: "tool-2", name: "write", arguments: { value: "first-write" } },
+								{ type: "toolCall", id: "tool-3", name: "read", arguments: { value: "fast-read" } },
+							],
+							"toolUse",
+						),
+					});
+				} else {
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "done" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) events.push(event);
+		await fastReadGate;
+
+		// While the write was running, no other tool overlapped.
+		// writeActiveObserved may be [0] (no reads running concurrently) — proves serial.
+		expect(writeActiveObserved.every((value) => value === 0)).toBe(true);
+		// tool results must still arrive in the original toolUse order.
+		const toolResultIds = events
+			.filter(
+				(event): event is Extract<AgentEvent, { type: "message_end" }> =>
+					event.type === "message_end" && event.message.role === "toolResult",
+			)
+			.map((event) => event.message.toolCallId);
+		expect(toolResultIds).toEqual(["tool-1", "tool-2", "tool-3"]);
+	});
+
+	it("isolates a thrown error inside a batch without dropping the other results", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		const okTool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "ok_tool",
+			label: "OK tool",
+			description: "ok",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute(_id, params) {
+				return { content: [{ type: "text", text: params.value }], details: { value: params.value } };
+			},
+		};
+		const throwTool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "throw_tool",
+			label: "Throw tool",
+			description: "throws",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute() {
+				throw new Error("kaboom from throw_tool");
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [okTool, throwTool],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+		};
+
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("mixed batch")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.push({
+						type: "done",
+						reason: "toolUse",
+						message: createAssistantMessage(
+							[
+								{ type: "toolCall", id: "tool-1", name: "ok_tool", arguments: { value: "first" } },
+								{ type: "toolCall", id: "tool-2", name: "throw_tool", arguments: { value: "x" } },
+								{ type: "toolCall", id: "tool-3", name: "ok_tool", arguments: { value: "third" } },
+							],
+							"toolUse",
+						),
+					});
+				} else {
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "done" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) events.push(event);
+
+		const toolResults = events
+			.filter(
+				(event): event is Extract<AgentEvent, { type: "message_end" }> =>
+					event.type === "message_end" && event.message.role === "toolResult",
+			)
+			.map((event) => event.message);
+
+		// Three results, in original call order.
+		expect(toolResults.map((r) => r.toolCallId)).toEqual(["tool-1", "tool-2", "tool-3"]);
+		const okResults = toolResults.filter((r) => !r.isError);
+		const errResults = toolResults.filter((r) => r.isError);
+		expect(okResults.map((r) => r.toolCallId)).toEqual(["tool-1", "tool-3"]);
+		expect(errResults).toHaveLength(1);
+		expect(errResults[0].toolCallId).toBe("tool-2");
+		// Error details are encoded as a generic thrown error (no permission_denied).
+		const details = errResults[0].details as Record<string, unknown> | undefined;
+		expect(details?.errorType).not.toBe("permission_denied");
+		expect(errResults[0].content[0]?.type === "text" ? errResults[0].content[0].text : "").toMatch(
+			/kaboom from throw_tool|kaboom/,
+		);
+	});
+
+	it("should inject steering message between batches and skip remaining tool calls", async () => {
+		// Two safety-safe reads in one concurrent batch, then a stateful write in the
+		// next batch. Steering arrives after the concurrent batch finishes — the
+		// stateful write (next batch) should be skipped.
+		const toolSchema = Type.Object({ value: Type.String() });
+		const executed: string[] = [];
+		const safeRead: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "safe_read",
+			label: "Safe read",
+			description: "safe read",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute(_id, params) {
+				executed.push(params.value);
+				return { content: [{ type: "text", text: params.value }], details: { value: params.value } };
+			},
+		};
+		const write: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "write",
+			label: "Write",
+			description: "stateful write",
+			parameters: toolSchema,
+			isConcurrencySafe: false,
+			async execute(_id, params) {
+				executed.push(params.value);
+				return { content: [{ type: "text", text: params.value }], details: { value: params.value } };
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [safeRead, write],
+		};
+
+		const queuedUserMessage: AgentMessage = createUserMessage("interrupt");
+		let queuedDelivered = false;
+
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			getSteeringMessages: async () => {
+				if (executed.length === 2 && !queuedDelivered) {
+					queuedDelivered = true;
+					return [queuedUserMessage];
+				}
+				return [];
+			},
+		};
+
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("read, write")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.push({
+						type: "done",
+						reason: "toolUse",
+						message: createAssistantMessage(
+							[
+								{ type: "toolCall", id: "tool-1", name: "safe_read", arguments: { value: "first" } },
+								{ type: "toolCall", id: "tool-2", name: "safe_read", arguments: { value: "second" } },
+								{ type: "toolCall", id: "tool-3", name: "write", arguments: { value: "third" } },
+							],
+							"toolUse",
+						),
+					});
+				} else {
+					// Subsequent turns: stop cleanly so the loop terminates.
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "done" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) events.push(event);
+
+		// Concurrent safe batch ran; the write (next batch) was skipped due to steering.
+		expect(executed).toEqual(["first", "second"]);
+
+		const toolEnds = events.filter(
+			(e): e is Extract<AgentEvent, { type: "tool_execution_end" }> => e.type === "tool_execution_end",
+		);
+		expect(toolEnds.length).toBe(3);
+		expect(toolEnds[0].isError).toBe(false);
+		expect(toolEnds[1].isError).toBe(false);
+		expect(toolEnds[2].isError).toBe(true);
+		expect(
+			toolEnds[2].result.content[0]?.type === "text" ? toolEnds[2].result.content[0].text : "",
+		).toContain("Skipped due to queued user message");
+	});
+
+	it("should checkpoint an approval-required tool inside a concurrent batch and skip later tools", async () => {
+		const schema = Type.Object({ command: Type.String() });
+		let deployExecuted = false;
+		let followupExecuted = false;
+		let writeExecuted = false;
+		const deploy: AgentTool<typeof schema, { command: string }> = {
+			name: "deploy",
+			label: "Deploy",
+			description: "Deploy (paused by policy)",
+			parameters: schema,
+			isConcurrencySafe: true,
+			async execute() {
+				deployExecuted = true;
+				return { content: [{ type: "text", text: "deployed" }], details: {} };
+			},
+		};
+		const read: AgentTool<typeof schema, { command: string }> = {
+			name: "read",
+			label: "Read",
+			description: "concurrent safe read",
+			parameters: schema,
+			isConcurrencySafe: true,
+			async execute() {
+				followupExecuted = true;
+				return { content: [{ type: "text", text: "read" }], details: {} };
+			},
+		};
+		const write: AgentTool<typeof schema, { command: string }> = {
+			name: "write",
+			label: "Write",
+			description: "stateful write (next batch)",
+			parameters: schema,
+			isConcurrencySafe: false,
+			async execute() {
+				writeExecuted = true;
+				return { content: [{ type: "text", text: "written" }], details: {} };
+			},
+		};
+		const store = new InMemoryCheckpointStore();
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [deploy, read, write],
+		};
+
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("batch")], context, {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			checkpointStore: store,
+			toolPolicies: [
+				{
+					id: "approval",
+					beforeTool: (event) => (event.toolName === "deploy"
+						? { decision: "pause", reason: "needs approval" }
+						: { decision: "allow" }),
+				},
+			],
+		}, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.push({
+						type: "done",
+						reason: "toolUse",
+						message: createAssistantMessage(
+							[
+								{ type: "toolCall", id: "deploy-1", name: "deploy", arguments: { command: "prod" } },
+								{ type: "toolCall", id: "read-1", name: "read", arguments: { command: "data" } },
+								{ type: "toolCall", id: "write-1", name: "write", arguments: { command: "save" } },
+							],
+							"toolUse",
+						),
+					});
+				} else {
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "waiting" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		const events: AgentEvent[] = [];
+		for await (const event of stream) events.push(event);
+
+		const paused = events.find((event): event is Extract<AgentEvent, { type: "tool_execution_end" }> =>
+			event.type === "tool_execution_end" && event.toolCallId === "deploy-1",
+		);
+		const checkpointId = (paused?.result.details as { checkpointId?: string } | undefined)?.checkpointId;
+		// No tool was executed (deploy paused, read never started, write skipped).
+		expect(deployExecuted).toBe(false);
+		expect(followupExecuted).toBe(false);
+		expect(writeExecuted).toBe(false);
+		// No tool_execution_start events for read or write — they never ran.
+		const toolStarts = events.filter(
+			(e): e is Extract<AgentEvent, { type: "tool_execution_start" }> => e.type === "tool_execution_start",
+		);
+		expect(toolStarts.map((e) => e.toolCallId)).toEqual(["deploy-1"]);
+		expect((paused?.result.details as { errorType?: string } | undefined)?.errorType).toBe("approval_required");
+		expect((paused?.result.details as { policyId?: string } | undefined)?.policyId).toBe("approval");
+		expect(checkpointId).toBeTypeOf("string");
+		// Checkpoint stored correctly.
+		expect(await store.consume(checkpointId!)).toMatchObject({
+			policyId: "approval",
+			toolCall: { name: "deploy" },
+		});
+		const runResult = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(runResult?.errorSubtype).toBe("approval_required");
+		expect(runResult?.checkpointId).toBe(checkpointId);
+	});
+
+	it("falls back to serial execution when a mayPause policy is configured", async () => {
+		const toolSchema = Type.Object({ value: Type.String() });
+		let active = 0;
+		let maxActive = 0;
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "safe_read",
+			label: "Safe read",
+			description: "safe read",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute(_id, params) {
+				active += 1;
+				maxActive = Math.max(maxActive, active);
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				active -= 1;
+				return { content: [{ type: "text", text: params.value }], details: {} };
+			},
+		};
+
+		const context: AgentContext = {
+			systemPrompt: "",
+			messages: [],
+			tools: [tool],
+		};
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			toolPolicies: [{ id: "approval", mayPause: true }],
+		};
+
+		let callIndex = 0;
+		const stream = agentLoop([createUserMessage("read many")], context, config, undefined, () => {
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => {
+				if (callIndex === 0) {
+					mockStream.push({
+						type: "done",
+						reason: "toolUse",
+						message: createAssistantMessage(
+							[
+								{ type: "toolCall", id: "tool-1", name: "safe_read", arguments: { value: "first" } },
+								{ type: "toolCall", id: "tool-2", name: "safe_read", arguments: { value: "second" } },
+							],
+							"toolUse",
+						),
+					});
+				} else {
+					mockStream.push({
+						type: "done",
+						reason: "stop",
+						message: createAssistantMessage([{ type: "text", text: "done" }]),
+					});
+				}
+				callIndex++;
+			});
+			return mockStream;
+		});
+
+		for await (const _event of stream) {
+			// consume
+		}
+
+		// mayPause policy forces serial execution even for concurrency-safe tools.
+		expect(maxActive).toBe(1);
+	});
+
+	it("triggers livelock detection across concurrent batches of repeated tool calls", async () => {
+		// Two concurrency-safe reads in the same batch, then a stateful write in the
+		// next batch — repeated across turns to exercise livelock detection that
+		// observes every batch's tool results.
+		const toolSchema = Type.Object({ value: Type.String() });
+		const tool: AgentTool<typeof toolSchema, { value: string }> = {
+			name: "stuck",
+			label: "Stuck",
+			description: "Always fails",
+			parameters: toolSchema,
+			isConcurrencySafe: true,
+			async execute() {
+				throw new Error("still stuck");
+			},
+		};
+		const context: AgentContext = { systemPrompt: "", messages: [], tools: [tool] };
+		const config: AgentLoopConfig = {
+			model: createModel(),
+			convertToLlm: identityConverter,
+			loopProgress: { repetitionThreshold: 3 },
+		};
+		let streamCalls = 0;
+		const stream = agentLoop([createUserMessage("loop")], context, config, undefined, () => {
+			streamCalls++;
+			const mockStream = new MockAssistantStream();
+			queueMicrotask(() => mockStream.push({
+				type: "done",
+				reason: "toolUse",
+				message: createAssistantMessage(
+					[{ type: "toolCall", id: `tool-${streamCalls}`, name: "stuck", arguments: { value: "same" } }],
+					"toolUse",
+				),
+			}));
+			return mockStream;
+		});
+		const events: AgentEvent[] = [];
+		for await (const event of stream) events.push(event);
+		const result = events.find((event): event is Extract<AgentEvent, { type: "agent_result" }> =>
+			event.type === "agent_result",
+		);
+		expect(streamCalls).toBe(3);
+		expect(result?.errorSubtype).toBe("livelock_detected");
+		expect(result?.lastTransition).toMatchObject({ reason: "livelock_detected", repeatCount: 3 });
 	});
 });

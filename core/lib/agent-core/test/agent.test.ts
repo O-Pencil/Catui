@@ -286,7 +286,7 @@ describe("Agent", () => {
 		expect(toolResults).toEqual(["tool-1", "tool-2"]);
 	});
 
-	it("should keep standard loop serial while sharing tool permission gates", async () => {
+	it("should share tool permission gates across concurrent standard loop tool calls", async () => {
 		const toolSchema = Type.Object({ value: Type.String() });
 		const executionOrder: string[] = [];
 		const events: string[] = [];
@@ -352,7 +352,8 @@ describe("Agent", () => {
 		expect(agent.agentLoopFramework).toBe("standard");
 		await agent.prompt("read both");
 
-		expect(executionOrder).toEqual(["start:first", "end:first", "start:second", "end:second"]);
+		// Both safe tools start before either finishes -> concurrent execution.
+		expect(executionOrder.slice(0, 2)).toEqual(["start:first", "start:second"]);
 		expect(permissionChecks).toBe(2);
 		expect(events).toContain("stream_request_start");
 		expect(events).toContain("agent_result");
@@ -968,4 +969,79 @@ describe("Agent", () => {
 		await agent.prompt("hello again");
 		expect(receivedSessionId).toBe("session-def");
 	});
+
+	it.each(["standard", "weak-model-compatible"] as const)(
+		"runs the unified concurrent loop for %s with correct framework annotation",
+		async (framework) => {
+			const toolSchema = Type.Object({ value: Type.String() });
+			const executionOrder: string[] = [];
+			let releaseGate!: () => void;
+			const gate = new Promise<void>((resolve) => {
+				releaseGate = resolve;
+			});
+
+			const slowTool: AgentTool<typeof toolSchema, { value: string }> = {
+				name: "slow_read",
+				label: "Slow read",
+				description: "Safe slow tool",
+				parameters: toolSchema,
+				isConcurrencySafe: true,
+				async execute() {
+					executionOrder.push("start:slow");
+					await gate;
+					executionOrder.push("end:slow");
+					return { content: [{ type: "text", text: "slow" }], details: {} };
+				},
+			};
+			const fastTool: AgentTool<typeof toolSchema, { value: string }> = {
+				name: "fast_read",
+				label: "Fast read",
+				description: "Safe fast tool",
+				parameters: toolSchema,
+				isConcurrencySafe: true,
+				async execute() {
+					executionOrder.push("start:fast");
+					releaseGate();
+					executionOrder.push("end:fast");
+					return { content: [{ type: "text", text: "fast" }], details: {} };
+				},
+			};
+
+			let callIndex = 0;
+			const agent = new Agent({
+				initialState: {
+					model: { ...getModel("openai", "gpt-4o-mini"), agentLoopFramework: framework } as Model<any>,
+					tools: [slowTool, fastTool],
+				},
+				streamFn: () => {
+					const stream = new MockAssistantStream();
+					queueMicrotask(() => {
+						if (callIndex === 0) {
+							stream.push({
+								type: "done",
+								reason: "toolUse",
+								message: createToolUseMessage([
+									{ type: "toolCall", id: "tool-1", name: "slow_read", arguments: { value: "first" } },
+									{ type: "toolCall", id: "tool-2", name: "fast_read", arguments: { value: "second" } },
+								]),
+							});
+						} else {
+							stream.push({ type: "done", reason: "stop", message: createAssistantMessage("done") });
+						}
+						callIndex++;
+					});
+					return stream;
+				},
+			});
+
+			await agent.prompt("read both");
+
+			// Both frameworks run the same concurrent loop: both tools started in parallel.
+			expect(executionOrder.slice(0, 2)).toEqual(["start:slow", "start:fast"]);
+			// Result annotation still reflects the configured framework.
+			expect(agent.state.lastResult?.loopFramework).toBe(framework);
+			const toolResults = agent.state.messages.filter((message) => message.role === "toolResult");
+			expect(toolResults.map((message) => message.toolCallId)).toEqual(["tool-1", "tool-2"]);
+		},
+	);
 });

@@ -126,7 +126,7 @@ describe("agent loop run tracing", () => {
 		expect(events.at(-1)).toMatchObject({ kind: "run.completed", payload: { toolCallCount: 1 } });
 	});
 
-	it("accounts for streamed tools when a structured turn ends with an error", async () => {
+	it("closes an errored streamed turn with interrupted results instead of executing tools", async () => {
 		const sink = new InMemoryRunTraceSink();
 		const recorder = new RunTraceRecorder({ runId: "streaming-tool-error", sink });
 		const schema = Type.Object({});
@@ -160,15 +160,18 @@ describe("agent loop run tracing", () => {
 		for await (const _event of stream) { /* drain */ }
 
 		const trace = sink.snapshot();
-		expect(executions).toBe(1);
+		// Unified loop: tools never start on an errored stream; the turn is closed
+		// with interrupted results and the model error is traced and replayed cleanly.
+		expect(executions).toBe(0);
 		expect(trace.map((event) => event.kind)).toEqual(expect.arrayContaining([
-			"tool.requested", "tool.started", "tool.completed",
+			"model.failed", "turn.completed",
 		]));
-		expect(trace.at(-1)).toMatchObject({ kind: "run.completed", payload: { toolCallCount: 1 } });
+		expect(trace.some((event) => event.kind === "tool.requested")).toBe(false);
+		expect(trace.at(-1)).toMatchObject({ kind: "run.completed", payload: { stopReason: "error", toolCallCount: 0 } });
 		expect(replayRunTrace(trace)).toMatchObject({ ok: true });
 	});
 
-	it("accounts for streamed tools when an abort replaces the partial assistant message", async () => {
+	it("closes a pending streamed turn with interrupted results when the stream is aborted", async () => {
 		const sink = new InMemoryRunTraceSink();
 		const recorder = new RunTraceRecorder({ runId: "streaming-tool-abort", sink });
 		const controller = new AbortController();
@@ -178,7 +181,6 @@ describe("agent loop run tracing", () => {
 			name: "read", label: "Read", description: "Read", parameters: schema,
 			async execute() {
 				executions++;
-				queueMicrotask(() => controller.abort());
 				return { content: [{ type: "text", text: "started before abort" }], details: {} };
 			},
 		};
@@ -198,18 +200,22 @@ describe("agent loop run tracing", () => {
 				runTrace: recorder,
 			},
 			controller.signal,
-			() => new StreamingToolPendingStream(partialResponse),
+			() => {
+				const pendingStream = new StreamingToolPendingStream(partialResponse);
+				queueMicrotask(() => controller.abort());
+				return pendingStream;
+			},
 		);
 		for await (const _event of stream) { /* drain */ }
 
 		const trace = sink.snapshot();
-		expect(executions).toBe(1);
-		expect(trace.map((event) => event.kind)).toEqual(expect.arrayContaining([
-			"tool.requested", "tool.started", "tool.completed",
-		]));
+		// Unified loop: tools never start on a pending stream; the abort closes the
+		// turn with interrupted results and the abort is traced and replayed cleanly.
+		expect(executions).toBe(0);
+		expect(trace.some((event) => event.kind === "tool.requested")).toBe(false);
 		expect(trace.at(-1)).toMatchObject({
 			kind: "run.completed",
-			payload: { stopReason: "aborted", toolCallCount: 1 },
+			payload: { stopReason: "aborted", toolCallCount: 0 },
 		});
 		expect(replayRunTrace(trace)).toMatchObject({ ok: true });
 	});
