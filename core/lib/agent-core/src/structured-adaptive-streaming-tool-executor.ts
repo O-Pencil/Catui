@@ -4,10 +4,10 @@
  * while preserving ordered tool_result emission for the next model turn.
  */
 /**
- * [WHO]: StructuredAdaptiveStreamingToolExecutor
+ * [WHO]: StructuredAdaptiveStreamingToolExecutor — compatibility-only export, no in-tree consumer
  * [FROM]: Depends on @catui/ai, ./types, ./structured-adaptive-tool-orchestration
- * [TO]: Consumed by ./structured-adaptive-agent-loop.ts
- * [HERE]: core/lib/agent-core/src/structured-adaptive-streaming-tool-executor.ts - streaming tool scheduling for weak-model-compatible loop
+ * [TO]: No in-tree consumer after the structured-adaptive loop converged into the standard loop. Exported via index.ts for public API compatibility only.
+ * [HERE]: core/lib/agent-core/src/structured-adaptive-streaming-tool-executor.ts - deprecated streaming tool scheduling shim
  */
 
 import type { ToolResultMessage } from "@catui/ai/types";
@@ -44,6 +44,14 @@ interface StreamingToolRecord {
 	contextMessages: AgentMessage[];
 }
 
+/**
+ * @deprecated Replaced by the unified standard loop's concurrent batching. The
+ * weak-model-compatible loop converged into `agentLoop`; streaming tool
+ * pre-execution is no longer needed because the standard loop executes tools
+ * after the assistant response completes (with `createInterruptedToolResults`
+ * closing the turn on error/abort). This class is retained for public API
+ * compatibility only and has no in-tree consumer.
+ */
 export class StructuredAdaptiveStreamingToolExecutor {
 	private readonly toolByName: Map<string, AgentTool<any>>;
 	private readonly records: StreamingToolRecord[] = [];
