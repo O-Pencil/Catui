@@ -72,7 +72,6 @@ security-audit/index.ts: Security extension entry, audit logging and dangerous p
 security-audit/engine/interceptor.ts: Request/response interception, InterceptorResult confirmation flow
 security-audit/engine/logger.ts: Security event logging, JSON file audit trail
 security-audit/engine/detector.ts: Vulnerability detection, pattern matching for dangerous commands
-soul/index.ts: AI personality evolution extension, persistent personality across sessions
 grub/index.ts: Grub extension entry - autonomous iterative task runner, /grub command, dual-phase prompt injection, feature-list guard dispatch, GRUB_MESSAGE_TYPE renderer
 grub/grub-controller.ts: GrubController - drives autonomous grub iterations, durable GrubTaskState, initializer baseline capture, feature-list mutation validation
 grub/grub-decision.ts: Grub assistant protocol parser, extracts validated loop-state decisions from assistant text

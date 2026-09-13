@@ -203,7 +203,7 @@ export class SettingsSelectorComponent extends Container {
 			{
 				id: "agent-loop",
 				label: "Agent loop",
-				description: "Default loop adaptation. Model default preserves per-model configuration.",
+				description: "Loop adaptation. Model default preserves per-model configuration; standard and weak-model-compatible now run the same unified loop (the latter is a legacy alias).",
 				currentValue: config.agentLoopFramework,
 				values: ["model-default", "standard", "weak-model-compatible"],
 			},

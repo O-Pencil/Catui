@@ -21,7 +21,7 @@ The `extensions/` module contains built-in extensions that extend Catui's capabi
 First-party extension source. Default-enabled entries are auto-loaded by `getBuiltinExtensionPaths()`; entries marked optional in `builtInExtensions` require explicit configuration/CLI opt-in even if their source directory is still here. Benchmark/CI harnesses may opt into Browser Harness registration with `CATUI_ENABLE_BROWSER_EXTENSION=1` without changing user config.
 
 Current default extension directories:
-`ask-user-question/`, `btw/`, `catail/`, `catpaw/`, `context-management/`, `debug/`, `diagnostics/`, `discipline/`, `goal/`, `grub/`, `humanizer/`, `idle-think/`, `insights/`, `link-world/`, `loop/`, `lsp/`, `mcp/`, `next-step/`, `notebook/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `skill-tool/`, `soul/`, `subagent/`, `task/`, `teach/`, `team/`.
+`ask-user-question/`, `btw/`, `catail/`, `catpaw/`, `context-management/`, `debug/`, `diagnostics/`, `discipline/`, `goal/`, `grub/`, `humanizer/`, `idle-think/`, `insights/`, `link-world/`, `loop/`, `lsp/`, `mcp/`, `next-step/`, `notebook/`, `plan/`, `presence/`, `recap/`, `sal/`, `security-audit/`, `skill-tool/`, `subagent/`, `task/`, `teach/`, `team/`.
 
 Current opt-in source still physically under `extensions/builtin/` pending Q2 physical/package decision:
 `browser/`.
@@ -221,15 +221,6 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 `engine/logger.ts`: Security event logging
 
 `README.md`: Security audit documentation
-
-#### soul/ — AI Personality Evolution
-
-**P3 Contract:**
-`index.ts`: - [WHO]: Extension interface
-    - [FROM]: core/extensions-host/types, soul-core
-    - [HERE]: soul extension entry
-
-**Note**: Core implementation in `packages/soul-core/`
 
 #### team/ — Multi-Agent Orchestration
 

@@ -83,6 +83,8 @@ npm run eval:harness -- --output .catui/harness-eval-report.json
 
 The built-in manifest expands every scenario across the standard and weak-model-compatible frameworks. Each fixture drives a scripted assistant stream through the production loop and real tool execution, asserts the concrete side effect or control result, then replays the captured trace. It covers policy ordering, approval checkpoints, livelock, tool exceptions and pairing, steering/follow-up, output recovery, context recovery after an injected compaction result, and concurrent safe tools. Fixtures receive deterministic clocks/IDs, an isolated temporary workspace, and a network API that fails closed.
 
+Note: the `weak-model-compatible` framework is a legacy alias of `standard` — both run the same unified loop, so dual-framework expansion mainly exercises the compatibility wrapper and trace contract, not divergent behavior.
+
 `npm run test:harness-critical` also runs checkpoint, Goal, Grub, Team, evolution, trace, and eval regression suites without scanning local worktrees. CI requires this command to finish with 100% scenario pass rate, zero replay divergences, zero policy violations, and zero unpaired tool calls. The JSON report is versioned and suitable for later trend aggregation without changing the required correctness gate.
 
 ## Compatibility and operations

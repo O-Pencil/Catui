@@ -381,7 +381,7 @@ ${chalk.bold("Options:")}
   --print-transcript             In text print mode, write tool-call transcript NDJSON to stderr
   --fail-on-agent-error          In print mode, exit non-zero when final loop result is an error
   --fail-on-tool-denial          In print mode, exit non-zero when tools were denied
-  --agent-loop <framework>       Override loop framework: standard or weak-model-compatible
+  --agent-loop <framework>       Override loop framework: standard or weak-model-compatible (both run the unified loop)
   --max-turns-per-prompt <n>     Stop a prompt after n assistant turns
   --max-tool-calls-per-prompt <n> Stop a prompt after n tool calls
   --max-tool-concurrency <n>     Max concurrent safe tool calls in compatible loop

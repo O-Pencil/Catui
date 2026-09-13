@@ -325,7 +325,6 @@ Extensions can:
 | `humanizer` | Vendored writing-quality skill: removes AI-writing tells from prose without changing meaning or inventing facts |
 | `mcp` | MCP protocol support |
 | `security-audit` | Security vulnerability detection |
-| `soul` | AI personality evolution and memory |
 
 ### Tools (`core/tools/`)
 

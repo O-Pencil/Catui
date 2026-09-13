@@ -1020,7 +1020,7 @@ class CatuiAgent implements acp.Agent {
 			if (!arg) {
 				await this.sendAssistantText(
 					sessionId,
-					`Current agent loop: ${this.session.agentLoopFramework}\nAvailable frameworks: ${choices.join(", ")}`,
+					`Current agent loop: ${this.session.agentLoopFramework}\nAvailable frameworks: ${choices.join(", ")}\nBoth run the unified loop (weak-model-compatible is a legacy alias).`,
 				);
 				return true;
 			}
@@ -1032,7 +1032,7 @@ class CatuiAgent implements acp.Agent {
 				return true;
 			}
 			this.session.setAgentLoopFramework(normalized as any);
-			await this.sendAssistantText(sessionId, `Agent loop framework set to ${this.session.agentLoopFramework}.`);
+			await this.sendAssistantText(sessionId, `Agent loop framework set to ${this.session.agentLoopFramework} (unified loop).`);
 			return true;
 		}
 

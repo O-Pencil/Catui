@@ -36,7 +36,7 @@ export class ConfigCommandHandlersController {
 
     if (!arg) {
       this.ctx.showStatus(
-        `Agent loop: ${this.ctx.session.agentLoopFramework} (available: ${choices.join(", ")})`,
+        `Agent loop: ${this.ctx.session.agentLoopFramework} (available: ${choices.join(", ")}; both run the unified loop)`,
       );
       return;
     }
@@ -50,7 +50,7 @@ export class ConfigCommandHandlersController {
 
     this.ctx.session.setAgentLoopFramework(normalized as any);
     this.ctx.footer.invalidate();
-    this.ctx.showStatus(`Agent loop framework: ${this.ctx.session.agentLoopFramework}`);
+    this.ctx.showStatus(`Agent loop framework: ${this.ctx.session.agentLoopFramework} (unified loop)`);
   }
 
   async handleMcpCommand(text: string): Promise<void> {
