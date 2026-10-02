@@ -243,6 +243,11 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 
 ### Optional Extensions (`extensions/optional/`)
 
+- `session-bridge/`: explicit `/bridge start|stop|status` grants revocable local
+  access to the current session through an authenticated loopback API. Its
+  companion MCP client is packaged as a personal Codex plugin. See its P2 map
+  and README for receipt semantics, activation and lifecycle boundaries.
+
 High-trust or extra extension source. Most optional entries require explicit extension configuration or CLI paths. `evolution/` is the current exception: it remains physically under `extensions/optional/` but is product-approved for default loading through `getBuiltinExtensionPaths()`.
 
 #### evolution/ — Controlled Self-Evolution

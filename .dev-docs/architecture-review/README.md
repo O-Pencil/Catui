@@ -25,6 +25,9 @@ This is a one-shot exercise. After the maintainer has acted on the Arch Agent's 
 
 ## Directory map
 
+- [Same-session bridge review](./session-bridge-review/README.md): opt-in local
+  control, receipt semantics and companion Codex plugin acceptance.
+
 ```
 .dev-docs/architecture-review/
 ├── README.md                ← this file: entry point + intent
