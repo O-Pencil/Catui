@@ -130,7 +130,7 @@
     "verify:full": "npm run build && npm run verify:dip && npm run verify:quality && npm run verify:package-boundary && npm run typecheck && npm run verify:package-boundary:dist && npm run verify:contract && npm run test:release-contracts && npm run test:artifact && npm run test:pre && npm run test:evolution-boundaries && npm run test:harness-critical",
     "test:release-contracts": "node --test --import tsx test/release-build.test.ts test/sal-terrain-budget.test.ts test/persona-assets.test.ts",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
-    "test:evolution-boundaries": "node --test --import tsx test/evolution-baseline-binding.test.ts test/evolution-benchmark-cli-binding.test.ts test/evolution-benchmark-promotion.test.ts test/evolution-benchmark.test.ts test/evolution-pawbench-cli.test.ts test/evolution-pawbench.test.ts test/evolution-refiner-redaction.test.ts test/evolution-rollback-discovery.test.ts",
+    "test:evolution-boundaries": "node --test --import tsx test/evolution-auto-provenance.test.ts test/evolution-baseline-binding.test.ts test/evolution-benchmark-cli-binding.test.ts test/evolution-benchmark-promotion.test.ts test/evolution-benchmark.test.ts test/evolution-pawbench-cli.test.ts test/evolution-pawbench.test.ts test/evolution-refiner-redaction.test.ts test/evolution-rollback-discovery.test.ts",
     "test:contract": "node --test --import tsx test/verification-contract.test.ts"
   },
   "keywords": [

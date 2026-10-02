@@ -19,6 +19,21 @@ import {
 import type { EvolutionArtifactKind, EvolutionScope } from "./evolution-types.js";
 
 const COOLDOWN_TURNS = 3;
+
+/**
+ * Provenance of an auto-observed candidate.
+ *
+ * Neither turn-end source is externally verified: both originate in the assistant's own
+ * output. Recording that honestly is the point — marking the structured branch `verified` would
+ * be the same self-report wearing a different label. Only the store's evidence gate may activate
+ * a candidate, so this field describes provenance and confers nothing.
+ */
+const PROVENANCE = {
+	/** Model emitted a well-formed `catui_evolution` object. Still a self-declaration. */
+	structuredDeclaration: "model_structured_declaration",
+	/** Model wrote a line matching LESSON_PATTERN. Free prose, no structured basis. */
+	proseSelfReport: "model_prose_self_report",
+} as const;
 const LESSON_PATTERN = /(?:Reusable lesson|Evolution lesson)\s*:\s*([^\n]+)/i;
 
 function extractText(message: unknown): string {
@@ -148,7 +163,12 @@ export class EvolutionAutoObserver {
 							metadata: { scenarioId, tracePath: relative(resolve(ctx.cwd), fixture.resolvedTracePath) },
 						},
 					],
-					evidence: { source: "turn_end_structured", turnIndex: event.turnIndex, tracePath: structured.tracePath },
+					evidence: {
+						source: "turn_end_structured",
+						turnIndex: event.turnIndex,
+						tracePath: structured.tracePath,
+						provenance: PROVENANCE.structuredDeclaration,
+					},
 				});
 				const currentGateReport = await this.#runGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId });
 				if (!currentGateReport.passed) {
@@ -182,7 +202,11 @@ export class EvolutionAutoObserver {
 						...(structured.nonApplicability ? { nonApplicability: structured.nonApplicability } : {}),
 					},
 				],
-				evidence: { source: "turn_end_structured", turnIndex: event.turnIndex },
+				evidence: {
+					source: "turn_end_structured",
+					turnIndex: event.turnIndex,
+					provenance: PROVENANCE.structuredDeclaration,
+				},
 			};
 			const candidate = createEvolutionCandidate(root, input);
 			const globalPolicy = structured.scope === "global" ? canAutoPromoteGlobalEvolution(input) : { allowed: true };
@@ -219,6 +243,7 @@ export class EvolutionAutoObserver {
 			evidence: {
 				source: "turn_end",
 				turnIndex: event.turnIndex,
+				provenance: PROVENANCE.proseSelfReport,
 			},
 		});
 		const gateReport = await this.#runGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId });
