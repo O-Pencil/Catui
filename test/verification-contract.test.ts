@@ -426,6 +426,48 @@ test("verify:full covers every required plan command", () => {
 	assert.deepEqual(missing, [], `verify:full does not run required plan commands: ${missing.join(", ")}`);
 });
 
+/**
+ * Suite names the aggregate runs directly, excluding composite stages whose children are
+ * registered individually. A composite stage is one that only chains other `npm run` calls
+ * without naming a test file itself.
+ */
+function directlyRunTestSuites(aggregate: string): string[] {
+	return expandScript(aggregate)
+		.filter((script) => /test:/.test(script))
+		.filter((script) => /test\/[a-z0-9-]+\.test\.ts/.test(scripts[script] ?? ""))
+		.map((script) => script.replace("npm run ", ""));
+}
+
+test("every suite the aggregate runs directly is registered as a required plan command", () => {
+	// The coverage assertion above only asks "does verify:full run what the plan lists?". That
+	// direction cannot catch a suite being added to the chain without registration, nor a gate
+	// being quietly downgraded to required:false — both leave the plan self-consistent while the
+	// gate stops being enforced. This asserts the opposite direction.
+	const required = new Set(
+		plan.commands.filter((command) => command.required).map((command) => command.command.replace("npm run ", "")),
+	);
+	const unregistered = directlyRunTestSuites("test").filter((suite) => !required.has(suite));
+	assert.deepEqual(
+		unregistered,
+		[],
+		`These suites run in the aggregate but are not required plan commands: ${unregistered.join(", ")}. Add them to verification-plan.json with required:true, or make them composite stages whose children are registered individually.`,
+	);
+});
+
+test("a plan command cannot be silently downgraded out of the required set", () => {
+	// Every test-running plan command must be required. An optional test gate is a gate nobody
+	// enforces, which is indistinguishable from a deleted one once the runner only honors
+	// required:false as non-blocking evidence.
+	const optionalTests = plan.commands
+		.filter((command) => !command.required && /test:/.test(command.command))
+		.map((command) => command.id);
+	assert.deepEqual(
+		optionalTests,
+		[],
+		`Test suites in the plan must be required:true; optional ones do not block. Currently optional: ${optionalTests.join(", ")}`,
+	);
+});
+
 test("the plan covers every suite the test chain runs", () => {
 	// Leaf suites only: test:release and test:pre are composites that must not appear as plan
 	// members, or the plan would double-count the same suite.
@@ -480,6 +522,40 @@ test("typecheck covers the product program and the scripts program", () => {
 /** Stages of the aggregate `npm test` flow, in execution order. */
 const AGGREGATE_STAGES = ["test:release", "test:pre", "test:evolution-boundaries", "test:harness-critical"];
 
+/**
+ * How many times each test file actually runs when `name` is invoked.
+ *
+ * This is deliberately not `testFilesIn`, which deduplicates by file name. Deduplication hides
+ * two distinct defects: a file listed twice inside one stage, and a shared sub-suite reached
+ * through two parents inside one stage. Both execute the file twice at runtime, and both were
+ * invisible to the previous check.
+ *
+ * Traversal carries an explicit path stack so a shared sub-suite is counted once per path it is
+ * reached by, and a cycle terminates instead of looping.
+ */
+function testFileExecutions(name: string): Map<string, number> {
+	const counts = new Map<string, number>();
+	const expanded = new Set<string>();
+	const visit = (script: string, path: string[]): void => {
+		if (!(script in scripts)) return;
+		if (path.includes(script)) return;
+		const nextPath = [...path, script];
+		for (const match of scripts[script]!.matchAll(/test\/[a-z0-9-]+\.test\.ts/g)) {
+			counts.set(match[0], (counts.get(match[0]) ?? 0) + 1);
+		}
+		if (expanded.has(script)) return;
+		expanded.add(script);
+		for (const match of scripts[script]!.matchAll(/npm run ([\w:-]+)/g)) visit(match[1]!, nextPath);
+	};
+	visit(name, []);
+	return counts;
+}
+
+/** Files that run more than once inside a single stage. */
+function withinStageDuplicates(stage: string): string[] {
+	return [...testFileExecutions(stage).entries()].filter(([, count]) => count > 1).map(([file]) => file).sort();
+}
+
 /** Regression files added by this batch, per owner. Reachability is asserted, not assumed. */
 const BATCH_REGRESSION_FILES = [
 	// S01 registry
@@ -521,11 +597,23 @@ test("the evolution boundary suite runs only files the aggregate does not alread
  */
 const KNOWN_DUPLICATE_STAGE_FILES = ["test/default-runtime-tools.test.ts"];
 
+test("no test file runs twice inside a single stage", () => {
+	// Catches both a file listed twice in one script and a shared sub-suite reached twice.
+	// The previous check used the deduplicated testFilesIn, so neither was visible.
+	for (const stage of AGGREGATE_STAGES) {
+		assert.deepEqual(
+			withinStageDuplicates(stage),
+			[],
+			`${stage} runs these files more than once: ${withinStageDuplicates(stage).join(", ")}`,
+		);
+	}
+});
+
 test("no test file executes more than once in the aggregate flow beyond the known set", () => {
-	// Count invocation sites rather than distinct files: a suite listed in two stages runs twice.
+	// Count runtime executions rather than distinct files: a suite listed in two stages runs twice.
 	const counts = new Map<string, number>();
 	for (const stage of AGGREGATE_STAGES) {
-		for (const file of testFilesIn(stage)) counts.set(file, (counts.get(file) ?? 0) + 1);
+		for (const [file, count] of testFileExecutions(stage)) counts.set(file, (counts.get(file) ?? 0) + count);
 	}
 	const duplicated = [...counts.entries()].filter(([, count]) => count > 1).map(([file]) => file);
 	assert.deepEqual(
