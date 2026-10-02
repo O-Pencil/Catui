@@ -6,7 +6,7 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import { evolutionCandidateContentHash, verifyEvolutionBenchmarkReport } from "./benchmark-comparison.js";
 import type {
@@ -774,7 +774,18 @@ export function promoteEvolutionCandidate(
 	)) {
 		throw new Error("eval_fixture promotion requires a passing candidate fixture replay gate");
 	}
+	// A candidate that declares a baseline must be promoted onto exactly that revision. A stale
+	// base means the evidence was gathered against different active content than it would replace.
+	// Candidates without the field keep working, so records written before it stay valid.
 	const current = loadCurrentEvolution(scopeRoot);
+	const baselineRevisionId = candidate.baselineRevisionId;
+	if (typeof baselineRevisionId === "string" && baselineRevisionId.length > 0) {
+		if (current?.revisionId !== baselineRevisionId) {
+			throw new Error(
+				`Evolution candidate baseline is stale: built against ${baselineRevisionId} but ${current?.revisionId ?? "no revision"} is active`,
+			);
+		}
+	}
 	const revisionId = nextId("revision", options);
 	const createdAt = now(options);
 	const contentHash = `sha256:${sha256(JSON.stringify(candidate.artifacts))}`;
@@ -1089,19 +1100,59 @@ export function loadActiveEvolutionSkillPaths(scopeRoot: string): string[] {
 }
 
 /**
+ * Revision ids that some rollback moved away from.
+ *
+ * `rollbackEvolution` records `rollbackOf: <withdrawn revision id>` in history.jsonl, and
+ * auto-rollback routes through the same function, so one event covers both paths. History is
+ * used rather than the `current` pointer because the pointer's `rollbackOf` only remembers the
+ * most recent rollback: a second rollback would otherwise resurrect the first withdrawn revision.
+ *
+ * Malformed lines are skipped, so a corrupted log degrades to "nothing withdrawn" — the prior
+ * behavior — rather than throwing during resource discovery.
+ */
+export function readWithdrawnRevisionIds(scopeRoot: string): Set<string> {
+	const historyPath = join(scopeRoot, "history.jsonl");
+	const withdrawn = new Set<string>();
+	if (!existsSync(historyPath)) return withdrawn;
+	for (const line of readFileSync(historyPath, "utf8").split("\n")) {
+		if (!line.trim()) continue;
+		try {
+			const event = JSON.parse(line) as { event?: unknown; rollbackOf?: unknown };
+			if (event?.event !== "rolled_back") continue;
+			if (typeof event.rollbackOf === "string" && event.rollbackOf.length > 0) withdrawn.add(event.rollbackOf);
+		} catch { /* skip malformed history line */ }
+	}
+	return withdrawn;
+}
+
+/**
  * Scan all revision directories under <scopeRoot>/revisions/ for SKILL.md files.
  * Unlike loadActiveEvolutionSkillPaths (which only materializes the current active
  * revision's skills), this discovers every skill that was ever promoted, enabling
  * local-only users to benefit from all their accumulated skills without needing
  * remote push or global auto-promotion.
+ *
+ * Revisions that a rollback withdrew are excluded, and any directory an earlier run left behind
+ * is removed. Without this, a rolled-back skill would keep being offered to the model through
+ * this historical scan even though `rollbackEvolution` moved the current pointer away from it.
  */
 export function discoverLocalSkillPaths(scopeRoot: string): string[] {
 	const revisionsDir = join(scopeRoot, "revisions");
 	if (!existsSync(revisionsDir)) return [];
 	const skillRoot = join(scopeRoot, "resources", "skills", "_local");
+	const withdrawn = readWithdrawnRevisionIds(scopeRoot);
 	const discovered: string[] = [];
 	for (const revEntry of readdirSync(revisionsDir, { withFileTypes: true })) {
 		if (!revEntry.isDirectory()) continue;
+		if (withdrawn.has(revEntry.name)) {
+			// Remove a stale materialization so it cannot re-enter discovery from disk.
+			const stale = join(skillRoot, revEntry.name);
+			if (existsSync(stale)) {
+				assertInside(scopeRoot, stale);
+				rmSync(stale, { recursive: true, force: true });
+			}
+			continue;
+		}
 		const manifestPath = join(revisionsDir, revEntry.name, "manifest.json");
 		if (!existsSync(manifestPath)) continue;
 		try {

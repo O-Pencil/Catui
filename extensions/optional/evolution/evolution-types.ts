@@ -80,6 +80,13 @@ export interface EvolutionCandidateInput {
 	artifacts: EvolutionArtifact[];
 	predictions?: EvolutionPrediction[];
 	evidence?: Record<string, unknown>;
+	/**
+	 * Revision this candidate proposes to supersede, when it refines an existing skill rather
+	 * than adding a new one. Optional so candidates created before this field existed still
+	 * validate. When present, promotion requires it to be the revision that is actually current:
+	 * a candidate built against a stale base must not be promoted onto a newer revision.
+	 */
+	baselineRevisionId?: string;
 }
 
 export interface EvolutionValidationReport {
