@@ -1,7 +1,7 @@
 /**
  * [WHO]: startBridgeServer provides bounded authenticated loopback transport
  * [FROM]: Node HTTP/crypto, controller dispatch and owner-only descriptor publication
- * [TO]: Opt-in session-bridge extension and integration tests
+ * [TO]: Explicitly activated session-bridge command and integration tests
  * [HERE]: extensions/optional/session-bridge/server.ts - no shell or Agent creation
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -25,7 +25,7 @@ async function body(req: IncomingMessage): Promise<unknown> {
   try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
   catch { throw new BridgeError(400, "Invalid JSON"); }
 }
-export async function startBridgeServer(controller: BridgeController, cwd: string, directory = registryDirectory()) {
+export async function startBridgeServer(controller: BridgeController, cwd: string, directory = registryDirectory(), onContact?: () => void) {
   const token = randomBytes(32).toString("hex");
   const bridgeId = randomUUID();
   const server = createServer((req, res) => { void handle(req, res); });
@@ -34,6 +34,11 @@ export async function startBridgeServer(controller: BridgeController, cwd: strin
   server.timeout = 10000;
   server.maxConnections = 16;
   let closing = false;
+  let lastContactAt: string | undefined;
+  const contacted = () => {
+    lastContactAt = new Date().toISOString();
+    onContact?.();
+  };
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       if (closing) throw new BridgeError(410, "Bridge closed");
@@ -42,11 +47,15 @@ export async function startBridgeServer(controller: BridgeController, cwd: strin
       const expected = Buffer.from(`Bearer ${token}`);
       if (auth.length !== expected.length || !timingSafeEqual(auth, expected)) throw new BridgeError(401, "Unauthorized");
       if (req.method === "GET" && req.url === "/status") {
-        respond(res, 200, { bridgeId, ...controller.status() });
+        const status = controller.status();
+        contacted();
+        respond(res, 200, { bridgeId, ...status });
       } else if (req.method === "POST" && req.url === "/command") {
         if (!req.headers["content-type"]?.startsWith("application/json")) throw new BridgeError(415, "Expected application/json");
         if (Number(req.headers["content-length"] ?? 0) > MAX_BODY_BYTES) throw new BridgeError(413, "Request too large");
-        respond(res, 200, controller.dispatch(await body(req)));
+        const result = controller.dispatch(await body(req));
+        contacted();
+        respond(res, 200, result);
       } else throw new BridgeError(404, "Not found");
     } catch (error) {
       if (!res.destroyed) respond(res, error instanceof BridgeError ? error.status : 500,
@@ -66,6 +75,7 @@ export async function startBridgeServer(controller: BridgeController, cwd: strin
   catch (error) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); throw error; }
   return {
     bridgeId,
+    get lastContactAt() { return lastContactAt; },
     async close(): Promise<void> {
       if (closing) return;
       closing = true;

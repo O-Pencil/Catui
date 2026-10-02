@@ -1,35 +1,36 @@
 # Catui same-session bridge
 
-This opt-in extension lets an authorized local MCP client observe and message the
+This built-in command lets an authorized local MCP client observe and message the
 exact Catui session you are using. It never launches another agent. Node 20+ and
 POSIX owner-only file permissions are required (macOS/Linux; Windows unsupported).
 
-## Activate
+## Connect in three steps
 
-Load the source or built extension explicitly:
+1. Start Catui normally (or `catui --resume` to choose an existing conversation)
+   and enter `/bridge start`. No extension paths or configuration files are needed.
+2. On first use, confirm **Connect Codex**. Catui installs its bundled plugin through
+   the installed Codex CLI. No account keys or ports to copy. Install/update Codex
+   first if it is unavailable, then retry `/bridge setup`.
+3. Open a new Codex chat and ask: **Connect to my Catui session and inspect its
+   progress.** If several sessions are enabled, use the exact prompt shown by
+   `/bridge status`. If the new plugin's tools are missing, restart Codex once.
 
-```bash
-catui --extension /absolute/path/to/Catui/extensions/optional/session-bridge/index.ts
-# Or: catui --extension /absolute/path/to/Catui/dist/extensions/optional/session-bridge/index.js
-```
+`/bridge` opens an action menu. `/bridge status` shows waiting or the last
+authenticated client contact; it does not infer a persistent connection from
+installation success. `/bridge stop` disconnects. Start again explicitly after
+switching, forking, reloading or restarting a session. To supervise continuously,
+also ask Codex to schedule checks; the bridge itself is not a scheduler.
 
-For an already-running Catui, add that absolute extension path to your normal
-extension configuration, then use `/reload` when the current task is idle. Reload
-alone does not grant control. In the target session, run `/bridge start` to grant
-local clients progress/message/cancellation access. `/bridge status` displays its
-instance ID; `/bridge stop` revokes access. Do not restart a working agent just to
-test this bridge. Activation/reload is a user action, not terminal injection.
+Subsequent starts skip setup for unchanged installed client assets. A changed
+client or Node path prompts an update. `/bridge setup` explicitly repairs a removed
+or disabled plugin even when Catui has a previous successful setup record. Setup
+is optional: declining it leaves the bridge usable by an already configured client.
+Headless sessions never assume installation consent; use interactive Catui for setup.
 
-The configuration entry is an absolute path in the existing `extensions` array
-of the applicable settings file; append it without replacing other entries:
-
-```json
-{"extensions": ["/absolute/path/to/Catui/extensions/optional/session-bridge/index.ts"]}
-```
-
-If the previous process has already exited, resume that conversation with
-`catui --resume --extension /absolute/path/to/Catui/extensions/optional/session-bridge/index.ts`,
-select the intended session, then run `/bridge start`.
+The command is default-loaded but inactive. It adds no listeners, processes, model
+calls, files or prompt content until used. Existing explicit extension paths remain
+compatible. An older running Catui process must first finish and restart on the
+new version; `catui --resume` preserves the chosen conversation.
 
 The extension binds only to 127.0.0.1 on an ephemeral port. It publishes a random
 token in `~/.catui/bridges/<bridge-id>.json` (0700 directory, 0600 file). A custom
@@ -38,14 +39,20 @@ files or their tokens in Git, prompts, logs, shared directories, or plugin packa
 Any process with your OS account's access to the registry has the enabled bridge's
 authority; this is local-account trust, not isolation from malicious same-user code.
 
-## Connect a Codex plugin
+## Distribution and developer details
 
-The companion `plugin/server.js` is a dependency-free MCP stdio server. Package it
-with client.js and package.json, then configure it as a Node stdio MCP server in a
-Codex plugin. The generated personal `catui-bridge` plugin uses this same source.
-It reads only enabled bridges; there is no endpoint configuration or token pasted
-into Codex. Start a new Codex chat after plugin installation if tools are not yet
-visible in the current one.
+The companion `plugin/server.js` is a dependency-free MCP stdio server. The npm
+package contains its runtime files and setup code. On confirmation, Catui builds a
+private, content-versioned local marketplace under `~/.catui/codex-bridge/` and
+uses `codex plugin marketplace add` followed by `codex plugin add`. It never edits
+the personal marketplace or Codex TOML by hand. Codex installs its own cache copy;
+the MCP command pins the running Node executable and the chosen bridge registry.
+This local distribution needs no public-directory listing or Git clone.
+
+Official packaging reference: [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins).
+Setup commands have bounded output and timeouts and use argument arrays, not a shell.
+Completed setup is recorded only after both commands succeed. The record is a
+setup receipt, not proof the plugin remains enabled or that a client has connected.
 
 Tools: `list_sessions`, `get_progress`, `send_message`, `cancel_run`.
 
@@ -86,7 +93,7 @@ No automatic polling, model calls or HTTP listeners exist before `/bridge start`
 ## Verify
 
 ```bash
-node --test --import tsx test/session-bridge.test.ts
+node --test --import tsx test/session-bridge.test.ts test/session-bridge-setup.test.ts
 ```
 
 Tests use temporary registries and controlled host capabilities; transport/MCP

@@ -36,6 +36,18 @@ catui --help                        # 查看全部参数
 
 ## 当前能力
 
+### 让 Codex 协助当前会话
+
+在 macOS／Linux 上，直接在 Catui 输入 `/bridge start`，首次确认安装连接插件。
+然后在 Codex 新开聊天，说“连接我的 Catui 会话，查看进度并帮我验收”。
+无需查找扩展路径、填写端口或复制密钥。需要已安装支持插件的 Codex。
+
+`/bridge status` 查看是否已有客户端访问，`/bridge setup` 重试或修复安装，
+`/bridge stop` 断开连接。需要持续监工时，再请 Codex 安排定时检查。
+详见[连接说明](extensions/optional/session-bridge/README.md)。
+
+### 内置功能
+
 - **工具与会话**：文件读取与编辑、Shell、模型切换、流式响应、历史记录、分支、上下文压缩和 HTML 导出。
 - **记忆与身份**：NanoMem 保留项目知识与偏好；persona 定义身份和工作风格。
   **NanoSoul 暂时下线**，不再自动初始化、注入人格或记录交互学习，已有 Soul 数据不删除。

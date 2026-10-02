@@ -10,8 +10,9 @@ Parent: [optional extensions](../AGENT.md).
 | registry.ts | Owner-only discovery directory and ephemeral descriptor publication |
 | server.ts | Authenticated bounded loopback HTTP listener and cleanup |
 | plugin/ | Dependency-free stdio MCP client packaged for Codex |
+| setup/ | User-confirmed bundled plugin installation and first-use onboarding |
 | README.md | Installation, activation, receipts and trust boundaries |
 
-No default load, model call, timer or server at extension registration. No host
+Default-loaded command; no model call, timer, process, file write or server at registration. No host
 internals beyond the extension API type. Stop/switch/fork/reload/shutdown revoke
 transport access; already submitted host messages are not automatically withdrawn.

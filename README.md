@@ -38,6 +38,17 @@ The root build does not build the mobile app.
 
 ## What ships
 
+### Connect Codex to your current session
+
+On macOS/Linux, enter `/bridge start` in Catui and confirm the first-use plugin
+installation. Open a new Codex chat and ask it to connect to your Catui session.
+There are no extension paths, keys or port numbers to copy. Use `/bridge status`
+to check client contact, `/bridge setup` to retry installation, and `/bridge stop`
+to disconnect. Requires an installed Codex version with plugin support.
+See [connection guide](extensions/optional/session-bridge/README.md).
+
+### Included capabilities
+
 - **Tools and sessions:** file inspection/editing, shell execution, model switching,
   streaming responses, session history, branching, compaction and HTML export.
 - **Memory and persona:** NanoMem retains project knowledge and preferences;

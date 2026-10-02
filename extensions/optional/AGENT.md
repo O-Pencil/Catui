@@ -3,11 +3,11 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
-session-bridge/: Opt-in same-session local control, /bridge start|stop|status, private discovery and Codex MCP client; see session-bridge/AGENT.md
+session-bridge/: Default-loaded /bridge command, explicitly activated same-session control, guided Codex plugin setup, private discovery; see session-bridge/AGENT.md
 export-html/index.ts: HTML export extension, exportSessionToHtml/exportFromFile, /export command
 simplify/index.ts: Simplification extension, /simplify style refactoring tool
 evolution/: Default-loaded controlled self-evolution extension, /refine command, evolution_refine, evolved_tool, evolved_executable_tool, candidate/revision ledger, active eval fixture retention, bounded global auto-promotion, prompt injection
 
-Rule: Members complete, one item per line, parent links valid, precise terms first. Most optional entries are opt-in; evolution is default-loaded by explicit product policy while remaining under optional source.
+Rule: Members complete, one item per line, parent links valid, precise terms first. Most optional entries are opt-in; evolution and the inactive session-bridge command are default-loaded by explicit product policy while remaining under optional source.
 
 [COVENANT]: Update this file header on changes and verify against parent AGENT.md

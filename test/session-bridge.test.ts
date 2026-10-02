@@ -36,6 +36,7 @@ const sendCommand = (id = "message-1", message = "Review the first batch") => ({
 test("real HTTP targets the same host and separates submitted from observed receipts", async t => {
   const f = await fixture(t);
   const receipt: any = await callBridge(f.descriptor, sendCommand());
+  assert.ok(f.transport.lastContactAt);
   assert.equal(receipt.status, "submitted");
   assert.equal(f.sent.length, 1);
   assert.equal(f.sent[0].mode, "followUp");
@@ -52,6 +53,7 @@ test("authentication, browser origin, body limits and malformed inputs fail befo
   const f = await fixture(t);
   const url = `http://127.0.0.1:${f.descriptor.port}`;
   assert.equal((await fetch(`${url}/status`)).status, 401);
+  assert.equal(f.transport.lastContactAt, undefined);
   assert.equal((await fetch(`${url}/status`, { headers: { Authorization: `Bearer ${f.descriptor.token}`, Origin: "https://example.com" } })).status, 403);
   const response = await fetch(`${url}/command`, { method: "POST", headers: { Authorization: `Bearer ${f.descriptor.token}`, "Content-Type": "application/json" }, body: "x".repeat(33000) });
   assert.equal(response.status, 413);
@@ -157,6 +159,37 @@ test("malformed descriptor errors never expose credentials", async t => {
     assert.equal(String(error).includes(f.descriptor.token), false);
     return true;
   });
+});
+
+test("bridge menu gives first-use setup and honest waiting/contact/disconnect status", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "catui-bridge-ui-"));
+  const previous = process.env.CATUI_BRIDGE_DIR;
+  process.env.CATUI_BRIDGE_DIR = directory;
+  let command: any, confirmations = 0;
+  const messages: string[] = [], badges: Array<string | undefined> = [];
+  const ctx = { hasUI: true, cwd: "/ui-project", sessionManager: { getSessionId: () => "ui-session" },
+    isIdle: () => true, hasPendingMessages: () => false, abort: () => {}, ui: {
+      select: async () => "Start connection", confirm: async () => { confirmations++; return false; },
+      notify: (message: string) => messages.push(message), setStatus: (_key: string, message: string | undefined) => badges.push(message),
+    } };
+  sessionBridge({ on: () => {}, registerCommand: (_name: string, value: any) => { command = value; }, sendUserMessage: () => {} } as any);
+  t.after(async () => {
+    await command.handler("stop", ctx);
+    if (previous === undefined) delete process.env.CATUI_BRIDGE_DIR; else process.env.CATUI_BRIDGE_DIR = previous;
+    await rm(directory, { recursive: true, force: true });
+  });
+  assert.deepEqual(badges, []);
+  await command.handler("", ctx);
+  assert.equal(confirmations, 1);
+  assert.equal(badges.at(-1), "Bridge: waiting for Codex");
+  const descriptor = await readDescriptor((await readdir(directory))[0].slice(0, -5), directory);
+  assert.ok(messages.some(message => message.includes(`Connect to Catui bridge ${descriptor.bridgeId}`)));
+  await callBridge(descriptor);
+  assert.equal(badges.at(-1), "Bridge: client seen");
+  await command.handler("status", ctx);
+  assert.ok(messages.at(-1)?.includes("Last client contact:"));
+  await command.handler("stop", ctx);
+  assert.equal(badges.at(-1), undefined);
 });
 
 test("SDK-loaded bridge submits into the same AgentSession queues and reload revokes it", async t => {

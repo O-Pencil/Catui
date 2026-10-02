@@ -1,10 +1,10 @@
 /**
- * [WHO]: Opt-in /bridge command binds a local controller to the current Catui session
- * [FROM]: Extension API contract, local controller and transport only
- * [TO]: User-loaded extension host; companion Codex plugin communicates over loopback
+ * [WHO]: Default /bridge command provides explicit activation and guided Codex setup
+ * [FROM]: Extension API contract, local controller/transport and lazy setup module
+ * [TO]: Built-in or explicitly loaded extension host; Codex communicates over loopback
  * [HERE]: extensions/optional/session-bridge/index.ts - lifecycle and explicit activation
  */
-import type { ExtensionAPI } from "../../../core/extensions-host/types.js";
+import type { ExtensionAPI, ExtensionContext, ExtensionUIContext } from "../../../core/extensions-host/types.js";
 import { BridgeController } from "./controller.js";
 import { startBridgeServer } from "./server.js";
 
@@ -20,23 +20,49 @@ export default function sessionBridge(api: ExtensionAPI): void {
   let server: Awaited<ReturnType<typeof startBridgeServer>> | undefined;
   let generation = 0;
   let starting = false;
+  let setupRunning = false;
+  let statusUI: ExtensionUIContext | undefined;
+  const setup = async (ctx: ExtensionContext, force = false) => {
+    if (setupRunning) { ctx.ui.notify("Codex setup is already running.", "info"); return; }
+    setupRunning = true;
+    const expectedGeneration = generation;
+    try {
+      const { offerCodexSetup } = await import("./setup/onboarding.js");
+      await offerCodexSetup(ctx, force, undefined, () => generation === expectedGeneration);
+    } finally { setupRunning = false; }
+  };
+  const showStatus = (ctx: ExtensionContext) => {
+    if (!server) { ctx.ui.notify("Bridge is off. Run /bridge start to connect Codex to this session.", "info"); return; }
+    const contact = server.lastContactAt ? `Last client contact: ${server.lastContactAt}.` : "Waiting for a client. Open a new Codex chat with Catui Bridge enabled.";
+    ctx.ui.notify(`${contact}\nIn Codex, say: Connect to Catui bridge ${server.bridgeId} and inspect its progress.\nUse /bridge setup to install or repair the plugin; /bridge stop to disconnect.`, "info");
+  };
   const stop = async () => {
     generation++;
     controller?.revoke();
     controller = undefined;
     const previous = server;
     server = undefined;
+    statusUI?.setStatus?.("catui-bridge", undefined);
+    statusUI = undefined;
     await previous?.close();
   };
   api.registerCommand("bridge", {
-    description: "Start, stop or inspect authorized local same-session control",
+    description: "Connect Codex to this session, install its plugin, or disconnect",
     handler: async (args, ctx) => {
-      const action = args.trim() || "status";
+      let action = args.trim();
+      if (!action && ctx.hasUI) {
+        const actions: Record<string, string> = { "Start connection": "start", "Set up Codex plugin": "setup", "Connection status": "status", "Stop connection": "stop" };
+        const selected = await ctx.ui.select("Catui Bridge", Object.keys(actions));
+        if (!selected) return;
+        action = actions[selected];
+      }
+      action ||= "status";
       if (action === "stop") {
         await stop();
         ctx.ui.notify("Bridge stopped. Previously submitted messages may still be queued.", "info");
       } else if (action === "start") {
-        if (server || starting) { ctx.ui.notify("Bridge is already active or starting.", "info"); return; }
+        if (server) { showStatus(ctx); await setup(ctx); return; }
+        if (starting) { ctx.ui.notify("Bridge is starting.", "info"); return; }
         starting = true;
         const expectedGeneration = ++generation;
         const next = new BridgeController({
@@ -45,19 +71,27 @@ export default function sessionBridge(api: ExtensionAPI): void {
           send: (text, mode) => api.sendUserMessage(text, { deliverAs: mode }), abort: () => ctx.abort(),
         });
         try {
-          const transport = await startBridgeServer(next, ctx.cwd);
+          const transport = await startBridgeServer(next, ctx.cwd, undefined, () => {
+            if (controller === next) ctx.ui.setStatus?.("catui-bridge", "Bridge: client seen");
+          });
           if (generation !== expectedGeneration || ctx.sessionManager.getSessionId() !== next.sessionId) {
             await transport.close(); return;
           }
           controller = next;
           server = transport;
-          ctx.ui.notify(`Bridge active: ${transport.bridgeId}. Local clients can read progress, send prompts and cancel the current run. Use /bridge stop to revoke.`, "info");
+          statusUI = ctx.ui;
+          ctx.ui.setStatus?.("catui-bridge", "Bridge: waiting for Codex");
+          ctx.ui.notify("Bridge started. Local clients can read progress, send prompts and cancel the current run. Use /bridge stop to disconnect.", "info");
+          await setup(ctx);
+          if (generation === expectedGeneration) showStatus(ctx);
         } catch (error) {
           ctx.ui.notify(error instanceof Error ? error.message : "Bridge startup failed", "error");
         } finally { starting = false; }
       } else if (action === "status") {
-        ctx.ui.notify(server ? `Bridge active: ${server.bridgeId}` : "Bridge inactive. Use /bridge start to allow local control.", "info");
-      } else ctx.ui.notify("Usage: /bridge start|stop|status", "warning");
+        showStatus(ctx);
+      } else if (action === "setup") {
+        await setup(ctx, true);
+      } else ctx.ui.notify("Usage: /bridge start|setup|status|stop", "warning");
     },
   });
   api.on("session_switch", stop);

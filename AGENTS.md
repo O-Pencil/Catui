@@ -399,6 +399,12 @@ Built-in commands (`core/slash-commands.ts`):
 | `/settings` | Open settings |
 | `/link-world` | Install internet access extension |
 | `/grub` | Start/status/resume/stop an autonomous long-running task harness |
+| `/bridge` | Connect Codex to the current session; guided setup, status and disconnect |
+
+`session-bridge` is default-loaded from `extensions/optional/session-bridge/`;
+the command stays inactive until `/bridge start`. First use offers bundled Codex
+plugin installation; `/bridge setup` repairs setup. See its README and
+`.dev-docs/architecture-review/session-bridge-review/` for receipt and lifecycle rules.
 
 Source evolution is configured separately with `catui evolve init --model provider/model --review-model provider/model`.
 `catui evolve configure --review-model provider/model --scope adaptive` enables
