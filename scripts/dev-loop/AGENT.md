@@ -10,6 +10,7 @@
 
 - `types.ts`: Shared verification, issue, artifact, and watch-state contracts.
 - `verification-plan.ts`: Loads `.dev-docs/vibe-coding/verification-plan.json` and prints it for agents.
+- `bootstrap-length-probe.ts`: Read-only probe reporting the resolved built-in registry and the five default bootstrap prompt lengths, for prompt-budget evidence.
 - `failure-parser.ts`: Parses verification logs into stable `IssueRecord` fingerprints and merges repeated evidence.
 - `run-verification.ts`: Runs local verification commands and writes run artifacts.
 - `github-provider.ts`: Reads this repository's PR checks through `gh` and converts failed checks to issue records.
