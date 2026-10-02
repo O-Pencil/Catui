@@ -80,7 +80,7 @@ plan-driven run never reproduces the CI dist boundary check.
 | ID | Status | Code/test references | Before/after evidence | Limit or blocker |
 | --- | --- | --- | --- | --- |
 | S01 | Implemented (structural) | `builtin-extensions.ts` (468 → 225 lines), `test/builtin-extension-registry.test.ts` (13 tests) | See S01 detail below | Behavioral effectiveness unmeasured (S09); metadata array order now equals load order, which differed from base metadata order — no consumer read that order |
-| S02 | Implemented (structural) | `package.json`, `.dev-docs/vibe-coding/verification-plan.json`, `.github/workflows/ci.yml`, `tsconfig.scripts.json`, `test/verification-contract.test.ts` (28) | See S02 detail below | Scripts were outside the typecheck program; now a gate |
+| S02 | Implemented (structural) | `package.json`, `.dev-docs/vibe-coding/verification-plan.json`, `.github/workflows/ci.yml`, `tsconfig.scripts.json`, `test/verification-contract.test.ts` (31) | See S02 detail below | One pre-existing cross-stage duplicate remains, allowlisted |
 | S03 | Implemented (structural) | `extensions/builtin/{typesafe,discipline,catpaw,humanizer,catail}/index.ts`, `extensions/builtin/catpaw/CATUI.md`, `test/bootstrap-routing.test.ts` (8 tests) | 4,388 → 3,176 chars, −27.6% | Routing effectiveness unmeasured (S09) |
 | S04 | Partial | `extensions/builtin/presence/index.ts`, `test/presence-soul-cleanup.test.ts` (7 tests) | Soul reads removed from both live paths; awakening candidate gated by env | Interactive smoke not run; quality evidence unavailable, so shipped default deliberately unchanged |
 | S05 | Partial (S05.4 closed) | `evolution-refiner.ts`, `test/evolution-refiner-redaction.test.ts` | Raw session evidence is now redacted before the model call; verified to fail on pre-fix code | S05.2 destination routing to memory / working notes unimplemented | Would need a second classifier; refused on scope grounds |
@@ -228,7 +228,8 @@ with no post-build dist boundary step at all. `verify:full` is now the single do
 | --- | --- | --- |
 | Full builds in one aggregate run | 1 (`test`) / 0 (`verify:all`) | 1 (`verify:full`, `test`) |
 | `build:deps` executions in `verify:full` | n/a | 1 |
-| Suites in the plan | 4 of 9 | all required suites |
+| Suites in the plan | 4 of 9 | all required suites, including the evolution lifecycle suites |
+| Scripts under `tsc --noEmit` | not covered | covered by `tsconfig.scripts.json` |
 | Dist package-boundary in the plan | absent | present, ordered after build |
 | Scripts under `tsc --noEmit` | not covered | covered by `tsconfig.scripts.json` |
 
@@ -249,16 +250,27 @@ a second loss: CI ran it through a raw `node --test` step that had no home in th
 Both are restored and both are now pinned by `the default test chain still runs every file it ran at
 base, plus context-management`, which was verified to fail against each removal.
 
-`test/verification-contract.test.ts` (28 tests) enforces: required gates present and required, dist
+`test/verification-contract.test.ts` (31 tests) enforces: required gates present and required, dist
 boundary after build, one build per aggregate run, no script cycle, no plan command reaching
-`verify:full`, plan and CI in agreement, no raw `node --test` in CI, and the graph walk itself via
-counterexamples that call the same function used on `package.json`.
+`verify:full`, plan and CI in agreement, no raw `node --test` in CI, that every regression file added
+by this batch is reachable from `npm test`, that the evolution boundary suite duplicates no file
+another stage already runs, that cross-stage duplication equals an explicit allowlist, that the
+typecheck covers both the product and scripts programs, and the graph walk itself via counterexamples
+that call the same function used on `package.json`.
+
+Known, deliberate, allowlisted: `test/default-runtime-tools.test.ts` is listed in both `test:tools`
+and `test:harness-critical`, so it runs twice. That predates this work. The harness-critical eval
+gate is load-bearing and restructuring it is a separate decision, so it is recorded rather than
+removed; the allowlist exists so the duplication cannot grow silently.
 
 ## Gate receipts
 
 Environment: macOS 26.6.2, Node v24.21.0, npm 11.19.0. Base `3d1cce1`, branch
-`refactor/simplification-learning-batch1`. All rows below are from `npm run verify:full` on the
-final head, log at `/tmp/vf5.log`, unless noted.
+`refactor/simplification-learning-batch1`.
+
+**These receipts are from a single `npm run verify:full` on head `fd46a3f` only.** Earlier runs in
+this branch, and the CI results quoted on the pull request against earlier commits, are superseded
+and are not evidence for this head. Re-run any gate before relying on it.
 
 | Gate | Command | Result |
 | --- | --- | --- |
@@ -269,15 +281,17 @@ final head, log at `/tmp/vf5.log`, unless noted.
 | Typecheck (product) | `tsc --noEmit` | pass |
 | Typecheck (scripts) | `npm run typecheck:scripts` | pass, 0 errors |
 | Package boundary (dist) | `npm run verify:package-boundary:dist` | pass, static + dist |
-| Plan/script contract | `npm run verify:contract` | pass, 28 tests |
+| Plan/script contract | `npm run verify:contract` and `npm run test:contract` | pass, 31 tests, both gates |
 | Release contract tests | `npm run test:release-contracts` | pass, 9 tests |
 | Artifact tests | `npm run test:artifact` | pass |
 | Pre-build suites | `npm run test:pre` | pass |
+| Evolution boundary suite | `npm run test:evolution-boundaries` | pass, 91 tests |
+| Contract suite in the chain | `npm run test:contract` | pass, 31 tests |
 | Harness critical + eval | `npm run test:harness-critical` | pass |
-| Full test total | `verify:full` aggregate | **531 tests, 531 pass, 0 fail, 0 skipped-error** |
+| Full test total | `verify:full` aggregate on head `fd46a3f` | **656 tests, 656 pass, 0 fail** |
 | Registry probe | `scripts/dev-loop/bootstrap-length-probe.ts` | 32 paths, 32 unique, 0 duplicates; 3,176 bootstrap chars |
 | `git diff --check` | whitespace | clean |
-| Remote CI | `gh pr checks 23` | source-evolution, architecture-boundaries, packages pass; Node 20/22 matrix tracked on the PR |
+| Remote CI | `gh pr checks 23` | must be re-read against head `fd46a3f`; results shown against earlier commits are not valid for this head |
 | Interactive smoke | not run | not run |
 | Headless smoke | partial | covered indirectly by SDK/headless tests in `test:runtime-owners`; no manual terminal pass |
 | Packaging | not run | `prepublishOnly` contract asserted by `test:release-contracts`; no publish attempted |
