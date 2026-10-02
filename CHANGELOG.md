@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.32] - 2026-10-02
+
+### Added
+- feat(session-bridge): let Codex supervise Catui workflows
+
+
 ## [1.2.31] - 2026-10-02
 
 ### Added
