@@ -46,8 +46,8 @@ function promoteEvolutionCandidate(
 			metrics: { passRate: 1, replayDivergences: 0, policyViolations: 0, unpairedToolCalls: 0 },
 		}
 		: options?.gateReport
-			? { ...options.gateReport, ...(options.gateReport.passed && candidate ? { benchmark: passingEvolutionGate(candidateId, candidate.contentHash).benchmark } : {}) }
-			: passingEvolutionGate(candidateId, candidate?.contentHash ?? `sha256:${"0".repeat(64)}`);
+			? { ...options.gateReport, ...(options.gateReport.passed && candidate ? { benchmark: passingEvolutionGate(candidate).benchmark } : {}) }
+			: passingEvolutionGate(candidate);
 	return promoteStoredEvolutionCandidate(root, candidateId, { ...options, gateReport });
 }
 

@@ -12,7 +12,7 @@ import {
 	DEFAULT_EVOLUTION_BENCHMARK_POLICY,
 } from "../../extensions/optional/evolution/benchmark-comparison.js";
 import type { EvolutionBenchmarkRunV1, EvolutionBenchmarkSnapshotV1 } from "../../extensions/optional/evolution/benchmark-types.js";
-import type { EvolutionGateReport } from "../../extensions/optional/evolution/evolution-types.js";
+import type { EvolutionCandidate, EvolutionGateReport } from "../../extensions/optional/evolution/evolution-types.js";
 
 function runs(role: "baseline" | "candidate"): EvolutionBenchmarkRunV1[] {
 	return Array.from({ length: 40 }, (_, task) => Array.from({ length: 3 }, (_, repetition) => {
@@ -48,9 +48,12 @@ function snapshot(role: "baseline" | "candidate", candidateId: string, candidate
 	};
 }
 
+/**
+ * Takes the candidate rather than loose id/hash strings, so the evidence is always bound to the
+ * baseline the store captured for that exact candidate.
+ */
 export function passingEvolutionGate(
-	candidateId: string,
-	candidateContentHash: string,
+	candidate: EvolutionCandidate,
 	overrides: Partial<Omit<EvolutionGateReport, "benchmark">> = {},
 ): EvolutionGateReport {
 	return {
@@ -60,18 +63,18 @@ export function passingEvolutionGate(
 		metrics: { passRate: 1, replayDivergences: 0, policyViolations: 0, unpairedToolCalls: 0 },
 		...overrides,
 		benchmark: compareEvolutionBenchmarks(
-			snapshot("baseline", candidateId, candidateContentHash),
-			snapshot("candidate", candidateId, candidateContentHash),
+			snapshot("baseline", candidate.id, candidate.contentHash),
+			snapshot("candidate", candidate.id, candidate.contentHash),
 			DEFAULT_EVOLUTION_BENCHMARK_POLICY,
-			{ candidateId, checkedAt: "2026-08-25T01:00:00.000Z" },
+			{ candidateId: candidate.id, baselineRevisionId: candidate.baselineRevisionId ?? null, checkedAt: "2026-08-25T01:00:00.000Z" },
 		),
 	};
 }
 
-export function writePassingEvolutionBenchmark(cwd: string, candidateId: string, candidateContentHash: string): string {
+export function writePassingEvolutionBenchmark(cwd: string, candidate: EvolutionCandidate): string {
 	const directory = join(cwd, ".catui", "evolution", "benchmarks");
 	mkdirSync(directory, { recursive: true });
-	const path = join(directory, `${candidateId}.json`);
-	writeFileSync(path, `${JSON.stringify(passingEvolutionGate(candidateId, candidateContentHash).benchmark, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+	const path = join(directory, `${candidate.id}.json`);
+	writeFileSync(path, `${JSON.stringify(passingEvolutionGate(candidate).benchmark, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
 	return path;
 }

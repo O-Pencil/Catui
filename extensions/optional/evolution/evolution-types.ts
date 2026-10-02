@@ -80,13 +80,6 @@ export interface EvolutionCandidateInput {
 	artifacts: EvolutionArtifact[];
 	predictions?: EvolutionPrediction[];
 	evidence?: Record<string, unknown>;
-	/**
-	 * Revision this candidate proposes to supersede, when it refines an existing skill rather
-	 * than adding a new one. Optional so candidates created before this field existed still
-	 * validate. When present, promotion requires it to be the revision that is actually current:
-	 * a candidate built against a stale base must not be promoted onto a newer revision.
-	 */
-	baselineRevisionId?: string;
 }
 
 export interface EvolutionValidationReport {
@@ -124,6 +117,15 @@ export interface EvolutionCandidate extends EvolutionCandidateInput {
 	createdAt: string;
 	updatedAt: string;
 	validation: EvolutionValidationReport;
+	/**
+	 * Revision that was active when this candidate was created, captured by
+	 * `createEvolutionCandidate` from store state. `null` means no revision was active, which is
+	 * a legitimate first-candidate state and is distinct from a record that predates this field.
+	 *
+	 * The store owns this value. It is deliberately not part of `EvolutionCandidateInput`, so a
+	 * model proposal, the refine tool, and a caller cannot supply or influence it.
+	 */
+	baselineRevisionId?: string | null;
 	rejectedAt?: string;
 	rejectedBy?: string;
 	rejectionReason?: string;

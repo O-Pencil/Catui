@@ -46,8 +46,8 @@ function promoteEvolutionCandidate(
 			metrics: { passRate: 1, replayDivergences: 0, policyViolations: 0, unpairedToolCalls: 0 },
 		}
 		: options?.gateReport
-			? { ...options.gateReport, ...(options.gateReport.passed && candidate ? { benchmark: passingEvolutionGate(candidateId, candidate.contentHash).benchmark } : {}) }
-			: passingEvolutionGate(candidateId, candidate?.contentHash ?? `sha256:${"0".repeat(64)}`);
+			? { ...options.gateReport, ...(options.gateReport.passed && candidate ? { benchmark: passingEvolutionGate(candidate).benchmark } : {}) }
+			: passingEvolutionGate(candidate);
 	return promoteStoredEvolutionCandidate(root, candidateId, { ...options, gateReport });
 }
 
@@ -738,7 +738,7 @@ test("evolution_refine proposes executable tools and refine promote gates activa
 		assert.equal(candidate?.artifacts[0]?.kind, "executable_tool");
 		assert.match(String(candidate?.artifacts[0]?.metadata?.approvedContentHash ?? ""), /^sha256:/);
 
-		writePassingEvolutionBenchmark(cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		writePassingEvolutionBenchmark(cwd, candidate!);
 		await refineCommand(`--workspace promote ${candidate?.id ?? ""}`, ctx);
 		assert.match(inspectEvolution(workspaceRoot).current?.revisionId ?? "", /^revision-/);
 		const invoked = await executableTool.execute(
@@ -862,7 +862,7 @@ test("refine command keeps planned artifacts inactive until held-out evidence is
 		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-refine-auto" });
 		let inspection = inspectEvolution(root);
 		assert.equal(inspection.candidates[0]?.status, "proposed");
-		writePassingEvolutionBenchmark(ctx.cwd, inspection.candidates[0]?.id ?? "", inspection.candidates[0]?.contentHash ?? "");
+		writePassingEvolutionBenchmark(ctx.cwd, inspection.candidates[0]!);
 		await refineCommand(`--session promote ${inspection.candidates[0]?.id ?? ""}`, ctx);
 		inspection = inspectEvolution(root);
 		assert.equal(inspection.candidates[0]?.status, "promoted");
@@ -910,7 +910,7 @@ test("evolution_refine keeps model-created tool specs inactive until evidence-ba
 		assert.match(createdText, /not promoted|gate failed/i);
 		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-autonomous" });
 		const candidate = inspectEvolution(root).candidates[0];
-		writePassingEvolutionBenchmark(ctx.cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		writePassingEvolutionBenchmark(ctx.cwd, candidate!);
 		const refineCommand = harness.commands.get("refine");
 		assert.ok(refineCommand);
 		await refineCommand(`--session promote ${candidate?.id ?? ""}`, ctx);
@@ -940,7 +940,7 @@ test("evolution_refine gates auto-promotion with deterministic eval evidence", a
 	const harness = createHarness();
 	try {
 		const refineTool = createEvolutionRefineTool({
-			runGate: async (candidate) => passingEvolutionGate(candidate.id, candidate.contentHash, { name: "test-gate" }),
+			runGate: async (candidate) => passingEvolutionGate(candidate, { name: "test-gate" }),
 		});
 		const ctx = {
 			agentDir: harness.agentDir,
@@ -1037,7 +1037,7 @@ test("evolution_refine combines project corpus and held-out evidence for promoti
 		assert.match(proposed.content[0]?.type === "text" ? proposed.content[0].text : "", /not promoted|gate failed/i);
 		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-project-gate" });
 		const candidate = inspectEvolution(root).candidates[0];
-		writePassingEvolutionBenchmark(cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		writePassingEvolutionBenchmark(cwd, candidate!);
 		const refineCommand = harness.commands.get("refine");
 		assert.ok(refineCommand);
 		await refineCommand(`--session promote ${candidate?.id ?? ""}`, ctx);
@@ -1083,7 +1083,7 @@ test("evolution_refine preserves project stream eval evidence on gate reports", 
 		assert.match(promoted.content[0]?.type === "text" ? promoted.content[0].text : "", /promoted/);
 		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-project-stream-gate" });
 		const candidate = inspectEvolution(root).candidates[0];
-		writePassingEvolutionBenchmark(cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		writePassingEvolutionBenchmark(cwd, candidate!);
 		const refineCommand = harness.commands.get("refine");
 		assert.ok(refineCommand);
 		await refineCommand(`--session promote ${candidate?.id ?? ""}`, ctx);
@@ -1204,7 +1204,7 @@ test("evolution_refine proposes trace-derived eval fixtures that gate future pro
 		assert.match(beforeApproval.content[0]?.type === "text" ? beforeApproval.content[0].text : "", /not promoted|gate failed/i);
 		const sessionRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-trace-fixture" });
 		const memoryCandidate = inspectEvolution(sessionRoot).candidates[0];
-		writePassingEvolutionBenchmark(cwd, memoryCandidate?.id ?? "", memoryCandidate?.contentHash ?? "");
+		writePassingEvolutionBenchmark(cwd, memoryCandidate!);
 		const refineCommand = harness.commands.get("refine");
 		assert.ok(refineCommand);
 		await refineCommand(`--session promote ${memoryCandidate?.id ?? ""}`, ctx);
@@ -1441,7 +1441,7 @@ test("evolution_refine activates session artifacts only after evidence-backed ap
 		assert.match(created.content[0]?.type === "text" ? created.content[0].text : "", /not promoted|gate failed/i);
 		const root = getEvolutionScopeRoot(harness.agentDir, { scope: "session", sessionId: "session-self-tune" });
 		let candidate = inspectEvolution(root).candidates[0];
-		writePassingEvolutionBenchmark(ctx.cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		writePassingEvolutionBenchmark(ctx.cwd, candidate!);
 		const refineCommand = harness.commands.get("refine");
 		assert.ok(refineCommand);
 		await refineCommand(`--session promote ${candidate?.id ?? ""}`, ctx);
@@ -1469,7 +1469,7 @@ test("evolution_refine activates session artifacts only after evidence-backed ap
 		);
 		assert.match(memory.content[0]?.type === "text" ? memory.content[0].text : "", /not promoted|gate failed/i);
 		candidate = inspectEvolution(root).candidates.find((item) => item.summary.includes("User prefers ambitious autonomy"));
-		writePassingEvolutionBenchmark(ctx.cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		writePassingEvolutionBenchmark(ctx.cwd, candidate!);
 		await refineCommand(`--session promote ${candidate?.id ?? ""}`, ctx);
 		const reinjected = await beforeAgentStart(
 			{ type: "before_agent_start", prompt: "continue", systemPrompt: "base" },
@@ -1519,7 +1519,7 @@ test("evolution_refine requires evidence before workspace and global behavioral 
 		assert.match(created.content[0]?.type === "text" ? created.content[0].text : "", /not promoted|gate failed/i);
 		const workspaceRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "workspace", cwd: harness.agentDir });
 		let candidate = inspectEvolution(workspaceRoot).candidates[0];
-		writePassingEvolutionBenchmark(harness.agentDir, candidate?.id ?? "", candidate?.contentHash ?? "");
+		writePassingEvolutionBenchmark(harness.agentDir, candidate!);
 		const refineCommand = harness.commands.get("refine");
 		assert.ok(refineCommand);
 		await refineCommand(`--workspace promote ${candidate?.id ?? ""}`, firstSession);
@@ -1569,7 +1569,7 @@ test("evolution_refine requires evidence before workspace and global behavioral 
 
 		const globalRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "global" });
 		candidate = inspectEvolution(globalRoot).candidates.find((item) => item.summary.includes("Prefer reversible global lessons"));
-		writePassingEvolutionBenchmark(harness.agentDir, candidate?.id ?? "", candidate?.contentHash ?? "");
+		writePassingEvolutionBenchmark(harness.agentDir, candidate!);
 		await refineCommand(`--global promote ${candidate?.id ?? ""}`, firstSession);
 		assert.match(inspectEvolution(globalRoot).current?.revisionId ?? "", /revision-/);
 
@@ -1593,7 +1593,7 @@ test("evolution_refine requires evidence before workspace and global behavioral 
 		assert.match(globalToolText, /created/);
 		assert.match(globalToolText, /not promoted|gate failed/i);
 		candidate = inspectEvolution(globalRoot).candidates.find((item) => item.summary.includes("Global tool candidate"));
-		writePassingEvolutionBenchmark(harness.agentDir, candidate?.id ?? "", candidate?.contentHash ?? "");
+		writePassingEvolutionBenchmark(harness.agentDir, candidate!);
 		await refineCommand(`--global promote ${candidate?.id ?? ""}`, firstSession);
 
 		const evolvedTool = harness.tools.get("evolved_tool");
@@ -1644,7 +1644,7 @@ test("evolution auto-observer leaves lessons inactive until evidence-backed appr
 		let candidates = inspectEvolution(root).candidates;
 		assert.equal(candidates.length, 1);
 		assert.equal(candidates[0]?.status, "proposed");
-		writePassingEvolutionBenchmark(ctx.cwd, candidates[0]?.id ?? "", candidates[0]?.contentHash ?? "");
+		writePassingEvolutionBenchmark(ctx.cwd, candidates[0]!);
 		const refineCommand = harness.commands.get("refine");
 		assert.ok(refineCommand);
 		await refineCommand(`--session promote ${candidates[0]?.id ?? ""}`, ctx);
@@ -1723,7 +1723,7 @@ test("evolution auto-observer requires held-out evidence for structured behavior
 		const workspaceRoot = getEvolutionScopeRoot(harness.agentDir, { scope: "workspace", cwd: harness.agentDir });
 		let candidate = inspectEvolution(workspaceRoot).candidates[0];
 		assert.equal(candidate?.status, "proposed");
-		writePassingEvolutionBenchmark(ctx.cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		writePassingEvolutionBenchmark(ctx.cwd, candidate!);
 		const refineCommand = harness.commands.get("refine");
 		assert.ok(refineCommand);
 		await refineCommand(`--workspace promote ${candidate?.id ?? ""}`, ctx);
@@ -1765,7 +1765,7 @@ test("evolution auto-observer requires held-out evidence for structured behavior
 		assert.equal(globalInspection.candidates.length, 1);
 		candidate = globalInspection.candidates[0];
 		assert.equal(candidate?.status, "proposed");
-		writePassingEvolutionBenchmark(ctx.cwd, candidate?.id ?? "", candidate?.contentHash ?? "");
+		writePassingEvolutionBenchmark(ctx.cwd, candidate!);
 		await refineCommand(`--global promote ${candidate?.id ?? ""}`, ctx);
 		globalInspection = inspectEvolution(globalRoot);
 		assert.match(globalInspection.current?.revisionId ?? "", /revision-/);

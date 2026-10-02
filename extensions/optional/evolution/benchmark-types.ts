@@ -104,6 +104,12 @@ export interface EvolutionBenchmarkPromotionReportV1 {
 	kind: "catui-evolution-benchmark-promotion-report";
 	candidateId: string;
 	candidateContentHash: string;
+	/**
+	 * Revision the candidate was created against, or null when none was active. Binding the
+	 * baseline here means a report gathered against one active state cannot validate a candidate
+	 * that would replace a different one.
+	 */
+	baselineRevisionId: string | null;
 	checkedAt: string;
 	corpus: EvolutionBenchmarkSnapshotV1["corpus"];
 	baselineSnapshotHash: string;

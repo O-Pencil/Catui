@@ -23,72 +23,16 @@ import {
 	readWithdrawnRevisionIds,
 	rollbackEvolution,
 } from "../extensions/optional/evolution/evolution-store.js";
-import { compareEvolutionBenchmarks, DEFAULT_EVOLUTION_BENCHMARK_POLICY } from "../extensions/optional/evolution/benchmark-comparison.js";
-import type { EvolutionBenchmarkRunV1, EvolutionBenchmarkSnapshotV1 } from "../extensions/optional/evolution/benchmark-types.js";
-import type { EvolutionArtifact, EvolutionCandidate, EvolutionCandidateInput, EvolutionGateReport } from "../extensions/optional/evolution/evolution-types.js";
+import type { EvolutionArtifact, EvolutionCandidate, EvolutionCandidateInput } from "../extensions/optional/evolution/evolution-types.js";
+import { passingEvolutionGate } from "./helpers/evolution-benchmark.js";
 import { DefaultResourceLoader } from "../core/platform/config/resource-loader.js";
 import { SettingsManager } from "../core/platform/config/settings-manager.js";
 
-/**
- * Promotion is fail-closed for skill_manifest artifacts: it demands a passing gate plus
- * integrity-bound held-out benchmark evidence. These helpers build that evidence the same way
- * test/evolution-benchmark-promotion.test.ts does, so this file exercises the real gate rather
- * than bypassing it.
- */
-function benchmarkRuns(role: "baseline" | "candidate"): EvolutionBenchmarkRunV1[] {
-	return Array.from({ length: 40 }, (_, task) => Array.from({ length: 3 }, (_, repetition) => {
-		const success = task < (role === "baseline" ? 20 : 30);
-		return {
-			taskId: `task-${task}`,
-			repetition: repetition + 1,
-			split: "heldout" as const,
-			slices: [task % 2 === 0 ? "coding" : "tool-use"],
-			success,
-			score: success ? 1 : 0,
-			costUsd: 1,
-			latencyMs: role === "baseline" ? 1_000 : 1_050,
-			policyViolations: 0,
-			replayDivergences: 0,
-			unpairedToolCalls: 0,
-		};
-	})).flat();
-}
-
-function benchmarkSnapshot(role: "baseline" | "candidate", candidateId: string, candidateContentHash: string): EvolutionBenchmarkSnapshotV1 {
-	return {
-		schemaVersion: 1,
-		kind: "catui-evolution-benchmark-snapshot",
-		role,
-		...(role === "candidate" ? { candidateId, candidateContentHash } : {}),
-		createdAt: "2026-08-25T00:00:00.000Z",
-		corpus: { id: "pawbench", version: "1.0", digest: `sha256:${"a".repeat(64)}` },
-		harness: { revisionId: role, commitSha: role === "baseline" ? "a".repeat(40) : "b".repeat(40) },
-		execution: { model: "frozen-model", modelVersion: "v1", temperature: 0, maxTokens: 32_768, timeoutMs: 60_000, budgetUsd: 100 },
-		runs: benchmarkRuns(role),
-	};
-}
-
-function passingGate(candidate: EvolutionCandidate): EvolutionGateReport {
-	return {
-		name: "builtin-harness-eval+heldout-benchmark",
-		passed: true,
-		checkedAt: "2026-08-25T01:00:00.000Z",
-		metrics: { passRate: 1, replayDivergences: 0, policyViolations: 0, unpairedToolCalls: 0 },
-		benchmark: compareEvolutionBenchmarks(
-			benchmarkSnapshot("baseline", candidate.id, candidate.contentHash),
-			benchmarkSnapshot("candidate", candidate.id, candidate.contentHash),
-			DEFAULT_EVOLUTION_BENCHMARK_POLICY,
-			{ candidateId: candidate.id, checkedAt: "2026-08-25T01:00:00.000Z" },
-		),
-	};
-}
-
-/** Create + evidence-promote a candidate, returning the new current revision id. */
 function promoteSkillRevision(scopeRoot: string, input: EvolutionCandidateInput): string {
 	const candidate = createEvolutionCandidate(scopeRoot, input);
 	const revision = promoteEvolutionCandidate(scopeRoot, candidate.id, {
 		approvedBy: "test",
-		gateReport: passingGate(candidate),
+		gateReport: passingEvolutionGate(candidate),
 	});
 	return revision.id;
 }

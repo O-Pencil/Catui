@@ -143,7 +143,12 @@ function withBenchmarkEvidence(
 		const stats = statSync(reportPath);
 		if (!stats.isFile() || stats.size > MAX_BENCHMARK_REPORT_BYTES) throw new Error("Benchmark evidence must be a JSON file no larger than 1 MB.");
 		const benchmark = readJson(reportPath);
-		if (!verifyEvolutionBenchmarkReport(benchmark, candidate.id, candidate.contentHash)) throw new Error("Benchmark evidence is invalid, tampered, or bound to another candidate revision.");
+		// Bind the report to the baseline the candidate itself declares. Together with the store's
+		// check that the candidate's baseline is still current, this means moving the baseline
+		// invalidates evidence gathered against the previous one.
+		if (!verifyEvolutionBenchmarkReport(benchmark, candidate.id, candidate.contentHash, candidate.baselineRevisionId ?? null)) {
+			throw new Error("Benchmark evidence is invalid, tampered, or bound to another candidate revision or baseline.");
+		}
 		if (!benchmark.passed) throw new Error("Behavioral benchmark evidence did not pass every promotion check.");
 		return { ...safetyReport, name: `${safetyReport.name}+heldout-benchmark`, benchmark };
 	} catch (error) {

@@ -566,6 +566,11 @@ export function createEvolutionCandidate(
 	assertNoDuplicateEvalFixture(scopeRoot, input);
 	const id = nextId("candidate", options);
 	const createdAt = now(options);
+	// Capture the baseline here, from store state, on the one path every caller funnels through.
+	// A model proposal, the refine tool, and a direct caller therefore cannot choose the baseline
+	// their evidence will later be judged against. `null` records a genuine first candidate and is
+	// distinct from a record that predates this field.
+	const baselineRevisionId = loadCurrentEvolution(scopeRoot)?.revisionId ?? null;
 	const candidate: EvolutionCandidate = {
 		...input,
 		schemaVersion: EVOLUTION_SCHEMA_VERSION,
@@ -575,6 +580,7 @@ export function createEvolutionCandidate(
 		createdAt,
 		updatedAt: createdAt,
 		validation,
+		baselineRevisionId,
 	};
 	writeJsonAtomic(candidatePath(scopeRoot, id), candidate);
 	appendHistory(scopeRoot, { schemaVersion: EVOLUTION_SCHEMA_VERSION, event: "candidate_created", candidateId: id, at: createdAt });
@@ -762,10 +768,34 @@ export function promoteEvolutionCandidate(
 	) {
 		throw new Error("Evolution promotion requires a perfect replay and safety gate");
 	}
+	// The baseline is captured at creation and must still describe reality at promotion. A stale
+	// base means the evidence was gathered against different active content than it would replace.
+	// Three distinct states, none of which is silently treated as "fine":
+	//   - string  : captured against a real revision; must still be the current one
+	//   - null    : captured when nothing was active, a legitimate first candidate; promotion
+	//               requires that nothing has become active since
+	//   - absent  : a record written before this field existed. Readable, but it cannot prove its
+	//               base, so it may only promote while no revision is active.
+	//
+	// Resolved before the evidence check so the report is verified against the same baseline the
+	// candidate claims: a report gathered against a different active state cannot activate it.
+	const current = loadCurrentEvolution(scopeRoot);
+	const expectedBaselineRevision = current?.revisionId ?? null;
+	if (!("baselineRevisionId" in candidate)) {
+		if (expectedBaselineRevision !== null) {
+			throw new Error(
+				`Evolution candidate predates baseline capture and cannot prove its base against active revision ${expectedBaselineRevision}`,
+			);
+		}
+	} else if (candidate.baselineRevisionId !== expectedBaselineRevision) {
+		throw new Error(
+			`Evolution candidate baseline is stale: created against ${candidate.baselineRevisionId ?? "no revision"} but ${expectedBaselineRevision ?? "no revision"} is active`,
+		);
+	}
 	const requiresBenchmark = candidate.artifacts.some((artifact) => artifact.kind !== "eval_fixture");
 	if (requiresBenchmark && (
 		options.gateReport.benchmark?.passed !== true
-		|| !verifyEvolutionBenchmarkReport(options.gateReport.benchmark, candidate.id, candidate.contentHash)
+		|| !verifyEvolutionBenchmarkReport(options.gateReport.benchmark, candidate.id, candidate.contentHash, expectedBaselineRevision)
 	)) {
 		throw new Error("Behavioral evolution promotion requires passing integrity-bound benchmark evidence");
 	}
@@ -773,18 +803,6 @@ export function promoteEvolutionCandidate(
 		options.gateReport.name !== "candidate-eval-fixture"
 	)) {
 		throw new Error("eval_fixture promotion requires a passing candidate fixture replay gate");
-	}
-	// A candidate that declares a baseline must be promoted onto exactly that revision. A stale
-	// base means the evidence was gathered against different active content than it would replace.
-	// Candidates without the field keep working, so records written before it stay valid.
-	const current = loadCurrentEvolution(scopeRoot);
-	const baselineRevisionId = candidate.baselineRevisionId;
-	if (typeof baselineRevisionId === "string" && baselineRevisionId.length > 0) {
-		if (current?.revisionId !== baselineRevisionId) {
-			throw new Error(
-				`Evolution candidate baseline is stale: built against ${baselineRevisionId} but ${current?.revisionId ?? "no revision"} is active`,
-			);
-		}
 	}
 	const revisionId = nextId("revision", options);
 	const createdAt = now(options);
