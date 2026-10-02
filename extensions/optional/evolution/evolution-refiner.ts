@@ -7,6 +7,7 @@
 
 import type { ExtensionCommandContext } from "../../../core/extensions-host/types.js";
 import type { SessionEntry } from "../../../core/session/session-manager.js";
+import { redactEvolutionEvidence } from "./prompts.js";
 import type { EvolutionArtifact, EvolutionArtifactKind, EvolutionCandidateInput, EvolutionPredictionDirection, EvolutionScope } from "./evolution-types.js";
 
 const REFINER_SYSTEM_PROMPT = `You are Catui's controlled self-evolution proposal writer.
@@ -128,12 +129,17 @@ export async function planEvolutionCandidate(
 	scope: EvolutionScope,
 	instructions: string,
 ): Promise<EvolutionCandidateInput> {
-	const userMessage = [
-		instructions ? `User refinement instructions:\n${instructions}` : "User refinement instructions: propose the smallest useful reusable harness update.",
-		"",
-		"Recent session trajectory:",
-		sessionExcerpt(ctx.sessionManager.getEntries()),
-	].join("\n");
+	// Session text is untrusted data that may contain credentials or private paths. Redact before
+	// it leaves the process, not after the model has already seen it.
+	const userMessage = redactEvolutionEvidence(
+		[
+			instructions ? `User refinement instructions:\n${instructions}` : "User refinement instructions: propose the smallest useful reusable harness update.",
+			"",
+			"Recent session trajectory:",
+			sessionExcerpt(ctx.sessionManager.getEntries()),
+		].join("\n"),
+		[ctx.cwd, ctx.agentDir],
+	);
 	const response = await ctx.completeSimple(REFINER_SYSTEM_PROMPT, userMessage);
 	if (!response) throw new Error("Refine unavailable: no model response. Check the selected model and API key.");
 	const parsed = extractJson(response);
