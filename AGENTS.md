@@ -8,7 +8,7 @@ This file provides guidance for **@o-catui-agent** tooling and contributors when
 
 ## Project Overview
 
-**Catui** (formerly catui-agent) is a terminal-native AI coding agent with persistent memory and evolving AI personality. Built with TypeScript, it provides an interactive TUI for conversational coding with multi-model support (Anthropic, OpenAI, Gemini, Alibaba DashScope/Token Plan, Ollama).
+**Catui** (formerly catui-agent) is a terminal-native AI coding agent with persistent memory and selectable personas. Built with TypeScript, it provides an interactive TUI for conversational coding with multi-model support (Anthropic, OpenAI, Gemini, Alibaba DashScope/Token Plan, Ollama).
 
 **Core Pillars:**
 - Terminal First - No Electron, no browser, pure terminal
@@ -22,7 +22,7 @@ This file provides guidance for **@o-catui-agent** tooling and contributors when
 - `@catui/tui` - Terminal UI components
 - `catui-protocol` - Public protocol contracts for extensions and published integrations
 - `catui-mem` - Persistent memory package integration
-- `catui-soul` - AI personality package integration
+- NanoSoul is suspended; `packages/soul-core` is retained standalone, outside the application build. Persona owns identity.
 
 ---
 
@@ -220,7 +220,7 @@ Catui/
 ├── packages/              # Bundled package-shaped integrations
 │   ├── protocol/          # Stable public protocol contracts
 │   ├── mem-core/          # Persistent memory system
-│   └── soul-core/         # AI personality engine
+│   └── soul-core/         # Suspended standalone source (not a root workspace)
 │
 ├── utils/                 # Shared utilities
 ├── cli/                   # CLI helpers
@@ -322,6 +322,7 @@ Extensions can:
 | `discipline` | Built-in engineering workflow skills, `skill` tool, and lightweight skill-use bootstrap |
 | `catpaw` | Evidence-led UI/UX design craft workflow skill |
 | `catail` | Research-to-publication Skill from framing through human-gated submission readiness |
+| `typesafe` | Default decision/tool/evaluation guidance and vendored TypeSafe integration skill |
 | `humanizer` | Vendored writing-quality skill: removes AI-writing tells from prose without changing meaning or inventing facts |
 | `mcp` | MCP protocol support |
 | `security-audit` | Security vulnerability detection |
@@ -490,7 +491,7 @@ npm run release
   │    ├─ npm auto-commits package.json + CHANGELOG.md + creates local git tag
   │    └─ [postversion hook] git push (tags kept local, GitHub rules block tag push)
   └─ npm publish
-       ├─ [prepublishOnly hook] build:release (mobile web UI + build; fails hard if apps/mobile is not installed)
+       ├─ [prepublishOnly hook] build:release (root build only; mobile has its own toolchain)
 ```
 
 For non-patch releases, run `npm version` manually:
@@ -599,6 +600,9 @@ P3 headers serve as **context budget gatekeepers**:
 - [P2: packages/](./packages/AGENT.md) - Bundled npm packages
 
 ### Related Documentation
+
+- [Design principles](./docs/design-principles.md) - Current architecture decisions and provenance
+- [README artwork](./assets/readme/AGENT.md) - Header asset and generation record
 
 - [.CATUI.md](./.CATUI.md) - Product personality charter
 - [packages/mem-core/AGENT.md](./packages/mem-core/AGENT.md) - Memory system

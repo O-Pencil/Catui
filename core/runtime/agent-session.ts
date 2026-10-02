@@ -1,13 +1,12 @@
 /**
- * [WHO]: AgentSession class, session lifecycle, semantic Run Trace capture/persistence, event emission (session-events), compaction decisions (SessionCompactionCoordinator), in-loop recovery adapter, pruneRecoverableErrorTail() re-export; safe context handoffs and pre-hook message journaling
+ * [WHO]: AgentSession class, session lifecycle, composes SessionRunTrace and SessionEventHandler, compaction decisions (SessionCompactionCoordinator), in-loop recovery adapter, pruneRecoverableErrorTail() re-export; safe context handoffs; delegates queues, queries and resource discovery
  * [FROM]: Depends on agent-core, ai, core/tools/*, core/session/*, core/platform/config/*
  * [TO]: Consumed by core/index.ts, core/runtime/sdk.ts, modes/interactive/interactive-mode.ts, modes/print-mode.ts, modes/rpc/rpc-mode.ts, modes/acp/acp-mode.ts, modes/rpc/rpc-types.ts, modes/rpc/rpc-client.ts, modes/interactive/components/footer.ts, modes/interactive/components/skill-invocation-message.ts
  * [HERE]: Central runtime hub; all modes delegate here; scoped cancellation keeps engine and UI queues consistent
  */
-import { randomUUID } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import type {
   Agent,
   AgentEvent,
@@ -19,7 +18,7 @@ import type {
   AgentTool,
   ThinkingLevel,
 } from "@catui/agent-core";
-import { InMemoryRunTraceSink, RunTraceRecorder, type RunTraceEventV1 } from "@catui/agent-core";
+import { type RunTraceEventV1 } from "@catui/agent-core";
 import type {
   AssistantMessage,
   DocumentContent,
@@ -36,9 +35,7 @@ import { stripFrontmatter } from "../../utils/frontmatter.js";
 import type { BashResult } from "../platform/exec/bash-executor.js";
 import {
   type CompactionResult,
-  calculateContextTokens,
   collectEntriesForBranchSummary,
-  estimateContextTokens,
 } from "../session/compaction/index.js";
 import { ToolOrchestrator } from "../tools/orchestrator.js";
 import { DEFAULT_THINKING_LEVEL } from "../platform/config/defaults.js";
@@ -67,16 +64,14 @@ import {
   type PromptTemplate,
 } from "../prompt/prompt-templates.js";
 import type {
-  ResourceExtensionPaths,
   ResourceLoader,
 } from "../platform/config/resource-loader.js";
-import { getLatestCompactionEntry, SessionManager, type SessionEntry, type BranchSummaryEntry, type SessionInfo, type SessionListProgress } from "../session/session-manager.js";
+import { SessionManager, type SessionEntry, type BranchSummaryEntry, type SessionInfo, type SessionListProgress } from "../session/session-manager.js";
 import type { SettingsManager } from "../platform/config/settings-manager.js";
 import { SessionSettingsAccessors } from "./session-settings-accessors.js";
 import { AgentDirContext } from "../agent-dir/agent-dir-context.js";
 
 import { t } from "../platform/i18n/index.js";
-import { toSoulContext, extractSessionContext } from "../soul-integration.js";
 import type { BashOperations } from "../tools/bash.js";
 import { createDefaultRuntimeTools } from "./default-tools.js";
 import { BashRunner } from "./bash-runner.js";
@@ -95,7 +90,7 @@ import {
   getActiveBaseToolNames,
 } from "./prompt-assembly.js";
 import { exportSessionHtml, getLastAssistantText } from "./export-bridge.js";
-import { ExtensionEventBridge } from "./event-bridge.js";
+import { SessionEventHandler } from "./session-event-handler.js";
 import { bindExtensionCore } from "./extension-core-bindings.js";
 import {
   buildSessionSlashCommands,
@@ -104,7 +99,10 @@ import {
 import { RetryCoordinator, type RetryCoordinatorHost, type RetrySessionEvent } from "./retry-coordinator.js";
 import { createLogger, type AgentLogger } from "../platform/utils/logger.js";
 import { createAgentTool, createTaskToolAlias, createSendMessageTool, AGENT_TOOL_NAME, TASK_TOOL_NAME, SEND_MESSAGE_TOOL_NAME, InProcessSubAgentBackend, type CreateSessionFn, type SubAgentEvent } from "../sub-agent/index.js";
-import { persistWorkspaceRunTrace, redactWorkspaceRunTraceEvent } from "./run-trace-jsonl.js";
+import { SessionMessageQueue } from "./session-message-queue.js";
+import { SessionRunTrace } from "./session-run-trace.js";
+import { discoverExtensionResources } from "./extension-resources.js";
+import { getSessionStats, getContextUsage, extractUserMessageText, type SessionStats } from "./session-queries.js";
 
 export type { SessionSlashCommandDescriptor } from "./slash-command-catalog.js";
 export { CycleModelError } from "./model-controller.js";
@@ -136,11 +134,11 @@ export interface AgentSessionConfig {
   mcpToolsFactory?: () => Promise<ToolDefinition[]>;
   /** Initial dynamic tools for first session build */
   initialMcpTools?: ToolDefinition[];
-  /** Soul manager factory refreshed on reload (for persona/dir switching) */
+  /** @deprecated NanoSoul is suspended; ignored. */
   soulManagerFactory?: () => Promise<any | null>;
   /** Model registry for API key resolution and model discovery */
   modelRegistry: ModelRegistry;
-  /** Soul manager for AI personality evolution */
+  /** @deprecated NanoSoul is suspended; ignored. */
   soulManager?: any;
   /** Initial active built-in tool names. Default: [read, bash, edit, write] */
   initialActiveToolNames?: string[];
@@ -186,24 +184,7 @@ export interface PromptOptions {
   source?: InputSource;
 }
 
-/** Session statistics for /session command */
-export interface SessionStats {
-  sessionFile: string | undefined;
-  sessionId: string;
-  userMessages: number;
-  assistantMessages: number;
-  toolCalls: number;
-  toolResults: number;
-  totalMessages: number;
-  tokens: {
-    input: number;
-    output: number;
-    cacheRead: number;
-    cacheWrite: number;
-    total: number;
-  };
-  cost: number;
-}
+export type { SessionStats } from "./session-queries.js";
 
 export type SlashCommandExecutor = (text: string) => Promise<boolean>;
 
@@ -236,12 +217,7 @@ class AgentSessionBase {
   private _detachExternalAbort?: () => void;
   private readonly _listeners = new Listeners<AgentSessionEvent>();
 
-  /** Tracks pending steering messages for UI display. Removed when delivered. */
-  private _steeringMessages: string[] = [];
-  /** Tracks pending follow-up messages for UI display. Removed when delivered. */
-  private _followUpMessages: string[] = [];
-  /** Messages queued to be included with the next user prompt as context ("asides"). */
-  private _pendingNextTurnMessages: CustomMessage[] = [];
+  private readonly _messageQueue = new SessionMessageQueue();
 
   // Retry coordinator (P1 - extracted from AgentSession)
   private _retryCoordinator!: RetryCoordinator;
@@ -255,9 +231,10 @@ class AgentSessionBase {
   // Extension system
   private _extensionRunner: ExtensionRunner | undefined = undefined;
   private _slashCommandExecutor: SlashCommandExecutor | undefined = undefined;
-  private readonly _extensionEventBridge: ExtensionEventBridge;
+  private readonly _eventHandler: SessionEventHandler;
 
   private _resourceLoader: ResourceLoader;
+  private _resourcesDiscovered = false;
   /** Injected theme for HTML-export custom-tool rendering (U2: no modes import). */
   private _theme?: ThemeContract;
   /** Debug event verbosity level. */
@@ -273,7 +250,6 @@ class AgentSessionBase {
   private _customTools: ToolDefinition[];
   private _staticCustomTools: ToolDefinition[];
   private _mcpToolsFactory?: () => Promise<ToolDefinition[]>;
-  private _soulManagerFactory?: () => Promise<any | null>;
   private _baseToolRegistry: Map<string, AgentTool> = new Map();
   /** CC-style Agent tool — recreated on each _buildRuntime() */
   private _agentTool?: any;
@@ -283,8 +259,6 @@ class AgentSessionBase {
   private _subAgentBackend?: InProcessSubAgentBackend;
   private _cwd: string;
   private _extensionRunnerRef?: { current?: ExtensionRunner };
-  private _soulManager?: any; // SoulManager from nanosoul
-  private _lastSoulInjection?: string;
   /**
    * Idempotency guard for the one-shot MCP capabilities hint CustomMessage.
    * Set after the first warmupMcpTools() persists the hint so a reload that
@@ -338,7 +312,6 @@ class AgentSessionBase {
     });
     this._staticCustomTools = config.customTools ?? [];
     this._mcpToolsFactory = config.mcpToolsFactory;
-    this._soulManagerFactory = config.soulManagerFactory;
     this._customTools = [...this._staticCustomTools, ...(config.initialMcpTools ?? [])];
     this._initialActiveToolNames = config.initialActiveToolNames;
     this._toolOrchestrator = new ToolOrchestrator({
@@ -359,15 +332,25 @@ class AgentSessionBase {
     this._agentDir = config.agentDir;
     this._modelRegistry = config.modelRegistry;
     this._extensionRunnerRef = config.extensionRunnerRef;
-    this._soulManager = config.soulManager;
     this._baseToolsOverride = config.baseToolsOverride;
     this._createSessionFactory = config.createSession;
     // Create shared backend for Agent/SendMessage tool session tracking (CC §XI)
     if (config.createSession) {
       this._subAgentBackend = new InProcessSubAgentBackend(config.createSession);
     }
-    this._extensionEventBridge = new ExtensionEventBridge({
+    this._eventHandler = new SessionEventHandler({
       getExtensionRunner: () => this._extensionRunner,
+      appendMessage: message => this.sessionManager.appendMessage(message),
+      appendCustomMessageEntry: (type, content, display, details) =>
+        this.sessionManager.appendCustomMessageEntry(type, content, display, details),
+      delivered: text => this._messageQueue.delivered(text),
+      emit: event => this._emit(event),
+      onSuccess: () => this._retryCoordinator.onSuccess(),
+      isRetryableError: message => this._retryCoordinator.isRetryableError(message),
+      handleError: message => this._retryCoordinator.handleError(message),
+      checkCompaction: message => this._compactionCoordinator.check(message),
+      debug: (level, source, message, data) => this._emitDebug(level, source, message, data),
+      logError: (message, data) => this._logger.error(message, data),
     });
     this._modelController = new ModelController({
       getModel: () => this.model,
@@ -471,7 +454,7 @@ class AgentSessionBase {
         const sessionContext = this.sessionManager.buildSessionContext();
         this.agent.replaceMessages(sessionContext.messages);
       },
-      extractUserMessageText: (content) => this._extractUserMessageText(content),
+      extractUserMessageText: (content) => extractUserMessageText(content),
     });
     this._lifecycleController = new SessionLifecycleController({
       getSessionFile: () => this.sessionManager.getSessionFile(),
@@ -484,12 +467,11 @@ class AgentSessionBase {
         this.agent.sessionId = this.sessionManager.getSessionId();
       },
       clearPendingQueues: () => {
-        this._steeringMessages = [];
-        this._followUpMessages = [];
-        this._pendingNextTurnMessages = [];
+        this._messageQueue.clear();
+        this._messageQueue.drainNextTurn();
       },
       clearPendingNextTurnMessages: () => {
-        this._pendingNextTurnMessages = [];
+        this._messageQueue.drainNextTurn();
       },
       sessionNewSession: (parentSession) => this.sessionManager.newSession({ parentSession }),
       sessionSetFile: (path) => this.sessionManager.setSessionFile(path),
@@ -506,7 +488,7 @@ class AgentSessionBase {
       restoreModel: (model) => this._modelController.restoreModel(model),
       restoreThinkingLevel: (opts) => this._modelController.restoreThinkingLevel(opts),
       runSetup: (setup) => setup(this.sessionManager),
-      extractUserMessageText: (content) => this._extractUserMessageText(content),
+      extractUserMessageText: (content) => extractUserMessageText(content),
     });
     this.agent.setModelErrorRecovery((event) =>
       this._compactionCoordinator.recoverModelErrorInLoop(event),
@@ -618,147 +600,8 @@ class AgentSessionBase {
     this._emit({ type: "debug", level, source, message, data, timestamp: Date.now() });
   }
 
-  // Track last assistant message for auto-compaction check
-  private _lastAssistantMessage: AssistantMessage | undefined = undefined;
-
-  // Latest completed semantic trace; extension consumers receive snapshots only.
-  private _lastRunTrace: RunTraceEventV1[] | undefined;
-  private _lastRunTracePath: string | undefined;
-
-  /** Internal handler for agent events - shared by subscribe and reconnect */
-  private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
-    // Journal completed messages before asynchronous extension hooks. A model-request
-    // boundary may commit a new working window as soon as the tool batch completes.
-    if (event.type === "message_end") {
-      if (event.message.role === "custom") {
-        this.sessionManager.appendCustomMessageEntry(
-          event.message.customType, event.message.content, event.message.display, event.message.details,
-        );
-      } else if (event.message.role === "user" || event.message.role === "assistant" || event.message.role === "toolResult") {
-        this.sessionManager.appendMessage(event.message);
-      }
-    }
-    // When a user message starts, check if it's from either queue and remove it BEFORE emitting
-    // This ensures the UI sees the updated queue state
-    if (event.type === "message_start" && event.message.role === "user") {
-      const messageText = this._getUserMessageText(event.message);
-      if (messageText) {
-        // Check steering queue first
-        const steeringIndex = this._steeringMessages.indexOf(messageText);
-        if (steeringIndex !== -1) {
-          this._steeringMessages.splice(steeringIndex, 1);
-        } else {
-          // Check follow-up queue
-          const followUpIndex = this._followUpMessages.indexOf(messageText);
-          if (followUpIndex !== -1) {
-            this._followUpMessages.splice(followUpIndex, 1);
-          }
-        }
-      }
-    }
-
-    // Notify all listeners (UI) first for responsive rendering,
-    // then emit to extensions in parallel (they shouldn't block rendering).
-    // For high-frequency streaming events (message_update), extensions run in background.
-    if (event.type === "message_update") {
-      // Streaming updates: emit to UI immediately, don't await extensions
-      this._emit(event);
-      // Emit dedicated tool_input_delta for tool call argument streaming
-      const ame = event.assistantMessageEvent;
-      if (ame.type === "toolcall_delta") {
-        const block = ame.partial.content[ame.contentIndex] as { id?: string; name?: string } | undefined;
-        if (block?.id) {
-          this._emit({ type: "tool_input_delta", toolCallId: block.id, toolName: block.name ?? "", delta: ame.delta });
-        }
-      }
-      this._extensionEventBridge.emitExtensionEvent(event).catch((err) => {
-        this._logger.error("[extension] message_update event error", { error: err });
-      });
-    } else {
-      // All other events: extensions run concurrently with UI notification
-      const extensionPromise = this._extensionEventBridge.emitExtensionEvent(event);
-      this._emit(event);
-      // Emit session state change for GUI consumption
-      if (event.type === "agent_start") {
-        this._emit({ type: "session_state_changed", state: "running", timestamp: Date.now() });
-      } else if (event.type === "agent_end") {
-        this._emit({ type: "session_state_changed", state: "idle", timestamp: Date.now() });
-      }
-      await extensionPromise;
-    }
-
-    // Handle session persistence
-    if (event.type === "tool_execution_start") {
-      this._emitDebug("verbose", "tool", "tool_start", { toolName: event.toolName, toolCallId: event.toolCallId });
-    } else if (event.type === "tool_execution_end") {
-      this._emitDebug("verbose", "tool", "tool_end", { toolName: event.toolName, isError: event.isError });
-    }
-
-    if (event.type === "message_end") {
-      // Track assistant message for auto-compaction (checked on agent_end)
-      if (event.message.role === "assistant") {
-        this._lastAssistantMessage = event.message;
-
-        // Reset retry counter on successful assistant response
-        const assistantMsg = event.message as AssistantMessage;
-        if (assistantMsg.stopReason !== "error") {
-          this._retryCoordinator.onSuccess();
-        }
-      }
-    }
-
-    // Check auto-retry and auto-compaction after agent completes
-    if (event.type === "agent_end" && this._lastAssistantMessage) {
-      const msg = this._lastAssistantMessage;
-      this._lastAssistantMessage = undefined;
-
-      // Check for retryable errors first (overloaded, rate limit, server errors)
-      if (this._retryCoordinator.isRetryableError(msg)) {
-        const didRetry = await this._retryCoordinator.handleError(msg);
-        if (didRetry) return; // Retry was initiated, don't proceed to compaction
-      }
-
-      await this._compactionCoordinator.check(msg);
-
-      // Record interaction for Soul (AI personality evolution)
-      if (this._soulManager) {
-        const outcome = msg.stopReason === "error" ? "failure" : "success";
-        const project = this._cwd.split(/[/\\]/).pop() || "unknown";
-        const { tags, complexity, toolUsage } = extractSessionContext(
-          this.state.messages as Array<{ role: string; content: any }>,
-          this._cwd,
-        );
-        const context = toSoulContext(project, tags, complexity, toolUsage);
-        const expertiseDomain = tags[0] || project;
-        void (async () => {
-          try {
-            await this._soulManager.recordInteraction(context, outcome, "turn");
-            await this._soulManager.updateExpertise(
-              expertiseDomain,
-              tags,
-              outcome === "success",
-            );
-          } catch (err) {
-            // Keep Soul failures non-blocking for the main session lifecycle.
-            this._logger.warn("[soul] recordInteraction/updateExpertise failed", { error: err });
-          }
-        })();
-      }
-    }
-
-    if (event.type === "agent_end" && this._extensionRunner) {
-      // Emit agent_end only after retry and compaction settle.
-      // This lets post-run extensions react to a stable end state.
-      void this._extensionRunner
-        .emit({
-          type: "agent_end",
-          messages: event.messages,
-        })
-        .catch((err) => {
-          this._logger.error("[extension] agent_end event error", { error: err });
-        });
-    }
-  };
+  private readonly _runTrace = new SessionRunTrace();
+  private _handleAgentEvent = (event: AgentEvent): Promise<void> => this._eventHandler.handle(event);
 
   /** Extract text content from a message */
   private _getUserMessageText(message: Message): string {
@@ -859,19 +702,20 @@ class AgentSessionBase {
     return this.agent.state.systemPrompt;
   }
 
-  /** Shared Soul manager used by this session, if Soul is enabled. */
+  /** @deprecated NanoSoul is suspended; always undefined. */
   get soulManager(): unknown | undefined {
-    return this._soulManager;
+    return undefined;
   }
 
   /** Latest completed semantic run trace, returned as an isolated snapshot. */
   getLastRunTrace(): readonly RunTraceEventV1[] | undefined {
-    return this._lastRunTrace === undefined ? undefined : structuredClone(this._lastRunTrace);
+    const snapshot = this._runTrace.snapshot;
+    return snapshot === undefined ? undefined : structuredClone(snapshot);
   }
 
   /** Workspace-local JSONL path for the latest completed semantic run trace. */
   getLastRunTracePath(): string | undefined {
-    return this._lastRunTracePath;
+    return this._runTrace.path;
   }
 
   /** Current retry attempt (0 if not retrying) */
@@ -967,14 +811,12 @@ class AgentSessionBase {
 
   private _rebuildSystemPrompt(
     toolNames: string[],
-    options?: { soulInjection?: string },
   ): string {
     return buildRuntimeSystemPrompt({
       cwd: this._cwd,
       resourceLoader: this._resourceLoader,
       toolNames,
       baseToolRegistry: this._baseToolRegistry,
-      soulInjection: options?.soulInjection ?? this._lastSoulInjection,
     });
   }
 
@@ -984,36 +826,6 @@ class AgentSessionBase {
       this._baseToolRegistry,
     );
   }
-
-  private async _generateSoulInjection(): Promise<string | undefined> {
-    if (!this._soulManager) {
-      this._lastSoulInjection = undefined;
-      return undefined;
-    }
-
-    try {
-      const project = this._cwd.split(/[/\\]/).pop() || "unknown";
-      const { tags, complexity, toolUsage } = extractSessionContext(
-        this.state.messages as Array<{ role: string; content: any }>,
-        this._cwd,
-      );
-      const injection = await this._soulManager.generateInjection(
-        toSoulContext(project, tags, complexity, toolUsage),
-      );
-      this._lastSoulInjection =
-        typeof injection === "string" && injection.trim().length > 0
-          ? injection
-          : undefined;
-      return this._lastSoulInjection;
-    } catch (error) {
-      this._emit({ type: "sdk:error", source: "soul", error });
-      return this._lastSoulInjection;
-    }
-  }
-
-  // =========================================================================
-  // Prompting
-  // =========================================================================
 
   /**
    * Send a prompt to the agent.
@@ -1025,6 +837,7 @@ class AgentSessionBase {
    * @throws Error if no model selected or no API key available (when not streaming)
    */
   async prompt(text: string, options?: PromptOptions): Promise<void> {
+    if (!this._resourcesDiscovered) await this.extendResourcesFromExtensions("startup");
     const _promptStart = performance.now();
     const expandPromptTemplates = options?.expandPromptTemplates ?? true;
     this._dbg(`prompt: "${text.slice(0, 80)}" isStreaming=${this.isStreaming} hasModel=${!!this.model}`);
@@ -1134,16 +947,12 @@ class AgentSessionBase {
     });
 
     // Inject any pending "nextTurn" messages as context alongside the user message
-    for (const msg of this._pendingNextTurnMessages) {
+    for (const msg of this._messageQueue.drainNextTurn()) {
       messages.push(msg);
     }
-    this._pendingNextTurnMessages = [];
 
     const activeBaseToolNames = this._getActiveBaseToolNames();
-    const soulInjection = await this._generateSoulInjection();
-    this._baseSystemPrompt = this._rebuildSystemPrompt(activeBaseToolNames, {
-      soulInjection,
-    });
+    this._baseSystemPrompt = this._rebuildSystemPrompt(activeBaseToolNames);
 
     // Emit before_agent_start extension event
     if (this._extensionRunner) {
@@ -1176,31 +985,12 @@ class AgentSessionBase {
       this.agent.setSystemPrompt(this._baseSystemPrompt);
     }
 
-    const traceSink = new InMemoryRunTraceSink();
-    const traceRecorder = new RunTraceRecorder({
-      runId: `run-${randomUUID()}`,
-      sessionId: this.sessionManager.getSessionId(),
-      sink: traceSink,
-      redactor: redactWorkspaceRunTraceEvent,
-      failureMode: "best_effort",
-    });
-    this.agent.setRunTrace(traceRecorder);
-    try {
+    await this._runTrace.run(this._cwd, this.sessionId, recorder => this.agent.setRunTrace(recorder), async () => {
       this._dbg(`calling agent.prompt with ${messages.length} message(s)`);
       await this.agent.prompt(messages);
       this._dbg(`agent.prompt returned (${(performance.now() - _promptStart).toFixed(0)}ms)`);
       await this.waitForRetry();
-    } finally {
-      try {
-        await traceRecorder.flush();
-        this._lastRunTrace = traceSink.snapshot();
-        const persisted = await persistWorkspaceRunTrace(this._cwd, this._lastRunTrace);
-        this._lastRunTracePath = persisted.latestPath;
-      } catch (error: unknown) {
-        this._logger.warn("[run-trace] failed to finalize semantic trace", { error });
-      }
-      this.agent.setRunTrace(undefined);
-    }
+    }, error => this._logger.warn("[run-trace] failed to finalize semantic trace", { error }));
   }
 
   /**
@@ -1310,7 +1100,7 @@ class AgentSessionBase {
     text: string,
     images?: ImageContent[],
   ): Promise<void> {
-    this._steeringMessages.push(text);
+    this._messageQueue.enqueue("steer", text);
     const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
     if (images) {
       content.push(...images);
@@ -1329,7 +1119,7 @@ class AgentSessionBase {
     text: string,
     images?: ImageContent[],
   ): Promise<void> {
-    this._followUpMessages.push(text);
+    this._messageQueue.enqueue("followUp", text);
     const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
     if (images) {
       content.push(...images);
@@ -1390,7 +1180,7 @@ class AgentSessionBase {
       timestamp: Date.now(),
     } satisfies CustomMessage<T>;
     if (options?.deliverAs === "nextTurn") {
-      this._pendingNextTurnMessages.push(appMessage);
+      this._messageQueue.nextTurn(appMessage);
     } else if (this.isStreaming) {
       if (options?.deliverAs === "followUp") {
         this.agent.followUp(appMessage);
@@ -1459,27 +1249,24 @@ class AgentSessionBase {
    * @returns Object with steering and followUp arrays
    */
   clearQueue(): { steering: string[]; followUp: string[] } {
-    const steering = [...this._steeringMessages];
-    const followUp = [...this._followUpMessages];
-    this._steeringMessages = [];
-    this._followUpMessages = [];
+    const cleared = this._messageQueue.clear();
     this.agent.clearAllQueues();
-    return { steering, followUp };
+    return cleared;
   }
 
   /** Number of pending messages (includes both steering and follow-up) */
   get pendingMessageCount(): number {
-    return this._steeringMessages.length + this._followUpMessages.length;
+    return this._messageQueue.pendingCount;
   }
 
   /** Get pending steering messages (read-only) */
   getSteeringMessages(): readonly string[] {
-    return this._steeringMessages;
+    return this._messageQueue.steering;
   }
 
   /** Get pending follow-up messages (read-only) */
   getFollowUpMessages(): readonly string[] {
-    return this._followUpMessages;
+    return this._messageQueue.followUp;
   }
 
   get resourceLoader(): ResourceLoader {
@@ -1665,72 +1452,13 @@ class AgentSessionBase {
     this._emitDebug("basic", "extension", "extensions_bound");
   }
 
-  private async extendResourcesFromExtensions(
-    reason: "startup" | "reload",
-  ): Promise<void> {
-    if (!this._extensionRunner?.hasHandlers("resources_discover")) {
-      return;
-    }
-
-    const { skillPaths, promptPaths, themePaths } =
-      await this._extensionRunner.emitResourcesDiscover(this._cwd, reason);
-
-    if (
-      skillPaths.length === 0 &&
-      promptPaths.length === 0 &&
-      themePaths.length === 0
-    ) {
-      return;
-    }
-
-    const extensionPaths: ResourceExtensionPaths = {
-      skillPaths: this.buildExtensionResourcePaths(skillPaths),
-      promptPaths: this.buildExtensionResourcePaths(promptPaths),
-      themePaths: this.buildExtensionResourcePaths(themePaths),
-    };
-
-    this._resourceLoader.extendResources(extensionPaths);
-    this._baseSystemPrompt = this._rebuildSystemPrompt(
-      this.getActiveToolNames(),
-    );
-    this.agent.setSystemPrompt(this._baseSystemPrompt);
-  }
-
-  private buildExtensionResourcePaths(
-    entries: Array<{ path: string; extensionPath: string }>,
-  ): Array<{
-    path: string;
-    metadata: {
-      source: string;
-      scope: "temporary";
-      origin: "top-level";
-      baseDir?: string;
-    };
-  }> {
-    return entries.map((entry) => {
-      const source = this.getExtensionSourceLabel(entry.extensionPath);
-      const baseDir = entry.extensionPath.startsWith("<")
-        ? undefined
-        : dirname(entry.extensionPath);
-      return {
-        path: entry.path,
-        metadata: {
-          source,
-          scope: "temporary",
-          origin: "top-level",
-          baseDir,
-        },
-      };
-    });
-  }
-
-  private getExtensionSourceLabel(extensionPath: string): string {
-    if (extensionPath.startsWith("<")) {
-      return `extension:${extensionPath.replace(/[<>]/g, "")}`;
-    }
-    const base = basename(extensionPath);
-    const name = base.replace(/\.(ts|js)$/, "");
-    return `extension:${name}`;
+  private async extendResourcesFromExtensions(reason: "startup" | "reload"): Promise<void> {
+    await discoverExtensionResources(this._extensionRunner, this._cwd, paths => {
+      this._resourceLoader.extendResources(paths);
+      this._baseSystemPrompt = this._rebuildSystemPrompt(this.getActiveToolNames());
+      this.agent.setSystemPrompt(this._baseSystemPrompt);
+    }, reason);
+    this._resourcesDiscovered = true;
   }
 
   private _applyExtensionBindings(runner: ExtensionRunner): void {
@@ -1752,7 +1480,6 @@ class AgentSessionBase {
       sessionManager: this.sessionManager,
       settingsManager: this.settingsManager,
       shutdownHandler: this._extensionShutdownHandler,
-      soulManager: this._soulManager,
       get model() {
         return thisSession.model;
       },
@@ -1785,7 +1512,7 @@ class AgentSessionBase {
           message.role === "user" && matches(this._getUserMessageText(message)) : undefined);
         // Keep the UI mirror in sync: cleared messages will never be delivered,
         // so the message_start removal path can never prune them.
-        this._followUpMessages = matches ? this._followUpMessages.filter(text => !matches(text)) : [];
+        this._messageQueue.clearFollowUp(matches);
       },
       getContextUsage: () => this.getContextUsage(),
       requestContextWindow: (handoff) => this.requestContextWindow(handoff),
@@ -1907,7 +1634,7 @@ class AgentSessionBase {
    * Run the MCP tools factory and merge the result into `_customTools`.
    * Shared by reload() and warmupMcpTools(). Does NOT rebuild the runtime —
    * the caller decides when to call _buildRuntime() (reload batches it with the
-   * soul refresh; warmup rebuilds on its own).
+   * resource refresh; warmup rebuilds on its own).
    * @returns number of MCP tools now loaded.
    */
   private async _refreshMcpTools(): Promise<number> {
@@ -2001,20 +1728,11 @@ class AgentSessionBase {
     this.settingsManager.reload();
     resetApiProviders();
     await this._resourceLoader.reload();
+    this._resourcesDiscovered = false;
 
     // Refresh dynamic managers/tools using updated env (e.g. persona switch).
     // This enables runtime tool changes without restarting the whole process.
     await this._refreshMcpTools();
-
-    if (this._soulManagerFactory) {
-      try {
-        this._soulManager = await this._soulManagerFactory();
-        this._lastSoulInjection = undefined;
-      } catch (error) {
-        this._emit({ type: "sdk:error", source: "soul", error });
-        // Keep previous _soulManager on failure.
-      }
-    }
 
     this._buildRuntime({
       activeToolNames: this.getActiveToolNames(),
@@ -2029,8 +1747,8 @@ class AgentSessionBase {
       this._extensionErrorListener;
     if (this._extensionRunner && hasBindings) {
       await this._extensionRunner.emit({ type: "session_start" });
-      await this.extendResourcesFromExtensions("reload");
     }
+    await this.extendResourcesFromExtensions("reload");
     this._emitDebug("basic", "resource", "reload_end");
   }
 
@@ -2221,7 +1939,7 @@ class AgentSessionBase {
       if (entry.type !== "message") continue;
       if (entry.message.role !== "user") continue;
 
-      const text = this._extractUserMessageText(entry.message.content);
+      const text = extractUserMessageText(entry.message.content);
       if (text) {
         result.push({ entryId: entry.id, text });
       }
@@ -2230,119 +1948,15 @@ class AgentSessionBase {
     return result;
   }
 
-  private _extractUserMessageText(
-    content: string | Array<{ type: string; text?: string }>,
-  ): string {
-    if (typeof content === "string") return content;
-    if (Array.isArray(content)) {
-      return content
-        .filter((c): c is { type: "text"; text: string } => c.type === "text")
-        .map((c) => c.text)
-        .join("");
-    }
-    return "";
-  }
-
   /**
    * Get session statistics.
    */
   getSessionStats(): SessionStats {
-    const state = this.state;
-    const userMessages = state.messages.filter((m) => m.role === "user").length;
-    const assistantMessages = state.messages.filter(
-      (m) => m.role === "assistant",
-    ).length;
-    const toolResults = state.messages.filter(
-      (m) => m.role === "toolResult",
-    ).length;
-
-    let toolCalls = 0;
-    let totalInput = 0;
-    let totalOutput = 0;
-    let totalCacheRead = 0;
-    let totalCacheWrite = 0;
-    let totalCost = 0;
-
-    for (const message of state.messages) {
-      if (message.role === "assistant") {
-        const assistantMsg = message as AssistantMessage;
-        toolCalls += assistantMsg.content.filter(
-          (c) => c.type === "toolCall",
-        ).length;
-        totalInput += assistantMsg.usage.input;
-        totalOutput += assistantMsg.usage.output;
-        totalCacheRead += assistantMsg.usage.cacheRead;
-        totalCacheWrite += assistantMsg.usage.cacheWrite;
-        totalCost += assistantMsg.usage.cost.total;
-      }
-    }
-
-    return {
-      sessionFile: this.sessionFile,
-      sessionId: this.sessionId,
-      userMessages,
-      assistantMessages,
-      toolCalls,
-      toolResults,
-      totalMessages: state.messages.length,
-      tokens: {
-        input: totalInput,
-        output: totalOutput,
-        cacheRead: totalCacheRead,
-        cacheWrite: totalCacheWrite,
-        total: totalInput + totalOutput + totalCacheRead + totalCacheWrite,
-      },
-      cost: totalCost,
-    };
+    return getSessionStats(this.messages, this.sessionFile, this.sessionId);
   }
 
   getContextUsage(): ContextUsage | undefined {
-    const model = this.model;
-    if (!model) return undefined;
-
-    const contextWindow = model.contextWindow ?? 0;
-    if (contextWindow <= 0) return undefined;
-
-    // After compaction, the last assistant usage reflects pre-compaction context size.
-    // We can only trust usage from an assistant that responded after the latest compaction.
-    // If no such assistant exists, context token count is unknown until the next LLM response.
-    const branchEntries = this.sessionManager.getBranch();
-    const latestCompaction = getLatestCompactionEntry(branchEntries);
-
-    if (latestCompaction) {
-      // Check if there's a valid assistant usage after the compaction boundary
-      const compactionIndex = branchEntries.lastIndexOf(latestCompaction);
-      let hasPostCompactionUsage = false;
-      for (let i = branchEntries.length - 1; i > compactionIndex; i--) {
-        const entry = branchEntries[i];
-        if (entry.type === "message" && entry.message.role === "assistant") {
-          const assistant = entry.message;
-          if (
-            assistant.stopReason !== "aborted" &&
-            assistant.stopReason !== "error"
-          ) {
-            const contextTokens = calculateContextTokens(assistant.usage);
-            if (contextTokens > 0) {
-              hasPostCompactionUsage = true;
-            }
-            break;
-          }
-        }
-      }
-
-      if (!hasPostCompactionUsage) {
-        return { tokens: null, contextWindow, percent: null };
-      }
-    }
-
-    const estimate = estimateContextTokens(this.messages);
-    const percent = (estimate.tokens / contextWindow) * 100;
-
-    return {
-      tokens: estimate.tokens,
-      contextWindow,
-      percent,
-    };
+    return getContextUsage(this.messages, this.model, this.sessionManager.getBranch());
   }
 
   /**

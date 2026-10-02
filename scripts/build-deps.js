@@ -1,11 +1,16 @@
 /**
+ * [WHO]: Builds application workspace dependencies in topological phases
+ * [FROM]: node:child_process and package build scripts
+ * [TO]: Root build and CI; suspended Soul source is excluded
+ * [HERE]: scripts/build-deps.js - dependency build orchestration
+ *
  * Builds the first-party internal libraries (build:deps) with dependency-aware
  * parallelism.
  *
  * Replaces the serial `&& ` chain. The only build-time dependency among the
  * libs are agent-core → ai and mem-core → protocol,
  * so:
- *   Phase 1 (parallel): protocol, ai, tui, soul-core — mutually independent
+ *   Phase 1 (parallel): protocol, ai, tui — mutually independent
  *   Phase 2 (parallel): agent-core, mem-core         — need phase 1 declarations
  *
  * Unlike a shell `p1 & p2 & wait` chain, this propagates any sub-build failure
@@ -18,7 +23,6 @@ const PHASE_1 = [
 	"packages/protocol",
 	"core/lib/ai",
 	"core/lib/tui",
-	"packages/soul-core",
 ];
 const PHASE_2 = ["core/lib/agent-core", "packages/mem-core"];
 

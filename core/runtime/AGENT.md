@@ -7,7 +7,7 @@ Queue contract: agent-session.ts and extension-core-bindings.ts forward optional
 Member List
 context-window-controller.ts: ContextWindowController, queued same-session handoffs, safe persisted checkpoints before model requests; retains tool batches and rejects unsafe or ineffective window changes
 event-bus.ts: EventBus interface, EventBusController, createEventBus(), typed event emission system for extension hooks, key methods: emit(), on() returns unsubscribe function
-event-bridge.ts: ExtensionEventBridge, ExtensionEventBridgeDeps, owns AgentEvent-to-extension-event mapping and extension turn indexing; AgentSession keeps public subscribe, persistence, retry/compaction, and Soul ordering
+event-bridge.ts: ExtensionEventBridge, ExtensionEventBridgeDeps, owns AgentEvent-to-extension-event mapping and extension turn indexing; SessionEventHandler owns journaling and recovery ordering, and AgentSession keeps public subscribe.
 sdk.ts: createAgentSession(options) factory, creates all services with dependency injection, wires up extensions, applies loop framework/policy overrides, consumed by all run modes (interactive/print/rpc); binds committed context preparation separately from transient extension transforms
 agent-session.ts: AgentSession class, central session lifecycle manager, wraps Agent from agent-core, captures and persists the latest semantic Run Trace, coordinates compaction decisions via SessionCompactionCoordinator, in-loop recovery and recoverable error-tail pruning (session-recovery.ts), forwards agent_result telemetry to extensions, exposes runtime loop policy updates, emits events, handles model switching, all modes delegate to this class; journals message_end before async hooks and delegates handoffs to ContextWindowController
 session-settings-accessors.ts: SessionSettingsAccessors() mixin — pure-delegation settings getter/setter surface for AgentSession (display/model/image/behavior settings), extracted from agent-session.ts (AS01); consumed by the AgentSession composition
@@ -21,7 +21,7 @@ compaction-controller.ts: CompactionController — owns manual + auto compaction
 session-tree-controller.ts: SessionTreeController — owns navigateTree() + branch summarization + the branch-summary abort slot (AS10); reads session via narrow SessionTreeControllerContext; after this slice AgentSession holds no abort slots
 session-lifecycle-controller.ts: SessionLifecycleController — owns new/switch/fork session identity-change choreography (AS08/AS11); reads session through SessionLifecycleControllerContext; reload/tree/teardown remain separate owners
 tool-runtime-controller.ts: ToolRuntimeController, ToolRuntimeBuildOptions, ToolRuntimeBuildResult, owns runtime tool source merge, extension-tool context adaptation, active tool resolution, and ToolOrchestrator registry updates; lifecycle interception is composed by sdk.ts policies
-prompt-assembly.ts: buildRuntimeSystemPrompt(), getActiveBaseToolNames(), owns runtime prompt resource assembly and base-tool filtering; Soul injection state remains in AgentSession
+prompt-assembly.ts: buildRuntimeSystemPrompt(), getActiveBaseToolNames(), owns runtime prompt resource assembly and base-tool filtering; NanoSoul is suspended
 default-tools.ts: createDefaultRuntimeTools(), DefaultRuntimeToolsOptions, complete default tool wiring with settings-aware image/shell/write-boundary configuration and optional Bash approval injection
 extension-core-bindings.ts: bindExtensionCore(), adapts AgentSession host capabilities into ExtensionRunner action/context APIs, including lazy deterministic replay and isolated Harness Eval; forwards optional requestContextWindow capability
 slash-command-catalog.ts: buildSessionSlashCommands(), buildExtensionSlashCommands(), shared slash command catalog assembly for runtime and extension views
@@ -34,6 +34,15 @@ model-cycle.ts: pure model-cycle decisions extracted from AgentSession (P4.2) �
 session-recovery.ts: ParsedSkillBlock, parseSkillBlock(), pruneRecoverableErrorTail() — pure skill-block parsing + recoverable error-tail pruning extracted from AgentSession (P6), no session state; re-exported by agent-session.ts for SDK compatibility
 session-events.ts: AgentSessionEvent, AgentSessionEventListener, mapSubAgentEvent() — session event contract + SubAgentEvent mapping extracted from AgentSession (P6); re-exported by agent-session.ts
 session-compaction-coordinator.ts: SessionCompactionCoordinator — loop-driven compaction decisions (overflow/threshold) + in-loop model-error recovery extracted from AgentSession (AS04/P6); reads session via narrow SessionCompactionCoordinatorContext, delegates the flow to compaction-controller.ts
+
+Additional members (runtime-skills-cleanup review):
+session-event-handler.ts: SessionEventHandler, SessionEventContext — owns pre-hook journaling, UI/extension event ordering, last assistant state and recovery/compaction ordering.
+session-message-queue.ts: SessionMessageQueue — owns pending steering/follow-up display state, predicate cancellation, and next-turn custom context.
+session-queries.ts: SessionStats, getSessionStats(), getContextUsage(), extractUserMessageText() — pure snapshot queries; facade preserves existing exports.
+session-run-trace.ts: SessionRunTrace — owns recorder lifetime, last snapshot and persistence path, with unconditional recorder detach.
+extension-resources.ts: discoverExtensionResources() — owns extension resource discovery and source metadata for startup/reload.
+
+NanoSoul is suspended: SDK and AgentSession no longer initialize, refresh, inject, or learn from Soul. Legacy public options/getters remain inert for compatibility; persona owns identity.
 
 ## Capability Ownership (runtime subsystem)
 
@@ -52,6 +61,11 @@ session-compaction-coordinator.ts: SessionCompactionCoordinator — loop-driven 
 | session-tree navigation + branch summary | `session-tree-controller.ts` | `SessionTreeControllerContext` | [AS10](../../.dev-docs/architecture-review/runtime-session-review/findings/AS10-tree-navigation-boundary.md) |
 | session new/switch/fork (identity change) | `session-lifecycle-controller.ts` | `SessionLifecycleControllerContext` | [AS08](../../.dev-docs/architecture-review/runtime-session-review/findings/AS08-session-lifecycle-boundary.md), [AS11](../../.dev-docs/architecture-review/runtime-session-review/findings/AS11-session-fork-boundary.md) |
 | tool runtime merge/adapt/active/registry | `tool-runtime-controller.ts` | `ToolRuntimeBuildOptions/Result` | [AS05](../../.dev-docs/architecture-review/runtime-session-review/findings/AS05-tool-runtime-controller-boundary.md) |
+| journaling and recovery ordering | `session-event-handler.ts` | `SessionEventContext` | [RC01](../../.dev-docs/architecture-review/runtime-skills-cleanup-review/findings/RC01-boundaries.md) |
+| queue display and next-turn context | `session-message-queue.ts` | `SessionMessageQueue` | RC01 |
+| trace recorder lifetime | `session-run-trace.ts` | `SessionRunTrace` | RC01 |
+| pure usage/statistics queries | `session-queries.ts` | snapshot arguments | RC01 |
+| extension resource discovery | `extension-resources.ts` | runner, cwd, extend callback | RC01 |
 | extension event mapping + turn indexing | `event-bridge.ts` | `ExtensionEventBridgeDeps` | [AS07](../../.dev-docs/architecture-review/runtime-session-review/findings/AS07-event-bridge-boundary.md) |
 | bash execution + pending-message queue | `bash-runner.ts` | closure deps (`BashRunnerDeps`) | P4.1 |
 | runtime prompt resource assembly | `prompt-assembly.ts` | function deps | P4 |

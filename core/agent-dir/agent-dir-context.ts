@@ -1,7 +1,7 @@
 /**
  * [WHO]: AgentDirContext interface, defaultAgentDirContext(), agentDirContextOf(), validateAgentId()
  * [FROM]: Depends on config.ts (getAgentDir)
- * [TO]: Consumed by core/persona, core/session, core/soul-integration, core/mcp, extensions, future --agent flag
+ * [TO]: Consumed by core/persona, core/session, core/mcp, extensions, future --agent flag
  * [HERE]: core/agent-dir/agent-dir-context.ts - multi-agent directory abstraction
  */
 

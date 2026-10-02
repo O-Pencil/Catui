@@ -36,7 +36,6 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "scoped-models", descriptionKey: "slash.scoped-models", category: "model" },
 	{ name: "apikey", descriptionKey: "slash.apikey", category: "model" },
 	{ name: "mcp", descriptionKey: "slash.mcp", category: "tools" },
-	{ name: "soul", descriptionKey: "slash.soul", category: "memory" },
 	{ name: "persona", descriptionKey: "slash.persona", category: "core" },
 	{ name: "memory", descriptionKey: "slash.memory", category: "memory" },
 	{ name: "dream", descriptionKey: "slash.dream", category: "memory", implementation: "extension" },

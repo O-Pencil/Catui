@@ -190,7 +190,7 @@ The `core/` module contains the central business logic for Catui. It orchestrate
 
 `soul-options-contract.ts`: Shared Soul enablement option contract used by runtime SDK and Soul integration without importing runtime implementation
 
-`soul-integration.ts`: Soul manager loading, prompt injection, and session context extraction bridge
+NanoSoul host integration is suspended. Persona owns identity; legacy SDK Soul options are inert.
 
 `model/custom-providers.ts`: Custom provider registration
 

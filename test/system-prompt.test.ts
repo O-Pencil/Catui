@@ -1,5 +1,5 @@
 /**
- * [WHO]: Regression tests for buildSystemPrompt's main-template output shape, with focus on the contract that project context files (AGENT.md / .CATUI.md / etc.) reach the system prompt on the default code path.
+ * [WHO]: Regression tests for buildSystemPrompt's default policy budget, custom replacement and project/persona context injection
  * [FROM]: Depends on ../core/prompt/system-prompt.js
  * [TO]: None (test file)
  * [HERE]: test/system-prompt.test.ts — guards against a regression where the Project Context block was accidentally removed from the main template path (only the customPrompt branch kept it). If buildSystemPrompt's main path ever stops injecting context files again, these tests fail loud.
@@ -8,6 +8,24 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildSystemPrompt } from "../core/prompt/system-prompt.js";
+
+describe("buildSystemPrompt: default policy budget and replacement", () => {
+	it("keeps the shared default policy below its pre-refresh size", () => {
+		const prompt = buildSystemPrompt({ cwd: "/workspace", selectedTools: ["read", "bash"] });
+		// Fixed fixture excludes project/skill content; allowance covers date/platform variation.
+		assert.ok(prompt.length < 23000, `default prompt grew to ${prompt.length} characters`);
+	});
+
+	it("does not impose default output guidance on a custom prompt", () => {
+		const prompt = buildSystemPrompt({
+			customPrompt: "CUSTOM_POLICY", cwd: "/workspace", selectedTools: [],
+			appendSystemPrompt: "APPENDED_POLICY",
+		});
+		assert.ok(prompt.startsWith("CUSTOM_POLICY\n\nAPPENDED_POLICY"));
+		assert.ok(!prompt.includes("# Communication and understanding"));
+		assert.ok(prompt.includes("Current working directory: /workspace"));
+	});
+});
 
 // ── main template: project context injection ─────────────────────────────────
 

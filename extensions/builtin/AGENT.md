@@ -3,6 +3,7 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
+typesafe/index.ts: typesafeExtension, DECISION_GUIDANCE — default passive decision/tool/evaluation guidance and TypeSafe skill discovery; see typesafe/AGENT.md.
 grub/grub-dispatch.ts: GrubDispatch, exclusive continuation lease, deferred idle dispatch, exact prompt ownership, cancellation and run attribution
 context-management/index.ts: Default context continuity extension, session_history/working_notes/new_context tools and transient context-budget hints; see context-management/AGENT.md
 context-management/history.ts: Bounded branch-scoped history retrieval and visible text projection

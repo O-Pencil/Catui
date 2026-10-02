@@ -14,6 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.31] - 2026-10-02
+
+### Added
+- Default decision-loop and TypeSafe integration skills, with no mandatory external API calls.
+- Shared README header artwork and current architecture guidance.
+
+### Changed
+- Split AgentSession message queues, events, traces, queries and extension resources into focused owners.
+- Suspend NanoSoul in the host; retain selectable personas and existing Soul data.
+- Consolidate the agent loop and improve Grub loop-state recovery.
+- Refresh output guidance for clear writing, diagrams, interactive HTML and optional video explainers; shrink the fixed default prompt by 7.7%.
+- Remove obsolete product naming and documentation while preserving upstream provenance.
+
+### Fixed
+- Restore npm 10 clean-install compatibility for workspace Node type dependencies.
+
 ## [1.2.30] - 2026-09-12
 
 ### Added

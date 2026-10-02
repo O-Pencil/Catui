@@ -1,269 +1,142 @@
-<div align="center">
+# Catui
 
-<pre>
-                               ,
-              ,-.       _,---._ __  / \
-             /  )    .-'       `./ /   \
-            (  (   ,'            `/    /|
-             \  `-"             \'\   / |
-              `.              ,  \ \ /  |
-               /`.          ,'-`----Y   |
-              (            ;        |   '
-              |  ,-.    ,-'         |  /
-              |  | (   |CATUI@2026  | /
-              )  |  \  `.___________|/
-              `--'   `--'
-</pre>
+![Catui — Your terminal. Your coding companion.](assets/readme/header.png)
 
-<h1>✎ Catui</h1>
+A terminal-first AI coding agent with persistent project memory, selectable personas,
+and extensible tools. Built with TypeScript and Node.js; published as `catui-agent`.
 
-<p><strong>The AI Coding Agent That Remembers & Evolves</strong></p>
+[中文](README_CN.md) · [Providers](docs/providers.md) · [SDK](docs/sdk.md) · [Extensions](docs/extensions.md)
 
-<p>
-  <a href="https://www.npmjs.com/package/catui-agent">
-    <img src="https://img.shields.io/npm/v/catui-agent.svg?style=flat-square&color=cb3837" alt="npm version">
-  </a>
-  <a href="https://nodejs.org">
-    <img src="https://img.shields.io/node/v/catui-agent.svg?style=flat-square&color=339933" alt="Node.js">
-  </a>
-  <a href="https://www.npmjs.com/package/catui-agent">
-    <img src="https://img.shields.io/npm/dm/catui-agent.svg?style=flat-square&color=cb3837" alt="Downloads">
-  </a>
-  <img src="https://img.shields.io/badge/TypeScript-5.0+-blue?style=flat-square&color=3178C6" alt="TypeScript">
-  <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square&color=brightgreen" alt="License">
-</p>
+## Start
 
-<p>
-  <a href="#-why-catui">Why Catui?</a> •
-  <a href="#-features">Features</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-documentation">Docs</a>
-</p>
-
-<p>
-  <a href="./README.md"><img src="https://img.shields.io/badge/English-Active-blue?style=flat-square" alt="English"></a>
-  <a href="./README_CN.md"><img src="https://img.shields.io/badge/中文-切换-orange?style=flat-square" alt="中文"></a>
-</p>
-
-</div>
-
----
-
-## 🌟 Why Catui?
-
-> **A terminal-native coding agent that remembers your projects and adapts to how you work**
-
-Catui isn't just another AI coding tool. It's a **terminal-native AI agent** with **persistent memory** and **evolving personality** — designed for developers who live in the terminal.
-
-### What Makes It Different?
-
-| | Other Tools | Catui |
-|---|---|---|
-| **Memory** | ❌ Starts fresh every session | ✅ Remembers your projects, preferences, and coding style |
-| **Personality** | ❌ Generic responses | ✅ Evolves a unique personality based on your interactions |
-| **Terminal Native** | ❌ GUI wrappers or plugins | ✅ Pure TUI built for terminal workflows |
-| **Model Freedom** | ❌ Vendor lock-in | ✅ 10+ providers, switch instantly |
-| **Offline Ready** | ❌ Cloud dependent | ✅ Local models via Ollama |
-
----
-
-## ✨ Features
-
-### 🧠 Persistent Memory (NanoMem)
-Your projects have context. So should your AI.
-
-- **Project Knowledge** — API endpoints, database schemas, architecture decisions
-- **Error Patterns** — Remembers bugs and their solutions  
-- **User Preferences** — Coding style, naming conventions, framework choices
-- **Smart Retrieval** — Automatically recalls relevant context when needed
-
-### 💫 AI Personality Evolution (NanoSoul)
-Your AI assistant develops its own character.
-
-- **Big Five Traits** — Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism
-- **Coding Style** — Verbosity, abstraction level, safety margins
-- **Domain Expertise** — Frontend, Backend, DevOps, AI/ML specializations
-- **Emotional States** — Confidence, curiosity, flow state
-
-> *After 50 sessions, your Catui will code differently than anyone else's.*
-
-### 🎨 Beautiful TUI
-A terminal interface that feels alive.
-
-- **Three Themes** — Dark, Light, and Warm (eye-friendly)
-- **Smooth Animations** — Breathing catui loader
-- **Intuitive Navigation** — Vim-like keybindings, fuzzy search
-- **Real-time Streaming** — Watch the AI think in real-time
-
-### 🔌 MCP Protocol Support
-Extend with the Model Context Protocol.
-
-Built-in tools include:
-- 📁 Filesystem operations
-- 🌐 HTTP requests (Fetch)
-- 🎭 Browser automation (Puppeteer)
-- 🗄️ Database queries (SQLite)
-- 🔧 Git operations
-
-### 🌐 Multi-Model Support
-Use the best model for each task.
-
-- 🇨🇳 **Alibaba DashScope / Token Plan** — Qwen, GLM, MiniMax, DeepSeek text models
-- 🤖 **OpenAI** — GPT-4, GPT-3.5
-- 💬 **Anthropic** — Claude 3 Opus/Sonnet/Haiku
-- 🔍 **Google** — Gemini Pro/Ultra
-- 🏠 **Local** — Ollama (Qwen, Llama, Mistral, etc.)
-
----
-
-## 🚀 Quick Start
-
-### Installation
+Requires Node.js 20 or later.
 
 ```bash
 npm install -g catui-agent
-```
-
-### First Run
-
-```bash
 catui
 ```
 
-1. **Select your model** — Choose from available providers
-2. **Enter API key** — Securely stored in `~/.catui/agents/default/auth.json`
-3. **Start coding** — Just type what you want to build
-
-### Example Session
-
-```
-You: Create a JWT authentication middleware for Express
-
-AI: [Analyzing project structure...]
-    [Creating auth.middleware.ts...]
-    [Adding TypeScript types...]
-    [Writing tests...]
-    
-    ✅ Done! Created:
-    - src/middleware/auth.middleware.ts
-    - src/types/auth.d.ts
-    - tests/auth.middleware.test.ts
-    
-    Features:
-    • JWT verification with RS256
-    • Refresh token rotation
-    • Role-based access control
-    • Rate limiting integration
-```
-
----
-
-## 🎮 Usage
-
-### Interactive Mode
+Use `/login` to configure a provider, `/model` to select a model, and `/persona` to
+choose an identity. Provider credentials can also come from environment variables;
+see [provider configuration](docs/providers.md). Model availability depends on the
+configured provider and account. Supported integrations include Anthropic, OpenAI,
+Google, Alibaba DashScope/Token Plan, and local Ollama setups.
 
 ```bash
-catui                    # Start new session
-catui -c                 # Continue last session
-catui -r                 # Resume from history
-catui -m qwen-max        # Use specific model
+catui -c                           # Continue the previous session
+catui -r                           # Select a session to resume
+catui -p "Explain this repository" # Run once and exit
+catui --mode rpc                    # JSON-lines integration over stdio
+catui --acp                         # Editor integration through ACP
+catui --serve --host 127.0.0.1      # HTTP/WebSocket remote control
+catui --help                        # Full CLI options
 ```
 
-### Print Mode (Scripts)
+The terminal UI is the primary interface. The repository also includes a remote
+server and a separate mobile web/Capacitor client; see [remote mode](docs/remote.md).
+The root build does not build the mobile app.
+
+## What ships
+
+- **Tools and sessions:** file inspection/editing, shell execution, model switching,
+  streaming responses, session history, branching, compaction and HTML export.
+- **Memory and persona:** NanoMem retains project knowledge and preferences;
+  persona files define identity and working style. **NanoSoul is suspended**:
+  no automatic initialization, personality injection or interaction learning.
+  Existing Soul data is left untouched. Legacy SDK Soul options are ignored.
+- **Extensibility:** built-in and user extensions register tools, commands and
+  lifecycle hooks. MCP connects external tool servers; Browser Harness is opt-in.
+- **Workflows:** engineering discipline skills, planning, subagents/teams, `/goal`,
+  `/grub`, `/loop`, research and writing skills. Check `/resources` for loaded
+  resources; availability also depends on mode and configuration.
+- **Runtime controls:** tool policies, bounded recovery, execution traces and
+  replay/evaluation tooling. See [run traces](docs/run-trace-and-replay.md).
+
+## Default decision skills
+
+The default `typesafe` extension ships two skills:
+
+| Skill | Purpose |
+| --- | --- |
+| `agent-decision-loop` | Choose a useful next action, ground tool arguments in evidence, evaluate results, and change approach when progress stalls |
+| `typesafe-ai` | Build TypeSafe System One integrations using typed judgments and current upstream documentation |
+
+A short decision/tool/evaluation guide is appended to each user turn. Full skill
+bodies load on demand via the Skill tool or `/skill:agent-decision-loop` and
+`/skill:typesafe-ai`. This works across CLI modes and headless SDK prompts.
+
+Ordinary Catui work uses the configured model and existing tools; it does not
+require a TypeSafe account or add TypeSafe API calls. Building an actual TypeSafe
+integration requires that service's credentials. Skill guidance is not a runtime
+correctness guarantee or a measured reduction in model errors.
+
+The upstream skill is vendored from [typesafe-ai/skills](https://github.com/typesafe-ai/skills)
+at a pinned revision with its MIT license; see [provenance](extensions/builtin/typesafe/AGENT.md).
+`--no-extensions` disables directory discovery. The CLI supplies built-in extensions
+explicitly, so they remain loaded, as do explicit `-e` paths.
+
+## Configuration and storage
+
+By default, agent configuration lives under `~/.catui/agents/<id>/` (ID `default`):
+
+| File/directory | Purpose |
+| --- | --- |
+| `auth.json` | Provider credentials |
+| `models.json` | Custom model definitions |
+| `settings.json` | Preferences and feature settings |
+| `sessions/` | Saved conversations |
+| `extensions/` | User extensions |
+
+`--agent <id>` selects an agent; `CATUI_CODING_AGENT_DIR` overrides its config root.
+See [models](docs/models.md), [skills](docs/skills.md), and [keybindings](docs/keybindings.md).
+Local persistence does not mean every feature is offline: configured providers,
+MCP servers and enabled external integrations may make network requests.
+
+## Develop
 
 ```bash
-# Single query
-catui -p "Refactor this to use async/await"
-
-# Pipe input
-cat bug-report.md | catui -p "Analyze this bug"
-
-# Chain commands
-catui -p "Generate API" | catui -p "Write tests for it"
+npm ci
+npm run build
+npx tsx cli.ts
 ```
 
-### Slash Commands
+The repository uses npm workspaces for three private runtime libraries and the
+published protocol/memory integrations. `apps/mobile` has its own toolchain.
+`packages/soul-core` is retained as suspended standalone source, outside the root
+workspace and application build.
 
-| Command | Description |
-|---------|-------------|
-| `/model` | Switch AI model |
-| `/thinking` | Adjust reasoning depth |
-| `/fork` | Branch conversation |
-| `/tree` | Browse session history |
-| `/memory` | View project memories |
-| `/soul` | Check AI personality |
-| `/settings` | Configure preferences |
-| `/export` | Save as HTML |
+| Location | Responsibility |
+| --- | --- |
+| `cli.ts`, `main.ts` | CLI startup and mode selection |
+| `core/runtime/` | Shared session facade and focused runtime owners |
+| `core/lib/{ai,agent-core,tui}/` | Private model, execution-loop and terminal libraries |
+| `core/platform/` | Configuration, process and utility primitives |
+| `modes/` | Interactive, print, RPC, ACP and remote interfaces |
+| `extensions/` | Default and opt-in product capabilities |
+| `packages/{protocol,mem-core}/` | Published protocol and memory integrations |
+| `test/`, `tests/` | Regression and characterization tests |
+| `.dev-docs/`, `llm-wiki/` | Architecture decisions and generated code navigation |
 
----
+`AgentSession` preserves the public facade. Model changes, lifecycle, compaction,
+queued messages, event ordering, trace persistence, statistics and resource
+discovery have named owners; start with [the runtime map](core/runtime/AGENT.md).
 
-## 📊 What's Different
+Before changing behavior, follow [AGENTS.md](AGENTS.md) and the
+[feature workflow](.dev-docs/feature-workflow.md). Required checks:
 
-Feature matrices comparing tools age fast. Instead, here are Catui's verifiable differentiators:
-
-| Differentiator | Catui |
-|---|---|
-| **Persistent Memory** | ✅ Project knowledge, error patterns, and preferences survive across sessions |
-| **Evolving Personality** | ✅ The agent's tone and coding style adapt to how you work |
-| **Chinese-First** | ✅ First-class Chinese docs, prompts, and locale handling |
-
----
-
-## 🏗️ Architecture Philosophy
-
-Catui is built on three pillars:
-
-```
-┌─────────────────────────────────────────┐
-│           🧠 COGNITIVE LAYER            │
-│    (Memory + Personality + Context)     │
-├─────────────────────────────────────────┤
-│           🔧 TOOL LAYER                 │
-│  (File Ops + Bash + Search + MCP)       │
-├─────────────────────────────────────────┤
-│           🎨 INTERFACE LAYER            │
-│       (TUI + Themes + Keybindings)      │
-└─────────────────────────────────────────┘
+```bash
+npm run verify:dip
+npm run verify:quality
+npm run verify:package-boundary
+npm run build
+npx tsc --noEmit
+npm test
 ```
 
-**Design Principles:**
-- **Terminal First** — No Electron, no browser, pure terminal
-- **Privacy First** — Local storage by default; opt-in diagnostics/eval telemetry only when explicitly configured
-- **Extensible** — Plugin system for tools, themes, and behaviors
-- **Fast Where It Counts** — `--version`/`--help` fast paths respond in <200 ms; full startup time is continuously benchmarked and optimized
+Focused scripts are listed in `package.json`. Optional integration checks may
+need provider credentials or additional services. Build and publish are separate;
+see [contribution guidance](CONTRIBUTING.md) before releasing.
 
----
+## License
 
-## 📚 Documentation
-
-- [Installation Guide](docs/INSTALL.md)
-- [Configuration](docs/CONFIG.md)
-- [Memory System](docs/记忆系统.md)
-- [MCP Guide](docs/MCP集成指南.md)
-- [Keybindings](docs/KEYBINDINGS.md)
-- [Extensions](docs/EXTENSIONS.md)
-- [Run Trace, Replay, and Harness Eval](docs/run-trace-and-replay.md)
-
----
-
-## 🌍 Community
-
-- 💬 [Discussions](https://github.com/catui-agent/catui-agent/discussions)
-- 🐛 [Issues](https://github.com/catui-agent/catui-agent/issues)
-- 📝 [Changelog](CHANGELOG.md)
-
----
-
-## 📄 License
-
-GPL-3.0 © [Catui Agent](https://github.com/catui-agent)
-
----
-
-<div align="center">
-
-**[⬆ Back to Top](#-catui)**
-
-<sub>Built with ❤️ for terminal dwellers everywhere</sub>
-
-</div>
+[GPL-3.0](LICENSE). Vendored components retain their own license notices.

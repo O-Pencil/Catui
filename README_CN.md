@@ -1,277 +1,126 @@
-<div align="center">
+# Catui
 
-<pre>
-             *     ,MMM8&&&.            .
-                  MMMM88&&&&&    .
-                 MMMM88&&&&&&&
-     *           MMM88&&&&&&&&
-                 MMM88&&&&&&&&
-                 'MMM88&&&&&&'
-                   'MMM8&&&'      .    _
-          |\___/|                      \\
-          )     (    |\_/|              ||    '
-         =\     /=   )a a '._.-""""-.  //
-           )===(    =\T_= /    ~  ~  \//
-          /     \     `"`\   ~   / ~  /
-          |     |         |~   \ |  ~/
-         /       \         \  ~/- \ ~\
-         \       /         || |  // /`
-     _/\_/\_   _/_/\_/\_/\_((_|\((_//\_/\_/_
-  |  |  |  |( (  |  |  |  |  |  |  |  |  |  |
-  |  |  |  | ) ) |  |  |  |  |  |  |  |  |  |
-  |  |  |  |(_(  |  |  |  |  |  |  |  |  |  |
-  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-</pre>
+![Catui — 你的终端，你的编程伙伴。](assets/readme/header.png)
 
-<h1>✎ Catui</h1>
+以终端为主要界面的 AI 编程 Agent，支持项目记忆、persona、可扩展工具和多模型。
+使用 TypeScript 与 Node.js 开发，npm 包名为 `catui-agent`。
 
-<p><strong>会记忆、能进化的 AI 编程助手</strong></p>
+[English](README.md) · [模型提供商](docs/providers.md) · [SDK](docs/sdk.md) · [扩展](docs/extensions.md)
 
-<p>
-  <a href="https://www.npmjs.com/package/catui-agent">
-    <img src="https://img.shields.io/npm/v/catui-agent.svg?style=flat-square&color=cb3837" alt="npm 版本">
-  </a>
-  <a href="https://nodejs.org">
-    <img src="https://img.shields.io/node/v/catui-agent.svg?style=flat-square&color=339933" alt="Node.js">
-  </a>
-  <a href="https://www.npmjs.com/package/catui-agent">
-    <img src="https://img.shields.io/npm/dm/catui-agent.svg?style=flat-square&color=cb3837" alt="下载量">
-  </a>
-  <img src="https://img.shields.io/badge/TypeScript-5.0+-blue?style=flat-square&color=3178C6" alt="TypeScript">
-  <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=flat-square&color=brightgreen" alt="License">
-</p>
+## 开始使用
 
-<p>
-  <a href="#-为什么选择-catui">为什么选择</a> •
-  <a href="#-核心特性">核心特性</a> •
-  <a href="#-快速开始">快速开始</a> •
-  <a href="#-文档">文档</a>
-</p>
-
-<p>
-  <a href="./README_CN.md"><img src="https://img.shields.io/badge/中文-当前-orange?style=flat-square" alt="中文"></a>
-  <a href="./README.md"><img src="https://img.shields.io/badge/English-Switch-blue?style=flat-square" alt="English"></a>
-</p>
-
-</div>
-
----
-
-## 🌟 为什么选择 Catui？
-
-> **会记住你的项目、适应你工作方式的终端编程智能体**
-
-Catui 不只是一个普通的 AI 编程工具。它是专为终端原生开发者打造的 **AI 智能体**，拥有**持久记忆**和**进化性格**。
-
-### 与众不同之处
-
-| | 其他工具 | Catui |
-|---|---|---|
-| **记忆能力** | ❌ 每次会话从零开始 | ✅ 记住你的项目、偏好和编码风格 |
-| **个性特征** | ❌ 千篇一律的回复 | ✅ 根据互动进化出独特性格 |
-| **终端原生** | ❌ GUI 包装或插件 | ✅ 纯 TUI，为终端工作流而生 |
-| **模型自由** | ❌ 厂商锁定 | ✅ 10+ 提供商，秒速切换 |
-| **离线可用** | ❌ 依赖云端 | ✅ Ollama 本地模型 |
-
----
-
-## ✨ 核心特性
-
-### 🧠 持久记忆系统 (NanoMem)
-你的项目有上下文，你的 AI 也应该有。
-
-- **项目知识** — API 端点、数据库结构、架构决策
-- **错误模式** — 记住 Bug 及其解决方案
-- **用户偏好** — 编码风格、命名规范、框架选择
-- **智能检索** — 自动召回相关上下文
-
-### 💫 AI 性格进化 (NanoSoul)
-你的 AI 助手会形成自己的性格。
-
-- **大五人格** — 开放性、尽责性、外向性、宜人性、神经质
-- **编码风格** — 代码冗长度、抽象层级、安全边际
-- **领域专长** — 前端、后端、DevOps、AI/ML 专业化
-- **情绪状态** — 信心、好奇心、心流状态
-
-> *使用 50 次后，你的 Catui 会和别人的不一样。*
-
-### 🎨 精美 TUI 界面
-一个会呼吸的终端界面。
-
-- **三种主题** — Dark、Light、Warm（护眼模式）
-- **流畅动画** — 铅笔呼吸加载动画
-- **直观导航** — 类 Vim 快捷键，模糊搜索
-- **实时流式** — 实时观看 AI 思考过程
-
-### 🔌 MCP 协议支持
-通过模型上下文协议无限扩展。
-
-内置工具包括：
-- 📁 文件系统操作
-- 🌐 HTTP 请求 (Fetch)
-- 🎭 浏览器自动化 (Puppeteer)
-- 🗄️ 数据库查询 (SQLite)
-- 🔧 Git 操作
-
-### 🌐 多模型支持
-为每个任务选择最佳模型。
-
-- 🇨🇳 **阿里百炼** — 通义系列（代码优化）
-- 🤖 **OpenAI** — GPT-4、GPT-3.5
-- 💬 **Anthropic** — Claude 3 Opus/Sonnet/Haiku
-- 🔍 **Google** — Gemini Pro/Ultra
-- 🏠 **本地** — Ollama (Qwen、Llama、Mistral 等)
-
----
-
-## 🚀 快速开始
-
-### 安装
+需要 Node.js 20 或以上版本。
 
 ```bash
 npm install -g catui-agent
-```
-
-### 首次运行
-
-```bash
 catui
 ```
 
-1. **选择模型** — 从可用提供商中选择
-2. **输入 API Key** — 安全存储在 `~/.catui/agents/default/auth.json`
-3. **开始编码** — 输入你想构建的内容
-
-### 示例会话
-
-```
-你: 创建一个 Express 的 JWT 认证中间件
-
-AI: [分析项目结构...]
-    [创建 auth.middleware.ts...]
-    [添加 TypeScript 类型...]
-    [编写测试...]
-    
-    ✅ 完成！创建了：
-    - src/middleware/auth.middleware.ts
-    - src/types/auth.d.ts
-    - tests/auth.middleware.test.ts
-    
-    特性：
-    • RS256 JWT 验证
-    • 刷新令牌轮换
-    • 基于角色的访问控制
-    • 速率限制集成
-```
-
----
-
-## 🎮 使用方法
-
-### 交互模式
+通过 `/login` 配置模型提供商，`/model` 选择模型，`/persona` 切换身份与工作风格。
+也可以通过环境变量配置凭证，详见[提供商文档](docs/providers.md)。
+支持 Anthropic、OpenAI、Google、阿里 DashScope/Token Plan 和本地 Ollama 等接入；
+具体可用模型取决于配置和账号。
 
 ```bash
-catui                    # 开始新会话
-catui -c                 # 继续上次会话
-catui -r                 # 从历史恢复
-catui -m qwen-max        # 使用指定模型
+catui -c                           # 继续上次会话
+catui -r                           # 选择历史会话
+catui -p "解释这个仓库"             # 单次执行后退出
+catui --mode rpc                    # stdio JSON-lines 集成
+catui --acp                         # ACP 编辑器集成
+catui --serve --host 127.0.0.1      # HTTP/WebSocket 远程控制
+catui --help                        # 查看全部参数
 ```
 
-### 打印模式（脚本）
+终端 TUI 是主要入口。仓库也包含远程服务，以及独立的移动端 Web/Capacitor 客户端，
+详见[远程模式](docs/remote.md)。根目录构建不会自动构建移动端。
+
+## 当前能力
+
+- **工具与会话**：文件读取与编辑、Shell、模型切换、流式响应、历史记录、分支、上下文压缩和 HTML 导出。
+- **记忆与身份**：NanoMem 保留项目知识与偏好；persona 定义身份和工作风格。
+  **NanoSoul 暂时下线**，不再自动初始化、注入人格或记录交互学习，已有 Soul 数据不删除。
+  SDK 中旧的 Soul 参数保留兼容，但不生效。
+- **扩展**：内置和用户扩展可注册工具、命令和生命周期钩子；MCP 接入外部工具服务。
+  Browser Harness 需要显式启用。
+- **工作流**：工程规范技能、规划、子 Agent 与团队、`/goal`、`/grub`、`/loop`、研究及写作技能。
+  可通过 `/resources` 查看已加载资源；具体可用能力取决于模式和配置。
+- **运行控制**：工具策略、有界恢复、执行轨迹、回放与评估工具，详见[运行轨迹](docs/run-trace-and-replay.md)。
+
+## 默认决策技能
+
+默认启用的 `typesafe` 扩展内置两项技能：
+
+| 技能 | 用途 |
+| --- | --- |
+| `agent-decision-loop` | 判断下一步需要什么证据，选择工具与参数，检查结果，遇到无进展时调整方法 |
+| `typesafe-ai` | 依据上游文档构建 TypeSafe System One 集成，组合类型化判断 |
+
+每个用户回合会附加一段简短的“决策→工具→评估”指引；完整技能按需通过 Skill 工具、
+`/skill:agent-decision-loop` 或 `/skill:typesafe-ai` 加载。CLI 各模式和无界面 SDK 都可使用。
+
+日常使用仍调用你配置的模型和已有工具，不需要 TypeSafe 账号，也不会额外调用 TypeSafe API。
+开发实际的 TypeSafe 服务集成时才需要对应凭证。技能是行为指导，不代表运行时正确性保证，
+也不意味着已经测得模型错误率下降。
+
+原版来自 [typesafe-ai/skills](https://github.com/typesafe-ai/skills)，固定版本并保留 MIT 许可证，
+详见[来源记录](extensions/builtin/typesafe/AGENT.md)。`--no-extensions` 关闭目录扩展发现；CLI 显式提供的内置扩展和 `-e` 路径仍会加载。
+
+## 配置与数据
+
+默认配置目录为 `~/.catui/agents/<id>/`，默认 ID 是 `default`。
+
+| 路径 | 用途 |
+| --- | --- |
+| `auth.json` | 模型提供商凭证 |
+| `models.json` | 自定义模型 |
+| `settings.json` | 偏好与功能设置 |
+| `sessions/` | 会话历史 |
+| `extensions/` | 用户扩展 |
+
+`--agent <id>` 选择 Agent，`CATUI_CODING_AGENT_DIR` 可覆盖配置根目录。
+更多设置见[模型](docs/models.md)、[技能](docs/skills.md)和[快捷键](docs/keybindings.md)。
+数据在本地持久化不等于所有功能离线：模型提供商、MCP 服务和启用的外部集成可能发送网络请求。
+
+## 本地开发
 
 ```bash
-# 单次查询
-catui -p "重构为 async/await"
-
-# 管道输入
-cat bug-report.md | catui -p "分析这个 Bug"
-
-# 链式命令
-catui -p "生成 API" | catui -p "为其编写测试"
+npm ci
+npm run build
+npx tsx cli.ts
 ```
 
-### 斜线命令
+根 npm workspace 包含三个私有运行库，以及协议和记忆包；`apps/mobile` 使用独立工具链。
+`packages/soul-core` 保留为暂停使用的独立源码，不参与根 workspace、应用依赖和构建。
 
-| 命令 | 描述 |
-|---------|-------------|
-| `/model` | 切换 AI 模型 |
-| `/thinking` | 调整推理深度 |
-| `/fork` | 分支对话 |
-| `/tree` | 浏览会话历史 |
-| `/memory` | 查看项目记忆 |
-| `/soul` | 查看 AI 性格 |
-| `/settings` | 配置偏好 |
-| `/export` | 导出为 HTML |
+| 目录 | 职责 |
+| --- | --- |
+| `cli.ts`、`main.ts` | 启动与模式选择 |
+| `core/runtime/` | 会话统一入口及按职责拆分的运行时模块 |
+| `core/lib/{ai,agent-core,tui}/` | 私有模型、执行循环和终端库 |
+| `core/platform/` | 配置、进程与通用基础能力 |
+| `modes/` | TUI、Print、RPC、ACP 和远程界面 |
+| `extensions/` | 默认及可选产品能力 |
+| `packages/{protocol,mem-core}/` | 可发布协议与记忆集成 |
+| `test/`、`tests/` | 回归及行为刻画测试 |
+| `.dev-docs/`、`llm-wiki/` | 架构决策和生成的代码导航 |
 
----
+`AgentSession` 保留公开接口；模型切换、生命周期、压缩、队列、事件顺序、运行轨迹、
+统计和扩展资源发现由各自模块负责。阅读代码可从[运行时地图](core/runtime/AGENT.md)开始。
 
-## 📊 差异点
+改动前遵循 [AGENTS.md](AGENTS.md) 和[功能开发流程](.dev-docs/feature-workflow.md)，运行：
 
-给其他工具打分的功能矩阵很快会过时，这里只列 Catui 可验证的差异点：
-
-| 差异点 | Catui |
-|---|---|
-| **持久记忆** | ✅ 项目知识、错误模式、使用偏好跨会话保留 |
-| **性格进化** | ✅ 回复风格与编码习惯会随交互逐渐演化 |
-| **中文优先** | ✅ 文档、提示词、本地化一等公民支持 |
-
----
-
-## 🏗️ 架构理念
-
-Catui 建立在三大支柱之上：
-
-```
-┌─────────────────────────────────────────┐
-│           🧠 认知层                      │
-│    (记忆 + 性格 + 上下文)                 │
-├─────────────────────────────────────────┤
-│           🔧 工具层                      │
-│  (文件操作 + Bash + 搜索 + MCP)          │
-├─────────────────────────────────────────┤
-│           🎨 界面层                      │
-│       (TUI + 主题 + 快捷键)               │
-└─────────────────────────────────────────┘
+```bash
+npm run verify:dip
+npm run verify:quality
+npm run verify:package-boundary
+npm run build
+npx tsc --noEmit
+npm test
 ```
 
-**设计原则：**
-- **终端优先** — 无 Electron，无浏览器，纯终端
-- **隐私优先** — 本地存储，无遥测，你的数据属于你
-- **可扩展** — 工具、主题、行为的插件系统
-- **性能持续优化** — `--version`/`--help` 快路径 200ms 内响应；完整启动耗时有基准测试持续跟踪优化
+定向测试入口见 `package.json`。部分可选集成检查需要凭证或外部服务。
+构建与发布是独立操作，发布前阅读[贡献指南](CONTRIBUTING.md)。
 
----
+## 许可证
 
-## 📚 文档
-
-- [安装指南](docs/INSTALL.md)
-- [配置说明](docs/CONFIG.md)
-- [记忆系统](docs/记忆系统.md)
-- [MCP 指南](docs/MCP集成指南.md)
-- [快捷键](docs/KEYBINDINGS.md)
-- [扩展开发](docs/EXTENSIONS.md)
-
----
-
-## 🌍 社区
-
-- 💬 [讨论区](https://github.com/catui-agent/catui-agent/discussions)
-- 🐛 [问题反馈](https://github.com/catui-agent/catui-agent/issues)
-- 📝 [更新日志](CHANGELOG.md)
-
----
-
-## 📄 许可证
-
-GPL-3.0 © [Catui Agent](https://github.com/catui-agent)
-
----
-
-<div align="center">
-
-**[⬆ 返回顶部](#-catui)**
-
-<sub>用 ❤️ 为终端 dwellers 打造</sub>
-
-</div>
+[GPL-3.0](LICENSE)。引入的第三方内容保留各自许可证。

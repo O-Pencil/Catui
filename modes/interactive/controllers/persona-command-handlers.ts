@@ -16,13 +16,11 @@ import {
   getPersonaDir,
   getPersonaMcpConfigPath,
   getPersonaMemoryDir,
-  getPersonaSoulDir,
   listPersonas,
   setActivePersonaId,
   toAbsolutePath,
 } from "../../../core/persona/persona-manager.js";
 import { PersonaSelectorComponent } from "../components/persona-selector.js";
-import { formatSoulStats } from "../components/soul-stats.js";
 import { theme } from "../theme/theme.js";
 
 /** Host capabilities needed by the persona/soul/memory command handlers. */
@@ -44,7 +42,7 @@ export class PersonaCommandHandlersController {
 
   /**
    * If session is tagged with a persona, apply it to env + active persona file,
-   * then reload session runtime so Catui/Soul/NanoMem/Skills/MCP can be re-wired.
+   * then reload session runtime so Catui/NanoMem/Skills/MCP can be re-wired.
    */
   async applyPersonaFromSessionIfAny(): Promise<void> {
     const entries = this.ctx.session.sessionManager.getEntries();
@@ -71,11 +69,10 @@ export class PersonaCommandHandlersController {
     }
     if (!personaId || !availablePersonaIds.has(personaId)) return;
 
-    // Apply persona env vars so extensions (NanoMem, Soul, MCP) use persona dirs
+    // Apply persona env vars so extensions (NanoMem, MCP) use persona dirs
     process.env.NANOMEM_MEMORY_DIR = toAbsolutePath(
       getPersonaMemoryDir(personaId),
     );
-    process.env.SOUL_DIR = toAbsolutePath(getPersonaSoulDir(personaId));
     process.env.MCP_CONFIG_PATH = toAbsolutePath(
       getPersonaMcpConfigPath(personaId),
     );
@@ -93,30 +90,7 @@ export class PersonaCommandHandlersController {
   }
 
   handleSoulCommand(): void {
-    const soulManager = (this.ctx.session as any)._soulManager;
-    if (!soulManager) {
-      this.ctx.chatContainer.addChild(new Spacer(1));
-      this.ctx.chatContainer.addChild(
-        new Text(theme.fg("warning", "⚠️  Soul Not Enabled"), 1, 0),
-      );
-      this.ctx.chatContainer.addChild(
-        new Text(
-          theme.fg(
-            "dim",
-            "Soul (AI personality system) is not enabled. Please use Catui 1.3.0 or later.",
-          ),
-          1,
-          0,
-        ),
-      );
-      this.ctx.ui.requestRender();
-      return;
-    }
-
-    const stats = formatSoulStats(soulManager, { compact: false });
-
-    this.ctx.chatContainer.addChild(new Spacer(1));
-    this.ctx.chatContainer.addChild(new Text(stats, 1, 0));
+    this.ctx.chatContainer.addChild(new Text("NanoSoul is suspended. Use /persona to choose an identity.", 1, 0));
     this.ctx.ui.requestRender();
   }
 
@@ -227,7 +201,6 @@ export class PersonaCommandHandlersController {
     process.env.NANOMEM_MEMORY_DIR = toAbsolutePath(
       getPersonaMemoryDir(personaId),
     );
-    process.env.SOUL_DIR = toAbsolutePath(getPersonaSoulDir(personaId));
     process.env.MCP_CONFIG_PATH = toAbsolutePath(
       getPersonaMcpConfigPath(personaId),
     );

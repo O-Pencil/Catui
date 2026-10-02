@@ -259,8 +259,8 @@ async function executeSimplify(options: SimplifyOptions, ctx: ExtensionCommandCo
 // Extension Entry Point
 // =============================================================================
 
-export default function simplifyExtension(pi: ExtensionAPI) {
-	pi.registerCommand("simplify", {
+export default function simplifyExtension(catui: ExtensionAPI) {
+	catui.registerCommand("simplify", {
 		description: "Suggest smaller code changes",
 		getArgumentCompletions: (prefix, context) => {
 			if (context && context.tokenIndex > 0) return null;
@@ -279,7 +279,7 @@ export default function simplifyExtension(pi: ExtensionAPI) {
 	});
 
 	// Keyboard shortcut for quick access
-	pi.registerShortcut("ctrl+shift+s", {
+	catui.registerShortcut("ctrl+shift+s", {
 		description: "Simplify changed files",
 		handler: async (ctx) => {
 			await executeSimplify({ runTests: true }, ctx as ExtensionCommandContext);
