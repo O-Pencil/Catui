@@ -5,7 +5,7 @@
  * [HERE]: core/runtime/prompt-assembly.ts - prompt input assembly extracted from AgentSession
  *
  * Extracted from AgentSession (P4.5). This module owns prompt resource assembly only.
- * Soul injection state and prompt application remain in AgentSession.
+ * Prompt application remains in AgentSession; NanoSoul is suspended.
  */
 
 import type { AgentTool } from "@catui/agent-core";
@@ -17,7 +17,6 @@ export interface RuntimeSystemPromptOptions {
   resourceLoader: ResourceLoader;
   toolNames: string[];
   baseToolRegistry: Map<string, AgentTool>;
-  soulInjection?: string;
   /**
    * Names of currently active MCP-powered tools (prefix `mcp_`). When
    * provided and non-empty, the rendered system prompt gains an
@@ -48,7 +47,6 @@ export function buildRuntimeSystemPrompt(
     customPrompt: options.resourceLoader.getSystemPrompt(),
     appendSystemPrompt,
     selectedTools: validToolNames,
-    soulInjection: options.soulInjection,
     mcpToolNames,
   });
 }

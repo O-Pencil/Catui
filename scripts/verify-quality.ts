@@ -167,7 +167,6 @@ function checkEdge(edge: ImportEdge, violations: Violation[]): void {
 
   const forbiddenCycleEdges = new Map<string, string[]>([
     ["core/mcp/mcp-config.ts", ["core/mcp/mcp-client.ts"]],
-    ["core/soul-integration.ts", ["core/runtime/sdk.ts"]],
     ["core/lib/ai/src/types.ts", ["core/lib/ai/src/utils/event-stream.ts"]],
   ]);
   const forbiddenTargets = forbiddenCycleEdges.get(from);

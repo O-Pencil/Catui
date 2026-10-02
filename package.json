@@ -1,7 +1,7 @@
 {
   "name": "catui-agent",
   "version": "1.2.30",
-  "description": "CLI coding agent with read, bash, edit, write tools and session management. Supports DashScope and Ali Token Plan. Soul enabled by default for AI personality evolution.",
+  "description": "CLI coding agent with read, bash, edit, write tools and session management. Supports DashScope and Ali Token Plan. Persona-based identity and built-in decision skills.",
   "type": "module",
   "bin": {
     "catui": "dist/cli.js"
@@ -49,6 +49,7 @@
     "dist/**/*.d.ts",
     "dist/**/*.json",
     "dist/**/*.md",
+    "dist/**/LICENSE",
     "dist/**/*.py",
     "dist/**/*.html",
     "dist/**/*.css",
@@ -59,7 +60,7 @@
   ],
   "scripts": {
     "dev": "tsx cli.ts",
-    "test": "npm run test:dev-loop && npm run test:security && npm run test:commands && npm run test:tools && npm run test:mcp && npm run test:sessions && npm run test:release && npm run test:harness-critical",
+    "test": "npm run test:runtime-owners && npm run test:dev-loop && npm run test:security && npm run test:commands && npm run test:tools && npm run test:mcp && npm run test:sessions && npm run test:release && npm run test:harness-critical",
     "build": "npm run clean:dist && npm run build:deps && tsc -p tsconfig.build.json && npm run copy:internal-libs && npm run copy:theme:json && npm run copy:assets && npm run build:meta && npm run minify:dist",
     "build:meta": "node scripts/generate-build-meta.js",
     "minify:dist": "node scripts/minify-dist.js",
@@ -103,6 +104,7 @@
     "test:evolution-pawbench": "node --test --import tsx test/evolution-pawbench.test.ts test/evolution-pawbench-cli.test.ts",
     "test:evolution": "node --test --import tsx test/evolution-automation.test.ts test/evolution-benchmark-promotion.test.ts test/evolution-benchmark.test.ts test/evolution-extension.test.ts test/evolution-pawbench.test.ts test/evolution-pawbench-cli.test.ts test/evolution-runtime-capabilities.test.ts test/evolution-schema.test.ts test/evolution-store.test.ts test/evolution-workflow.test.ts",
     "test:subagent": "node --test --import tsx test/subagent-parser.test.ts test/worktree-manager.test.ts test/bash-sandbox.test.ts",
+    "test:runtime-owners": "node --test --import tsx test/session-runtime-owners.test.ts test/typesafe-extension.test.ts test/context-window.test.ts test/retry-coordinator.test.ts",
     "test:dev-loop": "node --test --import tsx test/dev-loop.test.ts",
     "test:team": "node --test --import tsx test/team-parser.test.ts test/team-runtime.test.ts",
     "test:plan": "node --test --import tsx test/plan-mode.test.ts",
@@ -140,7 +142,6 @@
     "core/lib/ai",
     "core/lib/tui",
     "packages/mem-core",
-    "packages/soul-core",
     "packages/protocol"
   ],
   "engines": {
@@ -155,7 +156,6 @@
     "@mariozechner/jiti": "^2.6.2",
     "catui-protocol": "^0.1.1",
     "catui-mem": "^1.1.2",
-    "catui-soul": "^0.1.0",
     "@silvia-odwyer/photon-node": "^0.3.4",
     "@sinclair/typebox": "^0.34.41",
     "ajv": "^8.17.1",

@@ -40,14 +40,7 @@ import { SessionManager } from "../session/session-manager.js";
 import { SettingsManager } from "../platform/config/settings-manager.js";
 import { AgentDirContext, defaultAgentDirContext } from "../agent-dir/agent-dir-context.js";
 import { time } from "../platform/timings.js";
-import {
-  isSoulEnabled,
-  toSoulContext,
-  createSoulManager,
-} from "../soul-integration.js";
 import type { SoulOptionsContract } from "../soul-options-contract.js";
-// @ts-ignore - soul-core package is bundled at runtime
-import type { SoulManager } from "catui-soul";
 import {
   allTools,
   bashTool,
@@ -303,7 +296,7 @@ export interface CreateAgentSessionResult {
   extensionsResult: LoadExtensionsResult;
   /** Warning if session was restored with a different model than saved */
   modelFallbackMessage?: string;
-  /** Soul manager for AI personality (if enabled) */
+  /** @deprecated NanoSoul is suspended; always undefined. */
   soulManager?: any;
 }
 
@@ -816,39 +809,6 @@ export async function createAgentSession(
     };
   }
 
-  // Initialize Soul if enabled (before creating AgentSession)
-  let soulManager: SoulManager | undefined;
-  let soulManagerFactory: (() => Promise<SoulManager | null>) | undefined;
-  if (isSoulEnabled(options)) {
-    try {
-      const soulMgr = await createSoulManager(agentCtx);
-      if (soulMgr) {
-        soulManager = soulMgr;
-        await soulMgr.initialize();
-        time("soul.initialize");
-      } else {
-        logger.warn(
-          "Soul not available (nanosoul package not installed). Skipping...",
-        );
-      }
-    } catch (error) {
-      logger.warn(`Failed to initialize Soul: ${error}`);
-    }
-
-    soulManagerFactory = async () => {
-      try {
-        const mgr = await createSoulManager(agentCtx);
-        if (!mgr) return null;
-        await mgr.initialize();
-        time("soul.initialize");
-        return mgr;
-      } catch (error) {
-        logger.warn(`Failed to refresh Soul: ${error}`);
-        return null;
-      }
-    };
-  }
-
   const session = new AgentSession({
     agent,
     sessionManager,
@@ -864,8 +824,6 @@ export async function createAgentSession(
     modelRegistry,
     initialActiveToolNames,
     extensionRunnerRef,
-    soulManager,
-    soulManagerFactory,
     signal: options.signal,
     theme: options.theme,
     createSession: createAgentSession,
@@ -900,6 +858,5 @@ export async function createAgentSession(
     session,
     extensionsResult,
     modelFallbackMessage,
-    soulManager,
   };
 }

@@ -1,7 +1,7 @@
 /**
  * [WHO]: Config path getters (getAgentDir, getModelsPath, getRemotePublicDir, etc.), APP_NAME, VERSION
  * [FROM]: Depends on node:fs, node:os, node:path, node:url
- * [TO]: Consumed by main.ts, index.ts, migrations.ts, cli/args.ts, core/model-registry.ts, core/platform/keybindings.ts, core/skills.ts, core/package-manager.ts, core/soul-integration.ts, catui-defaults.ts, utils/changelog.ts, modes/remote/remote-server.ts, and all extension entry points
+ * [TO]: Consumed by main.ts, index.ts, migrations.ts, cli/args.ts, core/model-registry.ts, core/platform/keybindings.ts, core/skills.ts, core/package-manager.ts, catui-defaults.ts, utils/changelog.ts, modes/remote/remote-server.ts, and all extension entry points
  * [HERE]: config.ts - configuration path discovery and constants
  */
 import { existsSync, readFileSync } from "fs";

@@ -46,7 +46,6 @@ const DIST_MAIN = join(REPO, "dist", "main.js");
 const PUBLIC_PACKAGES: PublicPackageSpec[] = [
 	{ name: "catui-protocol", path: "packages/protocol", hostRange: "^0.1.1" },
 	{ name: "catui-mem", path: "packages/mem-core", hostRange: "^1.1.2", requiredExports: [".", "./extension"] },
-	{ name: "catui-soul", path: "packages/soul-core", hostRange: "^0.1.0" },
 ];
 const INTERNAL_LIBS: InternalLibSpec[] = [
 	{ name: "@catui/ai", path: "core/lib/ai", entry: "dist/index.js" },

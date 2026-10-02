@@ -65,6 +65,7 @@ export interface BuiltinExtension {
 }
 
 export const builtInExtensions: readonly BuiltinExtension[] = [
+	{ id: "typesafe", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, resourceDiscovery: true, testContracts: ["resource-discovery"], testFiles: ["test/typesafe-extension.test.ts"] },
 	{ id: "context-management", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/context-management.test.ts", "test/context-window.test.ts"] },
 	{ id: "diagnostics", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: true, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/diagnostic-buffer-throttle.test.ts", "test/diagnostics-runtime.test.ts"] },
 	{ id: "sal", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/sal-lifecycle.test.ts"] },
@@ -132,7 +133,6 @@ function findPackageRoot(startDir: string): string | null {
  *
  * Returns all default-enabled extension paths (builtin/):
  * - NanoMem (persistent memory)
- * - Soul (AI personality evolution)
  * - LinkWorld (internet search)
  * - SecurityAudit (security audit)
  * - MCP (MCP protocol adapter)
@@ -148,6 +148,11 @@ function findPackageRoot(startDir: string): string | null {
  */
 export function getBuiltinExtensionPaths(): string[] {
 	const paths: string[] = [];
+	const typesafeRoot = join(__dirname, "extensions", "builtin", "typesafe");
+	const typesafeEntry = join(typesafeRoot, "index.js");
+	const typesafeSource = join(typesafeRoot, "index.ts");
+	if (existsSync(typesafeEntry)) paths.push(typesafeEntry);
+	else if (existsSync(typesafeSource)) paths.push(typesafeSource);
 
 	// === Diagnostics extension (extension-owned issue buffer and reporting) ===
 	// Loaded first so it can subscribe to diagnostic:event before producer

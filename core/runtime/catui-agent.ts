@@ -70,7 +70,7 @@ export interface CatuiAgentOptions {
   /** Enable MCP tools */
   enableMCP?: boolean;
   
-  /** Enable Soul personality */
+  /** @deprecated NanoSoul is suspended; ignored. Use persona. */
   enableSoul?: boolean;
   
   /** Suppress all console output */
