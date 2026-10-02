@@ -2,7 +2,7 @@
  * [WHO]: goalExtension default export - wires the GoalController per thread; registers /goal command + completions; registers GetGoal/CreateGoal/UpdateGoal tools; subscribes to lifecycle hooks for accounting (turn_end), pull-model continuation + run-error blocking (agent_end, mirrors Codex continue_if_idle), and budget-limit steering; renders GOAL_MESSAGE_TYPE custom messages
  * [FROM]: Depends on @catui/agent-core, @catui/tui, core/extensions-host/types, ./goal-controller, ./goal-tools, ./goal-command, ./goal-parser, ./goal-types, ./goal-format
  * [TO]: Auto-loaded by builtin-extensions.ts as a default extension
- * [HERE]: extensions/builtin/goal/index.ts - extension entry; binds run accounting, scoped cancellation, owned input and per-thread controllers
+ * [HERE]: extensions/builtin/goal/index.ts - owner snapshot/remote command contract, run accounting, scoped cancellation and per-thread controllers
  */
 
 import * as fs from "node:fs";
@@ -142,6 +142,7 @@ export default async function goalExtension(api: ExtensionAPI): Promise<void> {
 	};
 
 	// Register tools (LLM-facing)
+	api.supervision?.registerSnapshot("goal", ctx => ensureController(ctx)?.get_goal() ?? null);
 	const [getGoalTool, createGoalTool, updateGoalTool] = buildAllGoalTools();
 	api.registerTool(getGoalTool);
 	api.registerTool(createGoalTool);
@@ -168,6 +169,12 @@ export default async function goalExtension(api: ExtensionAPI): Promise<void> {
 
 	// Slash command
 	api.registerCommand("goal", {
+		supervision: {
+			usage: "/goal <objective> | show | edit | pause | resume | clear | help",
+			busyUsage: "/goal show | pause | help",
+			effect: "Set or edit the goal; pause prevents further automatic continuation but does not abort the current run. Resume claims continuation. Replacement asks for confirmation.",
+			allowBusy: args => ["", "show", "pause", "help"].includes(args.trim()),
+		},
 		description: "Set, show, edit, pause, resume, or clear the thread goal.",
 		getArgumentCompletions: getGoalArgumentCompletions,
 		handler: async (args: string, ctx: ExtensionCommandContext) => {

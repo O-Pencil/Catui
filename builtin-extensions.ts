@@ -65,6 +65,7 @@ export interface BuiltinExtension {
 }
 
 export const builtInExtensions: readonly BuiltinExtension[] = [
+	{ id: "session-bridge", category: "optional", defaultEnabled: true, riskLevel: "command", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, testContracts: ["lifecycle", "external-process"], testFiles: ["test/session-bridge.test.ts", "test/session-bridge-setup.test.ts"] },
 	{ id: "typesafe", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, resourceDiscovery: true, testContracts: ["resource-discovery"], testFiles: ["test/typesafe-extension.test.ts"] },
 	{ id: "context-management", category: "default", defaultEnabled: true, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/context-management.test.ts", "test/context-window.test.ts"] },
 	{ id: "diagnostics", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: true, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/diagnostic-buffer-throttle.test.ts", "test/diagnostics-runtime.test.ts"] },
@@ -148,6 +149,12 @@ function findPackageRoot(startDir: string): string | null {
  */
 export function getBuiltinExtensionPaths(): string[] {
 	const paths: string[] = [];
+	// Command availability is default-on; local control still requires /bridge start.
+	const bridgeRoot = join(__dirname, "extensions", "optional", "session-bridge");
+	const bridgeEntry = join(bridgeRoot, "index.js");
+	const bridgeSource = join(bridgeRoot, "index.ts");
+	if (existsSync(bridgeEntry)) paths.push(bridgeEntry);
+	else if (existsSync(bridgeSource)) paths.push(bridgeSource);
 	const typesafeRoot = join(__dirname, "extensions", "builtin", "typesafe");
 	const typesafeEntry = join(typesafeRoot, "index.js");
 	const typesafeSource = join(typesafeRoot, "index.ts");

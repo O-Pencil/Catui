@@ -67,7 +67,7 @@ test("browser keeps a lightweight slash fallback while full extension is opt-in"
 
 test("only product-approved optional extensions are loaded by default", () => {
 	const paths = getBuiltinExtensionPaths();
-	const defaultOptionalIds = new Set(["evolution"]);
+	const defaultOptionalIds = new Set(["evolution", "session-bridge"]);
 	const unexpectedDefaultOptionalPaths = paths.filter((entry) =>
 		entry.includes("extensions") &&
 		entry.includes("optional") &&
@@ -85,7 +85,7 @@ test("only product-approved optional extensions are loaded by default", () => {
 
 test("extension metadata keeps unapproved optional and write-capable extensions out of defaults", () => {
 	const optionalExtensions = builtInExtensions.filter((extension) => extension.category === "optional");
-	const defaultOptionalIds = new Set(["evolution"]);
+	const defaultOptionalIds = new Set(["evolution", "session-bridge"]);
 	assert.ok(optionalExtensions.length > 0, "Expected optional extensions to be represented in metadata.");
 	for (const extension of optionalExtensions) {
 		assert.equal(extension.defaultEnabled, defaultOptionalIds.has(extension.id), `${extension.id} defaultEnabled policy mismatch.`);

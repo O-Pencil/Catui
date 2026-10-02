@@ -1,5 +1,5 @@
 /**
- * [WHO]: Extension, ExtensionContext, HookEvent, ToolDefinition, ContinuationLease; scoped follow-up cancellation and safe context-window contracts
+ * [WHO]: Extension, ExtensionContext, HookEvent, ToolDefinition, ContinuationLease; optional supervision, delegated dialogs, scoped cancellation and context-window contracts
  * [FROM]: Depends on agent-core, ai, tui - all extension-related types
  * [TO]: Consumed by core/extensions-host/index.ts, core/extensions-host/runner.ts, core/extensions-host/wrapper.ts, all extension entry points (builtin/loop, builtin/team, builtin/mcp, builtin/presence, builtin/security-audit, builtin/link-world, builtin/interview, optional/simplify, optional/export-html), modes/interactive/components/tool-execution.ts, modes/interactive/components/custom-message.ts, modes/acp/acp-mode.ts
  * [HERE]: core/extensions-host/types.ts - type definitions for extension system API
@@ -50,6 +50,7 @@ import type { Theme } from "../theme-contract.js";
 import type { BashResult } from "../platform/exec/bash-executor.js";
 import type { CompactionPreparation, CompactionResult } from "../session/compaction/index.js";
 import type { EventBus } from "../runtime/event-bus.js";
+import type { CommandSupervision, SessionSupervision } from "./supervision.js";
 import type { ExecOptions, ExecResult } from "../platform/exec/exec.js";
 import type { ReadonlyFooterDataProvider } from "../../modes/interactive/footer-data-provider.js";
 import type { KeybindingsManager } from "../platform/keybindings.js";
@@ -91,6 +92,8 @@ export type { AppAction, KeybindingsManager } from "../platform/keybindings.js";
 
 /** Options for extension UI dialogs. */
 export interface ExtensionUIDialogOptions {
+  /** Explicitly allow the connected supervisor to answer this dialog. */
+  delegatable?: boolean;
 	/** AbortSignal to programmatically dismiss the dialog. */
 	signal?: AbortSignal;
 	/** Timeout in milliseconds. Dialog auto-dismisses with live countdown display. */
@@ -311,6 +314,8 @@ export interface ExtensionHarnessEvalReport {
  * Context passed to extension event handlers.
  */
 export interface ExtensionContext {
+  /** Whether this context is being used under explicit supervisor delegation. */
+  supervised?: boolean;
 	/** UI methods for user interaction */
 	ui: ExtensionUIContext;
 	/** Whether UI is available (false in print/RPC mode) */
@@ -1034,6 +1039,8 @@ export type MessageRenderer<T = unknown> = (
 export type ArgumentCompletionContext = ProtocolArgumentCompletionContext;
 
 export interface RegisteredCommand extends ProtocolExtensionCommand<ExtensionCommandContext> {
+  /** Owner-declared remote invocation contract; absent means local only. */
+  supervision?: CommandSupervision;
 	name: string;
 	description?: string;
 	getArgumentCompletions?: (
@@ -1055,6 +1062,8 @@ export type ExtensionHandler<E, R = undefined> = (event: E, ctx: ExtensionContex
  * ExtensionAPI passed to extension factory functions.
  */
 export interface ExtensionAPI {
+  /** Session-local supervision, when supported by the host. */
+  supervision?: SessionSupervision;
 	/** Working directory resolved for this extension load */
 	cwd: string;
 
@@ -1490,6 +1499,7 @@ export interface ContinuationLease {
 
 /** Full runtime = state + actions; bound by the runner after loading. */
 export interface ExtensionRuntime extends ExtensionRuntimeState, ExtensionActions {
+  supervision?: SessionSupervision;
 	/** Bound in runner.bindCore from ExtensionContextActions.isIdle */
 	isIdle: () => boolean;
 	/** Bound in runner.bindCore from ExtensionContextActions.clearFollowUpQueue */

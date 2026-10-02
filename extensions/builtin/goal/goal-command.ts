@@ -96,12 +96,16 @@ async function editGoal(controller: GoalController, ctx: ExtensionCommandContext
 		ctx.ui.notify("No goal is currently set.", "info");
 		return;
 	}
-	const edited = await ctx.ui.editor("Edit goal objective", existing.objective);
+	const edited = ctx.supervised
+		? await ctx.ui.input("Edit goal objective", existing.objective, { initialValue: existing.objective, delegatable: true })
+		: await ctx.ui.editor("Edit goal objective", existing.objective);
 	if (edited === undefined) {
 		ctx.ui.notify("Edit cancelled.", "info");
 		return;
 	}
 	const validated = validateObjective(edited);
+	const current = await controller.get_goal();
+	if (current?.goal_id !== existing.goal_id || current.objective !== existing.objective || current.status !== existing.status) throw new Error("Goal changed while awaiting input; inspect it again.");
 	if (!validated.ok) {
 		ctx.ui.notify(validated.reason, "error");
 		return;
@@ -157,11 +161,14 @@ async function setObjective(
 		const ok = await ctx.ui.confirm(
 			"Replace goal?",
 			`Existing objective: ${existing.objective}\nNew objective: ${validated.value}`,
+			{ delegatable: true },
 		);
 		if (!ok) {
 			ctx.ui.notify("Goal unchanged.", "info");
 			return;
 		}
+		const current = await controller.get_goal();
+		if (current?.goal_id !== existing.goal_id || current.objective !== existing.objective || current.status !== existing.status) throw new Error("Goal changed while awaiting replacement; inspect it again.");
 		const result = await controller.set_objective(validated.value, "ReplaceExisting", {
 			tokenBudget: validatedBudget.value,
 		});

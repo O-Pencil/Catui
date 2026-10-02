@@ -83,18 +83,18 @@ async function askSingleSelect(
 ): Promise<string> {
 	// Simplified title: just the question text (options render as label — description below)
 	const header = `[${question.header.slice(0, ASK_USER_QUESTION_TOOL_CHIP_WIDTH)}]`;
-	const title = `${header} ${question.question}`;
+	const title = question.options.some(option => option.preview) ? buildQuestionTitle(question) : `${header} ${question.question}`;
 	const optionLabels = question.options.map((o) => buildOptionDisplayLabel(o.label, o.description));
 	optionLabels.push("Other (custom answer)");
 
-	const choice = await ctx.ui.select(title, optionLabels);
+	const choice = await ctx.ui.select(title, optionLabels, { delegatable: true });
 
 	if (choice === undefined) {
 		throw new Error(`User declined to answer: "${question.question}"`);
 	}
 
 	if (choice === "Other (custom answer)") {
-		const customAnswer = await ctx.ui.input(`Custom answer for: ${question.question}`);
+		const customAnswer = await ctx.ui.input(`Custom answer for: ${question.question}`, undefined, { delegatable: true });
 		if (customAnswer === undefined) {
 			throw new Error(`User declined to answer: "${question.question}"`);
 		}
@@ -114,15 +114,16 @@ async function askMultiSelect(
 		const confirmed = await ctx.ui.confirm(
 			question.header,
 			`Enable: ${option.label} — ${option.description}?`,
+			{ delegatable: true },
 		);
 		if (confirmed) {
 			answers.push(option.label);
 		}
 	}
 
-	const wantsCustom = await ctx.ui.confirm(question.header, "Add a custom answer?");
+	const wantsCustom = await ctx.ui.confirm(question.header, "Add a custom answer?", { delegatable: true });
 	if (wantsCustom) {
-		const customAnswer = await ctx.ui.input(`Custom answer for: ${question.question}`);
+		const customAnswer = await ctx.ui.input(`Custom answer for: ${question.question}`, undefined, { delegatable: true });
 		if (customAnswer !== undefined && customAnswer.trim().length > 0) {
 			answers.push(customAnswer.trim());
 		}

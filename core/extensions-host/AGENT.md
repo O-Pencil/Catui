@@ -5,6 +5,8 @@
 Continuation contract: loader.ts supplies session-local exclusive claimContinuation leases; types.ts declares ContinuationLease; runner.ts forwards predicate-scoped follow-up cancellation while retaining no-argument compatibility.
 
 Member List
+supervision.ts: SessionSupervision, owner command eligibility and snapshots, bounded delegated decision lifecycle; shared by feature owners and authorized transports
+supervision-ui.ts: wrapSupervisedUI, routes only explicitly delegatable dialogs and preserves local defaults
 index.ts: Extension system public API, re-exports from loader.ts, runner.ts, types.ts, wrapper.ts, consumed by SDK and extensions themselves
 wrapper.ts: wrapRegisteredTool(), wraps RegisteredTool into AgentTool, uses runner's createContext() for consistent context and converts extension tool_call blocks into typed permission denials
 types.ts: All extension-related TypeScript types and interfaces, including read-only Run Trace replay/Harness Eval context capabilities, key types: Extension, ExtensionContext, HookEvent types, AgentResultEvent, ToolDefinition, RegisteredTool, SlashCommand; optional requestContextWindow queues safe same-session handoffs
