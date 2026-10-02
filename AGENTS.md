@@ -601,6 +601,9 @@ P3 headers serve as **context budget gatekeepers**:
 
 ### Related Documentation
 
+- [Design principles](./docs/design-principles.md) - Current architecture decisions and provenance
+- [README artwork](./assets/readme/AGENT.md) - Header asset and generation record
+
 - [.CATUI.md](./.CATUI.md) - Product personality charter
 - [packages/mem-core/AGENT.md](./packages/mem-core/AGENT.md) - Memory system
 - [docs/](./docs/) - Documentation directory

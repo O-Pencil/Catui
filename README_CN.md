@@ -1,5 +1,7 @@
 # Catui
 
+![Catui — 你的终端，你的编程伙伴。](assets/readme/header.png)
+
 以终端为主要界面的 AI 编程 Agent，支持项目记忆、persona、可扩展工具和多模型。
 使用 TypeScript 与 Node.js 开发，npm 包名为 `catui-agent`。
 

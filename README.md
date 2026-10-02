@@ -1,5 +1,7 @@
 # Catui
 
+![Catui — Your terminal. Your coding companion.](assets/readme/header.png)
+
 A terminal-first AI coding agent with persistent project memory, selectable personas,
 and extensible tools. Built with TypeScript and Node.js; published as `catui-agent`.
 
