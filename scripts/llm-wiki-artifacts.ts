@@ -44,7 +44,7 @@ interface SearchIndexGraph {
 }
 
 export function buildSearchIndex(graph: SearchIndexGraph, pagesDir: string, root: string): SearchIndex {
-	const entries = collectMarkdownPages(pagesDir).map(path => {
+	const entries: SearchIndexEntry[] = collectMarkdownPages(pagesDir).map(path => {
 		const markdown = readFileSync(path, "utf-8");
 		const frontmatter = parsePageFrontmatter(path) ?? {};
 		const text = stripFrontmatter(markdown);

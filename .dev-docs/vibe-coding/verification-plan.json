@@ -141,6 +141,22 @@
       "timeoutMs": 180000
     },
     {
+      "id": "verification-contract-tests",
+      "label": "Plan/script drift guard (run in the chain as well as the gate)",
+      "command": "npm run test:contract",
+      "required": true,
+      "category": "test",
+      "timeoutMs": 120000
+    },
+    {
+      "id": "evolution-boundary-tests",
+      "label": "Evolution evidence, promotion and rollback boundary tests",
+      "command": "npm run test:evolution-boundaries",
+      "required": true,
+      "category": "test",
+      "timeoutMs": 600000
+    },
+    {
       "id": "harness-critical",
       "label": "Critical harness state and eval gate",
       "command": "npm run test:harness-critical",

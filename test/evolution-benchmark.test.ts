@@ -24,6 +24,52 @@ import type {
 	EvolutionBenchmarkSnapshotV1,
 } from "../extensions/optional/evolution/benchmark-types.ts";
 import { runEvolutionBenchmarkCli } from "../scripts/evolution-benchmark.ts";
+import { createEvolutionCandidate, getEvolutionScopeRoot } from "../extensions/optional/evolution/evolution-store.ts";
+
+/**
+ * The CLI takes the baseline from the candidate record the store captured, not from a flag. CLI
+ * tests therefore need a real candidate in a real scope, or they only exercise the error path.
+ */
+async function seedCliCandidate(directory: string, candidateId: string): Promise<{ agentDir: string; sessionId: string; contentHash: string }> {
+	const agentDir = join(directory, "agent");
+	const sessionId = "cli-evolution-benchmark";
+	const scopeRoot = getEvolutionScopeRoot(agentDir, { scope: "session", sessionId });
+	const candidate = createEvolutionCandidate(scopeRoot, {
+		scope: "session",
+		summary: "cli evidence fixture",
+		rationale: "fixture",
+		expectedOutcome: "fixture",
+		artifacts: [{
+			kind: "skill_manifest",
+			id: "evolved:skill_manifest:cli-fixture",
+			title: "CLI fixture",
+			content: "A procedure.",
+			applicability: "Matching task.",
+			nonApplicability: "Unrelated task.",
+		}],
+	}, { id: () => candidateId });
+	return { agentDir, sessionId, contentHash: candidate.contentHash };
+}
+
+function cliArgs(
+	directory: string,
+	baselinePath: string,
+	candidatePath: string,
+	outputPath: string,
+	candidateId: string,
+	agentDir: string,
+	sessionId: string,
+): string[] {
+	return [
+		"--baseline", baselinePath,
+		"--candidate", candidatePath,
+		"--candidate-id", candidateId,
+		"--output", outputPath,
+		"--agent-dir", agentDir,
+		"--scope", "session",
+		"--session-id", sessionId,
+	];
+}
 
 const CANDIDATE_ID = "candidate-evidence-a";
 const CANDIDATE_CONTENT_HASH = `sha256:${"c".repeat(64)}`;
@@ -259,21 +305,21 @@ test("accepts a statistically clear held-out improvement and binds it to the can
 		snapshot("baseline"),
 		snapshot("candidate"),
 		DEFAULT_EVOLUTION_BENCHMARK_POLICY,
-		{ candidateId: CANDIDATE_ID, checkedAt: "2026-08-25T01:00:00.000Z" },
+		{ candidateId: CANDIDATE_ID, baselineRevisionId: null, checkedAt: "2026-08-25T01:00:00.000Z" },
 	);
 	assert.equal(report.passed, true);
 	assert.equal(report.metrics.baselinePassRate, 0.5);
 	assert.equal(report.metrics.candidatePassRate, 0.75);
 	assert.equal(report.metrics.passRateGain, 0.25);
 	assert.ok(report.metrics.confidenceLowerBound > 0);
-	assert.equal(verifyEvolutionBenchmarkReport(report, CANDIDATE_ID, CANDIDATE_CONTENT_HASH), true);
+	assert.equal(verifyEvolutionBenchmarkReport(report, CANDIDATE_ID, CANDIDATE_CONTENT_HASH, null), true);
 	assert.deepEqual(
 		report,
 		compareEvolutionBenchmarks(
 			snapshot("baseline"),
 			snapshot("candidate"),
 			DEFAULT_EVOLUTION_BENCHMARK_POLICY,
-			{ candidateId: CANDIDATE_ID, checkedAt: "2026-08-25T01:00:00.000Z" },
+			{ candidateId: CANDIDATE_ID, baselineRevisionId: null, checkedAt: "2026-08-25T01:00:00.000Z" },
 		),
 	);
 });
@@ -355,10 +401,10 @@ test("detects promotion report tampering", () => {
 		snapshot("baseline"),
 		snapshot("candidate"),
 		DEFAULT_EVOLUTION_BENCHMARK_POLICY,
-		{ candidateId: CANDIDATE_ID, checkedAt: "2026-08-25T01:00:00.000Z" },
+		{ candidateId: CANDIDATE_ID, baselineRevisionId: null, checkedAt: "2026-08-25T01:00:00.000Z" },
 	);
 	report.metrics.candidatePassRate = 1;
-	assert.equal(verifyEvolutionBenchmarkReport(report, CANDIDATE_ID, CANDIDATE_CONTENT_HASH), false);
+	assert.equal(verifyEvolutionBenchmarkReport(report, CANDIDATE_ID, CANDIDATE_CONTENT_HASH, null), false);
 });
 
 test("rejects structurally incomplete and content-mismatched promotion reports", () => {
@@ -366,11 +412,11 @@ test("rejects structurally incomplete and content-mismatched promotion reports",
 		snapshot("baseline"),
 		snapshot("candidate"),
 		DEFAULT_EVOLUTION_BENCHMARK_POLICY,
-		{ candidateId: CANDIDATE_ID, checkedAt: "2026-08-25T01:00:00.000Z" },
+		{ candidateId: CANDIDATE_ID, baselineRevisionId: null, checkedAt: "2026-08-25T01:00:00.000Z" },
 	);
-	assert.equal(verifyEvolutionBenchmarkReport(report, CANDIDATE_ID, `sha256:${"d".repeat(64)}`), false);
+	assert.equal(verifyEvolutionBenchmarkReport(report, CANDIDATE_ID, `sha256:${"d".repeat(64)}`, null), false);
 	const incomplete = rehashReport({ ...report, checks: [], passed: true });
-	assert.equal(verifyEvolutionBenchmarkReport(incomplete, CANDIDATE_ID, CANDIDATE_CONTENT_HASH), false);
+	assert.equal(verifyEvolutionBenchmarkReport(incomplete, CANDIDATE_ID, CANDIDATE_CONTENT_HASH, null), false);
 });
 
 test("CLI writes a private passing report and prints only a compact verdict", async (t) => {
@@ -379,12 +425,13 @@ test("CLI writes a private passing report and prints only a compact verdict", as
 	const baselinePath = join(directory, "baseline.json");
 	const candidatePath = join(directory, "candidate.json");
 	const outputPath = join(directory, "evidence", `${CANDIDATE_ID}.json`);
+	const seeded = await seedCliCandidate(directory, CANDIDATE_ID);
 	await writeFile(baselinePath, JSON.stringify(snapshot("baseline")), "utf8");
-	await writeFile(candidatePath, JSON.stringify(snapshot("candidate")), "utf8");
+	await writeFile(candidatePath, JSON.stringify({ ...snapshot("candidate"), candidateId: CANDIDATE_ID, candidateContentHash: seeded.contentHash }), "utf8");
 	const output: string[] = [];
 	const errors: string[] = [];
 	const exitCode = await runEvolutionBenchmarkCli(
-		["--baseline", baselinePath, "--candidate", candidatePath, "--candidate-id", CANDIDATE_ID, "--output", outputPath],
+		cliArgs(directory, baselinePath, candidatePath, outputPath, CANDIDATE_ID, seeded.agentDir, seeded.sessionId),
 		{
 			stdout: (line) => output.push(line),
 			stderr: (line) => errors.push(line),
@@ -408,10 +455,11 @@ test("CLI persists failed evidence and returns a non-zero verdict", async (t) =>
 	const outputPath = join(directory, "evidence.json");
 	const candidateRuns = runs("baseline").map((run) => ({ ...run }));
 	await writeFile(baselinePath, JSON.stringify(snapshot("baseline")), "utf8");
-	await writeFile(candidatePath, JSON.stringify(snapshot("candidate", candidateRuns)), "utf8");
+	const seededFail = await seedCliCandidate(directory, CANDIDATE_ID);
+	await writeFile(candidatePath, JSON.stringify({ ...snapshot("candidate", candidateRuns), candidateId: CANDIDATE_ID, candidateContentHash: seededFail.contentHash }), "utf8");
 	const output: string[] = [];
 	const exitCode = await runEvolutionBenchmarkCli(
-		["--baseline", baselinePath, "--candidate", candidatePath, "--candidate-id", CANDIDATE_ID, "--output", outputPath],
+		cliArgs(directory, baselinePath, candidatePath, outputPath, CANDIDATE_ID, seededFail.agentDir, seededFail.sessionId),
 		{ stdout: (line) => output.push(line), stderr: () => undefined, checkedAt: "2026-08-25T01:00:00.000Z" },
 	);
 	const report = JSON.parse(await readFile(outputPath, "utf8"));
@@ -428,5 +476,7 @@ test("CLI rejects incomplete arguments without reading files", async () => {
 		checkedAt: "2026-08-25T01:00:00.000Z",
 	});
 	assert.equal(exitCode, 2);
-	assert.match(errors.join("\n"), /--baseline.*--candidate.*--candidate-id.*--output/i);
+	assert.match(errors.join("\n"), /--baseline/);
+	assert.match(errors.join("\n"), /--agent-dir/);
+	assert.match(errors.join("\n"), /--scope/);
 });

@@ -461,12 +461,77 @@ test("release packaging and prepublish verification are retained", () => {
 	);
 });
 
-test("typecheck has a canonical script instead of a bare npx invocation", () => {
-	assert.equal(scripts.typecheck, "tsc --noEmit");
+test("typecheck covers the product program and the scripts program", () => {
+	// scripts/ was outside the main tsconfig include list, so a required-parameter break in
+	// scripts/evolution-benchmark.ts was invisible to `tsc --noEmit` and reached runtime.
+	assert.equal(scripts["typecheck:scripts"], "tsc --noEmit -p tsconfig.scripts.json");
+	assert.match(scripts.typecheck, /tsc --noEmit/);
+	assert.match(scripts.typecheck, /typecheck:scripts/, "the scripts program must be part of the canonical typecheck");
+	const scriptsConfig = JSON.parse(readFileSync(join(ROOT, "tsconfig.scripts.json"), "utf8")) as { include?: string[]; extends?: string };
+	assert.ok(scriptsConfig.include?.includes("scripts/**/*.ts"), "tsconfig.scripts.json must include scripts/");
+	assert.equal(scriptsConfig.extends, "./tsconfig.json", "the scripts config must inherit the project options");
 	assert.equal(
 		plan.commands.find((command) => command.id === "typecheck")?.command,
 		"npm run typecheck",
 		"The plan must use the canonical script so a typecheck change is a one-line edit.",
+	);
+});
+
+/** Stages of the aggregate `npm test` flow, in execution order. */
+const AGGREGATE_STAGES = ["test:release", "test:pre", "test:evolution-boundaries", "test:harness-critical"];
+
+/** Regression files added by this batch, per owner. Reachability is asserted, not assumed. */
+const BATCH_REGRESSION_FILES = [
+	// S01 registry
+	"test/builtin-extension-registry.test.ts",
+	// S02 verification contract itself
+	"test/verification-contract.test.ts",
+	// S03 bootstraps
+	"test/bootstrap-routing.test.ts",
+	// S04 Presence
+	"test/presence-soul-cleanup.test.ts",
+	// Batch 2 evolution boundaries
+	"test/evolution-baseline-binding.test.ts",
+	"test/evolution-benchmark-cli-binding.test.ts",
+	"test/evolution-refiner-redaction.test.ts",
+	"test/evolution-rollback-discovery.test.ts",
+];
+
+test("every regression test added by this batch is reachable from npm test", () => {
+	const reachable = new Set(testFilesIn("test"));
+	const missing = BATCH_REGRESSION_FILES.filter((file) => !reachable.has(file));
+	assert.deepEqual(
+		missing,
+		[],
+		`These batch regression tests only run when invoked by hand, which is how the missing CLI baseline survived. Unreachable: ${missing.join(", ")}`,
+	);
+});
+
+test("the evolution boundary suite runs only files the aggregate does not already run", () => {
+	// Adding test:evolution wholesale would re-run the six files test:harness-critical covers.
+	const elsewhere = new Set(AGGREGATE_STAGES.filter((stage) => stage !== "test:evolution-boundaries").flatMap((stage) => testFilesIn(stage)));
+	const duplicated = testFilesIn("test:evolution-boundaries").filter((file) => elsewhere.has(file));
+	assert.deepEqual(duplicated, [], `These evolution files would execute twice in one aggregate run: ${duplicated.join(", ")}`);
+});
+
+/**
+ * Pre-existing cross-stage duplication found while wiring this batch in. It is listed rather than
+ * silently removed: test:harness-critical is the load-bearing eval gate, and restructuring it is a
+ * separate decision. This allowlist makes the duplication visible and prevents it from growing.
+ */
+const KNOWN_DUPLICATE_STAGE_FILES = ["test/default-runtime-tools.test.ts"];
+
+test("no test file executes more than once in the aggregate flow beyond the known set", () => {
+	// Count invocation sites rather than distinct files: a suite listed in two stages runs twice.
+	const counts = new Map<string, number>();
+	for (const stage of AGGREGATE_STAGES) {
+		for (const file of testFilesIn(stage)) counts.set(file, (counts.get(file) ?? 0) + 1);
+	}
+	const duplicated = [...counts.entries()].filter(([, count]) => count > 1).map(([file]) => file);
+	assert.deepEqual(
+		duplicated.sort(),
+		[...KNOWN_DUPLICATE_STAGE_FILES].sort(),
+		`Cross-stage duplication changed. Either remove it or record why it is acceptable. Currently: ${duplicated.join(", ") || "none"}`,
 	);
 });
 

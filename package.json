@@ -60,7 +60,7 @@
   ],
   "scripts": {
     "dev": "tsx cli.ts",
-    "test": "npm run test:release && npm run test:pre && npm run test:harness-critical",
+    "test": "npm run test:release && npm run test:pre && npm run test:evolution-boundaries && npm run test:harness-critical",
     "build": "npm run clean:dist && npm run build:deps && tsc -p tsconfig.build.json && npm run copy:internal-libs && npm run copy:theme:json && npm run copy:assets && npm run build:meta && npm run minify:dist",
     "build:meta": "node scripts/generate-build-meta.js",
     "minify:dist": "node scripts/minify-dist.js",
@@ -102,7 +102,7 @@
     "eval:evolution-pawbench": "node --import tsx scripts/evolution-pawbench.ts",
     "test:evolution-benchmark": "node --test --import tsx test/evolution-benchmark.test.ts",
     "test:evolution-pawbench": "node --test --import tsx test/evolution-pawbench.test.ts test/evolution-pawbench-cli.test.ts",
-    "test:evolution": "node --test --import tsx test/evolution-automation.test.ts test/evolution-baseline-binding.test.ts test/evolution-benchmark-promotion.test.ts test/evolution-benchmark.test.ts test/evolution-extension.test.ts test/evolution-pawbench.test.ts test/evolution-pawbench-cli.test.ts test/evolution-refiner-redaction.test.ts test/evolution-rollback-discovery.test.ts test/evolution-runtime-capabilities.test.ts test/evolution-schema.test.ts test/evolution-store.test.ts test/evolution-workflow.test.ts",
+    "test:evolution": "node --test --import tsx test/evolution-automation.test.ts test/evolution-baseline-binding.test.ts test/evolution-benchmark-promotion.test.ts test/evolution-benchmark-cli-binding.test.ts test/evolution-benchmark.test.ts test/evolution-extension.test.ts test/evolution-pawbench.test.ts test/evolution-pawbench-cli.test.ts test/evolution-refiner-redaction.test.ts test/evolution-rollback-discovery.test.ts test/evolution-runtime-capabilities.test.ts test/evolution-schema.test.ts test/evolution-store.test.ts test/evolution-workflow.test.ts",
     "test:subagent": "node --test --import tsx test/subagent-parser.test.ts test/worktree-manager.test.ts test/bash-sandbox.test.ts",
     "test:runtime-owners": "node --test --import tsx test/session-runtime-owners.test.ts test/typesafe-extension.test.ts test/context-management.test.ts test/context-window.test.ts test/retry-coordinator.test.ts test/builtin-extension-registry.test.ts test/bootstrap-routing.test.ts",
     "test:dev-loop": "node --test --import tsx test/dev-loop.test.ts",
@@ -124,11 +124,14 @@
     "postversion": "git push",
     "release": "npm version patch && npm publish",
     "test:artifact": "node --test --import tsx test/cli-output-disconnect.test.ts",
-    "test:pre": "npm run test:runtime-owners && npm run test:dev-loop && npm run test:security && npm run test:commands && npm run test:tools && npm run test:mcp && npm run test:sessions && npm run test:presence",
-    "typecheck": "tsc --noEmit",
+    "test:pre": "npm run test:runtime-owners && npm run test:dev-loop && npm run test:contract && npm run test:security && npm run test:commands && npm run test:tools && npm run test:mcp && npm run test:sessions && npm run test:presence",
+    "typecheck": "tsc --noEmit && npm run typecheck:scripts",
     "verify:contract": "node --test --import tsx test/verification-contract.test.ts",
-    "verify:full": "npm run build && npm run verify:dip && npm run verify:quality && npm run verify:package-boundary && npm run typecheck && npm run verify:package-boundary:dist && npm run verify:contract && npm run test:release-contracts && npm run test:artifact && npm run test:pre && npm run test:harness-critical",
-    "test:release-contracts": "node --test --import tsx test/release-build.test.ts test/sal-terrain-budget.test.ts test/persona-assets.test.ts"
+    "verify:full": "npm run build && npm run verify:dip && npm run verify:quality && npm run verify:package-boundary && npm run typecheck && npm run verify:package-boundary:dist && npm run verify:contract && npm run test:release-contracts && npm run test:artifact && npm run test:pre && npm run test:evolution-boundaries && npm run test:harness-critical",
+    "test:release-contracts": "node --test --import tsx test/release-build.test.ts test/sal-terrain-budget.test.ts test/persona-assets.test.ts",
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
+    "test:evolution-boundaries": "node --test --import tsx test/evolution-baseline-binding.test.ts test/evolution-benchmark-cli-binding.test.ts test/evolution-benchmark-promotion.test.ts test/evolution-benchmark.test.ts test/evolution-pawbench-cli.test.ts test/evolution-pawbench.test.ts test/evolution-refiner-redaction.test.ts test/evolution-rollback-discovery.test.ts",
+    "test:contract": "node --test --import tsx test/verification-contract.test.ts"
   },
   "keywords": [
     "catui",

@@ -80,7 +80,7 @@ plan-driven run never reproduces the CI dist boundary check.
 | ID | Status | Code/test references | Before/after evidence | Limit or blocker |
 | --- | --- | --- | --- | --- |
 | S01 | Implemented (structural) | `builtin-extensions.ts` (468 → 225 lines), `test/builtin-extension-registry.test.ts` (13 tests) | See S01 detail below | Behavioral effectiveness unmeasured (S09); metadata array order now equals load order, which differed from base metadata order — no consumer read that order |
-| S02 | Not started | — | — | — |
+| S02 | Implemented (structural) | `package.json`, `.dev-docs/vibe-coding/verification-plan.json`, `.github/workflows/ci.yml`, `tsconfig.scripts.json`, `test/verification-contract.test.ts` (28) | See S02 detail below | Scripts were outside the typecheck program; now a gate |
 | S03 | Implemented (structural) | `extensions/builtin/{typesafe,discipline,catpaw,humanizer,catail}/index.ts`, `extensions/builtin/catpaw/CATUI.md`, `test/bootstrap-routing.test.ts` (8 tests) | 4,388 → 3,176 chars, −27.6% | Routing effectiveness unmeasured (S09) |
 | S04 | Partial | `extensions/builtin/presence/index.ts`, `test/presence-soul-cleanup.test.ts` (7 tests) | Soul reads removed from both live paths; awakening candidate gated by env | Interactive smoke not run; quality evidence unavailable, so shipped default deliberately unchanged |
 | S05 | Partial (S05.4 closed) | `evolution-refiner.ts`, `test/evolution-refiner-redaction.test.ts` | Raw session evidence is now redacted before the model call; verified to fail on pre-fix code | S05.2 destination routing to memory / working notes unimplemented | Would need a second classifier; refused on scope grounds |
@@ -218,12 +218,72 @@ subpath in the `package.json` `exports` map and appears in no entry of
 `.dev-docs/architecture-review/baseline/public-api-symbols-main.txt`, so this is not a public
 API change.
 
+### S02 detail
+
+Base had three disagreeing verification surfaces: `npm test` compiled inside `test:release`,
+`verify:all` skipped the build and every suite, and the dev-loop plan listed a fourth, smaller set
+with no post-build dist boundary step at all. `verify:full` is now the single documented full run.
+
+| | Base | Now |
+| --- | --- | --- |
+| Full builds in one aggregate run | 1 (`test`) / 0 (`verify:all`) | 1 (`verify:full`, `test`) |
+| `build:deps` executions in `verify:full` | n/a | 1 |
+| Suites in the plan | 4 of 9 | all required suites |
+| Dist package-boundary in the plan | absent | present, ordered after build |
+| Scripts under `tsc --noEmit` | not covered | covered by `tsconfig.scripts.json` |
+
+Command expansion, before and after:
+
+```
+base npm test      -> build -> test:release -> build -> (4 files) -> test:pre... -> test:harness-critical
+now  npm test      -> test:release -> build -> test:release-contracts + test:artifact -> test:pre -> test:harness-critical
+new  verify:full   -> build -> verify:dip -> verify:quality -> verify:package-boundary -> typecheck
+                      -> verify:package-boundary:dist -> verify:contract -> test:release-contracts
+                      -> test:artifact -> test:pre -> test:harness-critical
+```
+
+One coverage regression was introduced and fixed during this item. Splitting the release stage by
+build dependency first put only `cli-output-disconnect` in `test:artifact`, which silently dropped
+`release-build`, `sal-terrain-budget` and `persona-assets` from `npm test`. `context-management` was
+a second loss: CI ran it through a raw `node --test` step that had no home in the script graph.
+Both are restored and both are now pinned by `the default test chain still runs every file it ran at
+base, plus context-management`, which was verified to fail against each removal.
+
+`test/verification-contract.test.ts` (28 tests) enforces: required gates present and required, dist
+boundary after build, one build per aggregate run, no script cycle, no plan command reaching
+`verify:full`, plan and CI in agreement, no raw `node --test` in CI, and the graph walk itself via
+counterexamples that call the same function used on `package.json`.
+
 ## Gate receipts
 
-Record exact command, commit, environment, exit code and relevant log path for:
-DIP, quality, static/dist package boundaries, build, typecheck, focused tests,
-full tests, harness evaluation, packaging, interactive/headless smoke, diff check
-and final remote CI. No implementation gates have run for this proposal.
+Environment: macOS 26.6.2, Node v24.21.0, npm 11.19.0. Base `3d1cce1`, branch
+`refactor/simplification-learning-batch1`. All rows below are from `npm run verify:full` on the
+final head, log at `/tmp/vf5.log`, unless noted.
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| DIP | `npm run verify:dip` | pass, 702/702 P3 headers, 39 P2 modules |
+| Quality | `npm run verify:quality` | pass, 767 TypeScript files scanned |
+| Package boundary (static) | `npm run verify:package-boundary` | pass |
+| Build | `npm run build` | pass, 1 invocation (`clean:dist` also 1) |
+| Typecheck (product) | `tsc --noEmit` | pass |
+| Typecheck (scripts) | `npm run typecheck:scripts` | pass, 0 errors |
+| Package boundary (dist) | `npm run verify:package-boundary:dist` | pass, static + dist |
+| Plan/script contract | `npm run verify:contract` | pass, 28 tests |
+| Release contract tests | `npm run test:release-contracts` | pass, 9 tests |
+| Artifact tests | `npm run test:artifact` | pass |
+| Pre-build suites | `npm run test:pre` | pass |
+| Harness critical + eval | `npm run test:harness-critical` | pass |
+| Full test total | `verify:full` aggregate | **531 tests, 531 pass, 0 fail, 0 skipped-error** |
+| Registry probe | `scripts/dev-loop/bootstrap-length-probe.ts` | 32 paths, 32 unique, 0 duplicates; 3,176 bootstrap chars |
+| `git diff --check` | whitespace | clean |
+| Remote CI | `gh pr checks 23` | source-evolution, architecture-boundaries, packages pass; Node 20/22 matrix tracked on the PR |
+| Interactive smoke | not run | not run |
+| Headless smoke | partial | covered indirectly by SDK/headless tests in `test:runtime-owners`; no manual terminal pass |
+| Packaging | not run | `prepublishOnly` contract asserted by `test:release-contracts`; no publish attempted |
+
+Deliberately not run: interactive terminal smoke, real-provider experiments (S09/S10), and any
+publish, merge, or service activation.
 
 ## Experiments
 
