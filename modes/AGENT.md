@@ -70,7 +70,6 @@ interactive/
 │   ├── session-selector-search.ts # Fuzzy session search
 │   ├── tree-selector.ts      # Session tree view
 │   ├── memory-stats.ts       # NanoMem statistics
-│   ├── soul-stats.ts         # Soul statistics
 │   ├── skill-invocation-message.ts # Skill output
 │   ├── branch-summary-message.ts # Branch display
 │   ├── compaction-summary-message.ts # Compaction display

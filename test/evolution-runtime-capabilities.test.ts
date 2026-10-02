@@ -48,9 +48,11 @@ test("extension context exposes read-only run trace replay and harness eval capa
 
 test("agent session returns an isolated snapshot of the latest completed run trace", () => {
 	const trace = [{ version: 1, eventId: "event-1", sequence: 1, timestamp: 1, runId: "run-1", kind: "run.started", payload: { loopFramework: "standard", inputFingerprint: "sha256:input" } }] as const;
-	const session = Object.create(AgentSession.prototype) as { _lastRunTrace: readonly unknown[]; getLastRunTrace(): readonly unknown[] | undefined };
-	session._lastRunTrace = trace;
+	const session = Object.create(AgentSession.prototype) as { _runTrace: { snapshot: readonly unknown[] }; getLastRunTrace(): readonly unknown[] | undefined };
+	session._runTrace = { snapshot: trace };
 	const snapshot = session.getLastRunTrace();
 	assert.deepEqual(snapshot, trace);
 	assert.notEqual(snapshot, trace);
+	(snapshot![0] as { payload: { inputFingerprint: string } }).payload.inputFingerprint = "changed";
+	assert.equal(trace[0].payload.inputFingerprint, "sha256:input");
 });

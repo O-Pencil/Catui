@@ -73,7 +73,7 @@ export interface Args {
 	/** Disable MCP (Model Context Protocol). Default: false (MCP enabled) */
 	noMcp?: boolean;
 	verbose?: boolean;
-	/** Disable Soul (AI personality evolution). Default: false (Soul enabled) */
+	/** @deprecated Accepted for compatibility; NanoSoul is already suspended. */
 	disableSoul?: boolean;
 	/** Enable ACP (Agent Client Protocol) mode for editor integration */
 	acp?: boolean;
@@ -416,7 +416,6 @@ ${chalk.bold("Options:")}
   --refresh-models               Refresh remote model lists via discovery (use with --list-models)
   --verbose                      Force verbose startup (overrides quietStartup setting)
   --offline                      Disable startup network operations (same as CATUI_OFFLINE=1)
-  --disable-soul                 Disable Soul (AI personality evolution)
   --no-mcp                       Disable MCP (Model Context Protocol) tools
   --acp                         Run as ACP Agent (for editor integration)
   --serve                       Remote serve mode: HTTP + WebSocket server for mobile/browser clients

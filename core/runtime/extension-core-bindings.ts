@@ -348,7 +348,7 @@ export function bindExtensionCore(runner: ExtensionRunner, host: ExtensionCoreBi
 				})();
 			},
 			getSystemPrompt: () => host.systemPrompt,
-			getSoulManager: () => host.soulManager,
+			getSoulManager: () => undefined,
 			getSkills: () => host.resourceLoader.getSkills().skills,
 			getLastRunTrace: () => host.getLastRunTrace(),
 			replayRunTrace: (events) => replayRunTrace(events),

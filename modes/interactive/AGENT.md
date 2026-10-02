@@ -61,7 +61,6 @@ components/tree-selector.ts: Tree view selector, hierarchical session display
 components/bash-execution.ts: Bash command execution display, streaming output with truncation; transcript/bash-output slice using tui-next legacy adapter for final width clamping
 components/tool-execution.ts: Tool call execution display, image rendering support; transcript/tool-output slice using tui-next legacy adapter for final width clamping
 components/skill-invocation-message.ts: Skill invocation display, collapsed/expanded state; system transcript slice using tui-next legacy adapter for final width clamping
-components/soul-stats.ts: Soul statistics display, personality profile visualization
 components/dynamic-border.ts: Dynamic border component, viewport-width adaptive
 components/attachments-bar.ts: File attachments bar, path/mimeType display
 components/memory-stats.ts: Memory statistics display, NanoMem engine integration

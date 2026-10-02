@@ -1,12 +1,12 @@
 /**
  * [WHO]: Provides ExtensionEventBridge, ExtensionEventBridgeDeps
  * [FROM]: Depends on agent-core AgentEvent, extensions-host event types, and ExtensionRunner
- * [TO]: Consumed by core/runtime/agent-session.ts for extension-facing event fanout
+ * [TO]: Consumed by core/runtime/session-event-handler.ts for extension-facing event fanout
  * [HERE]: core/runtime/event-bridge.ts - narrow extension event mapping extracted from AgentSession
  *
  * Extracted from AgentSession (P4.7 / AS07). This bridge owns only AgentEvent ->
  * extension event mapping and extension turn indexing. AgentSession keeps public
- * subscribe(), session persistence, retry/compaction ordering, and Soul lifecycle work.
+ * subscribe(); SessionEventHandler owns journaling and recovery ordering.
  */
 
 import type { AgentEvent } from "@catui/agent-core";

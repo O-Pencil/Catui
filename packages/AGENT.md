@@ -53,8 +53,9 @@ type surfaces.
 
 ### soul-core/
 
-AI personality package (`catui-soul`) used by `core/soul-integration.ts` and the built-in Soul
-extension.
+Suspended standalone AI personality package (`catui-soul`), retained for possible
+reactivation. It is not a root workspace, application dependency, or build target.
+The application uses persona; existing user Soul data is left untouched.
 
 Key files:
 

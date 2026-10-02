@@ -9,7 +9,7 @@ branch: main                             # cutover 2026-06-09：main=重构内�
 baseline_main: 0eea985 (frozen → v1.0)
 signoff: signed 2026-06-09（scope=行为不变结构重构 P0-P6；P7-code/P8 显式 deferred）
 refactor_complete: complete              # P0-P8 全部完成（P7 体积线已收口，P8 SDK 收窄已实现）
-updated_at: 2026-06-13
+updated_at: 2026-10-02
 ```
 
 ---
@@ -21,8 +21,8 @@ updated_at: 2026-06-13
 后续开发基于 main。
 
 > **重构完成度（诚实口径）**：**结构重构（P0–P6）+ 行为不变已完成并合 main**（public API 296=296）。
-> **但重构整体未 100% 完成**：**P7 体积/构建优化（BR02 browser 包 / BR03 metadata chunking / BR04 esbuild）与 P8 SDK 收窄都只评审、未执行代码**。
-> 包体积与 tsc 构建方式**仍是重构前的样子**——这两块是**遗留的后续重构任务**（见 §4 O3/O8/O9），不是"已完成"。
+> **Current status:** P7 size work is closed and P8 SDK narrowing is implemented; see O8b/O9. Earlier deferrals describe the June 9 sign-off scope.
+> Current builds use tsc plus per-file esbuild minification. Browser separation is an optional reopening, not incomplete P7 work.
 
 | Phase | 内容 | 状态 | 专项评审 |
 |-------|------|------|----------|
@@ -34,7 +34,7 @@ updated_at: 2026-06-13
 | P5 UI 拆 | `interactive-mode.ts` 拆 controllers/state/mount | ✅ 结构完成（scope C）| interactive-ui-review（F02 + UI01–UI08）|
 | P6 入口体积 | lazy 入口 / browser opt-in / ai lazy provider | ✅ done（EV02/03-reg/04/05 landed；DoD 已测，冷启动 −49% vs main）| entry-volume-review（EV01–EV05）|
 | P7 启动+构建线 | MCP 异步非阻塞启动 / build:deps 并行+incremental | ✅ **已执行（2026-06-10）**：启动关键路径 MCP init 移出（默认配置 ~56s→1.9s）；no-op build:deps 109s→41.7s（−62%）| startup-async-review |
-| P7 体积线 | browser 包 / metadata chunking / esbuild | ⚠️ **仍 deferred（gated）**：BR01 guard landed；**BR02/BR03/BR04 包体积未改**（需 metrics / install UX）| bundle-redesign-review（BR01–BR04 + closure）|
+| P7 size | browser assets / metadata / esbuild | Closed: minification and declaration stripping shipped; other options evaluated by measured value | O8b / bundle-redesign-review/closure.md |
 | P8 SDK 收窄 | root barrel → 稳定 SDK 面 | ✅ **已完成（2026-06-13）**：root 收窄至 ~20 符号（Bucket A）；protocol 包完成（Bucket B）；subpath exports 生成（Bucket C）；root 删除非 SDK 符号（Bucket D）| sdk-surface-review（SK01–SK03）|
 | Sign-off | S-1..S-6 + 签字 | ✅ **已签**（2026-06-09，scope = 行为不变结构重构；P7/P8 显式 deferred）| execution-plan/sign-off-main.md |
 
@@ -45,11 +45,11 @@ updated_at: 2026-06-13
 本次重构的已完成收益不是"换目录名"，而是把长期维护成本最高的几个耦合中心拆成有 owner、有 port、有守门规则的结构。可以对外表述为：
 
 > **P0-P6 已完成行为不变结构重构**：目录分层、runtime/UI god 文件拆解、扩展包边界、入口 lazy、DIP/quality 守门已落地；public API 保持 296=296；冷启动相对旧 main 明显下降。  
-> **P7/P8 未完成**：包体积/构建方式优化与 SDK 面收窄仍是后续重构任务，不能宣称已经拿到。
+> P7/P8 implementation status is recorded in O8b/O9; both are closed. The original sign-off excluded them at that time.
 
 | 已拿到 | 证据 | 意义 |
 |--------|------|------|
-| god 文件拆解 | `agent-session.ts` → 7 runtime 子模块（P4）+ settings accessor 面 53 成员 → mixin（2026-09-11，agent-session-split-review）；`interactive-mode.ts` → controllers/state/mount 子目录切片（P5，scope C） | 降低单文件理解成本；形成单 owner 和 capability-context 组合根。**注意口径**：拆的是"面"与"子模块"，主文件未瘦身（`agent-session.ts` 2440 行，63 个逻辑方法仍在 `AgentSessionBase`；`interactive-mode.ts` 2482 行主 facade 未动） |
+| Runtime decomposition | Existing controllers plus queue, event, trace, query and resource owners | See runtime-skills-cleanup-review; AgentSession keeps composition and the compatible public facade. |
 | 0 循环依赖 | `verify-quality` SCC = 0 | 依赖方向从"能跑"变成可守门的结构约束 |
 | public API 不变 | public symbols 296=296 | P0-P6 是行为不变结构重构，不强迫外部消费者迁移 |
 | 冷启动下降 | §6 cold-start：HEAD vs main 显著下降 | P6 lazy import/provider lazy 拿到用户可感知收益 |
@@ -57,10 +57,10 @@ updated_at: 2026-06-13
 | packaging bug 暴露并修复 | D1/D2/D5 | 重构过程找出隐藏发布问题，提升 release 可验证性 |
 | **root SDK 面收窄** | index.ts 收窄至 ~20 符号；protocol 包完成；subpath exports 生成 | 外部消费者只依赖稳定 SDK 面；内部可自由演进 |
 
-| 未拿到 | 原因 | 后续入口 |
+| Retained trade-off | Reason | Evidence |
 |--------|------|----------|
-| dist 体积下降 | D2 修复把原本漏装的 browser 资产正确打入包；P7 收缩刀 deferred | O8/O3，bundle-redesign-review closure |
-| 构建方式优化 | esbuild/metadata chunking 未执行，仍是 tsc 全量构建 | O8 / P7 BR03-BR04 |
+| Browser assets remain bundled | Install/enable UX and graceful fallback outweighed the measured saving | O8b / BR02 |
+| tsc plus minification, without metadata chunking | Per-file esbuild shipped; metadata chunking had negligible measured benefit | O8b / BR03-BR04 |
 
 **一致性结论**：当前目录结构与 `target-architecture.md` 的 P0-P8 端态一致；P7 体积线已收口，P8 SDK 收窄已实现。因此本次 sign-off 的准确边界是：**结构分层、行为不变、SDK 收窄全部完成；构建体积线已收口**。
 
@@ -113,7 +113,7 @@ updated_at: 2026-06-13
 ## 4. 未解决 / 待办（按优先级）
 
 > ✅ 已完成：O1 门组 A（sign-off Set A/C/D 跑过）· O2 P6 DoD（冷启动 −49% / dist 已接受）· O6 sign-off（2026-06-09 已签）· cutover（main=refactor，v1.0=旧）。
-> ⬇️ 以下是**重构尚未完成的部分** + 收尾杂项。**P7-code / P8 是真正的"重构未完成"，不是可有可无的 backlog**——它们是当初规划进重构、但因不影响用户功能而 deferred 的硬任务。
+> This table includes completed work and remaining follow-ups. O8b/O9 are closed, not open backlog.
 
 | # | 待办 | 类型 | 性质 |
 |---|------|------|------|

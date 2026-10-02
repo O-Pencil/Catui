@@ -25,7 +25,6 @@
       "@catui/tui": ["./core/lib/tui/src/index.ts"],
       "@catui/tui/*": ["./core/lib/tui/src/*"],
       "catui-mem": ["./packages/mem-core/src"],
-      "catui-soul": ["./packages/soul-core/src"],
       "catui-protocol": ["./packages/protocol/src/index.ts"]
     }
   },

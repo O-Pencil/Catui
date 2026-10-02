@@ -16,6 +16,8 @@ The `extensions/` module contains built-in extensions that extend Catui's capabi
 
 ## Member List
 
+typesafe/ (under builtin/): default passive decision/tool/evaluation guidance and the vendored TypeSafe API skill; see builtin/typesafe/AGENT.md. No additional API calls or credentials for ordinary Catui tasks.
+
 ### Built-in Extension Source (`extensions/builtin/`)
 
 First-party extension source. Default-enabled entries are auto-loaded by `getBuiltinExtensionPaths()`; entries marked optional in `builtInExtensions` require explicit configuration/CLI opt-in even if their source directory is still here. Benchmark/CI harnesses may opt into Browser Harness registration with `CATUI_ENABLE_BROWSER_EXTENSION=1` without changing user config.

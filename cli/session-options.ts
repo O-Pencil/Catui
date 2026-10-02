@@ -117,8 +117,8 @@ export function buildSessionOptions(
 		options.tools = parsed.tools.map((name) => allTools[name]);
 	}
 
-	// Soul (AI personality evolution) - enabled by default, disable with --disable-soul
-	options.enableSoul = parsed.disableSoul !== true;
+	// Legacy option stays inert while NanoSoul is suspended; persona owns identity.
+	options.enableSoul = false;
 
 	return { options, cliThinkingFromModel };
 }
