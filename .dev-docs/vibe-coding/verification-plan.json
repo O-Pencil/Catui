@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "O-Catui/Catui",
-  "description": "Agent-agnostic verification map for developing the CATUI/nanoPencil repository.",
+  "description": "Authoritative full-verification membership for the CATUI/nanoPencil repository. Every entry maps to a canonical npm script; test/verification-contract.test.ts fails if this file and package.json drift apart.",
   "artifactRoot": ".catui/dev-loop",
   "commands": [
     {
@@ -30,7 +30,7 @@
     },
     {
       "id": "package-boundary",
-      "label": "Package boundary",
+      "label": "Package boundary (static)",
       "command": "npm run verify:package-boundary",
       "required": true,
       "category": "package-boundary",
@@ -47,10 +47,42 @@
     {
       "id": "typecheck",
       "label": "TypeScript type check",
-      "command": "npx tsc --noEmit",
+      "command": "npm run typecheck",
       "required": true,
       "category": "typecheck",
       "timeoutMs": 300000
+    },
+    {
+      "id": "package-boundary-dist",
+      "label": "Package boundary (dist embed resolves)",
+      "command": "npm run verify:package-boundary:dist",
+      "required": true,
+      "category": "package-boundary",
+      "timeoutMs": 120000
+    },
+    {
+      "id": "verification-contract",
+      "label": "Plan/script drift guard",
+      "command": "npm run verify:contract",
+      "required": true,
+      "category": "test",
+      "timeoutMs": 120000
+    },
+    {
+      "id": "release-contract-tests",
+      "label": "Release packaging contract tests (build-free)",
+      "command": "npm run test:release-contracts",
+      "required": true,
+      "category": "test",
+      "timeoutMs": 180000
+    },
+    {
+      "id": "artifact-tests",
+      "label": "Post-build artifact tests (require dist)",
+      "command": "npm run test:artifact",
+      "required": true,
+      "category": "test",
+      "timeoutMs": 180000
     },
     {
       "id": "security-tests",
@@ -75,6 +107,46 @@
       "required": true,
       "category": "test",
       "timeoutMs": 120000
+    },
+    {
+      "id": "runtime-owner-tests",
+      "label": "Runtime owner, registry and bootstrap tests",
+      "command": "npm run test:runtime-owners",
+      "required": true,
+      "category": "test",
+      "timeoutMs": 180000
+    },
+    {
+      "id": "mcp-tests",
+      "label": "MCP and system prompt tests",
+      "command": "npm run test:mcp",
+      "required": true,
+      "category": "test",
+      "timeoutMs": 120000
+    },
+    {
+      "id": "session-tests",
+      "label": "Session management tests",
+      "command": "npm run test:sessions",
+      "required": true,
+      "category": "test",
+      "timeoutMs": 180000
+    },
+    {
+      "id": "presence-tests",
+      "label": "Presence lifecycle tests",
+      "command": "npm run test:presence",
+      "required": true,
+      "category": "test",
+      "timeoutMs": 180000
+    },
+    {
+      "id": "harness-critical",
+      "label": "Critical harness state and eval gate",
+      "command": "npm run test:harness-critical",
+      "required": true,
+      "category": "test",
+      "timeoutMs": 600000
     }
   ],
   "prChecks": {
