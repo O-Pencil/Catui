@@ -270,6 +270,16 @@ type PresenceSoulHints = {
 	identityPreferences: string[];
 };
 
+const MAX_IDENTITY_PREFERENCES = 5;
+
+/**
+ * NanoSoul is suspended: the default host's `getSoulManager()` always returns undefined, so
+ * production greeting and awakening paths no longer read it. This pure normalizer and the
+ * priority-ordered prompt builder are retained so the suspended-Soul path can be restored
+ * without reshaping the prompt contract, and so the ordering guarantees stay testable.
+ * Reopen condition: Soul ships again, or a non-default host supplies a soul manager.
+ */
+
 function normalizePreferenceText(value: unknown): string | undefined {
 	if (typeof value !== "string") return undefined;
 	const text = value.trim().replace(/\s+/g, " ");
@@ -297,27 +307,10 @@ function collectSoulHints(soulManager: unknown): PresenceSoulHints {
 			out.identityPreferences = knownPreferences
 				.map(normalizePreferenceText)
 				.filter((text): text is string => Boolean(text))
-				.slice(0, 5);
+				.slice(0, MAX_IDENTITY_PREFERENCES);
 		}
 	} catch {
 		/* fail-soft */
-	}
-	return out;
-}
-
-function mergeIdentityPreferences(...groups: readonly string[][]): string[] {
-	const seen = new Set<string>();
-	const out: string[] = [];
-	for (const group of groups) {
-		for (const value of group) {
-			const text = normalizePreferenceText(value);
-			if (!text) continue;
-			const key = text.toLowerCase();
-			if (seen.has(key)) continue;
-			seen.add(key);
-			out.push(text);
-			if (out.length >= 5) return out;
-		}
 	}
 	return out;
 }
@@ -660,14 +653,10 @@ async function generatePresenceLine(
 	if (!apiKey) return fallback();
 
 	const lastUser = kind === "idle" ? getLastUserMessage(ctx) : undefined;
-	const soulHints = collectSoulHints(ctx.getSoulManager());
 	const memoryIdentityPreferences = await collectIdentityPreferenceHighlights(state);
 	const presenceHints: PresenceSoulHints = {
-		...soulHints,
-		identityPreferences: mergeIdentityPreferences(
-			soulHints.identityPreferences,
-			memoryIdentityPreferences,
-		),
+		traits: [],
+		identityPreferences: memoryIdentityPreferences,
 	};
 	const promptPair = await buildPresencePromptPair(
 		state,
@@ -811,6 +800,19 @@ function maybeSendIdleReminder(api: ExtensionAPI, ctx: ExtensionContext, state: 
 }
 
 /**
+ * Awakening candidate (S04). The shipped default still generates awakening text and injects the
+ * internal-orientation block, because no quality evidence justifies removing visible behavior yet.
+ *
+ * `CATUI_PRESENCE_AWAKENING=off` runs the candidate instead: no separate model call, no injected
+ * internal-orientation prompt. Opening and idle greetings keep using Persona and memory inputs.
+ * This is an experiment switch, not a user setting; do not widen it into one.
+ */
+function isAwakeningEnabled(): boolean {
+	const value = process.env.CATUI_PRESENCE_AWAKENING?.trim().toLowerCase();
+	return !(value === "0" || value === "off" || value === "false" || value === "no");
+}
+
+/**
  * Generate awakening text once per session.
  * Fire-and-forget: best-effort, fail-soft, no retry.
  * Cost: ~450 tokens (one completeSimple call).
@@ -819,6 +821,7 @@ async function generateAwakening(
 	ctx: ExtensionContext,
 	state: PresenceState,
 ): Promise<void> {
+	if (!isAwakeningEnabled()) return;
 	if (state.awakeningGenerated) return;
 	state.awakeningGenerated = true;
 
@@ -843,7 +846,6 @@ async function generateAwakening(
 			.slice(0, 3);
 
 		const snapshot = await collectProjectSnapshot();
-		const soulHints = collectSoulHints(ctx.getSoulManager());
 		const now = new Date();
 
 		const contextLines: string[] = [
@@ -851,16 +853,6 @@ async function generateAwakening(
 			`Time: ${now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`,
 			`Project: ${snapshot.name}`,
 		];
-
-		if (soulHints.traits.length > 0) {
-			contextLines.push(`Personality leanings: ${soulHints.traits.join(", ")}`);
-		}
-		if (soulHints.tone) {
-			contextLines.push(`Current mood: ${soulHints.tone}`);
-		}
-		if (soulHints.identityPreferences.length > 0) {
-			contextLines.push(`Identity/role constraints: ${soulHints.identityPreferences.join(" | ")}`);
-		}
 
 		if (recentEpisodes.length > 0) {
 			contextLines.push("", "Recent sessions:");
