@@ -5,19 +5,32 @@
  * [HERE]: extensions/optional/session-bridge/controller.ts - same-session authority
  */
 import { createHash, randomUUID } from "node:crypto";
+import { BridgeOperations } from "./control/operations.js";
 import { BridgeError, MAX_MESSAGE_CHARS, MAX_RECEIPTS, object, type BridgeHost, type Receipt } from "./contracts.js";
 
 export class BridgeController {
   readonly sessionId: string;
   private active = true;
+  private operations?: BridgeOperations;
   private runId: string | null;
   private receipts = new Map<string, { fingerprint: string; receipt: Receipt; text: string }>();
   private recent: Array<{ at: string; event: string; text?: string }> = [];
   constructor(private readonly host: BridgeHost) {
     this.sessionId = host.sessionId();
     this.runId = host.isIdle() ? null : randomUUID();
+    if (host.supervision) this.operations = new BridgeOperations(host.supervision, () => this.assertCurrent());
   }
-  revoke(): void { this.active = false; }
+  revoke(): void { this.active = false; this.host.supervision?.stop(); }
+  async progress(): Promise<object> {
+    return { ...this.status(), ...(this.operations ? { supervision: await this.operations.progress() } : {}) };
+  }
+  capabilities(): object {
+    this.assertCurrent();
+    const commands = this.operations?.catalog() ?? [];
+    const registered = new Set(commands.map(c => c.name));
+    return { commands: [...commands, ...(this.host.commands?.() ?? []).filter(c => !registered.has(c.name)).map(c => ({ ...c, remote: false, availability: "local only" }))],
+      guidance: "Use messages for tasks/feedback. Use execute_command for declared remote commands with a fresh supervision revision. Answer pending decisions by exact ID. Unlisted or local-only commands cannot be executed remotely." };
+  }
   private assertCurrent(): void {
     if (!this.active || this.host.sessionId() !== this.sessionId) throw new BridgeError(410, "Bridge session is no longer active; start a new bridge explicitly");
   }
@@ -46,6 +59,10 @@ export class BridgeController {
     this.assertCurrent();
     const input = object(value);
     if (input.sessionId !== this.sessionId) throw new BridgeError(409, "Session mismatch");
+    if (input.action === "execute" || input.action === "answer") {
+      if (!this.operations) throw new BridgeError(409, "This host does not support supervision");
+      return this.operations.submit(input);
+    }
     if (input.action === "cancel") {
       if (typeof input.runId !== "string" || !input.runId || input.runId !== this.runId || this.host.isIdle()) {
         throw new BridgeError(409, "Run changed or is idle; refresh progress before cancellation");

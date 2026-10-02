@@ -1,10 +1,11 @@
 /**
- * [WHO]: ExtensionLoader, discoverAndLoadExtensions, loadExtensions, loadExtensionFromFactory; shared runtime with exclusive continuation leases and scoped cancellation
+ * [WHO]: ExtensionLoader, discoverAndLoadExtensions, loadExtensions, loadExtensionFromFactory; shared runtime with supervision, exclusive continuation leases and scoped cancellation
  * [FROM]: Depends on node:fs, node:module, node:os, node:path, @mariozechner/jiti, bundled packages
  * [TO]: Consumed by core/extensions-host/index.ts, core/platform/config/resource-loader.ts
  * [HERE]: core/extensions-host/loader.ts - 4-tier extension discovery (builtin → optional → user-dir → npm) and loading via jiti
  */
 import * as fs from "node:fs";
+import { SessionSupervision } from "./supervision.js";
 import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -173,13 +174,14 @@ type HandlerFn = (...args: unknown[]) => Promise<unknown>;
  * Create a runtime with throwing stubs for action methods.
  * Runner.bindCore() replaces these with real implementations.
  */
-export function createExtensionRuntime(): ExtensionRuntime {
+export function createExtensionRuntime(): ExtensionRuntime & { supervision: SessionSupervision } {
 	let continuation: { revoke: () => void } | undefined;
 	const notInitialized = () => {
 		throw new Error("Extension runtime not initialized. Action methods cannot be called during extension loading.");
 	};
 
 	return {
+		supervision: new SessionSupervision(),
 		claimContinuation: (onRevoked) => {
 			const previous = continuation;
 			const claim = { revoke: onRevoked };
@@ -224,6 +226,7 @@ function createExtensionAPI(
 	eventBus: EventBus,
 ): ExtensionAPI {
 	const api = {
+		get supervision() { return runtime.supervision; },
 		cwd,
 		agentDir,
 

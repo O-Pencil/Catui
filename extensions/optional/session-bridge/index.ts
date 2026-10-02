@@ -66,6 +66,7 @@ export default function sessionBridge(api: ExtensionAPI): void {
         starting = true;
         const expectedGeneration = ++generation;
         const next = new BridgeController({
+          supervision: api.supervision, commands: () => api.getCommands(),
           sessionId: () => ctx.sessionManager.getSessionId(), isIdle: () => ctx.isIdle(),
           hasPendingMessages: () => ctx.hasPendingMessages(),
           send: (text, mode) => api.sendUserMessage(text, { deliverAs: mode }), abort: () => ctx.abort(),
@@ -78,10 +79,11 @@ export default function sessionBridge(api: ExtensionAPI): void {
             await transport.close(); return;
           }
           controller = next;
+          api.supervision?.start(next.sessionId);
           server = transport;
           statusUI = ctx.ui;
           ctx.ui.setStatus?.("catui-bridge", "Bridge: waiting for Codex");
-          ctx.ui.notify("Bridge started. Local clients can read progress, send prompts and cancel the current run. Use /bridge stop to disconnect.", "info");
+          ctx.ui.notify("Bridge started. Codex can inspect capabilities, direct work, invoke supported commands and answer delegated questions or standard plan approvals. Elevated permissions remain local. Use /bridge stop to take back control.", "info");
           await setup(ctx);
           if (generation === expectedGeneration) showStatus(ctx);
         } catch (error) {
@@ -108,4 +110,7 @@ export default function sessionBridge(api: ExtensionAPI): void {
     const message = messageText(event.message);
     if (message.role === "assistant" && message.text) controller?.event("assistant_message", message.text);
   });
+  api.on("tool_execution_start", event => { controller?.event("tool_start", event.toolName); });
+  api.on("tool_execution_end", event => { controller?.event("tool_end", JSON.stringify({ tool: event.toolName, result: event.result, isError: event.isError })); });
+  api.on("agent_result", event => { controller?.event("run_result", JSON.stringify(event)); });
 }

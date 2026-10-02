@@ -47,9 +47,12 @@ export async function startBridgeServer(controller: BridgeController, cwd: strin
       const expected = Buffer.from(`Bearer ${token}`);
       if (auth.length !== expected.length || !timingSafeEqual(auth, expected)) throw new BridgeError(401, "Unauthorized");
       if (req.method === "GET" && req.url === "/status") {
-        const status = controller.status();
+        const status = await controller.progress();
         contacted();
         respond(res, 200, { bridgeId, ...status });
+      } else if (req.method === "GET" && req.url === "/capabilities") {
+        contacted();
+        respond(res, 200, { bridgeId, sessionId: controller.sessionId, ...controller.capabilities() });
       } else if (req.method === "POST" && req.url === "/command") {
         if (!req.headers["content-type"]?.startsWith("application/json")) throw new BridgeError(415, "Expected application/json");
         if (Number(req.headers["content-length"] ?? 0) > MAX_BODY_BYTES) throw new BridgeError(413, "Request too large");

@@ -11,6 +11,7 @@ Parent: [optional extensions](../AGENT.md).
 | server.ts | Authenticated bounded loopback HTTP listener and cleanup |
 | plugin/ | Dependency-free stdio MCP client packaged for Codex |
 | setup/ | User-confirmed bundled plugin installation and first-use onboarding |
+| control/ | Asynchronous supervisor operation receipts and state revision validation |
 | README.md | Installation, activation, receipts and trust boundaries |
 
 Default-loaded command; no model call, timer, process, file write or server at registration. No host

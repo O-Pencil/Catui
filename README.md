@@ -45,6 +45,10 @@ installation. Open a new Codex chat and ask it to connect to your Catui session.
 There are no extension paths, keys or port numbers to copy. Use `/bridge status`
 to check client contact, `/bridge setup` to retry installation, and `/bridge stop`
 to disconnect. Requires an installed Codex version with plugin support.
+Codex can discover the live command catalog, direct normal work and Grub/Goal,
+review Plan requests and answer delegated questions. Commands without a remote
+adapter and elevated permission approval remain local. Catui executes; Codex
+checks the resulting state and evidence before accepting completion.
 See [connection guide](extensions/optional/session-bridge/README.md).
 
 ### Included capabilities

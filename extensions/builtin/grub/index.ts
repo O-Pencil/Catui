@@ -2,7 +2,7 @@
  * [WHO]: grubExtension default export - registers /grub command, completions, dual-phase prompts, resume support, feature-list validation, and grub renderer
  * [FROM]: Depends on @catui/agent-core, @catui/tui, core/extensions-host/types, core/runtime/event-bus, ./grub-controller, ./grub-format, ./grub-parser, ./grub-types, ./grub-harness, ./grub-prompts, ./grub-persistence, ./grub-turn
  * [TO]: Auto-loaded by builtin-extensions.ts as a default extension
- * [HERE]: extensions/builtin/grub/index.ts - durable task lifecycle; GrubDispatch owns exact iteration prompts, abort and exclusive continuation
+ * [HERE]: extensions/builtin/grub/index.ts - owner snapshot/remote command contract and durable lifecycle; GrubDispatch owns iteration prompts, abort and continuation
  */
 
 import type { AgentMessage } from "@catui/agent-core";
@@ -130,6 +130,7 @@ function resumeSummary(task: GrubTaskState): string {
 export default async function grubExtension(api: ExtensionAPI) {
 	const bus = api.events;
 	const controller = getController(bus);
+	api.supervision?.registerSnapshot("grub", () => controller.getState());
 	const dispatch = new GrubDispatch(api, controller, () => {
 		const task = controller.getActiveTask()!;
 		publishGrubUpdate(api, bus, grubText(task.locale).startingIteration(task.currentIteration, task.id), "info");
@@ -359,6 +360,12 @@ export default async function grubExtension(api: ExtensionAPI) {
 	};
 
 	api.registerCommand("grub", {
+		supervision: {
+			usage: "/grub <task> [--max-iter N] [--max-fail N] | status --json | stop | resume",
+			busyUsage: "/grub status --json | stop | help",
+			effect: "Start or resume bounded autonomous work; claims exclusive continuation. Stop cancels only Grub-owned work. Status reports saved progress.",
+			allowBusy: args => ["status", "help", "stop"].includes(parseGrubCommand(args).type),
+		},
 		description: "Keep working on one task until it is done, stopped, or needs your help.",
 		getArgumentCompletions: getGrubArgumentCompletions,
 		handler: handleGrubCommand,

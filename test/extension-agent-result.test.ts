@@ -1,6 +1,6 @@
 /**
  * [WHO]: Verifies extension agent_result hook delivery
- * [FROM]: Depends on node:test, core/extensions-host/runner.ts, core/extensions-host/types.ts
+ * [FROM]: Depends on node:test, extension runner/types and the runtime event bridge
  * [TO]: Consumed by repository test runner
  * [HERE]: test/extension-agent-result.test.ts - guards agent loop result observability for extensions
  */
@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ExtensionRunner } from "../core/extensions-host/runner.js";
-import { AgentSession } from "../core/runtime/agent-session.js";
+import { ExtensionEventBridge } from "../core/runtime/event-bridge.js";
 import type {
 	AgentResultEvent,
 	Extension,
@@ -123,7 +123,7 @@ test("extension runner delivers agent_result events", async () => {
 	]);
 });
 
-test("agent session forwards agent_result to extensions", async () => {
+test("session event bridge forwards agent_result to extensions", async () => {
 	const received: AgentResultEvent[] = [];
 	const extension: Extension = {
 		path: "agent-session-result-probe",
@@ -145,13 +145,8 @@ test("agent session forwards agent_result to extensions", async () => {
 		shortcuts: new Map(),
 	};
 	const runner = createRunner([extension]);
-	const session = Object.create(AgentSession.prototype) as {
-		_extensionRunner: ExtensionRunner;
-		_emitExtensionEvent(event: AgentResultEvent): Promise<void>;
-	};
-	session._extensionRunner = runner;
-
-	await session._emitExtensionEvent({
+	const bridge = new ExtensionEventBridge({ getExtensionRunner: () => runner });
+	await bridge.emitExtensionEvent({
 		type: "agent_result",
 		stopReason: "toolUse",
 		turnCount: 4,

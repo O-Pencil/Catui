@@ -18,6 +18,8 @@ export interface BridgeDescriptor {
   startedAt: string;
 }
 export interface BridgeHost {
+  supervision?: import("../../../core/extensions-host/types.js").ExtensionAPI["supervision"];
+  commands?: () => Array<{ name: string; description?: string; source: string }>;
   sessionId(): string;
   isIdle(): boolean;
   hasPendingMessages(): boolean;

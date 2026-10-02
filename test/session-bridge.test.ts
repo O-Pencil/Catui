@@ -260,7 +260,7 @@ test("MCP stdio initializes, discovers tools, sends to live HTTP host, and check
   });
   const init = await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "1" } });
   assert.equal(init.result.protocolVersion, "2025-03-26");
-  assert.equal((await rpc("tools/list", {})).result.tools.length, 4);
+  assert.equal((await rpc("tools/list", {})).result.tools.length, 7);
   const call = async (name: string, args: any) => (await rpc("tools/call", { name, arguments: args })).result;
   const listed = await call("list_sessions", {});
   assert.equal(JSON.stringify(listed).includes(f.descriptor.token), false);

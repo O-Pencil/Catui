@@ -40,10 +40,10 @@ export async function readDescriptor(bridgeId, directory = registryDirectory()) 
     return d;
   } finally { await file.close(); }
 }
-export function callBridge(descriptor, command) {
+export function callBridge(descriptor, command, path = "/status") {
   const payload = command ? JSON.stringify(command) : undefined;
   return new Promise((resolve, reject) => {
-    const req = request({ hostname: "127.0.0.1", port: descriptor.port, path: command ? "/command" : "/status",
+    const req = request({ hostname: "127.0.0.1", port: descriptor.port, path: command ? "/command" : path,
       method: command ? "POST" : "GET", headers: { Authorization: `Bearer ${descriptor.token}`,
         ...(payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {}) } }, res => {
       const chunks = []; let size = 0;
@@ -89,11 +89,16 @@ export async function listSessions(directory = registryDirectory()) {
 export async function invokeTool(name, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("Expected tool arguments object");
   if (name === "list_sessions") return listSessions();
-  if (!["get_progress", "send_message", "cancel_run"].includes(name)) throw new Error("Unknown tool");
+  if (!["get_progress", "get_capabilities", "execute_command", "answer_decision", "send_message", "cancel_run"].includes(name)) throw new Error("Unknown tool");
   const descriptor = await readDescriptor(args.bridge_id);
   if (name === "get_progress") return callBridge(descriptor);
+  if (name === "get_capabilities") return callBridge(descriptor, undefined, "/capabilities");
   if (args.session_id !== descriptor.sessionId) throw new Error("Session mismatch; use the exact IDs from list_sessions");
   if (name === "send_message") return callBridge(descriptor, { action: "send", sessionId: args.session_id,
     requestId: args.request_id, message: args.message, mode: args.mode ?? "followUp" });
+  if (name === "execute_command") return callBridge(descriptor, { action: "execute", sessionId: args.session_id,
+    requestId: args.request_id, name: args.name, args: args.args ?? "", revision: args.revision });
+  if (name === "answer_decision") return callBridge(descriptor, { action: "answer", sessionId: args.session_id,
+    requestId: args.request_id, decisionId: args.decision_id, value: args.value });
   return callBridge(descriptor, { action: "cancel", sessionId: args.session_id, runId: args.run_id });
 }

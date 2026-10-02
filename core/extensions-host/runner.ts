@@ -2,9 +2,13 @@
  * [WHO]: ExtensionRunner class, lifecycle management, event emission, slash-command dispatch chokepoint (invokeCommand), telemetry sink wiring (setTelemetrySink); optional context-window capability forwarding
  * [FROM]: Depends on agent-core, ai, tui, modes/theme, session-manager, types.ts, core/platform/telemetry (ExtensionTelemetrySink + classifyArgsSignature for the P1 ext_command_events writer)
  * [TO]: Consumed by core/extensions-host/index.ts, core/extensions-host/wrapper.ts, core/runtime/agent-session.ts (delegates command dispatch via invokeCommand)
- * [HERE]: core/extensions-host/runner.ts - extension lifecycle and predicate-scoped queue forwarding; owns command error and telemetry dispatch
+ * [HERE]: core/extensions-host/runner.ts - lifecycle, supervised command/dialog binding, scoped queues, command errors and telemetry
  */
 import type { AgentMessage } from "@catui/agent-core";
+import { wrapSupervisedUI } from "./supervision-ui.js";
+import { SessionSupervision } from "./supervision.js";
+import { BUILTIN_SLASH_COMMANDS, getLocalizedCommands } from "../slash-commands.js";
+import { t } from "../platform/i18n/index.js";
 import type { ImageContent, Model } from "@catui/ai/types";
 import type { KeyId } from "@catui/tui";
 import type { Theme } from "../theme-contract.js";
@@ -255,6 +259,7 @@ export class ExtensionRunner {
 	private shutdownHandler: ShutdownHandler = () => {};
 	private shortcutDiagnostics: ResourceDiagnostic[] = [];
 	private commandDiagnostics: ResourceDiagnostic[] = [];
+	private readonly supervision: SessionSupervision;
 	private telemetrySink?: ExtensionTelemetrySink;
 	private _beforeAgentStartTimeoutMs: number | undefined = 1500;
 	private get beforeAgentStartTimeoutMs(): number { return this._beforeAgentStartTimeoutMs ?? 1500; }
@@ -276,6 +281,17 @@ export class ExtensionRunner {
 		this.agentDir = agentDir;
 		this.sessionManager = sessionManager;
 		this.modelRegistry = modelRegistry;
+		// Preserve compatibility with SDK callers constructing an older runtime shape.
+		this.supervision = runtime.supervision ??= new SessionSupervision();
+		this.supervision.bind({
+			localCommands: () => getLocalizedCommands(t).filter(c => BUILTIN_SLASH_COMMANDS.find(b => b.name === c.name)?.implementation !== "extension"),
+			context: () => this.createCommandContext(),
+			commands: () => this.getRegisteredCommands(),
+			invoke: async (name, args, ctx) => {
+				const result = await this.invokeCommand(name, args, ctx);
+				if (!result.found || result.error) throw new Error(result.error ?? "Command is no longer registered");
+			},
+		});
 	}
 
 	private async withTimeout<T>(
@@ -714,7 +730,7 @@ export class ExtensionRunner {
 		args: string,
 		ctx: ExtensionCommandContext,
 		metadata?: { sessionId?: string | null; runId?: string | null; variant?: string | null },
-	): Promise<{ found: boolean }> {
+	): Promise<{ found: boolean; error?: string }> {
 		const command = this.getCommand(commandName);
 		if (!command) return { found: false };
 
@@ -774,8 +790,7 @@ export class ExtensionRunner {
 		// expecting the thrown error (e.g. AgentSession previously re-caught it
 		// silently) won't see it. This matches the original behaviour: the old
 		// _tryExecuteExtensionCommand swallowed the error after emitError too.
-		void thrown;
-		return { found: true };
+		return { found: true, ...(thrown ? { error: thrown instanceof Error ? thrown.message : "Command failed" } : {}) };
 	}
 
 	/**
@@ -793,8 +808,9 @@ export class ExtensionRunner {
 	createContext(): ExtensionContext {
 		const getModel = this.getModel;
 		return {
-			ui: this.uiContext,
-			hasUI: this.hasUI(),
+			ui: wrapSupervisedUI(this.uiContext, this.supervision),
+			supervised: this.supervision.active,
+			hasUI: this.hasUI() || this.supervision.active,
 			cwd: this.cwd,
 			agentDir: this.agentDir,
 			sessionManager: this.sessionManager,
@@ -854,6 +870,8 @@ export class ExtensionRunner {
 	}
 
 	async emit<TEvent extends RunnerEmitEvent>(event: TEvent): Promise<RunnerEmitResult<TEvent>> {
+		if (event.type === "agent_abort") this.supervision.cancelDecisions("Run interrupted; no decision was approved");
+		if (["session_shutdown", "session_switch", "session_fork"].includes(event.type)) this.supervision.stop();
 		const ctx = this.createContext();
 		let result: SessionBeforeEventResult | undefined;
 

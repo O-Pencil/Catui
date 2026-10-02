@@ -405,6 +405,11 @@ Built-in commands (`core/slash-commands.ts`):
 the command stays inactive until `/bridge start`. First use offers bundled Codex
 plugin installation; `/bridge setup` repairs setup. See its README and
 `.dev-docs/architecture-review/session-bridge-review/` for receipt and lifecycle rules.
+The bridge exposes live command capabilities, owner snapshots for Grub/Goal/Plan,
+asynchronous command receipts and delegated questions/standard plan approvals.
+Only owner-enabled commands are remotely executable; elevation stays local.
+Generic supervision lives in `core/extensions-host/supervision.ts`; feature state
+and command behavior remain extension-owned.
 
 Source evolution is configured separately with `catui evolve init --model provider/model --review-model provider/model`.
 `catui evolve configure --review-model provider/model --scope adaptive` enables

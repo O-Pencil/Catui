@@ -41,6 +41,9 @@ catui --help                        # 查看全部参数
 在 macOS／Linux 上，直接在 Catui 输入 `/bridge start`，首次确认安装连接插件。
 然后在 Codex 新开聊天，说“连接我的 Catui 会话，查看进度并帮我验收”。
 无需查找扩展路径、填写端口或复制密钥。需要已安装支持插件的 Codex。
+连接后，Codex 可发现当前命令及用途，指挥普通任务、Grub、Goal，审核 Plan，
+并回答委托的问题。Catui 负责执行，Codex 根据状态、测试和产物验收。
+未适配的命令及权限提升仍由本地操作处理，命令目录会明确标注。
 
 `/bridge status` 查看是否已有客户端访问，`/bridge setup` 重试或修复安装，
 `/bridge stop` 断开连接。需要持续监工时，再请 Codex 安排定时检查。
