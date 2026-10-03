@@ -1,86 +1,86 @@
-# §6 路线图
+# §6 Roadmap
 
-> 阶段历史、当前状态、跨项目工作线进度
+> Phase history, current status, cross-project work-line progress
 
 <!--
-[WHO]  生态演进路线与里程碑
+[WHO]  Ecosystem evolution roadmap and milestones
 [FROM] catui-platform-charter.md §6-§7
-[TO]   各项目开发计划
-[HERE] charter/06-roadmap.md — 路线图
+[TO]   Each project's development plan
+[HERE] charter/06-roadmap.md — roadmap
 -->
 
 ---
 
-## 6.1 阶段总览
+## 6.1 Phase overview
 
-| 阶段 | 主题 | 主要项目 | 状态 |
-|------|------|----------|------|
-| 一 | 本地 ACP 接入 | editor + catui-agent | ✅ 已完成 |
-| 二 | Agent 服务化原型验证（Rust PCP Server） | editor + catui-agent | ✅ 已完成 |
-| 三 | Gateway 独立 + Asgard 集成 + editor 三模 | 4 核心项目 | ✅ 已完成（2026-05） |
-| 3.5 | Channel 阶段一 + Multi-Catui 隔离 | Gateway + 运维 | ✅ 已完成（2026-05） |
-| 四 | 平台化与多租户 | 全项目 | 🟡 **当前位置** |
-| 五 | 生态化与社会化进化 | 全项目 | ⚪ 规划中 |
+| Phase | Theme | Main projects | Status |
+|-------|-------|---------------|--------|
+| 1 | Local ACP integration | editor + catui-agent | ✅ Done |
+| 2 | Agent-service-ification prototype (Rust PCP Server) | editor + catui-agent | ✅ Done |
+| 3 | Gateway standalone + Asgard integration + editor three modes | 4 core projects | ✅ Done (2026-05) |
+| 3.5 | Channel phase 1 + Multi-Catui isolation | Gateway + ops | ✅ Done (2026-05) |
+| 4 | Platform-ification and multi-tenancy | All projects | 🟡 **Current** |
+| 5 | Ecosystem-ification and social evolution | All projects | ⚪ Planned |
 
-## 6.2 阶段详述
+## 6.2 Phase details
 
-### 阶段一：本地 ACP 接入 ✅
-- Editor 引入 `agent-client-protocol` crate，实现 ACP Client
-- 接入 `catui-agent --acp` 作为外部 Agent
-- 前端事件模型适配，流式渲染、工具调用、权限确认可用
+### Phase 1 — Local ACP integration ✅
+- Editor introduces the `agent-client-protocol` crate, implements ACP client
+- Connects to `catui-agent --acp` as an external Agent
+- Frontend event-model adaptation: streaming render, tool calls, permission confirmation available
 
-### 阶段二：Rust 原型验证 ✅
-- 定义 PCP v1（WebSocket 内部协议）
-- Editor 母仓构建 Rust 原型 `src/apps/server/`
-- **关键判断**：原型证明"Agent 在服务端、工具在客户端"架构可行，但 Rust Server 不作为生态主线——交给 Catui-Agent-Gateway（Node.js + Hono）
+### Phase 2 — Rust prototype verification ✅
+- Define PCP v1 (WebSocket internal protocol)
+- Editor main repo builds Rust prototype `src/apps/server/`
+- **Key judgment**: the prototype proved the "Agent on the server, tools on the client" architecture feasible, but the Rust server is not the ecosystem mainline — handed off to Catui-Agent-Gateway (Node.js + Hono)
 
-### 阶段三：Gateway 独立 + Asgard 集成 ✅
-- **Gateway**：独立仓库，v0.1 API 全集，Docker 镜像，Multi-Catui 隔离
-- **Asgard**：CatuiAgentBackend service，CatuiAgent CRUD + Gateway sync + usage logging
-- **Editor**：HttpChatProvider 落地，三模路由（local/service/remote-http）
-- **catui-agent**：以 SDK 形态被 Gateway import
+### Phase 3 — Gateway standalone + Asgard integration ✅
+- **Gateway**: standalone repo, v0.1 full API surface, Docker image, Multi-Catui isolation
+- **Asgard**: CatuiAgentBackend service, CatuiAgent CRUD + Gateway sync + usage logging
+- **Editor**: HttpChatProvider landed, three-mode routing (local / service / remote-http)
+- **catui-agent**: imported by Gateway as an SDK
 
-### 阶段 3.5：Channel + Multi-Catui ✅
-- Gateway 孵化 Channel 适配器（钉钉 Stream / WeChat / Feishu）
-- Multi-Catui 架构：`~/.catui/<id>/` 独立目录
-- Channel 长期归属独立仓库 `catui-channel-gateway`，当前在 Gateway 内孵化
+### Phase 3.5 — Channel + Multi-Catui ✅
+- Gateway incubates Channel adapters (DingTalk Stream / WeChat / Feishu)
+- Multi-Catui architecture: `~/.catui/<id>/` independent directory
+- Channel long-term belongs to standalone repo `catui-channel-gateway`; currently incubated inside Gateway
 
-### 阶段四：平台化与多租户 🟡
-六条工作线（A–F），详见下文 §6.3。
+### Phase 4 — Platform-ification and multi-tenancy 🟡
+Six work-lines (A–F), see §6.3 below.
 
-## 6.3 阶段四工作线
+## 6.3 Phase 4 work-lines
 
-| 线 | 主题 | 状态 | 主要参与方 |
-|---|------|------|-----------|
-| **A** | 工具回传协议（Gateway v0.2） | 🟡 进行中 | Gateway + Catui + Editor |
-| **B** | 计费与用量闭环 | ⚪ 未启 | Asgard 主导 |
-| **C** | 容器隔离与编排 | ⚪ 未启 | Asgard + 运维 |
-| **D** | Soul/Memory 配置中心 UI | ⚪ 未启 | Asgard + Gateway |
-| **E** | Channel Gateway 拆仓 | ⚪ 未启 | Gateway → 新仓 |
-| **F** | Rust 高性能层（可选） | ⚪ 未启 | Gateway 重构 |
+| Line | Theme | Status | Main participants |
+|------|-------|--------|-------------------|
+| **A** | Tool-callback protocol (Gateway v0.2) | 🟡 In progress | Gateway + Catui + Editor |
+| **B** | Billing and usage closed loop | ⚪ Not started | Asgard-led |
+| **C** | Container isolation and orchestration | ⚪ Not started | Asgard + ops |
+| **D** | Soul/Memory config-center UI | ⚪ Not started | Asgard + Gateway |
+| **E** | Channel Gateway repo split | ⚪ Not started | Gateway → new repo |
+| **F** | Rust high-performance layer (optional) | ⚪ Not started | Gateway refactor |
 
-### A 线：工具回传（Gateway v0.2）🟡
+### Line A — Tool callback (Gateway v0.2) 🟡
 
-**目标**：让远程 CatuiAgent 能调用 editor 本机的工具（read_file / write_file / bash / grep 等）。
+**Goal**: let a remote CatuiAgent call tools that live on the editor's local machine (`read_file` / `write_file` / `bash` / `grep`, etc.).
 
-**跨仓里程碑表**：
+**Cross-repo milestone table**:
 
-| 仓库 | 里程碑 | 状态 |
-|------|--------|------|
-| Gateway | M-tools-1（线协议 + 关联表） | ✅ 已完成 |
-| Catui | N-tools-1（类型 + RemoteToolSource 骨架） | ⏳ 待启动 |
-| Catui | N-tools-2（SDK remoteTools 接入） | ⏳ 待 N-tools-1 |
-| Catui | N-tools-3（真实 agent-loop e2e） | ⏳ 待 N-tools-2 |
-| Gateway | M-tools-2（CatuiEngineAdapter 绑定） | ⏳ 跨仓阻塞：依赖 N-tools-2 |
-| Gateway | M-tools-3（lifecycle / 错误码硬化） | ⏳ 待 M-tools-2 |
-| Editor | P1 polish（auth + agent-not-visible UI） | ⏳ 待 Gateway 稳定 |
-| Editor | 本机工具注册表 + SSE 处理 | ⏳ 待 M-tools-3 |
+| Repo | Milestone | Status |
+|------|-----------|--------|
+| Gateway | M-tools-1 (wire protocol + correlation table) | ✅ Done |
+| Catui | N-tools-1 (types + RemoteToolSource skeleton) | ⏳ Pending start |
+| Catui | N-tools-2 (SDK `remoteTools` integration) | ⏳ Pending N-tools-1 |
+| Catui | N-tools-3 (real agent-loop e2e) | ⏳ Pending N-tools-2 |
+| Gateway | M-tools-2 (CatuiEngineAdapter binding) | ⏳ Cross-repo blocked: depends on N-tools-2 |
+| Gateway | M-tools-3 (lifecycle / error-code hardening) | ⏳ Pending M-tools-2 |
+| Editor | P1 polish (auth + agent-not-visible UI) | ⏳ Pending Gateway stability |
+| Editor | Local-tool registry + SSE handling | ⏳ Pending M-tools-3 |
 
-## 6.4 战略原则
+## 6.4 Strategic principles
 
-1. **本体唯一性**：所有进化反馈最终沉淀至 Catui 核心参数
-2. **API 优先**：对外坚持 HTTP 协议，屏蔽内部复杂性
-3. **社会化进化**：Agent 在博弈场景中碰撞，冲突数据作为进化燃料
-4. **评估驱动**：通过 Catui-Evaluate 建立量化反馈闭环
-5. **宿主边界清晰**：具体宿主必须拥有自己的权限与执行边界
-6. **Harness 工具化**：Browser Harness 是可插拔工具，不上升为产品宿主
+1. **Single ontology**: all evolution feedback ultimately accumulates into Catui core parameters
+2. **API-first**: outward-facing protocol is HTTP, hiding internal complexity
+3. **Social evolution**: Agents collide in game scenarios; conflict data is evolution fuel
+4. **Evaluation-driven**: Catui-Evaluate establishes the quantitative feedback loop
+5. **Clear host boundaries**: each specific host must own its own permissions and execution boundary
+6. **Tool-ify the harness**: Browser Harness is a pluggable tool, not a product host

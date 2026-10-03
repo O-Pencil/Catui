@@ -5,7 +5,7 @@
 以终端为主要界面的 AI 编程 Agent，支持项目记忆、persona、可扩展工具和多模型。
 使用 TypeScript 与 Node.js 开发，npm 包名为 `catui-agent`。
 
-[English](README.md) · [模型提供商](docs/providers.md) · [SDK](docs/sdk.md) · [扩展](docs/extensions.md)
+[English](README.md) · [SDK](docs/sdk.md)
 
 ## 开始使用
 
@@ -17,7 +17,7 @@ catui
 ```
 
 通过 `/login` 配置模型提供商，`/model` 选择模型，`/persona` 切换身份与工作风格。
-也可以通过环境变量配置凭证，详见[提供商文档](docs/providers.md)。
+也可以通过环境变量配置凭证；模型可用性取决于配置和账号。
 支持 Anthropic、OpenAI、Google、阿里 DashScope/Token Plan 和本地 Ollama 等接入；
 具体可用模型取决于配置和账号。
 
@@ -93,7 +93,7 @@ catui --help                        # 查看全部参数
 | `extensions/` | 用户扩展 |
 
 `--agent <id>` 选择 Agent，`CATUI_CODING_AGENT_DIR` 可覆盖配置根目录。
-更多设置见[模型](docs/models.md)、[技能](docs/skills.md)和[快捷键](docs/keybindings.md)。
+更多内联配置见 `/model` 与 `/persona`；SDK 嵌入见 `docs/sdk.md`。
 数据在本地持久化不等于所有功能离线：模型提供商、MCP 服务和启用的外部集成可能发送网络请求。
 
 ## 本地开发

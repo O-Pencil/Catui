@@ -1,99 +1,99 @@
-# §3 项目关联关系
+# §3 Project Relationships
 
-> 项目间依赖、调用、协作的完整矩阵
+> Complete matrix of dependencies, calls, and collaboration between projects
 
 <!--
-[WHO]  项目间关联关系定义
+[WHO]  Inter-project relationship definitions
 [FROM] agent-projects-relations.md + PROJECT_OVERVIEW.md §七 + catui-platform-charter.md
-[TO]   各项目集成文档、架构设计
-[HERE] charter/03-relations.md — 关联关系
+[TO]   Each project's integration docs, architecture design
+[HERE] charter/03-relations.md — relationships
 -->
 
 ---
 
-## 3.1 核心依赖链
+## 3.1 Core dependency chain
 
 ```
-O-Mesh (编排) → Catui (执行) → Catui-Evaluate (评估) → 反馈优化
-Catui-Eidolon (浏览器宿主) ← Catui (本地 Kernel) / Gateway (云端 API)
+O-Mesh (orchestration) → Catui (execution) → Catui-Evaluate (evaluation) → feedback to optimize
+Catui-Eidolon (browser host) ← Catui (local Kernel) / Gateway (cloud API)
 ```
 
-## 3.2 关联矩阵
+## 3.2 Relationship matrix
 
-| 源项目 | 目标项目 | 关系类型 | 说明 |
-|--------|----------|----------|------|
-| Asgard-platform | Catui-Agent-Gateway | 服务消费 | 通过 OpenAI Compatible API 调用 |
-| Asgard-platform | Catui | 实例管理 | 配置和管理多个 CatuiAgent 实例 |
-| Catui | Catui-Agent-Gateway | SDK 嵌入 | `@catui/agent` 被 Gateway import |
-| Catui | O-Mesh | 被编排节点 | 作为 Agent 节点被 O-Mesh 调度 |
-| Catui | Catui-Evaluate | 被评估对象 | Agent 能力量化评估 |
-| Catui | Catui-Terminal | 具身协同 | Terminal 提供物理世界操作能力 |
-| O-Mesh | Catui-Agent-Gateway | 任务分发 | 复杂任务分解后通过网关分发 |
-| Catui-Evaluate | Catui | 反馈优化 | 评估结果驱动本体进化 |
-| Catui-Eidolon | Catui | 本地 Kernel 消费 | Native Messaging / ACP 调用 |
-| Catui-Eidolon | Catui-Agent-Gateway | 云端 API 消费 | OpenAI 兼容接口调用 |
-| Catui-Eidolon | Catui-Terminal | 能力互补 | 浏览器 DOM + 本地 Shell 构成完整具身 |
-| Catui-Eidolon | Catui-Evaluate | 行为采样 | 浏览器场景中的 Agent 表现评估 |
-| catui-editor | Catui | ACP 调用 | 本地模式通过 ACP 直连 CLI |
-| catui-editor | Catui-Agent-Gateway | HTTP 调用 | 远程模式通过 OpenAI API |
-| Catui-Game | Catui / Gateway | Agent 接入 | 游戏中的 AI 角色通过 Gateway 调用 |
-| Catui-Lesson | Catui / Gateway | Agent 接入 | 学习场景中的 AI 辅导 |
+| Source | Target | Relation type | Description |
+|--------|--------|---------------|-------------|
+| Asgard-platform | Catui-Agent-Gateway | Service consumer | Calls via OpenAI-compatible API |
+| Asgard-platform | Catui | Instance manager | Configures and manages multiple CatuiAgent instances |
+| Catui | Catui-Agent-Gateway | SDK embed | `@catui/agent` is imported by Gateway |
+| Catui | O-Mesh | Orchestrated node | Acts as an Agent node scheduled by O-Mesh |
+| Catui | Catui-Evaluate | Evaluation target | Quantitative evaluation of Agent capabilities |
+| Catui | Catui-Terminal | Embodiment collaboration | Terminal provides physical-world operations |
+| O-Mesh | Catui-Agent-Gateway | Task dispatch | Distributes decomposed complex tasks via gateway |
+| Catui-Evaluate | Catui | Feedback-driven optimization | Evaluation results drive ontology evolution |
+| Catui-Eidolon | Catui | Local Kernel consumer | Native Messaging / ACP calls |
+| Catui-Eidolon | Catui-Agent-Gateway | Cloud API consumer | OpenAI-compatible API calls |
+| Catui-Eidolon | Catui-Terminal | Capability complementarity | Browser DOM + local Shell = complete embodiment |
+| Catui-Eidolon | Catui-Evaluate | Behavior sampling | Agent performance evaluation in browser scenarios |
+| catui-editor | Catui | ACP call | Local mode: direct ACP to CLI |
+| catui-editor | Catui-Agent-Gateway | HTTP call | Remote mode: via OpenAI API |
+| Catui-Game | Catui / Gateway | Agent integration | AI characters in games go through Gateway |
+| Catui-Lesson | Catui / Gateway | Agent integration | AI tutoring in learning scenarios |
 
-## 3.3 关联关系图
+## 3.3 Relationship diagram
 
 ```mermaid
 graph TB
-    subgraph 本体层
-        NANO[Catui<br/>Agent Kernel<br/>记忆+个性+工具编排]
+    subgraph Ontology
+        NANO[Catui<br/>Agent Kernel<br/>memory + personality + tool orchestration]
     end
 
-    subgraph 网关层
-        GW[Catui-Agent-Gateway<br/>HTTP 中间件<br/>多 CatuiAgent 托管]
+    subgraph Gateway
+        GW[Catui-Agent-Gateway<br/>HTTP middleware<br/>multi CatuiAgent hosting]
     end
 
-    subgraph 编排层
-        OM[O-Mesh<br/>多 Agent 编排<br/>Blackboard 横向通信]
+    subgraph Orchestration
+        OM[O-Mesh<br/>multi-Agent orchestration<br/>Blackboard horizontal comms]
     end
 
-    subgraph 平台层
-        ASG[Asgard-platform<br/>用户平台<br/>Marketplace + Console]
+    subgraph Platform
+        ASG[Asgard-platform<br/>user platform<br/>Marketplace + Console]
     end
 
-    subgraph 表现层
-        ED[catui-editor<br/>AI 写作编辑器]
-        GAME[Catui-Game<br/>社会博弈]
-        LESSON[Catui-Lesson<br/>知识习得]
+    subgraph Expression
+        ED[catui-editor<br/>AI writing editor]
+        GAME[Catui-Game<br/>social-game]
+        LESSON[Catui-Lesson<br/>knowledge acquisition]
     end
 
-    subgraph 渗透层
-        EID[Catui-Eidolon<br/>浏览器分身<br/>页面感知+DOM 操作]
+    subgraph Infiltration
+        EID[Catui-Eidolon<br/>browser clone<br/>page sensing + DOM ops]
     end
 
-    subgraph 具身层
-        TERM[Catui-Terminal<br/>文件/Git/Shell]
+    subgraph Embodiment
+        TERM[Catui-Terminal<br/>file/Git/Shell]
     end
 
-    subgraph 评估层
-        EVAL[Catui-Evaluate<br/>Agent 评估框架]
+    subgraph Evaluation
+        EVAL[Catui-Evaluate<br/>Agent eval framework]
     end
 
-    %% 核心关系
-    NANO -->|SDK 嵌入| GW
-    NANO -->|被编排调度| OM
-    NANO -->|本地 Kernel| EID
-    NANO -->|被评估对象| EVAL
-    NANO <-->|具身协同| TERM
+    %% core relations
+    NANO -->|SDK embed| GW
+    NANO -->|orchestrated| OM
+    NANO -->|local Kernel| EID
+    NANO -->|eval target| EVAL
+    NANO <-->|embodiment collaboration| TERM
 
-    GW -->|HTTP 代理| ASG
-    GW -->|云端 API| EID
+    GW -->|HTTP proxy| ASG
+    GW -->|cloud API| EID
     GW -->|Remote HTTP| ED
 
-    ED -->|本地 ACP| NANO
+    ED -->|local ACP| NANO
 
-    EVAL -.->|反馈优化| NANO
-    EVAL -.->|行为采样| EID
+    EVAL -.->|feedback| NANO
+    EVAL -.->|behavior sampling| EID
 
-    ASG -->|CatuiAgent 管理| GW
+    ASG -->|CatuiAgent mgmt| GW
 
     style NANO fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
     style GW fill:#fff3e0,stroke:#f57c00,stroke-width:2px
@@ -102,66 +102,66 @@ graph TB
     style EVAL fill:#fce4ec,stroke:#c2185b,stroke-width:2px
 ```
 
-## 3.4 关键协作模式
+## 3.4 Key collaboration patterns
 
-### 模式 A：单 Agent 深度任务
-
-```
-用户 → Catui CLI → 编码实现 → Catui-Evaluate 评估 → 反馈优化
-```
-
-### 模式 B：多 Agent 协作开发
+### Pattern A — Single-Agent deep task
 
 ```
-用户 → O-Mesh Orchestrator
-    ├──→ Node1 (Catui): 设计数据库 Schema
-    ├──→ Node2 (Catui): 实现 API 接口（依赖 Node1）
-    ├──→ Node3 (Catui): 编写单元测试
-    └──→ Node4 (catui-editor): 撰写 API 文档
-    ↓
-Blackboard 共享 Schema 定义
-    ↓
-Catui-Evaluate 评估各节点输出
+User → Catui CLI → coding implementation → Catui-Evaluate eval → feedback to optimize
 ```
 
-### 模式 C：浏览器渗透交互
+### Pattern B — Multi-Agent collaborative development
 
 ```
-用户在任意网页打开 Eidolon Side Panel
+User → O-Mesh Orchestrator
+    ├──→ Node1 (Catui): design DB schema
+    ├──→ Node2 (Catui): implement API endpoints (depends on Node1)
+    ├──→ Node3 (Catui): write unit tests
+    └──→ Node4 (catui-editor): write API docs
     ↓
-Eidolon 读取当前页面 DOM 上下文
+Blackboard shares schema definition
     ↓
-本地模式: Native Messaging → Catui（记忆 + 推理）
-云端模式: OpenAI 兼容 API → Gateway → CatuiAgent
-    ↓
-返回推理结果或页面动作意图
-    ↓
-Eidolon 按 origin 权限执行 DOM 动作，Side Panel 反馈结果
+Catui-Evaluate evaluates each node's output
 ```
 
-### 模式 D：平台服务化
+### Pattern C — Browser infiltration interaction
 
 ```
-用户 → Asgard Marketplace → 选择/创建 CatuiAgent
+User opens Eidolon Side Panel on any web page
     ↓
-Asgard → Gateway 创建实例（catui-agent SDK + Soul + Memory）
+Eidolon reads current page DOM context
     ↓
-用户通过 Chat / Console 与 CatuiAgent 对话
+Local mode: Native Messaging → Catui (memory + reasoning)
+Cloud mode: OpenAI-compatible API → Gateway → CatuiAgent
     ↓
-Asgard 记录用量 / 计费
+Returns reasoning result or page-action intent
+    ↓
+Eidolon executes DOM action under per-origin permission, Side Panel reports result
 ```
 
-## 3.5 技术对接点
+### Pattern D — Platform-as-a-Service
 
-| 对接项目 | 接口/协议 | 说明 |
-|---------|----------|------|
-| Catui ↔ Gateway | SDK import | Gateway import `@catui/agent` |
-| Catui ↔ O-Mesh | CLI / Stream JSON | O-Mesh Runner 调用 Catui CLI |
-| Catui ↔ Catui-Evaluate | Python SDK | Evaluate 调用 Catui 进行测试 |
-| Catui ↔ Eidolon | Native Messaging / ACP | 浏览器插件调用 Catui 作为本地 Brain |
-| Catui ↔ Browser Harness | CDP / Python CLI | 通用浏览器工具层（非 Eidolon 场景） |
-| Gateway ↔ Asgard | HTTP 代理 | Asgard 通过 HTTP 路由到 Gateway |
-| Gateway ↔ Editor | HTTP + SSE (OpenAI Compatible) | 远程模式标准 API |
-| Gateway ↔ Eidolon | HTTP + SSE (OpenAI Compatible) | 云端模式标准 API |
-| Gateway ↔ Channel | 钉钉 Stream / WeChat XML / Feishu 事件 | IM 集成 |
-| 跨项目通信 | Blackboard (KV + pub/sub) | O-Mesh 提供的横向通信机制 |
+```
+User → Asgard Marketplace → select / create CatuiAgent
+    ↓
+Asgard → Gateway creates instance (catui-agent SDK + Soul + Memory)
+    ↓
+User chats with CatuiAgent via Chat / Console
+    ↓
+Asgard records usage / billing
+```
+
+## 3.5 Technical integration points
+
+| Integration | Interface / Protocol | Description |
+|-------------|---------------------|-------------|
+| Catui ↔ Gateway | SDK import | Gateway imports `@catui/agent` |
+| Catui ↔ O-Mesh | CLI / Stream JSON | O-Mesh Runner calls Catui CLI |
+| Catui ↔ Catui-Evaluate | Python SDK | Evaluate calls Catui to run tests |
+| Catui ↔ Eidolon | Native Messaging / ACP | Browser extension calls Catui as local Brain |
+| Catui ↔ Browser Harness | CDP / Python CLI | Generic browser tooling (non-Eidolon scenarios) |
+| Gateway ↔ Asgard | HTTP proxy | Asgard routes to Gateway via HTTP |
+| Gateway ↔ Editor | HTTP + SSE (OpenAI-compatible) | Remote-mode standard API |
+| Gateway ↔ Eidolon | HTTP + SSE (OpenAI-compatible) | Cloud-mode standard API |
+| Gateway ↔ Channel | DingTalk Stream / WeChat XML / Feishu events | IM integration |
+| Cross-project communication | Blackboard (KV + pub/sub) | O-Mesh-provided horizontal-comms mechanism |

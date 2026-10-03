@@ -1,71 +1,71 @@
-# §4 术语表
+# §4 Glossary
 
-> Catui 生态的规范术语定义。各仓内部文档遇到这些词时必须使用本表定义。
+> Canonical term definitions for the Catui ecosystem. Project-internal docs MUST use these definitions when referring to these terms.
 
 <!--
-[WHO]  全生态统一术语定义
+[WHO]  Cross-ecosystem unified term definitions
 [FROM] catui-platform-charter.md §4 + PROJECT_OVERVIEW.md
-[TO]   所有项目文档
-[HERE] charter/04-glossary.md — 术语表
+[TO]   All project documentation
+[HERE] charter/04-glossary.md — glossary
 -->
 
 ---
 
-## 4.1 项目与产品名
+## 4.1 Project and product names
 
-| 术语 | 规范定义 | 易混点 |
-|------|----------|--------|
-| **Catui** | 生态品牌名，通称 Agent 能力。"调用 Catui" = "调用某个 CatuiAgent"。不是单独项目 | 商业文案缩写可用；技术文档优先用 CatuiAgent |
-| **Catui** | 引擎项目，仓库名（大驼峰）。包含 `@catui/agent` SDK + `catui` CLI | ❌ Catui ≠ "一个 Agent"，它是引擎 |
-| **catui-agent** | npm 包名（短横线）`@catui/agent` | "被 Gateway import 的 SDK" 指本词 |
-| **catui** | CLI 命令名（全小写）：`catui` | 全局安装后的命令行入口 |
-| **CatuiAgent** | 配置好的运行单元：`engine + Soul + memory + model + personality`。有身份，由 `catui/<agent-id>` 标识 | ❌ CatuiAgent ≠ Catui 项目 |
-| **Catui-Agent-Gateway** | HTTP 中间件项目 / 仓库 / 服务名 | 旧称 `catui-gateway` 已废弃 |
-| **Asgard Platform** | 多 Agent 平台项目（含 Asgard-api + Asgard-web） | "asgard" / "Asgard" 同义 |
-| **catui-editor** | 写作客户端项目 / 仓库 | 别名 "editor" |
-| **Catui-Eidolon** | 浏览器分身插件（Eidolon = 分身/幻像） | Chrome/Edge MV3 |
-| **O-Mesh** | 多 Agent 编排引擎 | Orchestrator + Blackboard |
-| **Catui-Evaluate** | Agent 评估框架 | Python + DeepEval |
+| Term | Canonical definition | Common confusion |
+|------|----------------------|------------------|
+| **Catui** | Ecosystem brand name; generic reference to Agent capability. "Call Catui" = "call some CatuiAgent". Not a single project | OK in marketing copy; technical docs prefer CatuiAgent |
+| **Catui** | Engine project; repo name (PascalCase). Contains `@catui/agent` SDK + `catui` CLI | ❌ Catui ≠ "an Agent"; it is an engine |
+| **catui-agent** | npm package name (kebab-case): `@catui/agent` | "The SDK imported by Gateway" refers to this term |
+| **catui** | CLI command name (all lowercase): `catui` | Command-line entry after global install |
+| **CatuiAgent** | Configured runtime unit: `engine + Soul + memory + model + personality`. Has identity, identified by `catui/<agent-id>` | ❌ CatuiAgent ≠ the Catui project |
+| **Catui-Agent-Gateway** | HTTP middleware project / repo / service name | Old name `catui-gateway` deprecated |
+| **Asgard Platform** | Multi-Agent platform project (includes Asgard-api + Asgard-web) | "asgard" / "Asgard" are equivalent |
+| **catui-editor** | Writing client project / repo | Alias "editor" |
+| **Catui-Eidolon** | Browser-side clone plugin (Eidolon = clone / phantom) | Chrome/Edge MV3 |
+| **O-Mesh** | Multi-Agent orchestration engine | Orchestrator + Blackboard |
+| **Catui-Evaluate** | Agent evaluation framework | Python + DeepEval |
 
-## 4.2 架构概念
+## 4.2 Architectural concepts
 
-| 术语 | 规范定义 |
-|------|----------|
-| **EngineAdapter** | Gateway 内对引擎的抽象接口，目前实现是 `CatuiEngineAdapter` |
-| **RemoteToolTransport** | catui-agent SDK 内的回调接口，让"调用方拥有工具运行时"模式得以工作 |
-| **ToolCorrelation** | Gateway 内进程级表，关联 SSE `catui.tool_request` 与 HTTP POST `tool_response` |
-| **Soul** | 引擎内的人格描述模块（`catui-soul`）；包含 system prompt、风格 tag、行为默认值 |
-| **NanoMem** | 持久记忆引擎（`catui-mem`）；跨会话记忆沉淀与检索 |
-| **CATUIS_HOME** | 文件系统约定根：`~/.catui/`（环境变量 `CATUIS_HOME` 可覆盖）。每个 CatuiAgent 一个 `agents/<id>/` 槽位 |
-| **PAAS** | Catui as a Service — 以"数字生命"为核心的 Agent 基础设施服务化模式 |
+| Term | Canonical definition |
+|------|----------------------|
+| **EngineAdapter** | Abstraction over engines inside Gateway; current implementation is `CatuiEngineAdapter` |
+| **RemoteToolTransport** | Callback interface inside the catui-agent SDK; enables the "caller owns the tool runtime" pattern |
+| **ToolCorrelation** | Process-level table inside Gateway; correlates SSE `catui.tool_request` with HTTP POST `tool_response` |
+| **Soul** | Personality-description module inside the engine (`catui-soul`); includes system prompt, style tags, behavior defaults |
+| **NanoMem** | Persistent memory engine (`catui-mem`); cross-session memory accumulation and retrieval |
+| **CATUIS_HOME** | Filesystem root convention: `~/.catui/` (overridable via env var `CATUIS_HOME`). Each CatuiAgent has its own `agents/<id>/` slot |
+| **PAAS** | Catui as a Service — service-delivery model of Agent infrastructure centered on "digital life" |
 
-## 4.3 协议
+## 4.3 Protocols
 
-| 术语 | 规范定义 |
-|------|----------|
-| **ACP** | Agent Coding Protocol — 进程间协议，editor / IDE 与 catui-agent CLI 子进程之间使用 |
-| **PCP** | Catui Client Protocol — editor 与 Rust Server 之间的 WebSocket 内部协议（阶段二原型） |
-| **OpenAI 兼容 API** | Gateway 对外协议族：`/v1/chat/completions` + `/v1/models` + `/v1/agents` + SSE |
-| **Catui Tool Callback** | A 线工具回传 — Gateway → caller 走 SSE，caller → Gateway 走 HTTP POST |
-| **Channel 协议** | 第三方 IM 适配 — 钉钉 Stream / WeChat XML / Feishu 事件 → Gateway |
-| **Blackboard** | O-Mesh 提供的横向通信机制，KV + pub/sub 模式 |
+| Term | Canonical definition |
+|------|----------------------|
+| **ACP** | Agent Coding Protocol — inter-process protocol between editor / IDE and catui-agent CLI child process |
+| **PCP** | Catui Client Protocol — WebSocket internal protocol between editor and Rust Server (phase-2 prototype) |
+| **OpenAI-compatible API** | Gateway's outward-facing protocol family: `/v1/chat/completions` + `/v1/models` + `/v1/agents` + SSE |
+| **Catui Tool Callback** | Work-line A tool return — Gateway → caller via SSE, caller → Gateway via HTTP POST |
+| **Channel protocol** | Third-party IM adaptation — DingTalk Stream / WeChat XML / Feishu events → Gateway |
+| **Blackboard** | O-Mesh-provided horizontal communication mechanism; KV + pub/sub pattern |
 
-## 4.4 层级术语
+## 4.4 Layer terminology
 
-| 术语 | 含义 |
-|------|------|
-| **本体层 (Ontology)** | Catui — Agent 引擎核心 |
-| **网关层 (Gateway)** | Catui-Agent-Gateway — HTTP 服务化 |
-| **编排层 (Orchestration)** | O-Mesh — 多 Agent 协作调度 |
-| **评估层 (Evaluation)** | Catui-Evaluate — 能力度量 |
-| **平台层 (Platform)** | Asgard-platform — 用户入口 |
-| **表现层 (Expression)** | Editor / Game / Lesson — 场景化应用 |
-| **渗透层 (Infiltration)** | Catui-Eidolon — 浏览器分身 |
-| **具身层 (Embodiment)** | Catui-Terminal — 物理世界操作 |
+| Term | Meaning |
+|------|---------|
+| **Ontology layer** | Catui — Agent engine core |
+| **Gateway layer** | Catui-Agent-Gateway — HTTP service-ification |
+| **Orchestration layer** | O-Mesh — multi-Agent collaborative scheduling |
+| **Evaluation layer** | Catui-Evaluate — capability measurement |
+| **Platform layer** | Asgard-platform — user entry point |
+| **Expression layer** | Editor / Game / Lesson — scenario-specific applications |
+| **Infiltration layer** | Catui-Eidolon — browser-side clone |
+| **Embodiment layer** | Catui-Terminal — physical-world operations |
 
-## 4.5 废弃术语
+## 4.5 Deprecated terms
 
-| 术语 | 状态 | 替代 |
-|------|------|------|
-| `catui-gateway` | ❌ 废弃 | Catui-Agent-Gateway |
-| `catui-agent`（指项目名） | ⚠️ 易混 | catui-agent 仅指 npm 包名，项目名用 Catui |
+| Term | Status | Replacement |
+|------|--------|-------------|
+| `catui-gateway` | ❌ Deprecated | Catui-Agent-Gateway |
+| `catui-agent` (as project name) | ⚠️ Confusing | `catui-agent` refers only to the npm package name; use Catui for the project |

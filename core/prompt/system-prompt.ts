@@ -531,9 +531,8 @@ Only read the following docs when user asks about catui-agent, SDK, extensions, 
 - Main doc: ${readmePath}
 - More docs: ${docsPath}
 - Examples: ${examplesPath} (extensions, custom tools, SDK)
-- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integration (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), packages (docs/packages.md)
-- When handling related topics, first read docs and examples, then implement following cross-references in .md files
-- Must fully read .md files and follow related links (e.g., TUI API details in tui.md)`;
+- When asked about: SDK integration (docs/sdk.md), remote mode (docs/remote.md), run traces (docs/run-trace-and-replay.md), MCP awareness (docs/mcp-awareness.md), loop command (docs/loop-usage-examples.md), architecture (docs/design-principles.md)
+- When handling related topics, first read docs and examples, then implement following cross-references in .md files`;
 
   if (appendSection) {
     prompt += appendSection;

@@ -5,7 +5,7 @@
 A terminal-first AI coding agent with persistent project memory, selectable personas,
 and extensible tools. Built with TypeScript and Node.js; published as `catui-agent`.
 
-[中文](README_CN.md) · [Providers](docs/providers.md) · [SDK](docs/sdk.md) · [Extensions](docs/extensions.md)
+[中文](README_CN.md) · [SDK](docs/sdk.md)
 
 ## Start
 
@@ -18,7 +18,7 @@ catui
 
 Use `/login` to configure a provider, `/model` to select a model, and `/persona` to
 choose an identity. Provider credentials can also come from environment variables;
-see [provider configuration](docs/providers.md). Model availability depends on the
+see [Provider configuration](#providers) below. Model availability depends on the
 configured provider and account. Supported integrations include Anthropic, OpenAI,
 Google, Alibaba DashScope/Token Plan, and local Ollama setups.
 
@@ -103,7 +103,8 @@ By default, agent configuration lives under `~/.catui/agents/<id>/` (ID `default
 | `extensions/` | User extensions |
 
 `--agent <id>` selects an agent; `CATUI_CODING_AGENT_DIR` overrides its config root.
-See [models](docs/models.md), [skills](docs/skills.md), and [keybindings](docs/keybindings.md).
+See `/model` and `/persona` for inline configuration; `docs/sdk.md` documents
+programmatic embedders.
 Local persistence does not mean every feature is offline: configured providers,
 MCP servers and enabled external integrations may make network requests.
 

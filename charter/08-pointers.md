@@ -1,149 +1,149 @@
-# §8 各仓文档指针
+# §8 Per-Repo Documentation Pointers
 
-> Charter 不复制实施细节，只提供跳转。各项目本地 docs/ 目录结构一览。
+> The Charter does not duplicate implementation details; it only provides jump-links. Overview of each project's local `docs/` layout.
 
 <!--
-[WHO]  各项目文档的导航索引
-[FROM] catui-platform-charter.md §9 + 各项目 docs/ 目录扫描
-[TO]   各项目 README
-[HERE] charter/08-pointers.md — 文档指针
+[WHO]  Navigation index for each project's documentation
+[FROM] catui-platform-charter.md §9 + each project's docs/ scan
+[TO]   Each project's README
+[HERE] charter/08-pointers.md — documentation pointers
 -->
 
 ---
 
 ## 8.1 Catui
 
-**GitHub**：[O-Catui/Catui](https://github.com/O-Catui/Catui)
+**GitHub**: [O-Pencil/Catui](https://github.com/O-Pencil/Catui)
 
-| 主题 | 文档 |
-|------|------|
-| 项目导航 | `AGENTS.md` |
-| 产品人格宪章 | `.CATUI.md` |
-| 多 Catui 文件系统设计 | `docs/multi-agent-fs-design.md` |
-| 远程工具回传 SDK 接口 | `docs/remote-tool-register-design.md` |
-| SDK 使用指南 | `docs/SDK.md` |
-| SDK 测试 | `docs/SDK-TESTING.md` |
-| ACP 协议集成 | `docs/ACP协议集成开发文档.md` |
-| MCP 集成指南 | `docs/MCP集成指南.md` |
-| MCP 快速参考 | `docs/MCP快速参考.md` |
-| 记忆系统 | `docs/mem-core技术文档.md` |
-| 评估框架 | `docs/eval/` |
-| 启动性能优化 | `docs/startup-performance-optimization.md` |
-| 本生态宪章 | `charter/` |
+| Topic | Doc |
+|-------|-----|
+| Project navigation | `AGENTS.md` |
+| Product-personality charter | `.CATUI.md` |
+| Multi-Catui file-system design | `docs/multi-agent-fs-design.md` |
+| Remote-tool-callback SDK interface | `docs/remote-tool-register-design.md` |
+| SDK usage guide | `docs/SDK.md` |
+| SDK testing | `docs/SDK-TESTING.md` |
+| ACP protocol integration | `docs/ACP协议集成开发文档.md` |
+| MCP integration guide | `docs/MCP集成指南.md` |
+| MCP quick reference | `docs/MCP快速参考.md` |
+| Memory system | `docs/mem-core技术文档.md` |
+| Evaluation framework | `docs/eval/` |
+| Startup performance optimization | `docs/startup-performance-optimization.md` |
+| This ecosystem charter | `charter/` |
 
 ## 8.2 Catui-Agent-Gateway
 
-**GitHub**：[O-Catui/Catui-Agent-Gateway](https://github.com/O-Catui/Catui-Agent-Gateway)
+**GitHub**: [O-Pencil/Catui-Agent-Gateway](https://github.com/O-Pencil/Catui-Agent-Gateway)
 
-| 主题 | 文档 |
-|------|------|
-| 产品边界 / 双部署形态 | `docs/00-product-boundary.md` |
-| 开发计划 / 里程碑 | `docs/01-development-plan.md` |
-| OpenAI 兼容 API 契约 | `docs/02-api-contract.md` |
-| EngineAdapter 架构 | `docs/03-adapter-architecture.md` |
-| Asgard / Editor 集成 | `docs/04-asgard-editor-integration.md` + `docs/10-editor-integration-guide.md` |
-| Caller 运行时 | `docs/05-caller-runtime.md` |
-| 术语表（Gateway 内部） | `docs/06-glossary.md` |
-| catui-agent 集成 | `docs/07-m7-catui-agent-integration.md` |
-| Channel 集成 | `docs/13-channel-integration.md` + `docs/14-multi-catui-architecture.md` |
-| Multi-Catui 行动手册 | `docs/16-catui-storage-layout.md` |
-| **工具回传协议 v0.2** | `docs/18-tool-callback-protocol-v0.2.md` |
+| Topic | Doc |
+|-------|-----|
+| Product boundary / dual deployment | `docs/00-product-boundary.md` |
+| Development plan / milestones | `docs/01-development-plan.md` |
+| OpenAI-compatible API contract | `docs/02-api-contract.md` |
+| EngineAdapter architecture | `docs/03-adapter-architecture.md` |
+| Asgard / Editor integration | `docs/04-asgard-editor-integration.md` + `docs/10-editor-integration-guide.md` |
+| Caller runtime | `docs/05-caller-runtime.md` |
+| Glossary (Gateway-internal) | `docs/06-glossary.md` |
+| catui-agent integration | `docs/07-m7-catui-agent-integration.md` |
+| Channel integration | `docs/13-channel-integration.md` + `docs/14-multi-catui-architecture.md` |
+| Multi-Catui playbook | `docs/16-catui-storage-layout.md` |
+| **Tool-callback protocol v0.2** | `docs/18-tool-callback-protocol-v0.2.md` |
 
 ## 8.3 Asgard-platform
 
-**GitHub**：[O-Catui/Asgard-platform](https://github.com/O-Catui/Asgard-platform)
+**GitHub**: [O-Catui/Asgard-platform](https://github.com/O-Catui/Asgard-platform)
 
-| 主题 | 文档 |
-|------|------|
-| 平台概述 | `README.md` |
-| 后端架构审查 | `packages/api/ARCHITECTURE_REVIEW.md`（Asgard-api 子模块） |
-| 后端开发计划 | `packages/api/DEVELOPMENT_PLAN.md` |
-| 前端 PRD | `packages/web/PRD.md`（Asgard-web 子模块） |
+| Topic | Doc |
+|-------|-----|
+| Platform overview | `README.md` |
+| Backend architecture review | `packages/api/ARCHITECTURE_REVIEW.md` (Asgard-api submodule) |
+| Backend development plan | `packages/api/DEVELOPMENT_PLAN.md` |
+| Frontend PRD | `packages/web/PRD.md` (Asgard-web submodule) |
 
-### 子模块
+### Submodules
 
-| 子模块 | GitHub | 说明 |
-|--------|--------|------|
-| Asgard-api | [O-Catui/Asgard-api](https://github.com/O-Catui/Asgard-api) | FastAPI 后端 |
-| Asgard-web | [O-Catui/Asgard-web](https://github.com/O-Catui/Asgard-web) | React 前端 |
+| Submodule | GitHub | Description |
+|-----------|--------|-------------|
+| Asgard-api | [O-Catui/Asgard-api](https://github.com/O-Catui/Asgard-api) | FastAPI backend |
+| Asgard-web | [O-Catui/Asgard-web](https://github.com/O-Catui/Asgard-web) | React frontend |
 
 ## 8.4 catui-editor
 
-**GitHub**：[O-Catui/catui-editor](https://github.com/O-Catui/catui-editor)
+**GitHub**: [O-Pencil/catui-editor](https://github.com/O-Pencil/catui-editor)
 
-| 主题 | 文档 |
-|------|------|
-| 应用层路线 | `docs/technical-proposals/catui-platform-roadmap.md` |
-| Remote HTTP Provider 设计 | `docs/technical-proposals/remote-http-chat-provider-design.md` |
-| 写作 Agent 编排 | `docs/technical-proposals/writing-agent-orchestration-seams.md` |
-| 平台预算 API 需求 | `docs/technical-proposals/platform-budget-api.md` |
-| ACP 集成 | `docs/acp-integration-followups.md` |
-| PCP 内部协议（legacy） | `docs/technical-proposals/catui-client-protocol.md` |
+| Topic | Doc |
+|-------|-----|
+| Application-layer roadmap | `docs/technical-proposals/catui-platform-roadmap.md` |
+| Remote-HTTP provider design | `docs/technical-proposals/remote-http-chat-provider-design.md` |
+| Writing-Agent orchestration seams | `docs/technical-proposals/writing-agent-orchestration-seams.md` |
+| Platform budget API requirements | `docs/technical-proposals/platform-budget-api.md` |
+| ACP integration | `docs/acp-integration-followups.md` |
+| PCP internal protocol (legacy) | `docs/technical-proposals/catui-client-protocol.md` |
 
 ## 8.5 O-Mesh
 
-**GitHub**：[O-Catui/O-Mesh](https://github.com/O-Catui/O-Mesh)
+**GitHub**: [O-Catui/O-Mesh](https://github.com/O-Catui/O-Mesh)
 
-| 主题 | 文档 |
-|------|------|
-| 产品定义 | `PRD.md` |
-| API 文档 | `DOCS/API.md` |
-| 开发指南 | `DOCS/DEVELOPMENT.md` |
-| Agent 协调机制 | `DOCS/AGENT-COORDINATION.md` |
-| 事件系统 | `DOCS/EVENTS.md` |
-| 建议系统 | `DOCS/SUGGEST.md` |
+| Topic | Doc |
+|-------|-----|
+| Product definition | `PRD.md` |
+| API docs | `DOCS/API.md` |
+| Development guide | `DOCS/DEVELOPMENT.md` |
+| Agent coordination mechanism | `DOCS/AGENT-COORDINATION.md` |
+| Event system | `DOCS/EVENTS.md` |
+| Suggestion system | `DOCS/SUGGEST.md` |
 
 ## 8.6 Catui-Evaluate
 
-**GitHub**：[O-Catui/Catui-Evaluate](https://github.com/O-Catui/Catui-Evaluate)
+**GitHub**: [O-Pencil/Catui-Evaluate](https://github.com/O-Pencil/Catui-Evaluate)
 
-| 主题 | 文档 |
-|------|------|
-| 评估框架概述 | `README.md` |
-| 基准使用 | `BENCHMARK_USAGE.md` |
-| 评估指标文档 | `docs/guides/` + `docs/integrations/` |
+| Topic | Doc |
+|-------|-----|
+| Eval framework overview | `README.md` |
+| Benchmark usage | `BENCHMARK_USAGE.md` |
+| Eval-metric docs | `docs/guides/` + `docs/integrations/` |
 
 ## 8.7 Catui-Eidolon
 
-**GitHub**：[O-Catui/Catui-Eidolon](https://github.com/O-Catui/Catui-Eidolon)
+**GitHub**: [O-Pencil/Catui-Eidolon](https://github.com/O-Pencil/Catui-Eidolon)
 
-| 主题 | 文档 |
-|------|------|
-| 安装指南 | `INSTALL.md` |
-| Catui + Harness 架构 | `docs/eidolon-catui-harness-architecture.md` |
-| SDK 集成报告 | `docs/catui-sdk-integration-report.md` |
-| 主题系统 | `docs/theme/` |
+| Topic | Doc |
+|-------|-----|
+| Installation guide | `INSTALL.md` |
+| Catui + Harness architecture | `docs/eidolon-catui-harness-architecture.md` |
+| SDK integration report | `docs/catui-sdk-integration-report.md` |
+| Theme system | `docs/theme/` |
 
 ## 8.8 Catui-Game
 
-**GitHub**：[O-Catui/Catui-Game](https://github.com/O-Catui/Catui-Game)
+**GitHub**: [O-Pencil/Catui-Game](https://github.com/O-Pencil/Catui-Game)
 
-| 子项目 | 说明 |
-|--------|------|
-| `novel-studio/` | 小说创作工作台 |
-| `Philosophical-Studio/` | 哲学思辨工作台 |
-| `werewolf/` | 狼人杀博弈游戏 |
+| Subproject | Description |
+|------------|-------------|
+| `novel-studio/` | Novel-creation workbench |
+| `Philosophical-Studio/` | Philosophical-thinking workbench |
+| `werewolf/` | Werewolf game-theoretic scenario |
 
 ## 8.9 Catui-Lesson
 
-**GitHub**：[O-Catui/Catui-Lesson](https://github.com/O-Catui/Catui-Lesson)
+**GitHub**: [O-Pencil/Catui-Lesson](https://github.com/O-Pencil/Catui-Lesson)
 
-基于 Next.js 的知识学习平台，详情见仓库 README。
+A Next.js-based knowledge-learning platform; see the repo's README for details.
 
 ## 8.10 Catui-Terminal
 
-**GitHub**：[O-Catui/Catui-Terminal](https://github.com/O-Catui/Catui-Terminal)
+**GitHub**: [O-Pencil/Catui-Terminal](https://github.com/O-Pencil/Catui-Terminal)
 
-基于 Go + Electron 的终端应用，详情见仓库 README。
+A terminal application built on Go + Electron; see the repo's README for details.
 
 ---
 
-## 本地链接
+## Local links
 
-本地开发时，`charter/links/` 目录包含指向各兄弟项目的 junction 链接（已 gitignored）：
+For local development, the `charter/links/` directory contains junction links pointing to each sibling project (gitignored):
 
 ```bash
-# 创建本地链接（Windows）
+# Create local links (Windows)
 mkdir charter\links
 mklink /J charter\links\gateway   ..\..\Catui-Agent-Gateway
 mklink /J charter\links\asgard    ..\..\Asgard-platform

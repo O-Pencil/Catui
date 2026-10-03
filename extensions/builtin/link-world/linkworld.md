@@ -98,15 +98,15 @@ Some channels need credentials only the user can provide. Based on the doctor ou
 > 1. **Account ban** — platforms may detect non-browser API calls and restrict or ban the account
 > 2. **Credential exposure** — cookies grant full account access; using a secondary account limits the blast radius if credentials are ever compromised
 
-> 🍪 **Cookie 导入（所有需要登录的平台通用）：**
+> 🍪 **Cookie import (universal for all platforms that need login):**
 >
-> 所有需要 Cookie 的平台（Twitter、小红书等），**优先使用 Cookie-Editor 导入**，这是最简单最可靠的方式：
-> 1. 用户在自己的浏览器上登录对应平台
-> 2. 安装 [Cookie-Editor](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm) Chrome 插件
-> 3. 点击插件 → Export → Header String
-> 4. 把导出的字符串发给 Agent
+> For every platform that needs cookies (Twitter, XiaoHongShu, etc.), **prefer the Cookie-Editor import** — it is the simplest and most reliable approach:
+> 1. User logs into the platform in their own browser
+> 2. Install the [Cookie-Editor](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm) Chrome extension
+> 3. Click the extension → Export → Header String
+> 4. Send the exported string to the Agent
 >
-> **本地电脑用户**也可以用 `agent-reach configure --from-browser chrome` 一键自动提取（支持 Twitter + 小红书）。
+> **Local-machine users** can also auto-extract with `agent-reach configure --from-browser chrome` (supports Twitter + XiaoHongShu).
 
 **Twitter search & posting:**
 > "To unlock Twitter search, I need your Twitter cookies. Install the Cookie-Editor Chrome extension, go to x.com/twitter.com, click the extension → Export → Header String, and paste it to me."
@@ -115,16 +115,16 @@ Some channels need credentials only the user can provide. Based on the doctor ou
 agent-reach configure twitter-cookies "PASTED_STRING"
 ```
 
-> **代理说明（中国大陆等需要翻墙的网络环境）：**
+> **Proxy notes (for networks that need a proxy, e.g. mainland China):**
 >
-> xreach CLI 使用 Node.js 原生 `fetch()`，默认不走系统代理（`HTTP_PROXY`/`HTTPS_PROXY`）。link-world 已内置解决方案：安装时会自动安装 `undici`（`npm install -g undici`），运行 xreach 时自动注入 `EnvHttpProxyAgent`，让 fetch 走用户配置的代理。
+> The xreach CLI uses Node.js's native `fetch()` and does not honor system proxy env vars (`HTTP_PROXY`/`HTTPS_PROXY`) by default. link-world ships a built-in solution: it auto-installs `undici` (`npm install -g undici`) at install time, and when xreach runs it automatically injects an `EnvHttpProxyAgent` so fetch goes through the user-configured proxy.
 >
-> **你（Agent）需要做的：**
-> 1. 确认 `undici` 已全局安装：`npm list -g undici`，没有就装：`npm install -g undici`
-> 2. 确认用户配了代理：`agent-reach configure proxy http://user:pass@ip:port`
-> 3. link-world 会自动处理剩下的，不需要用户做额外操作
+> **What you (the Agent) need to do:**
+> 1. Confirm `undici` is installed globally: `npm list -g undici`; if not: `npm install -g undici`
+> 2. Confirm the user has configured a proxy: `agent-reach configure proxy http://user:pass@ip:port`
+> 3. link-world handles the rest automatically — no further user action required
 >
-> 如果用户报告 "fetch failed"，参考 [troubleshooting.md](troubleshooting.md)
+> If the user reports "fetch failed", see [troubleshooting.md](troubleshooting.md)
 
 **Reddit & Bilibili full access (server users):**
 > "Reddit and Bilibili block server IPs. To unlock full access, I need a residential proxy. You can get one at https://webshare.io ($1/month). Send me the proxy address."
@@ -133,47 +133,47 @@ agent-reach configure twitter-cookies "PASTED_STRING"
 agent-reach configure proxy http://user:pass@ip:port
 ```
 
-**XiaoHongShu / 小红书 (需要 Docker):**
-> "小红书需要一个 MCP 服务。需要你的机器上有 Docker。安装好 Docker 后我来搞定剩下的。"
+**XiaoHongShu / 小红书 (requires Docker):**
+> "XiaoHongShu requires an MCP service, which in turn requires Docker on your machine. Once Docker is installed I'll handle the rest."
 
 ```bash
 docker run -d --name xiaohongshu-mcp -p 18060:18060 xpzouying/xiaohongshu-mcp
 mcporter config add xiaohongshu http://localhost:18060/mcp
 ```
 
-> 如果在服务器上，建议加代理避免 IP 风控：
+> On servers we recommend adding a proxy to avoid IP-based risk control:
 > `docker run -d --name xiaohongshu-mcp -p 18060:18060 -e XHS_PROXY=http://user:pass@ip:port xpzouying/xiaohongshu-mcp`
 >
-> **登录方式（优先用 Cookie-Editor，最简单）：**
-> 1. 用户在自己的浏览器登录小红书 (xiaohongshu.com)
-> 2. 用 [Cookie-Editor](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm) 插件导出 Cookie（JSON 或 Header String 格式均可）
-> 3. 把 Cookie 字符串发给 Agent
-> 4. Agent 运行命令完成登录：
+> **Login method (Cookie-Editor preferred — simplest):**
+> 1. User logs into XiaoHongShu in their browser (xiaohongshu.com)
+> 2. Use the [Cookie-Editor](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm) extension to export cookies (JSON or Header String format both work)
+> 3. Send the cookie string to the Agent
+> 4. The Agent runs the command to complete login:
 >
 > ```bash
-> # JSON 格式（Cookie-Editor → Export → JSON）
+> # JSON format (Cookie-Editor → Export → JSON)
 > agent-reach configure xhs-cookies '[{"name":"web_session","value":"xxx","domain":".xiaohongshu.com",...}]'
 >
-> # 或 Header String 格式（Cookie-Editor → Export → Header String）
+> # Or Header String format (Cookie-Editor → Export → Header String)
 > agent-reach configure xhs-cookies "key1=val1; key2=val2; ..."
 > ```
 >
-> **备选：** 本地电脑如果有浏览器，也可以打开 http://localhost:18060 扫码登录。
+> **Alternative:** if the local machine has a browser, you can also open http://localhost:18060 and scan the QR code to log in.
 
 **抖音 / Douyin (douyin-mcp-server):**
-> "抖音视频解析需要一个 MCP 服务。安装 douyin-mcp-server 后即可解析视频、获取无水印下载链接。"
+> "Douyin video parsing requires an MCP service. Once douyin-mcp-server is installed, you can parse videos and fetch watermark-free download links."
 
 ```bash
-# 1. 安装
+# 1. Install
 pip install douyin-mcp-server
 
-# 2. 启动 HTTP 服务（端口 18070）
-# 方式一：用 uv（推荐）
+# 2. Start the HTTP service (port 18070)
+# Option 1: use uv (recommended)
 mkdir -p ~/.agent-reach/tools && cd ~/.agent-reach/tools
 git clone https://github.com/yzfly/douyin-mcp-server.git && cd douyin-mcp-server
 uv sync && uv run python run_http.py
 
-# 方式二：直接用 Python 启动
+# Option 2: start directly with Python
 python -c "
 from douyin_mcp_server.server import mcp
 mcp.settings.host = '127.0.0.1'
@@ -181,56 +181,56 @@ mcp.settings.port = 18070
 mcp.run(transport='streamable-http')
 "
 
-# 3. 注册到 mcporter
+# 3. Register with mcporter
 mcporter config add douyin http://localhost:18070/mcp
 ```
 
-> 无需认证即可解析视频信息和获取下载链接。
-> 如需 AI 语音识别提取文案功能，需要配置硅基流动 API Key（`export API_KEY="sk-xxx"`）。
+> No authentication is required for parsing video info and download links.
+> To enable the AI voice-recognition transcript-extraction feature, configure a SiliconFlow API Key (`export API_KEY="sk-xxx"`).
 >
-> 详见 https://github.com/yzfly/douyin-mcp-server
+> See https://github.com/yzfly/douyin-mcp-server for details.
 
-**LinkedIn (可选 — linkedin-scraper-mcp):**
-> "LinkedIn 基本内容可通过 Jina Reader 读取。完整功能（Profile 详情、职位搜索）需要 linkedin-scraper-mcp。"
+**LinkedIn (optional — linkedin-scraper-mcp):**
+> "Basic LinkedIn content is readable via Jina Reader. Full functionality (profile details, job search) requires linkedin-scraper-mcp."
 
 ```bash
 pip install linkedin-scraper-mcp
 ```
 
-> **登录方式（需要浏览器界面）：**
+> **Login method (browser UI required):**
 >
-> linkedin-scraper-mcp 使用 Chromium 浏览器登录，需要你能看到浏览器窗口。
+> linkedin-scraper-mcp uses a Chromium browser to log in, so it needs to be able to see a browser window.
 >
-> - **本地电脑（有桌面）：** 直接运行：
+> - **Local machine (has a desktop):** just run:
 >   ```bash
 >   linkedin-scraper-mcp --login --no-headless
 >   ```
->   浏览器会弹出来，手动登录 LinkedIn 即可。
+>   A browser window pops up; manually log into LinkedIn.
 >
-> - **服务器（无 UI）：** 需要通过 VNC 远程桌面操作：
+> - **Server (no UI):** requires a VNC remote desktop:
 >   ```bash
->   # 1. 服务器上安装并启动 VNC（如已有可跳过）
+>   # 1. Install and start VNC on the server (skip if already there)
 >   apt install -y tigervnc-standalone-server
 >   vncserver :1 -geometry 1280x720
 >
->   # 2. 用 VNC 客户端连接 服务器IP:5901
+>   # 2. Connect a VNC client to server-ip:5901
 >
->   # 3. 在 VNC 桌面的终端里运行：
+>   # 3. In the VNC desktop terminal run:
 >   export DISPLAY=:1
 >   linkedin-scraper-mcp --login --no-headless
 >   ```
->   在 VNC 里看到浏览器后手动登录。登录成功后 session 会保存到 `~/.linkedin-mcp/profile/`。
+>   After you see the browser inside VNC, log in manually. Once login succeeds the session is persisted to `~/.linkedin-mcp/profile/`.
 >
-> **登录后启动 MCP 服务：**
+> **Start the MCP service after login:**
 > ```bash
 > linkedin-scraper-mcp --transport streamable-http --port 8001
 > mcporter config add linkedin http://localhost:8001/mcp
 > ```
 >
-> 详见 https://github.com/stickerdaniel/linkedin-mcp-server
+> See https://github.com/stickerdaniel/linkedin-mcp-server for details.
 
-**Boss直聘 (可选 — mcp-bosszp):**
-> "Boss直聘职位页面可直接读取。完整搜索和打招呼功能需要 mcp-bosszp。"
+**Boss直聘 (optional — mcp-bosszp):**
+> "Boss直聘 job pages can be read directly. Full search and auto-greet features require mcp-bosszp."
 
 ```bash
 mkdir -p ~/.agent-reach/tools && cd ~/.agent-reach/tools
@@ -238,26 +238,26 @@ git clone https://github.com/mucsbr/mcp-bosszp.git && cd mcp-bosszp
 pip install -r requirements.txt && playwright install chromium
 ```
 
-> **登录方式（手机 App 扫码）：**
+> **Login method (mobile app QR scan):**
 >
-> mcp-bosszp 使用二维码登录，需要 Boss直聘 App 扫码。
+> mcp-bosszp uses QR-code login, which requires scanning with the Boss直聘 app.
 >
 > ```bash
-> # 1. 启动 MCP 服务
+> # 1. Start the MCP service
 > python boss_zhipin_fastmcp_v2.py
 >
-> # 2. 通过 MCP 触发登录（会生成二维码图片）
+> # 2. Trigger login via MCP (a QR-code image is generated)
 > mcporter call 'bosszhipin.start_login()'
 >
-> # 3. 浏览器打开二维码图片（服务器上用 http://服务器IP:8000/static/qrcode_xxx.png）
-> # 4. 用 Boss直聘 App 扫码确认
+> # 3. Open the QR-code image in a browser (on a server use http://server-ip:8000/static/qrcode_xxx.png)
+> # 4. Scan with the Boss直聘 app to confirm
 > ```
 >
-> 扫码成功后 session 自动保存，之后可以搜索职位和自动打招呼。
+> After a successful scan the session is auto-saved; afterwards you can search jobs and auto-greet.
 >
-> 或用 Docker：`docker-compose up -d`
+> Or use Docker: `docker-compose up -d`
 >
-> 详见 https://github.com/mucsbr/mcp-bosszp
+> See https://github.com/mucsbr/mcp-bosszp for details.
 
 ### Step 4: Final check
 
@@ -267,7 +267,7 @@ Run `agent-reach doctor` one final time and report the results to your user.
 
 If you are running inside **OpenClaw**, ask your user:
 
-> "link-world 安装好了。要不要我设一个每天自动检查的任务？它会帮你盯着这些渠道是否正常、有没有新版本。有问题才会通知你，没问题不打扰。"
+> "link-world is installed. Do you want me to set up a daily auto-check task? It will monitor whether these channels are healthy and whether there are new versions. It only notifies you if there's a problem — otherwise it stays quiet."
 
 If the user agrees, create a **cron job** (daily, `sessionTarget: "isolated"`, `delivery: "announce"`) with this task:
 

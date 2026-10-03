@@ -1,119 +1,119 @@
 # Security Audit Extension
 
-## 概述
+## Overview
 
-Security Audit Extension 为 Catui 提供安全审计能力，包括：
-- 审计日志记录所有操作
-- 危险命令模式检测
-- 敏感文件访问保护
-- 可选的拦截机制
+The Security Audit Extension provides Catui with security-audit capabilities, including:
+- Audit logging of all operations
+- Detection of dangerous command patterns
+- Protection of sensitive file access
+- Optional interception mechanism
 
-## 快速开始
+## Quick start
 
-### 安装
+### Installation
 
-安全审计作为内置扩展，默认启用。无需额外安装。
+Security audit is shipped as a built-in extension and enabled by default. No extra installation is needed.
 
-### 基本使用
+### Basic usage
 
 ```bash
-# 查看安全面板
+# View the security panel
 /security
 
-# 查看详细日志
+# View detailed logs
 /security-logs
 
-# 查看统计数据
+# View statistics
 /security-stats
 
-# 清除日志
+# Clear logs
 /security-clear
 ```
 
-## 架构设计
+## Architecture
 
-### 分层设计
+### Layered design
 
 ```
 ┌─────────────────────────────────────────────────┐
 │           Security Audit Extension              │
 ├─────────────────────────────────────────────────┤
 │  ┌─────────────────────────────────────────┐ │
-│  │           Security Interface              │ │  ← 可替换的接口层
-│  │  (标准化接口，支持不同实现)                 │ │
+│  │           Security Interface              │ │  ← Swappable interface layer
+│  │  (standardized interface, multiple impls)  │ │
 │  └─────────────────────────────────────────┘ │
 │                      │                         │
 │    ┌─────────────────┼─────────────────┐      │
 │    ▼                 ▼                 ▼      │
 │ ┌────────┐    ┌───────────┐    ┌──────────┐  │
-│ │  v1    │    │   v2     │    │   v3     │  │
-│ │ Light  │    │   Med    │    │  Heavy   │  │  ← 可升级的实现
+│ │  v1    │    │   v2     │    │   v3     │  │  ← Upgradeable implementations
+│ │ Light  │    │   Med    │    │  Heavy   │  │
 │ │ Audit  │    │  Secure  │    │  Guard   │  │
 │ └────────┘    └───────────┘    └──────────┘  │
 └─────────────────────────────────────────────────┘
 ```
 
-### 实现层级
+### Implementation levels
 
-| 层级 | 功能 | 模式 |
-|------|------|------|
-| L1 | 审计日志 | 必须 |
-| L2 | 危险识别 | 必须 |
-| L3 | 拦截确认 | 可选 |
-| L4 | 白名单 | 可选 |
+| Level | Capability | Mode |
+|-------|------------|------|
+| L1 | Audit log | Required |
+| L2 | Danger detection | Required |
+| L3 | Intercept + confirm | Optional |
+| L4 | Allowlist | Optional |
 
-## 危险模式
+## Dangerous patterns
 
-### 默认检测的危险命令模式
+### Default dangerous-command patterns
 
 ```typescript
 const DANGEROUS_PATTERNS = [
-  // 递归删除
+  // recursive delete
   "rm\\s+-rf",
   "rmdir\\s+/s",
   "del\\s+/s",
 
-  // 系统修改
+  // system modification
   "sudo\\s+",
   "chmod\\s+777",
   "chown\\s+",
 
-  // 进程控制
+  // process control
   "kill\\s+-9",
   "pkill\\s+-9",
   "killall\\s+",
 
-  // 网络下载执行
+  // download-and-exec
   "curl\\s+.*\\|\\s*sh",
   "wget\\s+.*\\|\\s*sh",
 
-  // Git 危险操作
+  // dangerous Git operations
   "git\\s+push\\s+--force",
 
-  // 容器/系统
+  // containers / system
   "docker\\s+rm\\s+-f",
   "systemctl\\s+stop",
 ];
 ```
 
-### 敏感路径
+### Sensitive paths
 
 ```typescript
 const SENSITIVE_PATHS = [
-  "~/.ssh/",      // SSH 密钥
-  "~/.aws/",      // AWS 凭证
-  "~/.azure/",    // Azure 凭证
-  ".env",         // 环境变量文件
-  ".env.local",   // 本地环境变量
-  ".env.production", // 生产环境变量
+  "~/.ssh/",      // SSH keys
+  "~/.aws/",      // AWS credentials
+  "~/.azure/",    // Azure credentials
+  ".env",         // environment-variable file
+  ".env.local",   // local environment overrides
+  ".env.production", // production environment
 ];
 ```
 
-## 插拔指南
+## Plug-and-play guide
 
-### 禁用安全审计
+### Disabling security audit
 
-如需禁用安全审计，可以在 `settings.json` 中设置：
+To disable security audit, set the following in `settings.json`:
 
 ```json
 {
@@ -125,9 +125,9 @@ const SENSITIVE_PATHS = [
 }
 ```
 
-### 自定义危险模式
+### Custom dangerous patterns
 
-在扩展配置中添加自定义检测模式：
+Add custom detection patterns to the extension config:
 
 ```json
 {
@@ -144,9 +144,9 @@ const SENSITIVE_PATHS = [
 }
 ```
 
-### 白名单命令
+### Allowlist commands
 
-将常用命令加入白名单：
+Add common commands to the allowlist:
 
 ```json
 {
@@ -160,43 +160,43 @@ const SENSITIVE_PATHS = [
 }
 ```
 
-## 升级指南
+## Upgrade guide
 
-### 当前版本 (v1 - Light Audit)
+### Current version (v1 — Light Audit)
 
-- ✅ 审计日志记录
-- ✅ 危险命令检测
-- ✅ 敏感文件检测
-- ⚠️ 警告提示
+- ✅ Audit-log recording
+- ✅ Dangerous-command detection
+- ✅ Sensitive-file detection
+- ⚠️ Warning prompts
 
-### 计划: v2 - Med Secure
+### Planned: v2 — Med Secure
 
-- ✅ 所有 v1 功能
-- 🔄 用户确认机制
-- 🔄 可配置的拦截级别
+- ✅ All v1 features
+- 🔄 User-confirmation mechanism
+- 🔄 Configurable interception level
 
-### 计划: v3 - Heavy Guard
+### Planned: v3 — Heavy Guard
 
-- ✅ 所有 v2 功能
-- 🔄 沙箱执行环境
-- 🔄 AI 语义分析
-- 🔄 完整操作拦截
+- ✅ All v2 features
+- 🔄 Sandbox execution environment
+- 🔄 AI semantic analysis
+- 🔄 Full-operation interception
 
-### 升级步骤
+### Upgrade steps
 
-升级到更高安全级别：
+To upgrade to a higher security level:
 
-1. **备份配置**
+1. **Back up the config**
    ```bash
    cp ~/.catui/agent/settings.json ~/.catui/agent/settings.json.bak
    ```
 
-2. **更新扩展**
+2. **Update the extension**
    ```bash
    npm install -g @catui/agent@latest
    ```
 
-3. **配置新级别**
+3. **Configure the new level**
    ```json
    {
      "security": {
@@ -206,36 +206,36 @@ const SENSITIVE_PATHS = [
    }
    ```
 
-## API 参考
+## API reference
 
-### SecurityEngine 接口
+### SecurityEngine interface
 
 ```typescript
 interface SecurityEngine {
-  // 检查命令是否安全
+  // Check whether a command is safe
   checkCommand(command: string, cwd: string): SecurityCheckResult;
 
-  // 检查文件操作
+  // Check a file operation
   checkFileOperation(operation: string, path: string): SecurityCheckResult;
 
-  // 记录审计日志
+  // Record an audit-log event
   log(event: AuditEvent): AuditEvent;
 
-  // 查询日志
+  // Query logs
   queryLogs(options?: LogQueryOptions): AuditEvent[];
 
-  // 获取统计
+  // Get statistics
   getStats(): SecurityStats;
 
-  // 清除日志
+  // Clear logs
   clearLogs(): void;
 
-  // 导出日志
+  // Export logs
   exportLogs(format?: "json" | "html"): string;
 }
 ```
 
-### 审计日志格式
+### Audit-log format
 
 ```json
 {
@@ -252,38 +252,38 @@ interface SecurityEngine {
 }
 ```
 
-## 故障排除
+## Troubleshooting
 
-### 日志位置
+### Log location
 
-审计日志存储在：
+Audit logs are stored at:
 ```
 ~/.catui/agent/security-audit.json
 ```
 
-### 查看日志
+### Viewing logs
 
 ```bash
-# 使用 catui 命令
+# Use the catui command
 /security-logs 50
 
-# 或直接查看文件
+# Or read the file directly
 cat ~/.catui/agent/security-audit.json
 ```
 
-### 常见问题
+### Common questions
 
-**Q: 危险命令仍然执行了？**
-A: 当前版本 (v1) 只记录和警告，不阻止执行。升级到 v2+ 可启用拦截。
+**Q: A dangerous command still ran?**
+A: The current version (v1) only logs and warns; it does not block execution. Upgrade to v2+ to enable interception.
 
-**Q: 如何添加自定义检测？**
-A: 修改扩展配置中的 `dangerousPatterns` 和 `sensitivePaths`。
+**Q: How do I add custom detection rules?**
+A: Modify the `dangerousPatterns` and `sensitivePaths` in the extension config.
 
-**Q: 日志太大怎么办？**
-A: 使用 `/security-clear` 清除，或配置 `maxLogEntries` 限制大小。
+**Q: Logs are too big?**
+A: Use `/security-clear` to clear them, or configure `maxLogEntries` to cap the size.
 
-## 相关文档
+## Related docs
 
-- [Extension 开发指南](./extensions)
-- [Settings 配置](./settings)
-- [安全最佳实践](./security)
+- [Extension development guide](./extensions)
+- [Settings configuration](./settings)
+- [Security best practices](./security)

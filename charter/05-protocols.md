@@ -1,44 +1,44 @@
-# §5 协议策略
+# §5 Protocol Strategy
 
-> 生态中各协议的定位、适用场景与权威文档
+> Positioning, applicable scenarios, and authoritative docs for each protocol in the ecosystem
 
 <!--
-[WHO]  全生态协议策略定义
+[WHO]  Whole-ecosystem protocol strategy definition
 [FROM] catui-platform-charter.md §5
-[TO]   各项目集成设计文档
-[HERE] charter/05-protocols.md — 协议策略
+[TO]   Each project's integration design docs
+[HERE] charter/05-protocols.md — protocol strategy
 -->
 
 ---
 
-## 5.1 协议总览
+## 5.1 Protocol overview
 
-| 协议 | 定位 | 适用场景 | 权威文档 |
-|------|------|----------|----------|
-| **HTTP + SSE（OpenAI 兼容）** | **主线协议** — Gateway 唯一对外 API | 所有外部客户端、第三方集成；Editor Remote HTTP；Eidolon 云端模式 | Catui-Agent-Gateway `docs/02` |
-| **ACP** | 本地直连 — Agent 引擎与宿主进程通信 | Editor 本地模式；Catui CLI；IDE 插件 | Catui ACP mode 实现 |
-| **PCP (WebSocket)** | 仅 Editor 内部 — Rust Server / Desktop PCP 模式 | Editor 内部维护，不对外推广 | catui-editor `docs/.../catui-client-protocol.md` |
-| **Catui Tool Callback (v0.2)** | A 线工具回传 — Gateway ↔ caller | Editor Remote HTTP 调用本机工具 | Gateway `docs/18` + Catui `docs/remote-tool-register-design.md` |
-| **Channel 协议** | 第三方 IM 适配 | 钉钉 Stream / WeChat XML / Feishu → Gateway | Gateway `docs/13` |
-| **Blackboard (KV + pub/sub)** | 多 Agent 横向通信 | O-Mesh 编排的多 Agent 协作 | O-Mesh `DOCS/` |
-| **Native Messaging** | 浏览器插件 ↔ 本地进程 | Eidolon 本地模式 → Catui | Catui-Eidolon `native-host/` |
+| Protocol | Positioning | Applicable scenarios | Authoritative doc |
+|----------|-------------|----------------------|-------------------|
+| **HTTP + SSE (OpenAI-compatible)** | **Main protocol** — Gateway's only outward API | All external clients and third-party integrations; Editor Remote HTTP mode; Eidolon cloud mode | Catui-Agent-Gateway `docs/02` |
+| **ACP** | Local direct connection — Agent engine and host process communication | Editor local mode; Catui CLI; IDE plugins | Catui ACP-mode implementation |
+| **PCP (WebSocket)** | Editor-internal only — Rust Server / Desktop PCP mode | Editor-maintained; not promoted externally | catui-editor `docs/.../catui-client-protocol.md` |
+| **Catui Tool Callback (v0.2)** | Work-line A tool return — Gateway ↔ caller | Editor Remote HTTP calls local tools | Gateway `docs/18` + Catui `docs/remote-tool-register-design.md` |
+| **Channel protocol** | Third-party IM adaptation | DingTalk Stream / WeChat XML / Feishu → Gateway | Gateway `docs/13` |
+| **Blackboard (KV + pub/sub)** | Multi-Agent horizontal communication | O-Mesh-orchestrated multi-Agent collaboration | O-Mesh `DOCS/` |
+| **Native Messaging** | Browser extension ↔ local process | Eidolon local mode → Catui | Catui-Eidolon `native-host/` |
 
-## 5.2 协议选择原则
+## 5.2 Protocol-selection principles
 
-1. **对外只暴露 OpenAI 兼容 HTTP**，降低所有接入方门槛
-2. 内部协议（ACP / PCP / Channel）各自服务特定通路，不互相侵入
-3. 新场景优先走 HTTP + SSE；仅在性能/隔离有明确需求时走内部协议
+1. **Expose only OpenAI-compatible HTTP externally** — lower the bar for all integrators
+2. Internal protocols (ACP / PCP / Channel) each serve specific paths and do not invade one another
+3. New scenarios prefer HTTP + SSE; only use internal protocols when there is a clear performance / isolation need
 
-## 5.3 Tool Callback v0.2 双通道
+## 5.3 Tool Callback v0.2 dual channel
 
 ```
-Gateway  ── SSE event: catui.tool_request  ──►  Caller (Editor/3rd-party)
+Gateway  ── SSE event: catui.tool_request  ──►  Caller (Editor / 3rd-party)
 Caller   ── POST /v1/.../tool_response      ──►  Gateway
 ```
 
-**关键决策**（详见 [07-decisions.md](./07-decisions.md) §8.1）：
-- 串行工具调用（同一 session 同时只允许一个 pending）
-- 无 caller heartbeat（靠 timeout_ms）
-- Asgard 可代理 tool_response（单一审计链）
-- arguments 对称封 256 KiB
-- session 失发显式事件 `catui.session_lost`
+**Key decisions** (see [07-decisions.md](./07-decisions.md) §8.1):
+- Serial tool calls (only one pending allowed per session at a time)
+- No caller heartbeat (rely on `timeout_ms`)
+- Asgard may proxy `tool_response` (single audit chain)
+- `arguments` capped symmetrically at 256 KiB
+- Explicit `catui.session_lost` event when session is lost

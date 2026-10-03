@@ -1,165 +1,162 @@
-# Issue: cron-tasks.json 存储位置与 TUI cwd 不一致，导致定时任务无法触发
+# Issue: cron-tasks.json storage path differs from TUI cwd, so scheduled tasks never fire
 
 ## ID
 `issue:cron-tasks-path-mismatch`
 
-## 状态
+## Status
 `closed — fixed`
 
-## 日期
+## Date
 `2026-05-22`
 
-## 关闭日期
+## Closed
 `2026-06-20`
 
 ---
 
-> **注意**：此 issue 已在后续重构中修复。当前代码使用 `api.agentDir` / `ctx.agentDir` 作为 cron 任务的存储基准路径，而非 `api.cwd`。cron 文件路径已改为 `.claude/scheduled_tasks.json`（相对于 agentDir）。此文档保留作为历史记录。
+> **Note**: this issue was fixed in a subsequent refactor. The current code uses `api.agentDir` / `ctx.agentDir` as the base path for cron-task storage instead of `api.cwd`. The cron file path has been changed to `.claude/scheduled_tasks.json` (relative to `agentDir`). This document is kept for historical reference.
 
-## 问题描述
+## Problem
 
-用户通过 TUI 内 `/loop create` 命令创建 durable cron 任务后，任务配置文件被写入 `~/.catui/cron-tasks.json`，但 catui TUI 的 cron 调度器实际读取的是 `{api.cwd}/.catui/cron-tasks.json`——两者路径不同，导致调度器读取到旧文件，定时任务从未触发。
+After a user creates a durable cron task via the TUI `/loop create` command, the task config file is written to `~/.catui/cron-tasks.json`, but the catui TUI's cron scheduler actually reads from `{api.cwd}/.catui/cron-tasks.json` — the two paths differ, so the scheduler reads the old file and the scheduled task never fires.
 
-### 复现路径
+### Reproduction path
 
-1. 用户在 TUI 中执行 `/loop create "0 9 * * *" <prompt>`，创建一个每天 9 点触发的 GitHub 日报任务
-2. 任务创建后，文件写入 `~/.catui/cron-tasks.json`（任务 ID `5cb66040`，包含完整的蕾姆口吻日报 prompt）
-3. catui TUI 从 `/home/minghuazzz/Pencil` 启动（`process.cwd()`），因此 `api.cwd = /home/minghuazzz/Pencil`
-4. cron 调度器（`createCronScheduler({ dir: api.cwd })`）读取 `/home/minghuazzz/Pencil/.catui/cron-tasks.json`（旧文件，任务 ID `5b725adf`，内容为旧版 prompt）
-5. 每天 9 点调度器检查旧文件中的任务，任务存在但发送命令是 openclaw（早已失效），日报从未正常发出
+1. In TUI run `/loop create "0 9 * * *" <prompt>` to create a daily-9-am GitHub digest task
+2. After creation, the file is written to `~/.catui/cron-tasks.json` (task ID `5cb66040`, containing the full Rem-toned digest prompt)
+3. catui TUI launches from `/home/minghuazzz/Pencil` (`process.cwd()`), so `api.cwd = /home/minghuazzz/Pencil`
+4. The cron scheduler (`createCronScheduler({ dir: api.cwd })`) reads `/home/minghuazzz/Pencil/.catui/cron-tasks.json` (the old file, task ID `5b725adf`, containing the old-version prompt)
+5. At 9 am every day the scheduler checks the old file's task; the task exists but its send command is openclaw (already invalid), so the digest never goes out
 
-### 影响
+### Impact
 
-- 所有通过 TUI 创建的 durable cron 任务在多项目工作区中都无法触发
-- 用户感知为「定时任务创建成功但从不执行」，诊断困难（两个路径的文件内容不同，不直观）
+- All durable cron tasks created via TUI fail to fire in multi-project workspaces
+- User-visible as "the task says it was created successfully but never executes", hard to diagnose (the two path-files have different content, not obviously related)
 
 ---
 
-## 根因分析
+## Root-cause analysis
 
-### 路径层级
+### Path divergence
 
 ```
-~/.catui/cron-tasks.json      ← 任务实际写入位置
-/home/minghuazzz/Pencil/.catui/cron-tasks.json  ← 调度器读取位置
+~/.catui/cron-tasks.json      ← where tasks are actually written
+/home/minghuazzz/Pencil/.catui/cron-tasks.json  ← where the scheduler reads
 ```
 
-### 代码层面的原因
+### Code-level reasons
 
-1. **任务写入时使用了 fallback cwd**：
-   `cron-tasks.ts` 中 `addCronTask()` 接收 `projectRoot` 参数。当调用路径没有显式传入 `projectRoot` 时，某些工具（如 `CronCreateTool`）使用 `ctx.cwd`（= `api.cwd` = TUI 进程 cwd），但历史上可能存在另一条代码路径用 `~` 或 `~/.catui` 作为默认值。
+1. **Task write used a fallback cwd**: in `cron-tasks.ts`, `addCronTask()` takes a `projectRoot` parameter. When the call path doesn't pass `projectRoot` explicitly, some tools (e.g. `CronCreateTool`) use `ctx.cwd` (= `api.cwd` = TUI process cwd), but historically there may have been a different code path that used `~` or `~/.catui` as the default.
 
-2. **调度器读取使用 `api.cwd`**：
-   `loop/index.ts` 第 298 行：
+2. **Scheduler reads use `api.cwd`**: `loop/index.ts` line 298:
    ```typescript
    createCronScheduler({ dir: api.cwd })
    ```
-   `api.cwd` 来源为 `ExtensionContext.cwd`，在 TUI 模式下为进程启动目录（TUI 从 `/home/minghuazzz/Pencil` 启动则为 `/home/minghuazzz/Pencil`）。
+   `api.cwd` comes from `ExtensionContext.cwd`; in TUI mode it is the process launch directory (when TUI launches from `/home/minghuazzz/Pencil`, then `/home/minghuazzz/Pencil`).
 
-3. **两个路径不指向同一文件**：
-   当 TUI cwd ≠ `~` 时（大多数情况），`~/.catui/` 和 `{cwd}/.catui/` 是两个独立目录，调度器无法看到用户实际创建的任务。
+3. **The two paths don't point to the same file**: when TUI cwd ≠ `~` (most cases), `~/.catui/` and `{cwd}/.catui/` are two separate directories, and the scheduler cannot see the task the user actually created.
 
-### 关键代码位置
+### Key code locations
 
-| 文件 | 行 | 说明 |
-|------|----|------|
-| `extensions/builtin/loop/cron-tools/cron-create-tool.ts` | 51 | `addCronTask(ctx.cwd, {...})` — 传入 ctx.cwd |
-| `extensions/builtin/loop/cron/cron-scheduler.ts` | 298 | `createCronScheduler({ dir: api.cwd })` — 使用 api.cwd |
+| File | Line | Notes |
+|------|------|-------|
+| `extensions/builtin/loop/cron-tools/cron-create-tool.ts` | 51 | `addCronTask(ctx.cwd, {...})` — passes `ctx.cwd` |
+| `extensions/builtin/loop/cron/cron-scheduler.ts` | 298 | `createCronScheduler({ dir: api.cwd })` — uses `api.cwd` |
 | `extensions/builtin/loop/cron/cron-tasks.ts` | 72 | `CRON_FILE_REL = ".catui/cron-tasks.json"` |
-| `core/runtime/agent-session.ts` | 396 | `this._cwd = config.cwd` — 来自 CreateAgentSessionOptions |
+| `core/runtime/agent-session.ts` | 396 | `this._cwd = config.cwd` — from `CreateAgentSessionOptions` |
 | `core/runtime/sdk.ts` | 283 | `const cwd = options.cwd ?? process.cwd()` |
 
 ---
 
-## 推荐修复方案
+## Recommended fix
 
-### 方案 A（推荐）：统一存储到 agentDir，与 issue-0012 对齐
+### Option A (recommended) — unify storage at `agentDir`, aligned with issue-0012
 
-> 问题：cron tasks 存储位置分散（`~/.catui` vs `{cwd}/.catui`），与 Issue 0012「Pencils 数据目录统一」的思路一致。
+> Problem: cron-task storage is fragmented (`~/.catui` vs `{cwd}/.catui`), in line with the Issue 0012 "unify Pencils data directory" direction.
 
-**修改点：**
+**Change points:**
 
-1. `cron-tasks.ts`：`CRON_FILE_REL` 路径改为相对于 `agentDir`，而非 `projectRoot`
+1. `cron-tasks.ts`: change `CRON_FILE_REL` to be relative to `agentDir` instead of `projectRoot`
    ```typescript
-   // 从
+   // from
    const CRON_FILE_REL = ".catui/cron-tasks.json";
-   // 改为（假设 agentDir 为 ~/.pencils/agents/<id>）
+   // to (assuming agentDir is ~/.pencils/agents/<id>)
    const CRON_FILE_REL = ".catui/cron-tasks.json";
-   // 并在 addCronTask / readCronTasks 中传入 agentDir 而非 cwd
+   // and pass agentDir instead of cwd in addCronTask / readCronTasks
    ```
 
-2. `cron-create-tool.ts`：传入 `ctx.agentDir`（需新增到 ExtensionContext）
+2. `cron-create-tool.ts`: pass `ctx.agentDir` (needs to be added to `ExtensionContext`)
    ```typescript
-   await addCronTask(ctx.agentDir, { ... })  // agentDir 来自 agentDirContext.path
+   await addCronTask(ctx.agentDir, { ... })  // agentDir comes from agentDirContext.path
    ```
 
-3. `loop/index.ts`：`createCronScheduler({ dir: agentDir })`
+3. `loop/index.ts`: `createCronScheduler({ dir: agentDir })`
 
-**优点**：
-- 与 issue 0012 的数据存储对齐原则一致
-- 每个 agent 的 cron tasks 在统一位置，不会因 cwd 变化而失效
-- 解决了跨项目工作区的问题
+**Pros**:
+- Aligns with the storage principles from issue 0012
+- Each agent's cron tasks live in one place; cwd changes don't break them
+- Solves the cross-project-workspace problem
 
-**缺点**：
-- 需要 ExtensionContext 新增 `agentDir` 字段（属于 API 扩展）
+**Cons**:
+- Needs an `agentDir` field added to `ExtensionContext` (an API extension)
 
 ---
 
-### 方案 B（简单修复）：任务创建时校验并警告
+### Option B (simple fix) — validate and warn when creating tasks
 
-> 问题：用户不知道任务写到了哪个路径，调度器也未检查文件是否存在。
+> Problem: the user doesn't know which path the task was written to, and the scheduler doesn't check whether the file exists.
 
-**修改点：**
+**Change points:**
 
-1. `addCronTask()` 在写入后验证可读性，读取一次确认写入成功
-2. 若读取失败（路径不存在或权限问题），抛出明确错误告知用户
-3. cron scheduler 启动时若文件不存在，创建空 `{ tasks: [] }` 并打印日志
+1. After `addCronTask()` writes, validate readability — read once to confirm successful write
+2. If the read fails (path missing or permission issue), throw an explicit error to the user
+3. If the cron file doesn't exist when the scheduler starts, create an empty `{ tasks: [] }` and log it
 
-**优点**：
-- 不改变存储结构，仅增加校验和警告
-- 改动小，风险低
+**Pros**:
+- Doesn't change storage layout, only adds validation and warnings
+- Small change, low risk
 
-**缺点**：
-- 没有根治问题，只是让问题更容易发现
+**Cons**:
+- Doesn't fix the root cause, just makes the problem easier to spot
 
 ---
 
-### 方案 C（无改动）：让调度器同时检查两个路径
+### Option C (no change) — scheduler checks both paths
 
-> 问题：迁移成本最小，但增加了调度器复杂度。
+> Problem: smallest migration cost, but adds scheduler complexity.
 
-**修改点：**
+**Change points:**
 
-cron scheduler 启动时检查两个路径，合并任务列表：
+On scheduler startup, check both paths and merge task lists:
 - `{cwd}/.catui/cron-tasks.json`
-- `~/.catui/cron-tasks.json`（或 `~/.pencils/agents/<id>/.catui/cron-tasks.json`）
+- `~/.catui/cron-tasks.json` (or `~/.pencils/agents/<id>/.catui/cron-tasks.json`)
 
-**优点**：
-- 用户无需重新创建任务，现有任务自动生效
+**Pros**:
+- Users don't need to re-create tasks; existing tasks take effect automatically
 
-**缺点**：
-- 两个文件可能版本不一致，产生歧义
-- 增加了维护复杂度
-
----
-
-## 推荐
-
-**方案 A（统一到 agentDir）**：从架构层面解决问题，与 issue 0012 方向一致，长期维护成本最低。需要在 `ExtensionContext` 中增加 `agentDir` 字段。
+**Cons**:
+- The two files may be inconsistent in version, causing ambiguity
+- Increases maintenance complexity
 
 ---
 
-## 验证方式
+## Recommendation
 
-1. 从非 home 目录启动 TUI（如 `cd /project && catui`）
-2. 创建 durable cron task
-3. 检查 `~/.pencils/agents/<id>/.catui/cron-tasks.json` 有任务写入
-4. 检查调度器读取的路径与写入路径一致
-5. 手动 `forceDue` 或等待 cron 触发，任务正常执行
+**Option A (unify at `agentDir`)**: solves the problem at the architecture level, aligns with issue 0012, and has the lowest long-term maintenance cost. Requires adding an `agentDir` field to `ExtensionContext`.
 
 ---
 
-## 相关 Issue
+## Verification
 
-- Issue 0012: Gateway 数据存储位置与系统目录对齐（catui 项目内）
-- REQ-001-proactive-send: Pencil-Agent-Gateway DingTalk 主动发送（已实现）
+1. Launch TUI from a non-home directory (e.g. `cd /project && catui`)
+2. Create a durable cron task
+3. Check that `~/.pencils/agents/<id>/.catui/cron-tasks.json` has the task written
+4. Check that the scheduler reads from the same path it writes to
+5. Manually `forceDue` or wait for the cron trigger; the task should execute normally
+
+---
+
+## Related issues
+
+- Issue 0012: Gateway data-storage alignment with system directories (within the Catui project)
+- REQ-001-proactive-send: Pencil-Agent-Gateway DingTalk proactive-send (already implemented)

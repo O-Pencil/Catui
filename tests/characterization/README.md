@@ -1,59 +1,59 @@
-# Characterization Harness — 行为基线（"功能不变"的行为半边证明）
+# Characterization Harness — Behavior Baseline (the behavioral half of "feature-preserved" proof)
 
-> 录在重构**前**的主干（`main`）上；重构分支回放比对。与公共符号表（结构半边，见 `scripts/collect-baseline.ts`）合起来构成"功能不变"的双面证据。
+> Recorded on the **pre-refactor** trunk (`main`); replayed and compared on the refactor branch. Combined with the public-symbol table (the structural half, see `scripts/collect-baseline.ts`), it forms the two-sided evidence that "feature behavior is preserved."
 
-## 目的
+## Purpose
 
-重构（候选 D / 两大阶段）的核心承诺是"功能不变"。符号表能证明**对外形状没变**，但函数内部重构后**行为可能悄悄改变**而符号不变。本 harness 用 **characterization（行为固化）测试**钉住"当前行为"：
+The refactor (Candidate D / two big phases) makes a core promise: "feature behavior is preserved." The symbol table can prove **the outward shape didn't change**, but refactoring inside a function may **quietly change behavior** even when symbols don't move. This harness uses **characterization (behavior-pinning) tests** to nail down "current behavior":
 
-- **固定输入 → Agent 实际产出**逐字节录为黄金文件（golden）。
-- 重构后回放同一输入，与黄金 diff；**任何差异 = 回归**（或大阶段二**显式声明**的有意变更，GB-2）。
-- 它会连**当前的 bug 一起钉住**——这正是行为保持重构所要：阶段一连 bug 都不许动，阶段二要改得显式声明。
+- **Fixed input → actual Agent output** is recorded byte-for-byte as a golden file.
+- After the refactor, replay the same input and diff against gold; **any difference = regression** (or, for phase-2, an **explicitly declared** intentional change, GB-2).
+- It will pin **current bugs along with the rest** — this is exactly what behavior-preserving refactor needs: phase 1 forbids even bug changes; phase 2 requires any change to be explicitly declared.
 
-**为什么走 print 模式**：print 是"同一核心引擎、去掉 TUI 非确定性"。它直接覆盖 P4（runtime 拆），也覆盖 P5 调用核心的大部分风险。UI 专属流（controller/overlay/keybinding）print 看不到 → 那部分在 P5 时补局部快照。
+**Why we use print mode**: print mode is "the same core engine, minus TUI non-determinism." It directly covers P4 (runtime split), and also covers most of P5's core-call risk surface. UI-specific flows (controller / overlay / keybinding) are invisible to print → for those, add local snapshots during P5.
 
-## 确定性怎么解决（关键）
+## How determinism is solved (key point)
 
-Agent 产出依赖 LLM（非确定、要钱、要网）。本 harness **绝不在 CI 调真模型**，复用仓库已验证的机制——**override `global.fetch`**（见 `packages/ai/test/openai-codex-stream.test.ts` 等），并做成 **record-once / replay（VCR）**：
+Agent output depends on an LLM (non-deterministic, costs money, needs network). This harness **never calls a real model in CI**. It reuses a mechanism already proven in the repo — **override `global.fetch`** (see `packages/ai/test/openai-codex-stream.test.ts` etc.) — implemented as **record-once / replay (VCR)**:
 
-| 模式 | 行为 |
-|------|------|
-| **record**（`RECORD=1`，你在 main 上跑一次）| 包住真实 `fetch`，把每次模型调用的 **SSE 原始字节**按顺序存进 `cases/<name>/cassette.json`，同时写黄金 |
-| **replay**（默认，CI / 重构分支）| `fetch` 被替换：模型 host 的第 N 次调用原样吐回 cassette 第 N 条；其他 host 一律 404（遥测在沙箱无凭据自动 noop）| 
+| Mode | Behavior |
+|------|----------|
+| **record** (`RECORD=1`, run once on `main`) | Wraps the real `fetch`, stores the **raw SSE bytes** of every model call in order into `cases/<name>/cassette.json`, and writes the golden at the same time |
+| **replay** (default, CI / refactor branches) | `fetch` is replaced: the Nth model-host call replays the Nth cassette entry verbatim; any other host returns 404 (telemetry auto-noops in the sandbox with no credentials) |
 
-字节级录制 → 回放确定，**无需手写 SSE**，provider 协议细节变了也不影响（录的是真实响应）。
+Byte-level recording → replay is deterministic, **no need to hand-write SSE**, and provider-protocol details don't matter (we're recording real responses).
 
-## 目录
+## Layout
 
 ```
 tests/characterization/
 ├── harness/
-│   ├── fetch-cassette.ts   # record/replay global.fetch（按顺序、原始字节）
-│   ├── normalize.ts        # diff 前洗掉易变量（时间戳/耗时/绝对路径/ANSI/uuid）
-│   └── run-case.ts         # 构 session(假模型) + runPrintMode + 捕获 stdout
+│   ├── fetch-cassette.ts   # record/replay global.fetch (in-order, raw bytes)
+│   ├── normalize.ts        # wash easy-variables before diff (timestamps / durations / absolute paths / ANSI / uuid)
+│   └── run-case.ts         # build session (fake model) + runPrintMode + capture stdout
 ├── cases/<name>/
 │   ├── case.json           # { provider, model, input, workspace?, baseUrl?, api? }
-│   ├── cassette.json       # 录制产物（RECORD 生成）
-│   └── workspace/          # 沙箱种子文件（让 read/edit/bash 输出稳定）
-├── __golden__/<name>.txt   # 归一化后的黄金 stdout
-├── characterization.test.ts# vitest：逐 case 回放 + 比对黄金
+│   ├── cassette.json       # recording artifact (RECORD generates)
+│   └── workspace/          # sandbox seed files (make read/edit/bash output stable)
+├── __golden__/<name>.txt   # normalized golden stdout
+├── characterization.test.ts# vitest: per-case replay + golden comparison
 └── vitest.config.ts
 ```
 
-## 工作流
+## Workflow
 
 ```bash
-# ① 在 main（重构前）录黄金 + cassette —— 需你机器上有对应 provider 的真实可用模型
+# ① On main (pre-refactor) record the golden + cassette — requires a working real-model provider on your machine
 RECORD=1 OPENAI_API_KEY=sk-... npx vitest run --config tests/characterization/vitest.config.ts
 git add tests/characterization/cases/*/cassette.json tests/characterization/__golden__
 git commit -m "test(characterization): record pre-refactor golden baseline"
 
-# ② 把 harness + golden + cassette 带到重构分支，回放比对（零网络）
+# ② Bring the harness + golden + cassette onto the refactor branch and replay (zero network)
 npx vitest run --config tests/characterization/vitest.config.ts
-#   全绿 = 行为不变；红 = 回归（或大阶段二有意变更，--update 黄金 + 留理由）
+#   All green = behavior preserved; red = regression (or, for phase-2, intentional change — --update gold + leave a reason)
 ```
 
-**OpenAI 兼容第三方端点**（非静态注册表里的模型）：case.json 加 `baseUrl`（+ 可选 `api`，默认 `openai-completions`），`run-case.ts buildModel()` 见到 `baseUrl` 即直接合成 Model。key 仍按 `provider` 解析（无通用 `${PROVIDER}_API_KEY` 兜底），用 `provider:"openai"` → 把该端点 key 放进 `OPENAI_API_KEY`。例：
+**OpenAI-compatible third-party endpoints** (models not in the static registry): add `baseUrl` to `case.json` (plus optional `api`, defaults to `openai-completions`); `run-case.ts buildModel()` synthesizes a `Model` directly when it sees `baseUrl`. The key is still resolved by `provider` (no generic `${PROVIDER}_API_KEY` fallback) — for `provider:"openai"`, put that endpoint's key into `OPENAI_API_KEY`. Example:
 
 ```json
 { "provider": "openai", "model": "mimo-v2.5-pro",
@@ -61,20 +61,20 @@ npx vitest run --config tests/characterization/vitest.config.ts
   "input": "..." }
 ```
 
-Replay 前置条件：
+Replay prerequisites:
 
-- 每个 `cases/<name>/` 必须已经有 `cassette.json`。
-- `tests/characterization/__golden__/<name>.txt` 必须已经存在。
-- 如果缺 cassette，测试会快速失败并提示先在 `main` 上执行 `RECORD=1`，不会继续进入模型循环。
+- Every `cases/<name>/` must already have `cassette.json`.
+- `tests/characterization/__golden__/<name>.txt` must already exist.
+- If the cassette is missing, the test fast-fails with a hint to run `RECORD=1` on `main` first, and never enters the model loop.
 
-## 接到哪些门
+## Which gates this feeds
 
-| 门 | 用法 |
-|----|------|
-| **GA-2 / GA-3**（阶段一行为不变）| P1 搬迁后回放必须全绿（机械搬迁不改行为）|
-| **GB-2**（阶段二逐域）| 该域回放全绿，除非评审显式声明有意变更（`--update` + 理由）|
-| **V5-1**（P5 零回归）| print 黄金覆盖核心；UI 专属流补局部快照 |
+| Gate | Use |
+|------|-----|
+| **GA-2 / GA-3** (phase-1 behavior preserved) | After P1 mechanical move, replay must be all green (mechanical moves don't change behavior) |
+| **GB-2** (phase-2 per-domain) | That domain's replay is all green, unless the review explicitly declares an intentional change (`--update` + reason) |
+| **V5-1** (P5 zero regression) | Print goldens cover core; UI-specific flows supplemented with local snapshots |
 
-## ⚠️ 状态
+## ⚠️ Status
 
-本 harness 在受限沙箱**无法运行验证**（tsx/vitest 冷启动数分钟，性能不足）。代码按已读的真实接口（`createAgentSession` / `runPrintMode` / fetch-override）写成，**需你在开发机跑一次 `RECORD=1` 锁定**。`run-case.ts` 顶部列了 2 个需你确认的假设（apiKey env 注入、createAgentSession 选项名）。
+This harness **cannot be run/verified in the restricted sandbox** (tsx/vitest cold-start takes several minutes, performance is insufficient). The code is written against the real interfaces I've read (`createAgentSession` / `runPrintMode` / fetch-override); **you need to run `RECORD=1` once on your dev machine to lock it down**. The top of `run-case.ts` lists the 2 assumptions you need to confirm (apiKey env injection, `createAgentSession` option names).

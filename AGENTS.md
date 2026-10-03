@@ -30,17 +30,17 @@ This file provides guidance for **@o-catui-agent** tooling and contributors when
 
 > **IMPORTANT — these instructions OVERRIDE default behavior. You MUST follow them.**
 
-开发任何**新功能 / 重构 / 非平凡改动**前，你 **MUST** 先读并遵循 [`.dev-docs/feature-workflow.md`](.dev-docs/feature-workflow.md)（四步循环 + 层级归属 + 验收门）。具体强制项：
+Before developing any **new feature / refactor / non-trivial change**, you **MUST** read and follow [`.dev-docs/feature-workflow.md`](.dev-docs/feature-workflow.md) (four-step loop + layer ownership + acceptance gates). Mandatory rules:
 
-- **MUST** 按 §2b 的层级归属决策树确定文件落点。**概念层 ≠ 目录层**：一个功能既有概念层（认知/工具/界面）又有目录家（packages/core/modes/extensions），二者正交、不 1:1 映射。**新的用户可感知功能默认进 `extensions/`；不得因为"它是认知能力"就塞进 `core/`。**
-- **MUST** 遵守 §2b 每层的 MUST / CAN / MUST-NOT 约束。
-- **MUST** 类型/协议落点按 [`dev-conventions.md` §3b](.dev-docs/architecture-review/evolution/dev-conventions.md) 放置阶梯:类型住**最窄作用域**;**仅当跨 publish 边界(mem/soul/外部要用)才进 `catui-protocol`**;消费者本地 `extends` 基契约、**不写回**协议;用目录的 DIP `AGENT.md` member list 发现已有类型、**不重复定义**;**永不预先抽象**(涌现了再抽取)。
-- 命中 §3 触发条件（load-bearing 区 / >400 行 / ≥8 ports / 重写 / public-API·deps·默认扩展·CLI·TUI 变更 / 无明确 owner）**MUST** 先建 `<topic>-review/` 专项评审再写代码。
-- 完成后 **MUST** 跑 §5 五道验收门（`verify:dip` / `verify:quality` / `verify:package-boundary` / `build` / `tsc --noEmit`）+ §6 PR 自检并报告结果；改动经 PR 进 main，让 CI 再强制跑一遍。
+- **MUST** use the §2b layer-ownership decision tree to determine file placement. **Concept layer ≠ directory layer**: a feature has both a concept layer (cognition/tool/UI) and a directory home (packages/core/modes/extensions); the two are orthogonal, not 1:1. **New user-perceivable features go into `extensions/` by default**; do not stuff them into `core/` just because they are "cognitive capabilities."
+- **MUST** follow the MUST / CAN / MUST-NOT constraints of each layer in §2b.
+- **MUST** place types/protocols per the ladder in [`dev-conventions.md` §3b](.dev-docs/architecture-review/evolution/dev-conventions.md): types live in the **narrowest scope**; only cross-publish-boundary types (mem/soul/external) go into `catui-protocol`; consumers `extend` base contracts locally and **do not write back** to the protocol; discover existing types via the directory's DIP `AGENT.md` member list and **do not redefine**; **never pre-abstract** (let it emerge first).
+- When §3 trigger conditions fire (load-bearing area / >400 lines / ≥8 ports / rewrite / public-API · deps · default-extension · CLI · TUI change / no clear owner) you **MUST** first create a `<topic>-review/` and complete that review before writing code.
+- After completion you **MUST** run the §5 five acceptance gates (`verify:dip` / `verify:quality` / `verify:package-boundary` / `build` / `tsc --noEmit`) plus the §6 PR self-check and report results; changes go in via PR to main so CI enforces them again.
 
-> ⚠️ **CI 只兜结构规则（循环/DIP/边界/编译），抓不到"落点错"**——把 `extensions` 功能塞进 `core/` 照样能过 CI。**落点正确性由本规则保证，不能依赖 CI。**
+> ⚠️ **CI only enforces structural rules (cycles / DIP / boundaries / compilation); it cannot catch "wrong placement"** — stuffing an `extensions` feature into `core/` still passes CI. **Placement correctness is enforced by this rule, not by CI.**
 
-重构收益结论、已发现问题、未完成项(P7/P8) 见 [`REFACTOR-LEDGER.md`](.dev-docs/architecture-review/REFACTOR-LEDGER.md)。
+Refactor outcomes, open issues, and outstanding items (P7/P8) live in [`REFACTOR-LEDGER.md`](.dev-docs/architecture-review/REFACTOR-LEDGER.md).
 
 ---
 
