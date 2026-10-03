@@ -248,21 +248,19 @@ function lockHeldMessage(lockPath: string, now: Date): string {
 	const alive = lockOwnerIsAlive(lockPath);
 	return alive
 		? `Evolution budget ledger is held by another process that is still running; no model call was made. It releases the lock when it finishes.`
-		: `Evolution budget ledger is held by a process that is no longer running, and the store will not remove a lock it did not take. No model call was made. Once you are sure that process has exited, remove ${lockPath} to resume.`;
+		: `Evolution budget ledger is held by a process that is no longer running, and the store will not remove a lock it did not take. No model call was made. To resume, remove ${lockPath} by hand — but only once you are sure that process has exited and no other Catui process is running a refinement that could be waiting on or holding the lock. Removing it while a writer is live reintroduces exactly the double-charge the lock prevents.`;
 }
 
 /**
  * Reserves one model call, or refuses.
  *
- * Synchronous on purpose: within one process the read and the charge cannot be separated by an
- * await, so two concurrent refinements cannot both see the same headroom.
- *
- * Across processes it is not safe, and the earlier version of this comment claimed otherwise. The
- * read-modify-write here has no mutual exclusion, so N processes racing on the same agent directory
- * can each observe the same count and each charge, overshooting by up to N - 1 rather than by one.
- * That is a real gap and it is not fixed here: it needs serialized or atomic reservation, which is
- * separate work. Until then this is a *per-process* cap that is advisory between processes, and the
- * number of concurrent Catui processes sharing an agent directory is assumed to be one.
+ * Synchronous on purpose: the read-decide-write must be atomic with respect to the caller's next
+ * await, which is what stops two refinements in one process from both seeing the same headroom.
+ * Across processes the same job is done by `withBudgetLock`, so the cap holds for cooperating
+ * processes too — with one deliberate exception stated where it is enforced: a lock left behind by a
+ * process that died is *not* taken over, because POSIX has no atomic compare-and-remove and a
+ * recovery that guesses would delete a live owner's replacement. That case ends in a visible
+ * refusal, not an overspend.
  */
 export function reserveEvolutionModelCall(
 	agentDir: string,

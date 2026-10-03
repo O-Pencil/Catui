@@ -273,9 +273,10 @@ test("a real child holding the lock keeps everyone else out, and cleans up after
 	const s = space();
 	try {
 		reserveInProcess(s.agentDir);
-		// Held well past a waiter's full attempt budget (60 attempts x 20ms), so "respected" cannot
-		// be confused with "the holder happened to leave first".
-		const holder = spawn(process.execPath, ["--import", "tsx", HOLDER, s.agentDir, "2500"], { cwd: REPO_ROOT });
+		// Held past the whole observation: child startup through tsx, the wait for the lock to
+		// appear, and then a waiter's full attempt budget (60 attempts x 20ms). Anything shorter
+		// makes the result depend on scheduling, and a flaky concurrency test is worse than none.
+		const holder = spawn(process.execPath, ["--import", "tsx", HOLDER, s.agentDir, "6000"], { cwd: REPO_ROOT });
 		try {
 			const held = await waitFor(() => existsSync(lockFile(s.agentDir)), 5_000);
 			assert.ok(held, "the child must have taken the lock");
