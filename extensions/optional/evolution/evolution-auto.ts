@@ -1,5 +1,5 @@
 /**
- * [WHO]: EvolutionAutoObserver turns explicit reusable-lesson and structured turn output into automatically activated evolution artifacts
+ * [WHO]: EvolutionAutoObserver turns explicit reusable-lesson and structured turn output into candidate records, rate limited per scope root; activation still requires the store evidence gate
  * [FROM]: Depends on extension turn_end context, evolution gate, and evolution store validation/persistence
  * [TO]: Consumed by optional evolution extension entry
  * [HERE]: extensions/optional/evolution/evolution-auto.ts - deterministic loop-level self-evolution observer with scope gates
@@ -122,8 +122,21 @@ function structuredProposal(text: string):
 	return undefined;
 }
 
+/**
+ * One rate limit for every branch that can create a candidate, keyed by the scope root it writes
+ * to rather than by session.
+ *
+ * Keying by session was right only while session scope was the sole writer. A structured proposal
+ * may target global or workspace, and two sessions proposing the same global artifact each got
+ * their own budget; keying by root makes a scope's limit that scope's, and a workspace proposal can
+ * no longer be muted by an unrelated session's memory.
+ *
+ * Deliberately a bounded turn window and nothing more. It suppresses repetition, not an idea: the
+ * map is in-memory, so a restart clears it, and once COOLDOWN_TURNS elapses the same proposal is
+ * free to be made again. That is the opposite of the permanent blacklist the review warns about.
+ */
 export class EvolutionAutoObserver {
-	#lastCandidateTurnBySession = new Map<string, number>();
+	#lastCandidateTurnByRoot = new Map<string, number>();
 	#runGate: EvolutionGateRunner;
 
 	constructor(options: { runGate?: EvolutionGateRunner } = {}) {
@@ -134,15 +147,22 @@ export class EvolutionAutoObserver {
 		const sessionId = ctx.sessionManager.getSessionId();
 		const text = extractText(event.message);
 		const structured = structuredProposal(text);
-		if (structured) {
-			const root = getEvolutionScopeRoot(
+		// The root any branch would write to, resolved before the branches so one check can cover
+		// all of them. Previously the structured branches skipped the cooldown entirely, so an
+		// identical `catui_evolution` proposal created a fresh candidate on every single turn.
+		const root = structured
+			? getEvolutionScopeRoot(
 				ctx.agentDir,
 				structured.scope === "global"
 					? { scope: "global" }
 					: structured.scope === "workspace"
 						? { scope: "workspace", cwd: ctx.cwd }
 						: { scope: "session", sessionId },
-			);
+			)
+			: getEvolutionScopeRoot(ctx.agentDir, { scope: "session", sessionId });
+		const lastTurn = this.#lastCandidateTurnByRoot.get(root);
+		if (lastTurn !== undefined && event.turnIndex - lastTurn < COOLDOWN_TURNS) return { skipped: "cooldown" };
+		if (structured) {
 			if (structured.kind === "eval_fixture") {
 				if (structured.scope !== "workspace") return { skipped: "eval_fixture_scope" };
 				if (!structured.tracePath) return { skipped: "eval_fixture_trace_path" };
@@ -181,7 +201,7 @@ export class EvolutionAutoObserver {
 						recordEvolutionGateFailure(root, candidate.id, { gateReport: fixtureGateReport });
 					}
 				}
-				this.#lastCandidateTurnBySession.set(sessionId, event.turnIndex);
+				this.#lastCandidateTurnByRoot.set(root, event.turnIndex);
 				return { candidateId: candidate.id };
 			}
 			const input = {
@@ -218,14 +238,11 @@ export class EvolutionAutoObserver {
 					recordEvolutionGateFailure(root, candidate.id, { gateReport });
 				}
 			}
-			this.#lastCandidateTurnBySession.set(sessionId, event.turnIndex);
+			this.#lastCandidateTurnByRoot.set(root, event.turnIndex);
 			return { candidateId: candidate.id };
 		}
-		const lastTurn = this.#lastCandidateTurnBySession.get(sessionId);
-		if (lastTurn !== undefined && event.turnIndex - lastTurn < COOLDOWN_TURNS) return { skipped: "cooldown" };
 		const lesson = text.match(LESSON_PATTERN)?.[1]?.trim();
 		if (!lesson) return { skipped: "no_lesson" };
-		const root = getEvolutionScopeRoot(ctx.agentDir, { scope: "session", sessionId });
 		const candidate = createEvolutionCandidate(root, {
 			scope: "session",
 			summary: "Auto-observed reusable lesson",
@@ -252,7 +269,7 @@ export class EvolutionAutoObserver {
 		} else {
 			recordEvolutionGateFailure(root, candidate.id, { gateReport });
 		}
-		this.#lastCandidateTurnBySession.set(sessionId, event.turnIndex);
+		this.#lastCandidateTurnByRoot.set(root, event.turnIndex);
 		return { candidateId: candidate.id };
 	}
 }
