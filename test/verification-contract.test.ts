@@ -11,6 +11,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { orderingViolations, planStageScriptNames } from "./helpers/verification-order.js";
 import { join } from "node:path";
 
 const ROOT = process.cwd();
@@ -140,13 +141,14 @@ test("all five mandatory gates are present and required in the plan", () => {
 test("the post-build dist package-boundary check is in the plan and runs after build", () => {
 	const ids = plan.commands.map((command) => command.id);
 	assert.ok(ids.includes("package-boundary-dist"), "The dist package-boundary check must be a plan member.");
-	assert.ok(
-		ids.indexOf("build") < ids.indexOf("package-boundary-dist"),
-		"package-boundary-dist must run after build, or it verifies a stale or absent dist.",
-	);
-	assert.ok(
-		ids.indexOf("package-boundary-dist") < ids.indexOf("artifact-tests"),
-		"Artifact tests must run after the dist boundary check.",
+	// The shared predicate, so the recheck's counterexample falsifies the rule this actually uses
+	// rather than a copy of it that could drift.
+	const stageScripts = planStageScriptNames(plan);
+	const violations = orderingViolations(stageScripts);
+	assert.deepEqual(
+		violations,
+		[],
+		`the plan must keep its stage ordering: ${violations.join("; ")}`,
 	);
 });
 
