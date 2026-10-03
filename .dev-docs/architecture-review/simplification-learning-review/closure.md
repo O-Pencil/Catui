@@ -108,16 +108,16 @@ separately by a test that fails without the fix.
 | S05.4 history is data, not authority | `redactEvolutionEvidence` existed at `prompts.ts:50` but was unreachable; `sessionExcerpt` `evolution-refiner.ts:77` sent 24,000 raw chars unredacted | **closed this batch** — `test/evolution-refiner-redaction.test.ts` | **implemented** |
 | S05.5 acceptance examples for all destinations | none | none | missing |
 | S06.1 bounded trace selection | `workspaceTracePaths` `evolution-fixture.ts:32` caps at 50, but selects by mtime recency only | `evolution-extension.test.ts` trace-sweep cases | partial |
-| S06.2 verified outcome vs self-report vs unknown | absent on the behavioral path; `LESSON_PATTERN` `evolution-auto.ts:22` regexes the assistant's own prose. Source side does discriminate (`source/assessment/measurement.ts:14`) | `source-evolution.test.ts` (source side only) | missing (behavioral) |
-| S06.3 retrieve existing skills in scope | no call from refiner, refine tool or observer into `inspectEvolution` / `loadActiveEvolutionArtifacts` | none | missing |
+| S06.2 verified outcome vs self-report vs unknown | turn-end marks both sources `provenance` (model self-report) with no `verified` flag; `LESSON_PATTERN` `evolution-auto.ts` still regexes the assistant's own prose, so the regex finding stands | `test/evolution-auto-provenance.test.ts`, `test/evolution-auto-promotion-gate.test.ts` | **implemented (provenance)** — self-report cannot self-promote |
+| S06.3 retrieve existing skills in scope | `existingArtifactInventory` `evolution-refiner.ts` reads `getEvolutionScopeRoot` + `loadActiveEvolutionArtifacts` and lists id/kind/title, bounded at 40 | `test/evolution-refiner-existing-skills.test.ts` (7 cases) | **implemented** — `inspectEvolution` has no active-artifact list, so the store loader is used instead |
 | S06.4 small update or new inactive skill | `planEvolutionCandidate` `evolution-refiner.ts:127`; inactive path `evolution-refine-tool.ts:265` | `evolution-extension.test.ts` inactive-plan case | partial (prompt only) |
 | S06.5 provenance + predicted benefit in metadata | `EvolutionPrediction` `evolution-types.ts:35`; `skillMarkdown` `evolution-store.ts:149` | `evolution-store.test.ts` prediction case | already-covered (shape) |
-| S06.6 skill body states trigger/prereqs/steps/pitfalls/verification/limits | `validateArtifact` `evolution-store.ts:412` checks kind, id, title, length, budget, executable content only | none | missing |
+| S06.6 skill body states trigger/prereqs/steps/pitfalls/verification/limits | `validateSkillManifestStructure` `evolution-store.ts`; trigger/limits ride on the existing `applicability`/`nonApplicability` fields rather than a second prose copy | `test/evolution-skill-body-structure.test.ts` (20 cases) | **implemented** — write-only enforcement; see the store-validation compatibility note below |
 | S06.7 no whole traces or credentials in skills | `MAX_CONTENT_CHARS` `evolution-store.ts:36`; `EXECUTABLE_PATTERNS` `evolution-store.ts:57` | `evolution-store.test.ts` rejection cases | partial |
 | S06.8 acceptance set | no test for "no lesson → no candidate"; no test for malformed `catui_evolution` JSON | none | missing |
-| S07.1 reuse size limits and dedup | limits `evolution-store.ts:34`; dedup `assertNoDuplicateEvalFixture` `evolution-store.ts:542` is fixture-content-hash only | `evolution-store.test.ts` dedup case | partial |
-| S07.2 prefer update over near-duplicate | live `EvolutionArtifact` `evolution-types.ts:23` has no `overrides`; the merge mechanism exists only in dead `workflow.ts:104` | `evolution-workflow.test.ts` tests dead code | missing |
-| S07.3 at most four logical edits, enforced | `formatEvolutionChanges` `evolution-format.ts:116` renders changes but nothing counts or bounds them | none | missing |
+| S07.1 reuse size limits and dedup | limits reused; `assertNoDuplicateProseArtifact` refuses a copied prose body under a new id, `nearDuplicateProseWarnings` reports a mere rewording; `assertNoDuplicateEvalFixture` untouched | `test/evolution-skill-dedup.test.ts` (13 cases) | **implemented** — exec_fixture rule unchanged |
+| S07.2 prefer update over near-duplicate | `EvolutionArtifact.overrides` `evolution-types.ts` plus `resolveOverrideArtifacts` `evolution-store.ts`; the older `mergeScopedArtifacts` `workflow.ts` remains dead code | `test/evolution-overrides.test.ts` (16 cases) | **implemented** — overrides resolve at promotion against the verified baseline |
+| S07.3 at most four logical edits, enforced | `MAX_LOGICAL_CHANGES_PER_CANDIDATE` `evolution-store.ts` counted by `logicalArtifactChanges`, enforced in `assertValidInput` so an over-budget candidate is never persisted | `test/evolution-edit-budget.test.ts` (10 cases) | **implemented** — artifact-level add/change/delete, rejected whole |
 | S07.4 reject over-budget, do not truncate | `assertValidInput` `evolution-store.ts:501` throws before persistence | `evolution-store.test.ts` rejection cases | already-covered |
 | S07.5 feed rejected changes back to the refiner | write-only: `rejectEvolutionCandidate` `evolution-store.ts:974` persists, but `planEvolutionCandidate` never reads prior candidates into the prompt | none | missing |
 | S07.6 no permanent blacklist | no blacklist exists; equally no re-evaluation trigger. Repeated identical structured proposals create a new candidate each turn because `COOLDOWN_TURNS` is applied only at `evolution-auto.ts:201` | cooldown test covers only the `LESSON_PATTERN` branch | missing |
@@ -134,6 +134,30 @@ separately by a test that fails without the fix.
 | S10.2 reuse existing observer and budget | the observer exists (`evolution-auto.ts`); a budget mechanism exists only on the source side | `evolution-automation.test.ts:71` imports `automation.ts`, which nothing live loads | missing for the behavioral path |
 | S10.3 require new evidence since last attempt | no evidence cursor in the behavioral scope | none | missing |
 | S10.4 reserve budget before calling a model | no reservation on the live path | none | missing |
+
+**Store-validation compatibility change, and why the rule is write-only.** S06.6 adds a
+structural requirement to `skill_manifest` bodies. The first implementation put the check inside
+`validateArtifact` unconditionally, on the assumption that reading a stored revision does not
+re-validate. That assumption was wrong: `loadRevision` `evolution-store.ts` does call
+`validateEvolutionCandidateInput`, so a skill promoted before the rule existed would fail to load,
+`loadCurrentEvolution` would quarantine it, and the skill would drop out of prompt and skill
+discovery without any error reaching the user.
+
+The rule is therefore enforced on write only. `validateEvolutionCandidateInput` takes a private
+`enforceSkillBodyStructure` flag that defaults to on, and `loadRevision` is the sole caller that
+turns it off; `loadActiveEvolutionArtifacts`, `loadActiveEvolutionSkillPaths`, and `rollbackEvolution`
+all route through it, so historical skills stay readable, renderable, and rollback-able. The flag is
+deliberately not exported: a public switch that disables validation is one a future caller will
+disable by accident. `test/evolution-skill-body-structure.test.ts` writes a pre-rule revision
+straight to disk to prove the compatibility claim, since going through `createEvolutionCandidate`
+would only ever produce conforming records and prove nothing.
+
+Fence tracking in `markdownHeadings` is CommonMark-shaped on purpose: the opening run fixes both the
+marker character and its length, and only a bare run of that same character at least that long
+closes the block. A boolean toggle was the first implementation and it was wrong — supervisor
+review reproduced a body that opened with four backticks, closed the block with three, and had all
+four required headings counted as real sections. Unrecognized markers leave the block open, which
+can only fail validation, never fake a section.
 
 **Dead cluster, and why it matters for review.** `consumers.ts`, `evaluation.ts`, `store.ts`,
 `workflow.ts`, `automation.ts`, `paths.ts` and the older `types.ts`/`prompts.ts` helpers have no
