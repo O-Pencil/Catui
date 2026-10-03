@@ -4,9 +4,9 @@
 * @O-Pencil/nanopencil
 
 # Core packages
-/packages/agent-core/ @O-Pencil/nanopencil
-/packages/ai/ @O-Pencil/nanopencil
-/packages/tui/ @O-Pencil/nanopencil
+/core/lib/agent-core/ @O-Pencil/nanopencil
+/core/lib/ai/ @O-Pencil/nanopencil
+/core/lib/tui/ @O-Pencil/nanopencil
 /packages/mem-core/ @O-Pencil/nanopencil
 /packages/soul-core/ @O-Pencil/nanopencil
 
