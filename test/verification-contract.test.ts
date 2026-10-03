@@ -15,6 +15,7 @@ import { orderingViolations, planStageScriptNames } from "./helpers/verification
 import { ciNpmRuns, ciRawTestRuns } from "./helpers/verification-ci.js";
 import { testFileExecutions as walkTestFiles, withinStageDuplicates as withinStageFiles } from "./helpers/verification-test-graph.js";
 import { fullBuildExecutions as fullBuildRunCount, fullBuildsIn as fullBuildScripts, walkScriptGraph } from "./helpers/verification-script-graph.js";
+import { duplicatedPlanKeys, gateViolations, malformedInvocations, missingScripts } from "./helpers/verification-plan.js";
 import { join } from "node:path";
 
 const ROOT = process.cwd();
@@ -90,24 +91,23 @@ function planCommandIds(): string[] {
 }
 
 test("every plan command maps to a real npm script", () => {
-	for (const command of plan.commands) {
-		assert.match(
-			command.command,
-			/^npm run [\w:-]+$/,
-			`Plan command ${command.id} must be a bare \`npm run <script>\` invocation so the plan and package.json cannot drift: ${command.command}`,
-		);
-		const script = command.command.replace("npm run ", "");
-		assert.ok(script in scripts, `Plan command ${command.id} references missing script "${script}".`);
-	}
+	// Rules live in the shared helper so the recheck's counterexamples run them against a mutated
+	// plan copy rather than editing the file they protect.
+	assert.deepEqual(malformedInvocations(plan), [], "a plan command must be a bare `npm run <script>` invocation so the plan and package.json cannot drift");
+	assert.deepEqual(missingScripts(plan, scripts), [], "a plan command must not reference a script that does not exist");
 });
 
 test("all five mandatory gates are present and required in the plan", () => {
-	for (const gate of MANDATORY_GATES) {
-		const entry = plan.commands.find((command) => command.id === gate.id);
-		assert.ok(entry, `Mandatory gate "${gate.id}" is missing from verification-plan.json.`);
-		assert.equal(entry?.command, `npm run ${gate.script}`);
-		assert.equal(entry?.required, true, `Mandatory gate "${gate.id}" must be required.`);
-	}
+	assert.deepEqual(gateViolations(plan), [], `mandatory gate problems: ${gateViolations(plan).join("; ")}`);
+});
+
+test("no plan id or command is duplicated", () => {
+	// Every gate lookup above is `find`-based, so a second entry sharing an id or a command with the
+	// first is unreachable by the gate check, the CI parity check, and the verify:full coverage check
+	// at the same time — while the file still reads as correct.
+	const duplicated = duplicatedPlanKeys(plan);
+	assert.deepEqual(duplicated.ids, [], `duplicated plan ids: ${duplicated.ids.join(", ")}`);
+	assert.deepEqual(duplicated.commands, [], `duplicated plan commands: ${duplicated.commands.join(", ")}`);
 });
 
 test("the post-build dist package-boundary check is in the plan and runs after build", () => {
