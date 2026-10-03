@@ -11,6 +11,9 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { planEvolutionCandidate } from "../extensions/optional/evolution/evolution-refiner.js";
 import type { ExtensionCommandContext } from "../core/extensions-host/types.js";
 
@@ -19,10 +22,14 @@ import type { ExtensionCommandContext } from "../core/extensions-host/types.js";
  * budget. A single shared directory made the later tests in this file depend on how many model
  * calls the earlier ones had spent.
  */
-let sequence = 0;
+let cleanup: (() => void)[] = [];
 function freshDirs(): { cwd: string; agentDir: string } {
-	sequence += 1;
-	return { cwd: `/private/tmp/catui-workspace-${sequence}`, agentDir: `/private/tmp/catui-agent-${sequence}` };
+	// A real temporary directory, not a made-up path. The refiner's budget ledger is written to disk
+	// under the agent directory, so a synthetic path would create it for real and carry usage over
+	// into the next run of the suite.
+	const root = mkdtempSync(join(tmpdir(), "catui-evo-redact-"));
+	cleanup.push(() => rmSync(root, { recursive: true, force: true }));
+	return { cwd: join(root, "work"), agentDir: join(root, "agent") };
 }
 
 function secretSessionText(cwd: string, agentDir: string): string {
@@ -50,6 +57,8 @@ function createContext(seen: { user?: string; system?: string }, dirs: { cwd: st
 		},
 	} as unknown as ExtensionCommandContext;
 }
+
+test.afterEach(() => { for (const done of cleanup.splice(0)) done(); });
 
 test("planEvolutionCandidate redacts secrets and private paths before calling the model", async () => {
 	const seen: { user?: string; system?: string } = {};
