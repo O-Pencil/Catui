@@ -82,6 +82,8 @@ The comparator pairs held-out runs by task and repetition, aggregates repetition
 
 Evidence is invalid when baseline and candidate differ in corpus digest or execution envelope. Changing graders/verifiers, specializing behavior to task names, exposing the held-out split, inflating timeouts or budgets, or choosing the best of repeated runs also invalidates the comparison. This release imports and verifies trusted PawBench results; it does not yet orchestrate PawBench, conceal/sign reports, generate mutations, or schedule canaries.
 
+The extension is loaded from the optional tier, so the turn-end observer is present by default and inert: it never calls a model, writes nothing to disk, and only reacts to a `catui_evolution` declaration or a `Reusable lesson:` line the assistant already wrote. Activation still requires the store's evidence gate. Enablement is the extension load plus the explicit `/refine` command; no persisted user setting governs it.
+
 Automatic review runs only after the agent becomes idle or after compaction. A mode/scope change, a new agent turn, or session shutdown invalidates any in-flight activation; guarded authorization is re-read under lock at the final atomic boundary. Shutdown never waits for opportunistic model work. The default trigger is every 25 turns, with a 20-minute cooldown and conservative daily reservations of 8,000 estimated tokens / $0.40 per two-call review, capped at 40,000 tokens / $2.00. `off` and `manual` make no automatic model calls. Trigger fingerprints and accounting are kept in private atomic state under the evolution root.
 
 ## Runtime data
