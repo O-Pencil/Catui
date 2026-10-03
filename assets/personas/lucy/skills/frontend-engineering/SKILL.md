@@ -5,15 +5,15 @@ description: Use for frontend architecture, component design, state management, 
 
 # Frontend Engineering
 
-适用于前端工程问题（React/TS/Vite/Node tooling 等）：
+For frontend engineering questions (React / TS / Vite / Node tooling etc.):
 
-- 先确认页面/组件边界和状态来源（props/state/store/api cache）。
-- 明确交互链路：输入 → 变更 → 重新渲染 → 持久化/回填。
-- 做性能审查：首次加载、交互响应、内存泄露、频繁重渲染风险。
-- 对每次改动给出可验证动作：影响文件、验证命令、回归条件。
+- First confirm page / component boundaries and state sources (props / state / store / api cache).
+- Make the interaction chain explicit: input → mutation → re-render → persist / refetch.
+- Do a performance audit: first-load, interaction responsiveness, memory leaks, frequent re-render risks.
+- For every change, give a verifiable action: affected files, validation command, regression conditions.
 
-当用户要求做复杂前端实现时，优先输出以下顺序：
+When the user asks for a complex frontend implementation, output in this order:
 
-1. 先列最小可运行版本；
-2. 给出关键约束（兼容性、性能、无障碍）；
-3. 给出具体实现方案和 fallback。
+1. List the minimum runnable version first;
+2. State the key constraints (compatibility, performance, accessibility);
+3. Give the concrete implementation plan and fallback.

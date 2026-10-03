@@ -5,85 +5,85 @@ description: Use when answering "how does X work", "why does X do Y", "what's th
 
 # Structured Explanation
 
-默认启用：让复杂回答既快读得懂，又讲得清。
+Enabled by default: makes complex answers both quick to read and clear to understand.
 
-## 何时启动
+## When to activate
 
-- 用户问 "为什么" / "怎么工作的" / "区别是什么"
-- 涉及设计决策 / trade-off / 多个方案
-- 解释陌生概念、库、API、协议、算法
-- 调试一个非显而易见的 bug
-- 任何"展开说说" / "讲清楚" / "详细讲"
+- User asks "why" / "how does it work" / "what's the difference"
+- Involves a design decision / trade-off / multiple options
+- Explaining an unfamiliar concept, library, API, protocol, algorithm
+- Debugging a non-obvious bug
+- Any "elaborate" / "explain clearly" / "in detail"
 
-## 何时不要启动
+## When NOT to activate
 
-- 一句话能答完的事实（"X 是什么" → 答完就停）
-- 用户明确说 "简短点" / "一句话"
-- 用户在赶时间 / 情绪差
-- 这是闲聊、收尾、过渡
+- A one-line factual answer ("what is X" → answer and stop)
+- User explicitly says "keep it short" / "one sentence"
+- User is in a hurry / emotionally strained
+- This is small talk, wrap-up, transition
 
-## 模式：四层结构
+## Mode: four-layer structure
 
-按需组合，不必每次都齐：
+Combine as needed, no need to use all four each time:
 
-### 1. TL;DR（一句话结论）
+### 1. TL;DR (one-sentence conclusion)
 
-第一句话给结论。不要让用户读完整段才知道你在说什么。
+The first sentence is the conclusion. Don't make the user read the whole paragraph to find out what you're saying.
 
-> ✅ "X 比 Y 快约 30%，代价是内存占用翻倍。"
-> ❌ "X 是一种新的方法，它在内部做了一系列优化……"
+> ✅ "X is about 30% faster than Y, at the cost of doubled memory."
+> ❌ "X is a new approach, internally it makes a series of optimizations..."
 
-### 2. 关键点（2-4 条）
+### 2. Key points (2-4 items)
 
-每条一行。粗体起头。
+One line each. Bold lead.
 
-> **核心机制** — X 把 Y 缓存到 Z，命中时跳过 N 步计算
-> **代价** — 首次调用比 Y 慢约 2x
-> **适用** — 重复调用多、数据变化小的场景
+> **Core mechanism** — X caches Y in Z; on hit, skip N steps of computation
+> **Cost** — first call is about 2x slower than Y
+> **When it fits** — repeated calls, slowly-changing data
 
-### 3. 例子（可选）
+### 3. Example (optional)
 
-复杂概念配一个具体例子，比讲 10 段理论更有效。
+A concrete example beats ten paragraphs of theory for complex concepts.
 
-### 4. 边界 / 反例（可选）
+### 4. Boundary / counter-example (optional)
 
-什么情况下不适用、什么时候会失效。
+When it doesn't fit, when it breaks.
 
-## 输出形态
+## Output formats
 
-按场景挑：
+Pick by scenario:
 
-| 场景 | 形态 |
-|------|------|
-| 解释一个机制 | TL;DR + 关键点 + 例子 |
-| 对比 A 和 B | 表格（列：维度 / A / B） |
-| 列权衡 | 列表（每条：选项 + 好处 + 代价） |
-| 教一个新概念 | TL;DR + 类比 + 关键点 + 反例 |
-| 讲一个决策 | 结论 + 为什么 + 拒绝的方案 + 何时重评 |
+| Scenario | Format |
+|----------|--------|
+| Explain a mechanism | TL;DR + key points + example |
+| Compare A and B | Table (columns: dimension / A / B) |
+| List trade-offs | List (each item: option + upside + cost) |
+| Teach a new concept | TL;DR + analogy + key points + counter-example |
+| Explain a decision | Conclusion + why + rejected options + when to re-evaluate |
 
-## 节奏
+## Rhythm
 
-- 默认中文段落 80-150 字
-- 列表条目一行写完
-- 代码块只放关键部分，5-15 行最佳
-- 必要时用 H2 切分小节
-- 不写"如上所述"、"简单来说"、"显而易见"这种废字
+- Default Chinese paragraph 80-150 characters
+- List items fit on one line
+- Code blocks only the key parts; 5-15 lines ideal
+- Use H2 to split sections when needed
+- Don't write "as mentioned above" / "to put it simply" / "obviously" — empty filler
 
-## 反例
+## Counter-examples
 
-❌ 一段 500 字的连续散文，开头讲历史背景
+❌ A 500-word continuous prose, opening with historical background
 
-❌ 上来就贴 50 行代码，不解释
+❌ 50 lines of code dumped without explanation
 
-❌ 解释 5 分钟，最后不告诉用户结论
+❌ 5 minutes of explanation that never gives the conclusion
 
-❌ "这个其实比较复杂，要分几个方面讲……"（空铺垫）
+❌ "This is actually quite complex, it needs to be split into several aspects..." (empty preamble)
 
-✅ "X 是个 lazy 缓存，写时算一次，之后命中直接返回。代价是首次慢、内存多。**不适合**频繁写入的场景。"
+✅ "X is a lazy cache, computes once on write, returns directly on subsequent hits. Cost: first call slower, more memory. **Not suitable** for write-heavy scenarios."
 
-✅ "**TL;DR** — A 更快，B 更省内存。**何时选 A** — 读多写少。**何时选 B** — 写密集。"
+✅ "**TL;DR** — A is faster, B is more memory-efficient. **When to pick A** — read-heavy. **When to pick B** — write-dense."
 
-## 与其他 skill 配合
+## Combines with
 
-- 跟 `decision-framing` 一起用：先给决策框架（framing），再用结构化解释展开
-- 跟 `empathetic-communication` 一起用：先承认现状，再给结构化路径
+- Together with `decision-framing`: first apply the decision frame, then unfold with structured explanation
+- Together with `empathetic-communication`: first acknowledge the situation, then offer the structured path

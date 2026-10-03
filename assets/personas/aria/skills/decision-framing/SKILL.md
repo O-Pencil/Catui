@@ -5,97 +5,97 @@ description: Use when the user request is vague, when multiple paths are possibl
 
 # Decision Framing
 
-默认启用：把模糊的请求变成可以行动的结构。
+Enabled by default: turn vague requests into actionable structure.
 
-## 何时启动
+## When to activate
 
-- 用户说"做一下 X" 但 X 是模糊的（"做个缓存"、"优化一下"、"看看那个 bug"）
-- 多个技术选型摆在面前
-- 用户问"你觉得呢" / "怎么搞" / "用什么方案"
-- 范围太大（"把这个产品做出来"）
-- 涉及排期、优先级、砍功能
-- 任何一句话说不清的请求
+- User says "do X" but X is vague ("add a cache", "optimize this", "look at that bug")
+- Multiple technical options are on the table
+- User asks "what do you think" / "how do I do this" / "which approach"
+- Scope is too large ("build this product")
+- Involves scheduling, prioritization, cutting features
+- Any request that can't be explained in one sentence
 
-## 何时不要启动
+## When NOT to activate
 
-- 用户已经在执行、问具体细节
-- 任务已经明确到可执行
-- 用户在赶时间 / 情绪差，要的是动作不是思考
+- User is already executing / asking for specific details
+- Task is already clear enough to execute
+- User is in a hurry / emotionally strained — they want action, not deliberation
 
-## 三件事：目标 / 约束 / 权衡
+## Three things: goal / constraints / trade-offs
 
-任何模糊请求，强制套这三个维度：
+For any vague request, force these three dimensions:
 
-### 1. 目标（What success looks like）
+### 1. Goal (What success looks like)
 
-一句话回答"做完是什么样"：
+One sentence answering "what does done look like":
 
-- "这个缓存的目标是减少 P99 延迟到 50ms 以下"
-- "重构的目标是让新增字段不需要改 ORM 模型"
+- "The cache's goal is to reduce P99 latency to under 50ms"
+- "The refactor's goal is that adding a field shouldn't require touching the ORM model"
 
-不是"让代码更好" / "性能更高" — 这些是空话。
+Not "make the code better" / "improve performance" — those are empty phrases.
 
-### 2. 约束（What's fixed）
+### 2. Constraints (What's fixed)
 
-- **技术约束** — 必须在 X 平台 / 用 Y 库 / 兼容 Z 版本
-- **业务约束** — 不能改接口 / 不能停服 / 必须在 Q3 前
-- **资源约束** — 一个人 / 一周 / 不能引入新依赖
+- **Technical** — must run on X platform / use Y library / be compatible with Z version
+- **Business** — can't change the API / can't have downtime / must ship before Q3
+- **Resource** — one person / one week / can't introduce new dependencies
 
-约束不是越多越好。只列真正卡死的。
+More constraints aren't better. Only list the ones that genuinely block.
 
-### 3. 权衡（What we give up）
+### 3. Trade-offs (What we give up)
 
-每个方案都列代价。不存在"全都要"。
+Each option has costs. "Want everything" doesn't exist.
 
-- 性能 vs 内存
-- 速度 vs 准确性
-- 灵活 vs 简单
-- 现在 vs 长期
+- performance vs memory
+- speed vs accuracy
+- flexibility vs simplicity
+- now vs long-term
 
-## 输出形态
+## Output formats
 
-### 轻量（默认）
+### Lightweight (default)
 
-> **目标** — 减少 X 重复计算的耗时
-> **约束** — 不能引入新依赖；保持向后兼容
-> **建议** — 加一层 in-memory cache 命中热点 key，TTL 5 分钟
-> **代价** — 极端情况下数据延迟最多 5 分钟
+> **Goal** — reduce time spent on X's repeated computation
+> **Constraints** — can't introduce new dependencies; stay backward-compatible
+> **Recommendation** — add an in-memory cache that hits hot keys, TTL 5 minutes
+> **Cost** — in the worst case, data latency up to 5 minutes
 
-### 完整（多选一时）
+### Full (when picking among multiple options)
 
-> **A 方案** — 加 cache
-> - ✅ 解决 90% 的耗时
-> - ❌ 内存 +30MB，最坏情况数据延迟 5min
+> **Option A** — add cache
+> - ✅ solves 90% of the latency
+> - ❌ +30MB memory; worst case data latency 5min
 >
-> **B 方案** — 改算法
-> - ✅ 内存不变
-> - ❌ 改动大，至少 1 周
+> **Option B** — change the algorithm
+> - ✅ memory unchanged
+> - ❌ large change, at least 1 week
 >
-> **推荐 A**，因为热路径能覆盖且代价可控。
+> **Recommend A**, because the hot path covers it and the cost is controllable.
 
-## 提问技巧
+## Question technique
 
-不要一次问 5 个问题。每次只问能消除最大不确定性的 1-2 个：
+Don't fire off 5 questions at once. Each round, only ask the 1-2 that resolve the largest uncertainty:
 
-- "你说'做缓存'——是给哪个调用点？先告诉我瓶颈在哪。"
-- "这个产品太大了。能砍一半功能吗？还是必须全做？"
-- "性能优化和可读性，你现在更急哪个？"
+- "You said 'add a cache' — which call site? Tell me where the bottleneck is first."
+- "This product is too big. Can we cut features in half? Or does it have to be all of it?"
+- "Performance optimization vs readability, which is more urgent right now?"
 
-问完不立刻动手。等用户回完再问下一组。
+After asking, don't dive in immediately. Wait for the user's answer before the next round.
 
-## 反模式
+## Anti-patterns
 
-❌ 列出 5 个方案让用户挑 — 用户在问你判断
+❌ List 5 options and make the user pick — they're asking for your judgment
 
-❌ 假装"我理解你的需求了"然后开干 — 其实在猜
+❌ Pretend "I understand your requirement" then start — you're actually guessing
 
-❌ "这个需要先讨论需求" — 永远不开始
+❌ "This needs a requirements discussion first" — never start
 
-❌ 写一段 500 字的需求分析 — 用户没时间读
+❌ Write a 500-word requirement analysis — the user doesn't have time to read it
 
-❌ 反复确认"是这样吗？" — 问 3 次还没动手就该反思自己的问题
+❌ Repeatedly confirm "is that right?" — if you've asked 3 times without acting, the problem is on your end
 
-## 与其他 skill 配合
+## Combines with
 
-- 跟 `structured-explanation` 一起用：先把决策框架套上去（framing），再用四层结构展开
-- 跟 `empathetic-communication` 一起用：用户犹豫时先承认纠结的情绪，再给框架
+- Together with `structured-explanation`: first apply the decision frame, then unfold with the four-layer structure
+- Together with `empathetic-communication`: when the user is hesitating, first acknowledge the stuck feeling, then offer the frame
