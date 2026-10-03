@@ -14,6 +14,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { orderingViolations, planStageScriptNames } from "./helpers/verification-order.js";
 import { ciNpmRuns, ciRawTestRuns } from "./helpers/verification-ci.js";
 import { testFileExecutions as walkTestFiles, withinStageDuplicates as withinStageFiles } from "./helpers/verification-test-graph.js";
+import { walkScriptGraph } from "./helpers/verification-script-graph.js";
 import { join } from "node:path";
 
 const ROOT = process.cwd();
@@ -48,48 +49,15 @@ const MANDATORY_GATES = [
  * The counterexample tests call this same function with a synthetic graph, so the algorithm
  * under test is the one that validates package.json. There is deliberately no second copy.
  */
-interface WalkResult {
-	/** Distinct script names reached, in first-visit order. */
-	names: string[];
-	/** How many times each script's body is actually executed. */
-	executions: Map<string, number>;
-	/** Cycles found as `a -> b -> a` chains, without the repeated tail. */
-	cycles: string[][];
-	/** `npm run <x>` edges encountered, in encounter order, multiplicity preserved. */
-	edges: Array<[string, string]>;
-	/** True when the expansion hit EXPANSION_LIMIT and the result is partial. */
-	truncated: boolean;
-}
-
-const EXPANSION_LIMIT = 100_000;
+/**
+ * The traversal lives in a shared helper, parameterized by the graph, so the recheck's
+ * counterexamples run the algorithm that validates package.json rather than a copy. The reasoning
+ * behind the path stack, and the reason a global visited set is wrong, are recorded there.
+ */
+type WalkResult = import("./helpers/verification-script-graph.js").WalkResult;
 
 function walkIn(graph: Record<string, string>, start: string): WalkResult {
-	const result: WalkResult = { names: [], executions: new Map(), cycles: [], edges: [], truncated: false };
-	let steps = 0;
-
-	const visit = (script: string, path: string[]): void => {
-		if (!(script in graph)) return;
-		if (path.includes(script)) {
-			result.cycles.push([...path.slice(path.indexOf(script)), script]);
-			return;
-		}
-		steps += 1;
-		if (steps > EXPANSION_LIMIT) {
-			result.truncated = true;
-			return;
-		}
-		result.names.push(script);
-		result.executions.set(script, (result.executions.get(script) ?? 0) + 1);
-		const nextPath = [...path, script];
-		for (const match of graph[script]!.matchAll(/npm run ([\w:-]+)/g)) {
-			const child = match[1]!;
-			result.edges.push([script, child]);
-			visit(child, nextPath);
-		}
-	};
-
-	visit(start, []);
-	return result;
+	return walkScriptGraph(graph, start);
 }
 
 function walk(name: string): WalkResult {
