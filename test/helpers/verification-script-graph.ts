@@ -74,3 +74,40 @@ export function walkScriptGraph(graph: Record<string, string>, start: string, de
 	visit(start, []);
 	return result;
 }
+
+/**
+ * Script names that perform a full compile.
+ *
+ * Named rather than matched by pattern because the pattern is a guess: `build` delegates through
+ * `build:deps` and `tsc`, `build:release` delegates to `build`, and a future `rebuild:full` would
+ * too. Anything whose whole body is a delegation to one of these is a full compile under another
+ * name, and a guard that only knows two strings would not see it — so `unregisteredBuildAliases`
+ * reports them instead of letting them accumulate silently.
+ */
+export const FULL_BUILD_ALIASES: readonly string[] = [
+	"build",
+	"build:release",
+	// Found by the drift check below, not by inspection: `prepublishOnly` delegates straight to
+	// `build:release` and so compiles as often as `build` does. It was absent from the two-name
+	// list, so any count taken through it would have missed those compiles.
+	"prepublishOnly",
+];
+
+/** Scripts that are nothing but a delegation to a full build, but are not named in the set above. */
+export function unregisteredBuildAliases(graph: Record<string, string>): string[] {
+	const known = new Set(FULL_BUILD_ALIASES);
+	return Object.entries(graph)
+		.filter(([name]) => !known.has(name))
+		.filter(([, body]) => new RegExp(`^npm run (${[...known].join("|")})$`).test(body.trim()))
+		.map(([name]) => name);
+}
+
+/** Distinct full-build script names reached from `start`, in first-visit order. */
+export function fullBuildsIn(graph: Record<string, string>, start: string): string[] {
+	return walkScriptGraph(graph, start).names.filter((name) => FULL_BUILD_ALIASES.includes(name));
+}
+
+/** How many full builds actually execute when `start` is invoked. */
+export function fullBuildExecutions(graph: Record<string, string>, start: string): number {
+	return walkScriptGraph(graph, start).executions.get("build") ?? 0;
+}

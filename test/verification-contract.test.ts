@@ -14,7 +14,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { orderingViolations, planStageScriptNames } from "./helpers/verification-order.js";
 import { ciNpmRuns, ciRawTestRuns } from "./helpers/verification-ci.js";
 import { testFileExecutions as walkTestFiles, withinStageDuplicates as withinStageFiles } from "./helpers/verification-test-graph.js";
-import { walkScriptGraph } from "./helpers/verification-script-graph.js";
+import { fullBuildExecutions as fullBuildRunCount, fullBuildsIn as fullBuildScripts, walkScriptGraph } from "./helpers/verification-script-graph.js";
 import { join } from "node:path";
 
 const ROOT = process.cwd();
@@ -74,13 +74,15 @@ function leafTestSuites(name: string): string[] {
 	return expandScript(name).filter((entry) => /node --test/.test(scripts[entry] ?? ""));
 }
 
+/** The full-build vocabulary and detection rules live in the shared helper, so the recheck's
+ * counterexamples exercise the same definitions these assertions use. */
 function fullBuildsIn(name: string): string[] {
-	return walk(name).names.filter((entry) => entry === "build" || entry === "build:release");
+	return fullBuildScripts(scripts, name);
 }
 
 /** How many times a full compile actually runs. `build:release` delegates to `build`. */
 function fullBuildExecutions(name: string): number {
-	return walk(name).executions.get("build") ?? 0;
+	return fullBuildRunCount(scripts, name);
 }
 
 function planCommandIds(): string[] {
