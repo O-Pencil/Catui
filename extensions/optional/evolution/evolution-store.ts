@@ -1,5 +1,5 @@
 /**
- * [WHO]: Evolution ledger path resolution, candidate/revision validation, rejected-candidate listing, skill_manifest body structure enforcement, the refinement change budget, the shared artifact hash, and behavioral prose dedup, no-IO executable DSL manifests, usage records, prediction manifests, post-hoc attribution, eval_fixture dedupe/retention, gated promotion, quarantine, rollback, and conservative auto-rollback
+ * [WHO]: Evolution ledger path resolution, scope/root agreement enforcement, candidate/revision validation, rejected-candidate listing, skill_manifest body structure enforcement, the refinement change budget, the shared artifact hash, and behavioral prose dedup, no-IO executable DSL manifests, usage records, prediction manifests, post-hoc attribution, eval_fixture dedupe/retention, gated promotion, quarantine, rollback, and conservative auto-rollback
  * [FROM]: Depends on node fs/path/crypto for owner-only runtime state below agentDir/evolution/v1
  * [TO]: Consumed by optional evolution extension command handlers and tests
  * [HERE]: extensions/optional/evolution/evolution-store.ts - durable store for controlled self-evolution
@@ -7,7 +7,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { evolutionCandidateContentHash, verifyEvolutionBenchmarkReport } from "./benchmark-comparison.js";
 import type {
 	EvolutionArtifact,
@@ -21,6 +21,7 @@ import type {
 	EvolutionInspection,
 	EvolutionQuarantine,
 	EvolutionRevision,
+	EvolutionScope,
 	EvolutionScopeSelector,
 	EvolutionValidationReport,
 	EvolutionPrediction,
@@ -207,6 +208,31 @@ function assertInside(root: string, target: string): void {
 	if (rel.startsWith("..") || rel === "" || resolve(resolvedRoot, rel) !== resolvedTarget) {
 		throw new Error(`Evolution path escapes scope root: ${target}`);
 	}
+}
+
+const EVOLUTION_ROOT_SEGMENTS: ReadonlyArray<{ directory: string; scope: EvolutionScope }> = [
+	{ directory: "global", scope: "global" },
+	{ directory: "workspaces", scope: "workspace" },
+	{ directory: "sessions", scope: "session" },
+];
+
+/**
+ * The scope a root belongs to, read from the fixed layout `<...>/evolution/v1/<scope directory>`.
+ *
+ * The alternative is to have every caller pass its scope alongside the root and trust it, but that
+ * is the hole this closes: a candidate's own `scope` field and the directory it is written to can
+ * disagree, and every scope-keyed policy reads the field. A candidate declaring `workspace` inside
+ * the global root is refused here; without the check `canAutoPromoteGlobalEvolution` sees
+ * `scope !== "global"` and waves a `skill_manifest` through a gate that exists to forbid exactly
+ * that. Undefined means the path is not an evolution root at all, which callers treat as a refusal
+ * rather than as a wildcard.
+ */
+export function evolutionScopeOfRoot(scopeRoot: string): EvolutionScope | undefined {
+	const segments = resolve(scopeRoot).split(sep);
+	// Last occurrence, so an agent directory that itself contains a "v1" segment does not win.
+	const version = segments.lastIndexOf("v1");
+	if (version < 0) return undefined;
+	return EVOLUTION_ROOT_SEGMENTS.find((entry) => entry.directory === segments[version + 1])?.scope;
 }
 
 export function getEvolutionScopeRoot(agentDir: string, selector: EvolutionScopeSelector): string {
@@ -893,6 +919,17 @@ export function createEvolutionCandidate(
 	input: EvolutionCandidateInput,
 	options?: EvolutionClockOptions,
 ): EvolutionCandidate {
+	// Before anything is read or written: the record's declared scope and the directory it is being
+	// written to must agree. Every scope-keyed policy downstream reads the field, so a mismatch is
+	// a policy bypass rather than a cosmetic inconsistency. The message names the two scopes and not
+	// the path, which may sit under a private directory.
+	const rootScope = evolutionScopeOfRoot(scopeRoot);
+	if (rootScope === undefined) {
+		throw new Error("Evolution scope root is not a recognized evolution root, so no candidate scope can be verified against it");
+	}
+	if (rootScope !== input.scope) {
+		throw new Error(`Evolution candidate declares scope ${input.scope} but its scope root is ${rootScope}`);
+	}
 	// Capture the baseline here, from store state, on the one path every caller funnels through.
 	// A model proposal, the refine tool, and a direct caller therefore cannot choose the baseline
 	// their evidence will later be judged against. `null` records a genuine first candidate and is

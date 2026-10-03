@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	createEvolutionCandidate,
+	getEvolutionScopeRoot,
 	discoverLocalSkillPaths,
 	loadActiveEvolutionSkillPaths,
 	promoteEvolutionCandidate,
@@ -80,8 +81,11 @@ function candidateInput(skills: EvolutionArtifact[]): EvolutionCandidateInput {
 }
 
 function withScopeRoot(run: (scopeRoot: string) => void | Promise<void>): Promise<void> {
+	// A real scope root, not a bare directory: the store now derives the scope from the root it is
+	// given and refuses a candidate whose declared scope disagrees with it.
 	const root = mkdtempSync(join(tmpdir(), "catui-evo-rollback-"));
-	return Promise.resolve(run(join(root, "scope"))).finally(() => rmSync(root, { recursive: true, force: true }));
+	const scopeRoot = getEvolutionScopeRoot(join(root, "agent"), { scope: "session", sessionId: "rollback-test" });
+	return Promise.resolve(run(scopeRoot)).finally(() => rmSync(root, { recursive: true, force: true }));
 }
 
 /** Skill names a DefaultResourceLoader actually serves for these skill paths. */

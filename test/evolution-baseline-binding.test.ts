@@ -24,6 +24,7 @@ import { join } from "node:path";
 import { planEvolutionCandidate } from "../extensions/optional/evolution/evolution-refiner.js";
 import {
 	createEvolutionCandidate,
+	getEvolutionScopeRoot,
 	inspectEvolution,
 	loadCurrentEvolution,
 	promoteEvolutionCandidate,
@@ -130,7 +131,9 @@ function refinerContext(modelJson: unknown): ExtensionCommandContext {
 	return {
 		cwd: CWD,
 		agentDir: AGENT_DIR,
-		sessionManager: { getEntries: () => [] },
+		// getSessionId is required once the refiner resolves a session-scope root, which it now does
+		// for every scope, not just the ones that happen to need a session.
+		sessionManager: { getEntries: () => [], getSessionId: () => "baseline-test" },
 		completeSimple: async () => JSON.stringify(modelJson),
 	} as unknown as ExtensionCommandContext;
 }
@@ -140,8 +143,11 @@ function modelProposal(extra: Record<string, unknown> = {}): unknown {
 }
 
 function withRoot(run: (scopeRoot: string) => void | Promise<void>): Promise<void> {
+	// A real scope root, not a bare directory: the store now derives the scope from the root it is
+	// given and refuses a candidate whose declared scope disagrees with it.
 	const root = mkdtempSync(join(tmpdir(), "catui-evo-baseline-"));
-	return Promise.resolve(run(join(root, "scope"))).finally(() => rmSync(root, { recursive: true, force: true }));
+	const scopeRoot = getEvolutionScopeRoot(join(root, "agent"), { scope: "session", sessionId: "baseline-test" });
+	return Promise.resolve(run(scopeRoot)).finally(() => rmSync(root, { recursive: true, force: true }));
 }
 
 function candidateById(scopeRoot: string, candidateId: string): EvolutionCandidate {
@@ -187,7 +193,8 @@ test("the refiner cannot choose the baseline; the store captures it", async () =
 				baselineRevisionId: "revision-the-model-invented",
 				artifacts: [{ ...skillArtifact("evolved:skill_manifest:captured-baseline"), baselineRevisionId: "revision-the-model-invented" }],
 			})),
-			"workspace",
+			// The scope the refiner is asked for must match the root the candidate is written to.
+			"session",
 			"propose a refinement",
 		);
 		const candidate = createEvolutionCandidate(scopeRoot, input);
@@ -321,7 +328,7 @@ test("the refiner -> store -> promotion chain works end to end with a captured b
 		const seed = createEvolutionCandidate(scopeRoot, directInput());
 		const r1 = promoteEvolutionCandidate(scopeRoot, seed.id, { approvedBy: "test", gateReport: gateFor(seed) }).id;
 
-		const input = await planEvolutionCandidate(refinerContext(modelProposal()), "workspace", "propose a refinement");
+		const input = await planEvolutionCandidate(refinerContext(modelProposal()), "session", "propose a refinement");
 		const candidate = createEvolutionCandidate(scopeRoot, input);
 		assert.equal(candidate.baselineRevisionId, r1, "baseline captured from the live scope");
 

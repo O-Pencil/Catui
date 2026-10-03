@@ -351,7 +351,10 @@ test("evolution records post-hoc attribution for revision predictions", () =>
 
 test("evolution auto-rolls back the current revision when attribution falsifies its predictions", () =>
 	withTempAgentDir((agentDir) => {
-		const root = getEvolutionScopeRoot(agentDir, { scope: "workspace", cwd: "/tmp/project-auto-rollback" });
+		// A session root, because the assertion here is the session rollback policy: one falsified
+		// prediction is enough. It was living in a workspace root and passing only because the
+		// record declared a scope the root did not have.
+		const root = getEvolutionScopeRoot(agentDir, { scope: "session", sessionId: "auto-rollback" });
 		createEvolutionCandidate(root, candidateInput("Baseline"), { id: () => "candidate-baseline" });
 		promoteEvolutionCandidate(root, "candidate-baseline", {
 			id: () => "revision-baseline",
@@ -521,7 +524,9 @@ test("workspace auto-rollback treats interleaved stream falsification as strong 
 
 test("evolution auto-rollback does not move current for non-current or root revisions", () =>
 	withTempAgentDir((agentDir) => {
-		const root = getEvolutionScopeRoot(agentDir, { scope: "workspace", cwd: "/tmp/project-auto-rollback-guard" });
+		// Session root for the same reason: the guard under test is the missing predecessor, which a
+		// stricter workspace policy would have stopped short of.
+		const root = getEvolutionScopeRoot(agentDir, { scope: "session", sessionId: "auto-rollback-guard" });
 		createEvolutionCandidate(root, {
 			...candidateInput("Root"),
 			predictions: [

@@ -17,6 +17,7 @@ import {
 import type { EvolutionBenchmarkRunV1, EvolutionBenchmarkSnapshotV1 } from "../extensions/optional/evolution/benchmark-types.js";
 import {
 	createEvolutionCandidate,
+	getEvolutionScopeRoot,
 	promoteEvolutionCandidate,
 } from "../extensions/optional/evolution/evolution-store.js";
 import { EvolutionStore } from "../extensions/optional/evolution/store.js";
@@ -106,7 +107,7 @@ function fixtureGate(): EvolutionGateReport {
 }
 
 test("behavioral promotion rejects missing, mismatched, and tampered benchmark evidence", () => {
-	const root = mkdtempSync(join(tmpdir(), "catui-evolution-evidence-"));
+	const root = getEvolutionScopeRoot(mkdtempSync(join(tmpdir(), "catui-evolution-evidence-")), { scope: "workspace", cwd: "/tmp/evidence-project" });
 	try {
 		const candidate = createEvolutionCandidate(root, behavioralInput(), { id: () => "candidate-a" });
 		assert.throws(() => promoteEvolutionCandidate(root, "candidate-a", { gateReport: fixtureGate() }), /benchmark evidence/i);
@@ -140,7 +141,7 @@ test("behavioral promotion rejects missing, mismatched, and tampered benchmark e
 });
 
 test("behavioral promotion accepts integrity-bound passing held-out evidence", () => {
-	const root = mkdtempSync(join(tmpdir(), "catui-evolution-evidence-"));
+	const root = getEvolutionScopeRoot(mkdtempSync(join(tmpdir(), "catui-evolution-evidence-")), { scope: "workspace", cwd: "/tmp/evidence-project" });
 	try {
 		const candidate = createEvolutionCandidate(root, behavioralInput(), { id: () => "candidate-pass" });
 		const revision = promoteEvolutionCandidate(root, "candidate-pass", { gateReport: passingGate("candidate-pass", candidate.contentHash) });
@@ -152,7 +153,7 @@ test("behavioral promotion accepts integrity-bound passing held-out evidence", (
 });
 
 test("pure eval_fixture promotion requires its replay gate but not a real-task benchmark", () => {
-	const root = mkdtempSync(join(tmpdir(), "catui-evolution-evidence-"));
+	const root = getEvolutionScopeRoot(mkdtempSync(join(tmpdir(), "catui-evolution-evidence-")), { scope: "workspace", cwd: "/tmp/evidence-project" });
 	try {
 		createEvolutionCandidate(root, fixtureInput(), { id: () => "candidate-fixture" });
 		assert.throws(() => promoteEvolutionCandidate(root, "candidate-fixture"), /gate report/i);
@@ -168,7 +169,7 @@ test("pure eval_fixture promotion requires its replay gate but not a real-task b
 });
 
 test("legacy evolution store cannot bypass the evidence-gated promotion authority", async () => {
-	const root = mkdtempSync(join(tmpdir(), "catui-legacy-evolution-"));
+	const root = getEvolutionScopeRoot(mkdtempSync(join(tmpdir(), "catui-legacy-evolution-")), { scope: "workspace", cwd: "/tmp/legacy-project" });
 	try {
 		const store = new EvolutionStore({ agentDir: root, cwd: root, sessionId: "session" });
 		await assert.rejects(() => store.promote("workspace", "candidate-legacy"), /legacy.*promotion.*disabled/i);
@@ -178,7 +179,7 @@ test("legacy evolution store cannot bypass the evidence-gated promotion authorit
 });
 
 test("eval_fixture verifier candidates cannot mix multiple or behavioral artifacts", () => {
-	const root = mkdtempSync(join(tmpdir(), "catui-evolution-evidence-"));
+	const root = getEvolutionScopeRoot(mkdtempSync(join(tmpdir(), "catui-evolution-evidence-")), { scope: "workspace", cwd: "/tmp/evidence-project" });
 	try {
 		const multiple = fixtureInput();
 		multiple.artifacts.push({ ...multiple.artifacts[0]!, id: "evolved:eval_fixture:second", content: "{\"second\":true}" });
