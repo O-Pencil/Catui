@@ -279,6 +279,21 @@ test("two roots of the same scope kind do not see each other", async () => {
 	});
 });
 
+test("workspace candidates and active revisions do not leak into another project", async () => {
+	await withAgentDir((agentDir) => {
+		const one = workspaceRoot(agentDir, join(agentDir, "project-one"));
+		const two = workspaceRoot(agentDir, join(agentDir, "project-two"));
+		assert.notEqual(one, two);
+		promote(one, [note("evolved:prompt_note:project-one", "Only project one.")], "workspace");
+		assert.deepEqual(loadActiveEvolutionArtifacts(one).map((artifact) => artifact.id), ["evolved:prompt_note:project-one"]);
+		assert.deepEqual(snapshotState(two), { pointer: undefined, active: [], revisions: 0 });
+		assert.deepEqual(inspectEvolution(two).candidates, []);
+		const candidate = createEvolutionCandidate(one, input([note("evolved:prompt_note:next", "Next project one.")], "workspace"));
+		assert.throws(() => promoteEvolutionCandidate(two, candidate.id, { approvedBy: "test", gateReport: gateFor(candidate) }), /Evolution candidate not found/);
+		assert.deepEqual(snapshotState(two), { pointer: undefined, active: [], revisions: 0 });
+	});
+});
+
 test("a candidate from one session root cannot be promoted through another", async () => {
 	await withAgentDir((agentDir) => {
 		const one = sessionRoot(agentDir, "one");
