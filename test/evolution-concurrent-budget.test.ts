@@ -17,17 +17,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	DEFAULT_EVOLUTION_BUDGET,
-	lockOwnerIsAlive,
 	readEvolutionBudget,
 	reserveEvolutionModelCall,
-	sameLockIdentity,
-	unlinkIfSameLock,
 } from "../extensions/optional/evolution/evolution-budget.js";
 import { EvolutionAutoObserver } from "../extensions/optional/evolution/evolution-auto.js";
 import {
@@ -75,13 +72,6 @@ function reserveInProcess(agentDir: string, policy: Partial<typeof DEFAULT_EVOLU
 	return reserveEvolutionModelCall(agentDir, { ...DEFAULT_EVOLUTION_BUDGET, ...policy });
 }
 
-function firstLockFile(dir: string): string {
-	mkdirSync(dir, { recursive: true });
-	const path = join(dir, "lock");
-	writeFileSync(path, "held", "utf8");
-	return path;
-}
-
 function sleep(ms: number): Promise<void> {
 	return new Promise((done) => setTimeout(done, ms));
 }
@@ -100,6 +90,7 @@ interface ChildResult {
 	reserved: boolean;
 	reason?: string;
 	calls?: number;
+	message?: string;
 }
 
 function reserveInChild(agentDir: string, policy: Record<string, unknown>): Promise<ChildResult> {
@@ -160,7 +151,7 @@ test("a lock held by another process makes the reservation wait rather than proc
 	// second entrant cannot slip past it the way the unsynchronized version let N - 1 through.
 	const s = space();
 	try {
-		reserveEvolutionCandidate(s.agentDir);
+		reserveInProcess(s.agentDir);
 		// A fresh lock, as if another process were mid-reservation right now.
 		writeFileSync(lockFile(s.agentDir), `${JSON.stringify({ pid: 999999, acquiredAt: new Date().toISOString() })}\n`, "utf8");
 
@@ -182,28 +173,77 @@ test("a lock held by another process makes the reservation wait rather than proc
 	}
 });
 
-test("a lock left by a dead process does not wedge the budget forever", async () => {
-	// A cap that one crash can deadlock away is not a cap. The staleness window is what keeps the
-	// guarantee from becoming an outage.
+test("a lock left by a dead process is reported, never removed automatically", async () => {
+	// This reverses the previous version of this file, and the reversal is the point. The old test
+	// asserted that a stale lock was broken so the budget could recover. Recovery means one process
+	// removing a file on the belief that it belongs to another, and the only check available is
+	// stat-then-unlink, which is not atomic: a replacement installed in between is deleted, and the
+	// process that installed it never learns. POSIX has no compare-and-remove, so there is no
+	// version of automatic recovery that is also correct. The budget refuses and says who to ask.
 	const s = space();
 	try {
-		reserveEvolutionCandidate(s.agentDir);
-		writeFileSync(lockFile(s.agentDir), `${JSON.stringify({ pid: 999999, acquiredAt: "long ago" })}\n`, "utf8");
+		reserveInProcess(s.agentDir);
+		const lock = lockFile(s.agentDir);
+		writeFileSync(lock, `${JSON.stringify({ pid: 2 ** 30, acquiredAt: "long ago" })}\n`, "utf8");
 		const longAgo = new Date(Date.now() - 60_000);
-		utimesSync(lockFile(s.agentDir), longAgo, longAgo);
+		utimesSync(lock, longAgo, longAgo);
 
 		const result = await reserveInChild(s.agentDir, { dailyCallBudget: 5, dailyEstimatedTokenBudget: 1_000_000, estimatedTokensPerCall: 1 });
-		assert.equal(result.reserved, true, "a stale lock must be broken, not obeyed forever");
-		assert.equal(readEvolutionBudget(s.agentDir).calls, 2);
+		assert.equal(result.reserved, false, "a lock this process did not take must not be taken over");
+		assert.equal(readEvolutionBudget(s.agentDir).calls, 1, "and no call may be charged behind it");
 	} finally {
 		s.dispose();
 	}
 });
 
-function reserveEvolutionCandidate(agentDir: string): void {
-	const first = reserveEvolutionModelCall(agentDir, { dailyCallBudget: 1, dailyEstimatedTokenBudget: 1_000_000, estimatedTokensPerCall: 1 });
-	assert.equal(first.reserved, true);
-}
+test("a dead owner's lock is refused with a message that names the recovery", async () => {
+	const s = space();
+	try {
+		reserveInProcess(s.agentDir);
+		const lock = lockFile(s.agentDir);
+		writeFileSync(lock, `${JSON.stringify({ pid: 2 ** 30, acquiredAt: "long ago" })}\n`, "utf8");
+		const longAgo = new Date(Date.now() - 60_000);
+		utimesSync(lock, longAgo, longAgo);
+
+		const result = reserveInProcess(s.agentDir);
+		assert.equal(result.reserved, false);
+		if (!result.reserved) {
+			assert.equal(result.reason, "budget_locked");
+			// The operator has to be told which situation they are in and what to do about it.
+			assert.match(result.message, /no longer running/);
+			assert.match(result.message, new RegExp(lock.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), "the message must name the file to remove");
+			assert.match(result.message, /No model call was made/);
+		}
+		assert.equal(existsSync(lock), true, "and the lock is left exactly where the dead owner left it");
+	} finally {
+		s.dispose();
+	}
+});
+
+test("an unknown lock owner is treated as alive, not as abandoned", async () => {
+	// Unreadable contents, a missing pid, or an unprobeable liveness are all unknown. Unknown is not
+	// evidence of abandonment, and reading it that way is how two processes charge one headroom.
+	for (const contents of ["{ not json", "{}", JSON.stringify({ pid: 0 }), JSON.stringify({ pid: "x" })]) {
+		const s = space();
+		try {
+			reserveInProcess(s.agentDir);
+			const lock = lockFile(s.agentDir);
+			writeFileSync(lock, `${contents}\n`, "utf8");
+			const longAgo = new Date(Date.now() - 60_000);
+			utimesSync(lock, longAgo, longAgo);
+
+			const result = await reserveInChild(s.agentDir, { dailyCallBudget: 5, dailyEstimatedTokenBudget: 1_000_000, estimatedTokensPerCall: 1 });
+			assert.equal(result.reserved, false, `contents ${contents} must not be read as a dead owner`);
+			assert.equal(existsSync(lock), true, `contents ${contents} must leave the lock alone`);
+			// The refusal and the untouched file are the same either way, so the only observable
+			// difference between "alive" and "dead" is which repair the message recommends. Asserting
+			// only the outcome would let the two be swapped freely.
+			assert.ok(result.message?.includes("still running"), `an unknown owner must be described as running, got: ${result.message}`);
+		} finally {
+			s.dispose();
+		}
+	}
+});
 
 test("a lock owned by a live process is never broken, however old it looks", () => {
 	// Age is not proof of death. A stopped process, a suspended host, or a stalled filesystem all
@@ -222,37 +262,6 @@ test("a lock owned by a live process is never broken, however old it looks", () 
 		assert.equal(result.reason, "budget_locked", "and the refusal must say it was contention, not exhaustion");
 		assert.equal(existsSync(lock), true, "the owner's lock must be left exactly where it was");
 		assert.equal(readEvolutionBudget(s.agentDir).calls, 1, "no second call was charged");
-	} finally {
-		s.dispose();
-	}
-});
-
-test("a displaced owner's release cannot remove the lock that replaced it", () => {
-	// The hazard the identity check exists for. Once a lock is broken, the file at that path belongs
-	// to somebody else, and the old owner resuming must not delete it — that would open a window in
-	// which no lock exists at all while a third party is mid-reservation.
-	const s = space();
-	try {
-		const before = mkdtempSync(join(tmpdir(), "catui-evo-identity-"));
-		try {
-			const original = statSync(firstLockFile(before));
-			rmSync(join(before, "lock"));
-			const replacement = statSync(firstLockFile(before));
-
-			assert.equal(sameLockIdentity({ dev: original.dev, ino: original.ino }, { dev: original.dev, ino: original.ino }), true, "the same file is the same identity");
-			assert.equal(sameLockIdentity({ dev: original.dev, ino: original.ino }, { dev: replacement.dev, ino: replacement.ino }), false, "a file recreated at the same path is a different identity");
-			assert.notEqual(original.ino, replacement.ino, "precondition: the filesystem really handed out a new inode");
-
-			// The rule, applied: a holder of the old identity must leave the replacement alone.
-			unlinkIfSameLock(join(before, "lock"), { dev: original.dev, ino: original.ino });
-			assert.equal(existsSync(join(before, "lock")), true, "the displaced owner's release must not remove the lock that replaced it");
-
-			// And its own file, it may remove.
-			unlinkIfSameLock(join(before, "lock"), { dev: replacement.dev, ino: replacement.ino });
-			assert.equal(existsSync(join(before, "lock")), false, "an owner must still be able to release its own lock");
-		} finally {
-			rmSync(before, { recursive: true, force: true });
-		}
 	} finally {
 		s.dispose();
 	}
@@ -279,18 +288,26 @@ test("a real child holding the lock keeps everyone else out, and cleans up after
 		} finally {
 			holder.kill("SIGKILL");
 		}
-		// Killed, so the lock is left behind and the next reservation must recover it rather than
-		// trusting its age alone — the recorded pid is gone, which is the actual signal.
-		const recovered = reserveInChild(s.agentDir, { dailyCallBudget: 5, dailyEstimatedTokenBudget: 1_000_000, estimatedTokensPerCall: 1 });
-		assert.equal((await recovered).reserved, true, "a dead owner's lock must be recoverable");
+		// Killed, so its lock is orphaned. The next reservation must refuse it rather than take it
+		// over: a lock this process did not create is never removed on a guess about who owned it.
+		const afterDeath = await reserveInChild(s.agentDir, { dailyCallBudget: 5, dailyEstimatedTokenBudget: 1_000_000, estimatedTokensPerCall: 1 });
+		assert.equal(afterDeath.reserved, false, "an orphaned lock is not taken over automatically");
+		assert.equal(existsSync(lockFile(s.agentDir)), true, "and it is left for an operator to remove");
+
+		// Operator recovery is the documented step, and it is the only thing that clears it.
+		rmSync(lockFile(s.agentDir));
+		const afterRecovery = await reserveInChild(s.agentDir, { dailyCallBudget: 5, dailyEstimatedTokenBudget: 1_000_000, estimatedTokensPerCall: 1 });
+		assert.equal(afterRecovery.reserved, true, "once the orphaned lock is removed, reservations resume");
 	} finally {
 		s.dispose();
 	}
 });
 
-test("two waiters recovering one dead owner's lock produce exactly one reservation", async () => {
-	// The competition the identity check makes safe: both waiters observe the same stale file, and
-	// the one that loses must not remove the lock the winner just took.
+test("two waiters contending for a dead owner's lock both refuse and neither removes it", async () => {
+	// The competition the old design mishandled. Both waiters observe the same file, and under the
+	// previous recovery both would have raced to delete it — with the loser's unlink landing on the
+	// winner's fresh lock. Now nobody deletes it, so the ledger cannot be charged twice and the
+	// file is still there for the operator.
 	const s = space();
 	try {
 		reserveInProcess(s.agentDir);
@@ -298,25 +315,19 @@ test("two waiters recovering one dead owner's lock produce exactly one reservati
 		writeFileSync(lock, `${JSON.stringify({ pid: 2 ** 30, acquiredAt: "long ago" })}\n`, "utf8");
 		const longAgo = new Date(Date.now() - 60_000);
 		utimesSync(lock, longAgo, longAgo);
-
 		const seeded = readEvolutionBudget(s.agentDir).calls ?? 0;
+
 		const results = await Promise.all([
 			reserveInChild(s.agentDir, { dailyCallBudget: 2, dailyEstimatedTokenBudget: 1_000_000, estimatedTokensPerCall: 1 }),
 			reserveInChild(s.agentDir, { dailyCallBudget: 2, dailyEstimatedTokenBudget: 1_000_000, estimatedTokensPerCall: 1 }),
 		]);
 
-		const winners = results.filter((result) => result.reserved);
-		assert.equal(winners.length, 1, `exactly one waiter may hold the recovered lock: ${JSON.stringify(results)}`);
-		for (const loser of results.filter((result) => !result.reserved)) {
-			assert.ok(loser.reason === "budget_locked" || loser.reason === "budget_exhausted", `loser must say why: ${JSON.stringify(loser)}`);
+		assert.equal(results.filter((result) => result.reserved).length, 0, `neither waiter may take a lock it did not create: ${JSON.stringify(results)}`);
+		for (const result of results) {
+			assert.equal(result.reason, "budget_locked", `loser must say why: ${JSON.stringify(result)}`);
 		}
-		// Successful reservations and the ledger must agree, not just the ledger. Compared against
-		// the starting count, since the recovery itself was seeded by a call made before the race.
-		assert.equal(
-			(readEvolutionBudget(s.agentDir).calls ?? 0) - seeded,
-			winners.length,
-			"the ledger must record exactly the reservations that were granted during the race",
-		);
+		assert.equal(readEvolutionBudget(s.agentDir).calls, seeded, "the ledger is untouched by a lock nobody may take");
+		assert.equal(existsSync(lock), true, "and the lock survives the contention");
 	} finally {
 		s.dispose();
 	}

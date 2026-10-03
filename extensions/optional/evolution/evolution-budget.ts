@@ -147,32 +147,8 @@ function quarantineCorruptLedger(path: string): void {
  * the only synchronous sleep available, and the alternative — a busy spin — would burn a core in
  * exactly the situation where a process is already struggling.
  */
-const LOCK_STALE_MS = 5_000;
 const LOCK_ATTEMPTS = 60;
 const LOCK_BACKOFF_MS = 20;
-
-/** Enough of a file's identity to tell "the same lock" from "someone replaced it". */
-export interface LockIdentity {
-	dev: number;
-	ino: number;
-}
-
-function identityOf(path: string): LockIdentity {
-	const stats = statSync(path);
-	return { dev: stats.dev, ino: stats.ino };
-}
-
-/**
- * Two observations of the same lock file, not of the same lock.
- *
- * A path is not an identity. Once a stale lock is broken, the file at that path is a different
- * file belonging to a different owner, and anything still holding a reference to the old one must
- * not act on the new one. This is the whole reason both the release and the break check the file
- * they are about rather than the path they once used.
- */
-export function sameLockIdentity(a: LockIdentity, b: LockIdentity): boolean {
-	return a.dev === b.dev && a.ino === b.ino;
-}
 
 function sleepSync(ms: number): void {
 	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -185,102 +161,67 @@ function lockContention(error: unknown): boolean {
 /**
  * Whether the process that wrote this lock is still running on this host.
  *
- * Age is not proof of death. A process that is stopped, a host that is suspended, or a filesystem
- * that stalled can all leave a lock looking arbitrarily old while its owner is alive and about to
- * resume. Breaking such a lock hands two processes the right to charge the same headroom, and the
- * owner — unaware it had been dispossessed — then releases the lock its replacement now holds.
+ * Only `ESRCH` proves death. Everything else is unknown, and unknown is treated as *alive*: a lock
+ * whose owner cannot be identified, whose contents cannot be read, or whose liveness cannot be
+ * probed is not evidence of abandonment, and treating it as such is how two processes end up
+ * charging the same headroom. `EPERM` means the process exists and we may not signal it.
  *
- * So liveness is asked, not inferred. `EPERM` means the process exists and we may not signal it,
- * which is a live owner. Anything else that is not `ESRCH` is treated as live too, because the
- * conservative failure of a budget is a visible refusal, not an overspend.
+ * The answer is diagnostic. It never authorizes removing a lock, because nothing here is atomic
+ * enough to do that safely.
  */
-export function lockOwnerIsAlive(lockPath: string): boolean {
-	let raw: string;
-	try {
-		raw = readFileSync(lockPath, "utf8");
-	} catch {
-		// Unreadable: no owner we can vouch for, so age is all we have.
-		return false;
-	}
+function lockOwnerIsAlive(lockPath: string): boolean {
 	let pid: unknown;
 	try {
-		pid = (JSON.parse(raw) as { pid?: unknown }).pid;
+		pid = (JSON.parse(readFileSync(lockPath, "utf8")) as { pid?: unknown }).pid;
 	} catch {
-		return false;
+		return true;
 	}
-	if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return false;
+	if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return true;
 	try {
 		process.kill(pid, 0);
 		return true;
 	} catch (error) {
-		return (error as NodeJS.ErrnoException)?.code === "EPERM";
-	}
-}
-
-/**
- * Removes the lock only if the file at the path is still the one we looked at.
- *
- * Exported because this is the rule that stops a displaced owner from deleting its replacement's
- * lock, and an untested guard on a concurrency path is a comment rather than a guarantee. Callers
- * pass the identity they observed; if the path now holds a different file, nothing is removed.
- */
-export function unlinkIfSameLock(lockPath: string, observed: LockIdentity): void {
-	try {
-		if (sameLockIdentity(identityOf(lockPath), observed)) unlinkSync(lockPath);
-	} catch {
-		// Already gone, or replaced between the check and now. Either way it is not ours to remove.
+		return (error as NodeJS.ErrnoException)?.code !== "ESRCH";
 	}
 }
 
 /**
  * Runs `run` holding the lock, or reports that the lock could not be taken.
  *
- * A lock is only broken when its owner is demonstrably gone. A lock whose owner is alive is waited
- * on, and waiting past the attempts becomes a stated refusal — a live-but-stalled owner costs one
- * refused reservation, which is recoverable, where breaking its lock costs an unenforced cap.
+ * The lock is never removed by anyone but the process that took it. The earlier version broke a
+ * lock that looked abandoned and then released "its own" lock by path — and neither half of that is
+ * sound. `unlinkIfSameLock` compared dev and ino, which looks like it closes the window, but a
+ * compare followed by an unlink is not atomic: a replacement installed between the two is deleted
+ * without anything throwing. POSIX has no compare-and-remove primitive, so there is no version of
+ * this that recovers a lock automatically and is also correct. Rather than keep a TOCTOU and call
+ * the cap hard, recovery is refused and the operator is told what to do.
  *
- * Exhausting the attempts is reported rather than proceeded through: proceeding unlocked is the
- * exact race this exists to remove, and a budget that is occasionally unenforced is worse than one
- * that occasionally refuses, because the refusal is visible and the unenforced call is not.
+ * The owner releasing its own lock is safe precisely because nothing else can put a file at that
+ * path. That is a consequence of refusing recovery, not an independent guarantee.
  */
 function withBudgetLock<T>(path: string, now: Date, run: () => T): { ok: true; value: T } | { ok: false; reason: "lock_unavailable" } {
 	const lockPath = `${path}.lock`;
 	for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
-		let handle: number | undefined;
+		let handle: number;
 		try {
 			handle = openSync(lockPath, "wx", 0o600);
 		} catch (error) {
 			if (!lockContention(error)) throw error;
-			// One stat, for both the identity and the age. Statting twice leaves a window in which a
-			// competing waiter's removal turns ordinary contention into a thrown ENOENT — which is
-			// how a queue turns into a crash.
-			let observed: LockIdentity;
-			let ageMs: number;
-			try {
-				const stats = statSync(lockPath);
-				observed = { dev: stats.dev, ino: stats.ino };
-				ageMs = now.getTime() - stats.mtimeMs;
-			} catch {
-				// Vanished between the failed open and here; retry immediately.
-				continue;
-			}
-			if (ageMs > LOCK_STALE_MS && !lockOwnerIsAlive(lockPath)) {
-				// Only the file we judged, and only while it is still that file: two waiters can
-				// observe the same stale lock, and the loser must not remove the winner's new one.
-				unlinkIfSameLock(lockPath, observed);
-			}
 			sleepSync(LOCK_BACKOFF_MS);
 			continue;
 		}
-		let ours: LockIdentity;
 		try {
-			ours = identityOf(lockPath);
 			writeFileSync(handle, `${JSON.stringify({ pid: process.pid, acquiredAt: now.toISOString() })}\n`, { encoding: "utf8" });
 		} catch (error) {
 			try {
+				closeSync(handle);
+			} catch {
+				// Nothing further to do; the file was ours to begin with.
+			}
+			try {
 				unlinkSync(lockPath);
 			} catch {
-				// Nothing to clean up.
+				// Nothing further to do.
 			}
 			throw error;
 		}
@@ -290,14 +231,24 @@ function withBudgetLock<T>(path: string, now: Date, run: () => T): { ok: true; v
 			try {
 				closeSync(handle);
 			} catch {
-				// Already closed; the identity check below is what matters.
+				// Already closed.
 			}
-			// Our lock, or the one that replaced it after somebody decided we were dead. Removing
-			// the latter would hand a third party a window with no lock at all.
-			unlinkIfSameLock(lockPath, ours);
+			try {
+				unlinkSync(lockPath);
+			} catch {
+				// Already gone.
+			}
 		}
 	}
 	return { ok: false, reason: "lock_unavailable" };
+}
+
+/** Why the last attempt could not take the lock, phrased for whoever has to fix it. */
+function lockHeldMessage(lockPath: string, now: Date): string {
+	const alive = lockOwnerIsAlive(lockPath);
+	return alive
+		? `Evolution budget ledger is held by another process that is still running; no model call was made. It releases the lock when it finishes.`
+		: `Evolution budget ledger is held by a process that is no longer running, and the store will not remove a lock it did not take. No model call was made. Once you are sure that process has exited, remove ${lockPath} to resume.`;
 }
 
 /**
@@ -327,7 +278,7 @@ export function reserveEvolutionModelCall(
 			reason: "budget_locked",
 			day: utcDay(now),
 			calls: 0,
-			message: `Evolution budget ledger is held by another process; no model call was made. Try again once it clears.`,
+			message: lockHeldMessage(`${path}.lock`, now),
 		};
 	}
 	return locked.value;

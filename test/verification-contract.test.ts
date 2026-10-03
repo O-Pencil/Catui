@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { orderingViolations, planStageScriptNames } from "./helpers/verification-order.js";
 import { ciNpmRuns, ciRawTestRuns } from "./helpers/verification-ci.js";
+import { testFileExecutions as walkTestFiles, withinStageDuplicates as withinStageFiles } from "./helpers/verification-test-graph.js";
 import { join } from "node:path";
 
 const ROOT = process.cwd();
@@ -526,37 +527,16 @@ test("typecheck covers the product program and the scripts program", () => {
 const AGGREGATE_STAGES = ["test:release", "test:pre", "test:evolution-boundaries", "test:harness-critical"];
 
 /**
- * How many times each test file actually runs when `name` is invoked.
- *
- * This is deliberately not `testFilesIn`, which deduplicates by file name. Deduplication hides
- * two distinct defects: a file listed twice inside one stage, and a shared sub-suite reached
- * through two parents inside one stage. Both execute the file twice at runtime, and both were
- * invisible to the previous check.
- *
- * Traversal carries an explicit path stack so a shared sub-suite is counted once per path it is
- * reached by, and a cycle terminates instead of looping.
+ * The traversal lives in a shared helper, parameterized by the script map, so the recheck's
+ * counterexamples can hand it a mutated copy and watch the same algorithm react. The reasoning for
+ * counting executions rather than distinct files is recorded there.
  */
 function testFileExecutions(name: string): Map<string, number> {
-	const counts = new Map<string, number>();
-	const expanded = new Set<string>();
-	const visit = (script: string, path: string[]): void => {
-		if (!(script in scripts)) return;
-		if (path.includes(script)) return;
-		const nextPath = [...path, script];
-		for (const match of scripts[script]!.matchAll(/test\/[a-z0-9-]+\.test\.ts/g)) {
-			counts.set(match[0], (counts.get(match[0]) ?? 0) + 1);
-		}
-		if (expanded.has(script)) return;
-		expanded.add(script);
-		for (const match of scripts[script]!.matchAll(/npm run ([\w:-]+)/g)) visit(match[1]!, nextPath);
-	};
-	visit(name, []);
-	return counts;
+	return walkTestFiles(scripts, name);
 }
 
-/** Files that run more than once inside a single stage. */
 function withinStageDuplicates(stage: string): string[] {
-	return [...testFileExecutions(stage).entries()].filter(([, count]) => count > 1).map(([file]) => file).sort();
+	return withinStageFiles(scripts, stage);
 }
 
 /** Regression files added by this batch, per owner. Reachability is asserted, not assumed. */

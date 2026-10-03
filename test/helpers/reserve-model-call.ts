@@ -25,7 +25,7 @@ const policy: Readonly<EvolutionBudgetPolicy> = { ...DEFAULT_EVOLUTION_BUDGET, .
 
 try {
 	const result = reserveEvolutionModelCall(agentDir, policy);
-	process.stdout.write(`${JSON.stringify({ reserved: result.reserved, reason: result.reserved ? undefined : result.reason, calls: result.reserved ? result.calls : undefined })}\n`);
+	process.stdout.write(`${JSON.stringify({ reserved: result.reserved, reason: result.reserved ? undefined : result.reason, calls: result.reserved ? result.calls : undefined, message: result.reserved ? undefined : result.message })}\n`);
 } catch (error) {
 	process.stdout.write(`${JSON.stringify({ reserved: false, reason: "threw", message: error instanceof Error ? error.message : String(error) })}\n`);
 	process.exit(1);
