@@ -25,6 +25,7 @@ import {
 	getEvolutionScopeRoot,
 	inspectEvolution,
 	loadActiveEvolutionArtifacts,
+	readEvolutionEvidenceCursor,
 } from "../extensions/optional/evolution/evolution-store.js";
 import type { ExtensionContext } from "../core/extensions-host/types.js";
 
@@ -103,20 +104,48 @@ test("a repeated structured proposal does not create a new candidate each turn",
 	}
 });
 
-test("the cooldown is keyed by the root a proposal writes to, not by session", async () => {
+test("the cursor is recorded in the scope root the proposal writes to", async () => {
 	const s = space();
 	try {
 		const cooldown = new EvolutionAutoObserver({ runGate: inertGate });
 		const first = await cooldown.observeTurnEnd({ type: "turn_end", turnIndex: 1, message: { content: structuredNote("global-note", "global") } } as never, context(s.agentDir, s.cwd, "session-a"));
 		assert.ok(first.candidateId);
 
-		// A different session proposing to the same global scope shares that scope's limit.
-		const second = await cooldown.observeTurnEnd({ type: "turn_end", turnIndex: 2, message: { content: structuredNote("global-note", "global") } } as never, context(s.agentDir, s.cwd, "session-b"));
-		assert.equal(second.skipped, "cooldown", "a global scope's limit is that scope's, not a session's");
+		// The global scope keeps its own cursor, beside its own candidates and revisions. A session
+		// proposal does not land there and does not disturb it.
+		const globalCursor = readEvolutionEvidenceCursor(
+			getEvolutionScopeRoot(s.agentDir, { scope: "global" }),
+			"session-a",
+		);
+		assert.equal(globalCursor?.lastTurnIndex, 1, "the global scope records its own stream position");
+		assert.equal(
+			readEvolutionEvidenceCursor(getEvolutionScopeRoot(s.agentDir, { scope: "session", sessionId: "session-a" }), "session-a"),
+			undefined,
+			"and the session scope is untouched by a global proposal",
+		);
 
-		// A different scope is unaffected by what the global scope did.
-		const workspace = await cooldown.observeTurnEnd({ type: "turn_end", turnIndex: 2, message: { content: structuredNote("workspace-note", "workspace") } } as never, context(s.agentDir, s.cwd, "session-b"));
-		assert.ok(workspace.candidateId, "an unrelated workspace must not be muted by the global scope");
+		const sessionScoped = await cooldown.observeTurnEnd({ type: "turn_end", turnIndex: 1, message: { content: structuredNote("session-note", "session") } } as never, context(s.agentDir, s.cwd, "session-a"));
+		assert.ok(sessionScoped.candidateId, "the same turn index in another scope is separate evidence");
+	} finally {
+		s.dispose();
+	}
+});
+
+test("another session's turn stream is not suppressed by this one's cursor", async () => {
+	// A cursor is per stream, not per scope. Turn indices restart with a session, so a cursor from a
+	// finished session would otherwise sit above every early turn of the next one for as long as it
+	// took to climb past the old high-water mark. Sharing a scope is not sharing an evidence stream.
+	const s = space();
+	try {
+		const cooldown = new EvolutionAutoObserver({ runGate: inertGate });
+		await cooldown.observeTurnEnd({ type: "turn_end", turnIndex: 7, message: { content: structuredNote("from-a", "global") } } as never, context(s.agentDir, s.cwd, "session-a"));
+
+		const fromB = await cooldown.observeTurnEnd({ type: "turn_end", turnIndex: 1, message: { content: structuredNote("from-b", "global") } } as never, context(s.agentDir, s.cwd, "session-b"));
+		assert.ok(fromB.candidateId, "session B's first turn is new evidence, not a repeat of session A's seventh");
+
+		// Within session B, the same window does apply.
+		const soonAfter = await cooldown.observeTurnEnd({ type: "turn_end", turnIndex: 2, message: { content: structuredNote("from-b-again", "global") } } as never, context(s.agentDir, s.cwd, "session-b"));
+		assert.equal(soonAfter.skipped, "cooldown", "a stream is only ever compared against itself");
 	} finally {
 		s.dispose();
 	}
@@ -145,19 +174,29 @@ test("the same proposal is allowed again once the window passes", async () => {
 	}
 });
 
-test("a restart clears the limit", async () => {
+test("a restart does not re-consume evidence the cursor already recorded", async () => {
+	// This reverses an earlier decision in this file, and the reversal is the point. The limit used
+	// to live in the observer instance, on the argument that a limit outliving its process could
+	// outlive its justification. But the same map was also the only record of which turns had been
+	// consumed, so a restart re-proposed every turn the process had already turned into candidates.
+	// A cursor that forgets on restart is not a cursor. It stays bounded: the window is turn-based
+	// and new evidence is always admitted, which is what keeps it short of a standing judgement
+	// about an idea.
 	const s = space();
 	try {
 		const ctx = context(s.agentDir, s.cwd);
 		const first = new EvolutionAutoObserver({ runGate: inertGate });
 		await first.observeTurnEnd({ type: "turn_end", turnIndex: 1, message: { content: structuredNote("after-restart") } } as never, ctx);
+		assert.equal(sessionCandidates(s.agentDir), 1);
 
-		// A new observer holds no memory, so the same turn is not suppressed. Nothing is persisted
-		// for this on purpose: a limit that outlived the process could outlive its justification.
-		const fresh = new EvolutionAutoObserver({ runGate: inertGate });
-		const result = await fresh.observeTurnEnd({ type: "turn_end", turnIndex: 1, message: { content: structuredNote("after-restart") } } as never, ctx);
-		assert.ok(result.candidateId);
-		assert.equal(sessionCandidates(s.agentDir), 2);
+		const afterRestart = new EvolutionAutoObserver({ runGate: inertGate });
+		const repeat = await afterRestart.observeTurnEnd({ type: "turn_end", turnIndex: 1, message: { content: structuredNote("after-restart") } } as never, ctx);
+		assert.equal(repeat.skipped, "cooldown", "the same turn is not turned into a second candidate");
+		assert.equal(sessionCandidates(s.agentDir), 1, "and the ledger gained nothing");
+
+		// Still bounded: past the window the same stream proceeds again.
+		const later = await afterRestart.observeTurnEnd({ type: "turn_end", turnIndex: 5, message: { content: structuredNote("after-restart") } } as never, ctx);
+		assert.ok(later.candidateId, "the window is turn-based, not a permanent bar");
 	} finally {
 		s.dispose();
 	}

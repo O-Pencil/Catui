@@ -86,6 +86,8 @@ Model calls are reserved against a daily ledger at `<agentDir>/evolution/v1/budg
 
 The extension is loaded from the optional tier, so the turn-end observer is present by default and inert: it never calls a model, writes nothing to disk, and only reacts to a `catui_evolution` declaration or a `Reusable lesson:` line the assistant already wrote. Activation still requires the store's evidence gate. Enablement is the extension load plus the explicit `/refine` command; no persisted user setting governs it.
 
+How far the turn-end observer has consumed a session's turns is recorded in `evidence-cursor.json` beside that scope's own candidates, so a restart does not turn the same evidence into a second candidate. The cursor is per turn stream rather than per scope — turn indices restart with a session, so a cursor left behind by a finished session would otherwise sit above every early turn of the next one. It is written only when a turn actually produces a candidate, so a quiet session still writes nothing at all.
+
 Automatic review runs only after the agent becomes idle or after compaction. A mode/scope change, a new agent turn, or session shutdown invalidates any in-flight activation; guarded authorization is re-read under lock at the final atomic boundary. Shutdown never waits for opportunistic model work. The default trigger is every 25 turns, with a 20-minute cooldown and conservative daily reservations of 8,000 estimated tokens / $0.40 per two-call review, capped at 40,000 tokens / $2.00. `off` and `manual` make no automatic model calls. Trigger fingerprints and accounting are kept in private atomic state under the evolution root.
 
 ## Runtime data

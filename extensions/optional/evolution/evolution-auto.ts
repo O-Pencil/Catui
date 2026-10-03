@@ -14,6 +14,8 @@ import {
 	createEvolutionCandidate,
 	getEvolutionScopeRoot,
 	promoteEvolutionCandidate,
+	readEvolutionEvidenceCursor,
+	recordEvolutionEvidenceCursor,
 	recordEvolutionGateFailure,
 } from "./evolution-store.js";
 import type { EvolutionArtifactKind, EvolutionScope } from "./evolution-types.js";
@@ -131,12 +133,13 @@ function structuredProposal(text: string):
  * their own budget; keying by root makes a scope's limit that scope's, and a workspace proposal can
  * no longer be muted by an unrelated session's memory.
  *
- * Deliberately a bounded turn window and nothing more. It suppresses repetition, not an idea: the
- * map is in-memory, so a restart clears it, and once COOLDOWN_TURNS elapses the same proposal is
- * free to be made again. That is the opposite of the permanent blacklist the review warns about.
+ * The last consumed turn is held in that scope's on-disk evidence cursor rather than in this
+ * instance, because a cursor that forgets on restart is not a cursor. What the cursor does *not* do
+ * is outlast its own turn window: it suppresses a fixed number of turns, new evidence is always
+ * admitted, and a stream belonging to a different session starts from nothing. That keeps it a
+ * bounded re-read of recent work rather than a standing judgement about an idea.
  */
 export class EvolutionAutoObserver {
-	#lastCandidateTurnByRoot = new Map<string, number>();
 	#runGate: EvolutionGateRunner;
 
 	constructor(options: { runGate?: EvolutionGateRunner } = {}) {
@@ -160,8 +163,10 @@ export class EvolutionAutoObserver {
 						: { scope: "session", sessionId },
 			)
 			: getEvolutionScopeRoot(ctx.agentDir, { scope: "session", sessionId });
-		const lastTurn = this.#lastCandidateTurnByRoot.get(root);
-		if (lastTurn !== undefined && event.turnIndex - lastTurn < COOLDOWN_TURNS) return { skipped: "cooldown" };
+		// Read from disk, not from this instance, so a restart cannot make the observer re-consume
+		// turns it already turned into candidates. A cursor from another session does not apply.
+		const cursor = readEvolutionEvidenceCursor(root, sessionId);
+		if (cursor !== undefined && event.turnIndex - cursor.lastTurnIndex < COOLDOWN_TURNS) return { skipped: "cooldown" };
 		if (structured) {
 			if (structured.kind === "eval_fixture") {
 				if (structured.scope !== "workspace") return { skipped: "eval_fixture_scope" };
@@ -201,7 +206,7 @@ export class EvolutionAutoObserver {
 						recordEvolutionGateFailure(root, candidate.id, { gateReport: fixtureGateReport });
 					}
 				}
-				this.#lastCandidateTurnByRoot.set(root, event.turnIndex);
+				recordEvolutionEvidenceCursor(root, sessionId, event.turnIndex);
 				return { candidateId: candidate.id };
 			}
 			const input = {
@@ -238,7 +243,7 @@ export class EvolutionAutoObserver {
 					recordEvolutionGateFailure(root, candidate.id, { gateReport });
 				}
 			}
-			this.#lastCandidateTurnByRoot.set(root, event.turnIndex);
+			recordEvolutionEvidenceCursor(root, sessionId, event.turnIndex);
 			return { candidateId: candidate.id };
 		}
 		const lesson = text.match(LESSON_PATTERN)?.[1]?.trim();
@@ -269,7 +274,7 @@ export class EvolutionAutoObserver {
 		} else {
 			recordEvolutionGateFailure(root, candidate.id, { gateReport });
 		}
-		this.#lastCandidateTurnByRoot.set(root, event.turnIndex);
+		recordEvolutionEvidenceCursor(root, sessionId, event.turnIndex);
 		return { candidateId: candidate.id };
 	}
 }

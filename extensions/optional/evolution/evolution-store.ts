@@ -1,5 +1,5 @@
 /**
- * [WHO]: Evolution ledger path resolution, scope/root agreement enforcement, candidate/revision validation, rejected-candidate listing, skill_manifest body structure enforcement, the refinement change budget, the shared artifact hash, and behavioral prose dedup, no-IO executable DSL manifests, usage records, prediction manifests, post-hoc attribution, eval_fixture dedupe/retention, gated promotion, quarantine, rollback, and conservative auto-rollback
+ * [WHO]: Evolution ledger path resolution, scope/root agreement enforcement, per-scope evidence cursor, candidate/revision validation, rejected-candidate listing, skill_manifest body structure enforcement, the refinement change budget, the shared artifact hash, and behavioral prose dedup, no-IO executable DSL manifests, usage records, prediction manifests, post-hoc attribution, eval_fixture dedupe/retention, gated promotion, quarantine, rollback, and conservative auto-rollback
  * [FROM]: Depends on node fs/path/crypto for owner-only runtime state below agentDir/evolution/v1
  * [TO]: Consumed by optional evolution extension command handlers and tests
  * [HERE]: extensions/optional/evolution/evolution-store.ts - durable store for controlled self-evolution
@@ -1448,6 +1448,69 @@ export function recordEvolutionAttributionAndMaybeRollback(
  * are included here — a proposal that failed once is still allowed to be made again, because the
  * conditions that failed it may no longer hold.
  */
+/**
+ * How far this scope's turn stream has been consumed.
+ *
+ * `sessionId` is part of the record because turn indices restart. A scope can be written by many
+ * sessions — global and workspace scopes are shared — and a cursor from a finished session would
+ * otherwise suppress every early turn of the next one, silently, for as long as it took to climb back
+ * past the old high-water mark. A cursor from a different stream is simply not a cursor for this one.
+ */
+export interface EvolutionEvidenceCursor {
+	schemaVersion: 1;
+	sessionId: string;
+	lastTurnIndex: number;
+	updatedAt: string;
+}
+
+function evidenceCursorPath(scopeRoot: string): string {
+	return join(scopeRoot, "evidence-cursor.json");
+}
+
+/**
+ * The cursor for this stream, or undefined if there is none that applies.
+ *
+ * A corrupt cursor reads as absent. The two ways to be wrong are reprocessing one turn's evidence,
+ * which costs a duplicate candidate, and refusing every turn, which costs the feature entirely; only
+ * one of those is recoverable, and the ledger beside it keeps the real usage record either way.
+ */
+export function readEvolutionEvidenceCursor(scopeRoot: string, sessionId: string): EvolutionEvidenceCursor | undefined {
+	// readJson throws on malformed content, and the turn_end handler swallows observer errors. A
+	// corrupt cursor that propagated would therefore silence the observer on every turn from then
+	// on, with nothing logged and nothing to diagnose — a permanent stop rather than a missed turn.
+	let record: EvolutionEvidenceCursor | undefined;
+	try {
+		record = readJson<EvolutionEvidenceCursor>(evidenceCursorPath(scopeRoot));
+	} catch {
+		return undefined;
+	}
+	if (!record || record.schemaVersion !== 1 || record.sessionId !== sessionId) return undefined;
+	if (!Number.isInteger(record.lastTurnIndex) || record.lastTurnIndex < 0) return undefined;
+	return record;
+}
+
+/**
+ * Advances the cursor, never rewinding it. Out-of-order events are normal when several turns settle
+ * at once, and a cursor that moved backwards would re-admit evidence already consumed.
+ */
+export function recordEvolutionEvidenceCursor(
+	scopeRoot: string,
+	sessionId: string,
+	turnIndex: number,
+	options?: EvolutionClockOptions,
+): EvolutionEvidenceCursor {
+	const existing = readEvolutionEvidenceCursor(scopeRoot, sessionId);
+	const lastTurnIndex = Math.max(existing?.lastTurnIndex ?? 0, turnIndex);
+	const cursor: EvolutionEvidenceCursor = {
+		schemaVersion: 1,
+		sessionId,
+		lastTurnIndex,
+		updatedAt: now(options),
+	};
+	writeJsonAtomic(evidenceCursorPath(scopeRoot), cursor, { overwrite: true });
+	return cursor;
+}
+
 export function listRejectedCandidates(scopeRoot: string): EvolutionCandidate[] {
 	return listJsonRecords<EvolutionCandidate>(join(scopeRoot, "candidates"), "proposal.json")
 		.filter((candidate) => candidate.status === "rejected")

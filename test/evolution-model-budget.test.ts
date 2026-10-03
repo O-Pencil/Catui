@@ -270,6 +270,50 @@ test("an unreadable ledger fails closed for the day and is kept aside", () => {
 	}
 });
 
+test("reporting leaves the filesystem untouched and never repairs anything", () => {
+	// Regression from supervisor review. `readEvolutionBudget` shared the load path with the
+	// reservation, which quarantined a corrupt ledger on the way past. Asking about the budget then
+	// deleted the very file the next reservation needed, so reading *cleared* a corruption block it
+	// had not created, and the next call was handed a fresh allowance.
+	const s = space();
+	try {
+		mkdirSync(join(s.agentDir, "evolution", "v1"), { recursive: true, mode: 0o700 });
+		const corrupt = "{ this is not json";
+		writeFileSync(budgetFile(s.agentDir), corrupt, "utf8");
+
+		for (let i = 0; i < 3; i += 1) {
+			const report = readEvolutionBudget(s.agentDir);
+			assert.equal(report.corrupt, true, "corruption is reported as its own fact");
+			assert.equal(report.calls, null, "and never as a confident zero");
+			assert.equal(report.estimatedTokens, null);
+			assert.deepEqual(readdirSync(join(s.agentDir, "evolution", "v1")), ["budget.json"], "reporting moves nothing aside");
+			assert.equal(readFileSync(budgetFile(s.agentDir), "utf8"), corrupt, "and rewrites nothing");
+		}
+
+		// The block still holds after any number of reads.
+		const refused = reserveEvolutionModelCall(s.agentDir);
+		assert.equal(refused.reserved, false, "reading the budget must not clear the block it found");
+		assert.equal(reserveEvolutionModelCall(s.agentDir).reserved, false, "and the refusal outlives the first attempt");
+	} finally {
+		s.dispose();
+	}
+});
+
+test("reporting a healthy ledger reports real usage and changes nothing", async () => {
+	const s = space();
+	try {
+		reserveEvolutionModelCall(s.agentDir);
+		const before = readFileSync(budgetFile(s.agentDir), "utf8");
+
+		const report = readEvolutionBudget(s.agentDir);
+		assert.equal(report.corrupt, false);
+		assert.equal(report.calls, 1);
+		assert.equal(readFileSync(budgetFile(s.agentDir), "utf8"), before, "a report is not a write");
+	} finally {
+		s.dispose();
+	}
+});
+
 test("the ledger is private, under the existing evolution root, with no daemon or timer", async () => {
 	const s = space();
 	try {

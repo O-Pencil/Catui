@@ -20,8 +20,8 @@
  * exist to bound a loop, not to bill anyone.
  */
 
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 export interface EvolutionBudgetPolicy {
@@ -70,15 +70,13 @@ function freshState(now: Date): EvolutionBudgetState {
 }
 
 /**
- * Reads the ledger, reporting corruption rather than guessing at it.
+ * Reads the ledger. Purely a read: it touches no file, renames nothing, and writes nothing.
  *
- * A truncated or corrupt file must not be read as "nothing spent yet": that is the reading which
- * hands a runaway loop a fresh allowance every time it corrupts the file. It is also not read as
- * spent, which would be a permanent block on a machine nobody can diagnose. The corrupt file is kept
- * aside and the day is treated as exhausted, which fails closed for today and heals at the UTC
- * boundary like any other allowance.
+ * Everything with a side effect lives in `reserveEvolutionModelCall`. That split is not tidiness. A
+ * reporting function that quarantines a corrupt ledger deletes the very file the next reservation
+ * needs to see, so *asking* about the budget would clear a corruption block it did not create.
  */
-function loadState(path: string, now: Date): { state: EvolutionBudgetState; corrupt: boolean } {
+function peekState(path: string, now: Date): { state: EvolutionBudgetState; corrupt: boolean } {
 	if (!existsSync(path)) return { state: freshState(now), corrupt: false };
 	const read = (): EvolutionBudgetState | undefined => {
 		const parsed = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
@@ -100,12 +98,8 @@ function loadState(path: string, now: Date): { state: EvolutionBudgetState; corr
 		state = undefined;
 	}
 	if (!state) {
-		// Kept, not deleted: this is the only evidence of what happened to the file.
-		try {
-			renameSync(path, `${path}.corrupt-${createHash("sha256").update(readFileSync(path)).digest("hex").slice(0, 12)}`);
-		} catch {
-			// Already gone or unreadable; the day is exhausted either way.
-		}
+		// The reported numbers are placeholders, not usage. A reader that cannot parse the ledger
+		// must not print a confident zero, which is indistinguishable from "nothing spent today".
 		return { state: { schemaVersion: 1, day: utcDay(now), calls: Number.MAX_SAFE_INTEGER, estimatedTokens: Number.MAX_SAFE_INTEGER }, corrupt: true };
 	}
 	// A new UTC day starts the allowance over, so a ledger left over from yesterday cannot silence
@@ -115,18 +109,43 @@ function loadState(path: string, now: Date): { state: EvolutionBudgetState; corr
 
 function saveState(path: string, state: EvolutionBudgetState): void {
 	mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-	const temporary = `${path}.tmp`;
-	writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-	renameSync(temporary, path);
+	// A unique temporary name, not a fixed ".tmp". A fixed name means two processes write the same
+	// scratch file and one of them renames the other's half-written ledger into place.
+	const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+	try {
+		writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+		renameSync(temporary, path);
+	} catch (error) {
+		try {
+			unlinkSync(temporary);
+		} catch {
+			// Nothing to clean up.
+		}
+		throw error;
+	}
+}
+
+/** Moves a corrupt ledger aside, keeping it as the only evidence of what happened. */
+function quarantineCorruptLedger(path: string): void {
+	try {
+		renameSync(path, `${path}.corrupt-${createHash("sha256").update(readFileSync(path)).digest("hex").slice(0, 12)}`);
+	} catch {
+		// Already gone or unreadable; the day is treated as spent either way.
+	}
 }
 
 /**
  * Reserves one model call, or refuses.
  *
- * Synchronous on purpose: the reservation has to land before the caller's next await, or two
- * concurrent refinements could both read the same headroom. It does not make the limit exact across
- * *processes* sharing an agent directory — a benign race that can overshoot by one call — and that is
- * stated rather than papered over with a lock file that would outlive the problem.
+ * Synchronous on purpose: within one process the read and the charge cannot be separated by an
+ * await, so two concurrent refinements cannot both see the same headroom.
+ *
+ * Across processes it is not safe, and the earlier version of this comment claimed otherwise. The
+ * read-modify-write here has no mutual exclusion, so N processes racing on the same agent directory
+ * can each observe the same count and each charge, overshooting by up to N - 1 rather than by one.
+ * That is a real gap and it is not fixed here: it needs serialized or atomic reservation, which is
+ * separate work. Until then this is a *per-process* cap that is advisory between processes, and the
+ * number of concurrent Catui processes sharing an agent directory is assumed to be one.
  */
 export function reserveEvolutionModelCall(
 	agentDir: string,
@@ -134,11 +153,13 @@ export function reserveEvolutionModelCall(
 	now: Date = new Date(),
 ): BudgetReservation {
 	const path = budgetPath(agentDir);
-	const { state, corrupt } = loadState(path, now);
+	const { state, corrupt } = peekState(path, now);
 	if (corrupt) {
-		// The corrupt file has been moved aside, so nothing is left at the ledger path. Without
-		// writing an exhausted ledger back, the very next call would find no file at all and be
-		// handed a fresh allowance — the suppression would last exactly one attempt.
+		// The repair lives here rather than in the reader, and the exhausted ledger is written back
+		// rather than only the bad file moved aside: with nothing at the ledger path, the very next
+		// call would find no file and be handed a fresh allowance, and the suppression would last
+		// exactly one attempt.
+		quarantineCorruptLedger(path);
 		saveState(path, { schemaVersion: 1, day: state.day, calls: Number.MAX_SAFE_INTEGER, estimatedTokens: Number.MAX_SAFE_INTEGER });
 		return {
 			reserved: false,
@@ -170,12 +191,31 @@ export function reserveEvolutionModelCall(
 	return { reserved: true, day: reserved.day, calls: nextCalls, remainingCalls: policy.dailyCallBudget - nextCalls };
 }
 
-/** Read-only view for reporting; never reserves, so it cannot spend. */
-export function readEvolutionBudget(
-	agentDir: string,
-	now: Date = new Date(),
-): { day: string; calls: number; estimatedTokens: number; file: string } {
+export interface EvolutionBudgetReport {
+	day: string;
+	/** null when the ledger is unreadable. Never a fabricated zero. */
+	calls: number | null;
+	estimatedTokens: number | null;
+	corrupt: boolean;
+	file: string;
+}
+
+/**
+ * A view for reporting, and nothing else: it reserves nothing and touches no file.
+ *
+ * `corrupt` is reported as its own field and the usage fields become null, because a reader that
+ * cannot parse the ledger must not present "0 calls used" as fact. That number is what a
+ * corruption-blocked budget looks like, and a status display that prints it is indistinguishable
+ * from a fresh allowance.
+ */
+export function readEvolutionBudget(agentDir: string, now: Date = new Date()): EvolutionBudgetReport {
 	const path = budgetPath(agentDir);
-	const { state, corrupt } = loadState(path, now);
-	return { day: state.day, calls: corrupt ? 0 : state.calls, estimatedTokens: corrupt ? 0 : state.estimatedTokens, file: path };
+	const { state, corrupt } = peekState(path, now);
+	return {
+		day: state.day,
+		calls: corrupt ? null : state.calls,
+		estimatedTokens: corrupt ? null : state.estimatedTokens,
+		corrupt,
+		file: path,
+	};
 }
