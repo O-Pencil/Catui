@@ -1,5 +1,5 @@
 /**
- * [WHO]: Evolution artifact, prediction/attribution, stream-aware gate report, revision, current pointer, active fixture pointer, quarantine, and command result contracts
+ * [WHO]: Evolution artifact (with the optional `overrides` update instruction), prediction/attribution, stream-aware gate report, revision, current pointer, active fixture pointer, quarantine, and command result contracts
  * [FROM]: Depends only on local extension trust-boundary decisions
  * [TO]: Consumed by evolution-store, evolution-format, evolution-refiner, and extension entry
  * [HERE]: extensions/optional/evolution/evolution-types.ts - narrow optional evolution type surface
@@ -29,6 +29,13 @@ export interface EvolutionArtifact {
 	applicability?: string;
 	nonApplicability?: string;
 	tokenBudget?: number;
+	/**
+	 * Names the active artifact this one replaces. Absent means "add", which is what every
+	 * candidate written before this field existed means, so the store keeps behaving exactly as it
+	 * did. It is a proposal-time instruction, not stored state: the merged revision holds the
+	 * resolved artifact set with this field dropped.
+	 */
+	overrides?: { skillId: string };
 	metadata?: Record<string, unknown>;
 }
 

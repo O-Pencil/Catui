@@ -1,5 +1,5 @@
 /**
- * [WHO]: Evolution ledger path resolution, validation, no-IO executable DSL manifests, usage records, prediction manifests, post-hoc attribution, eval_fixture dedupe/retention, gated promotion, quarantine, rollback, and conservative auto-rollback
+ * [WHO]: Evolution ledger path resolution, candidate/revision validation, skill_manifest body structure enforcement, the refinement change budget, the shared artifact hash, and behavioral prose dedup, no-IO executable DSL manifests, usage records, prediction manifests, post-hoc attribution, eval_fixture dedupe/retention, gated promotion, quarantine, rollback, and conservative auto-rollback
  * [FROM]: Depends on node fs/path/crypto for owner-only runtime state below agentDir/evolution/v1
  * [TO]: Consumed by optional evolution extension command handlers and tests
  * [HERE]: extensions/optional/evolution/evolution-store.ts - durable store for controlled self-evolution
@@ -32,6 +32,20 @@ import type {
 
 const EVOLUTION_SCHEMA_VERSION = 1;
 const MAX_ARTIFACTS_PER_CANDIDATE = 12;
+/**
+ * The proposal asks for "at most four logical add/delete/replace changes per refinement, subject to
+ * a documented mapping onto existing artifact semantics". The mapping is one artifact-level change:
+ * an artifact the active set does not have is an add, an artifact replacing an active one is a
+ * replace, and an active artifact the candidate leaves out is a delete. That is the same unit
+ * `formatEvolutionChanges` already renders, and both sides hash an artifact through
+ * `evolutionArtifactHash`, so a change counted here is exactly a change a reviewer is shown.
+ *
+ * Counting artifact entries rather than diffed text is deliberate. A character-level budget would
+ * make the number depend on how verbosely a body is phrased, which is not what "logical changes"
+ * means; and a heading rewrite would spend the whole budget while a genuine restructuring spent
+ * none.
+ */
+const MAX_LOGICAL_CHANGES_PER_CANDIDATE = 4;
 const MAX_PREDICTIONS_PER_CANDIDATE = 8;
 const MAX_CONTENT_CHARS = 4000;
 const MAX_GLOBAL_AUTO_PROMOTE_CONTENT_CHARS = 800;
@@ -67,6 +81,22 @@ const EXECUTABLE_PATTERNS: readonly RegExp[] = [
 	/\bsk-[A-Za-z0-9_-]{16,}\b/,
 	/\bhttps?:\/\/[^\s)]+/i,
 	/\bmcpServers\b|\bserverCommand\b|\bpackage\.json\b|\bserver\s+(?:endpoint|url|command)\b/i,
+];
+
+/**
+ * Body sections a skill_manifest must carry, with every heading accepted for each.
+ *
+ * Trigger and limits are deliberately absent: they already have structured fields
+ * (applicability / nonApplicability) that skillMarkdown renders. Asking for them again in prose
+ * would create a second source of truth that can silently disagree with the field. The four below
+ * have no field, so a skill whose body omits them ships as a bare paragraph the agent cannot
+ * follow, check, or hand off.
+ */
+const REQUIRED_SKILL_BODY_SECTIONS: readonly { section: string; canonical: string; aliases: readonly string[] }[] = [
+	{ section: "prerequisites", canonical: "Prerequisites", aliases: ["prerequisites", "preconditions", "before you start", "requirements"] },
+	{ section: "steps", canonical: "Steps", aliases: ["steps", "procedure", "how to run", "process"] },
+	{ section: "pitfalls", canonical: "Pitfalls", aliases: ["pitfalls", "gotchas", "common mistakes", "failure modes"] },
+	{ section: "verification", canonical: "Verification", aliases: ["verification", "verify", "how to verify", "checks"] },
 ];
 
 const SECRET_REDACTION_PATTERNS: readonly RegExp[] = [
@@ -406,7 +436,134 @@ function validateWorkflowSpecMetadata(artifact: EvolutionArtifact): string[] {
 	return errors;
 }
 
-function validateArtifact(artifact: EvolutionArtifact, seen: Set<string>): string[] {
+function hasText(value: unknown): value is string {
+	return typeof value === "string" && value.trim().length > 0;
+}
+
+/** Lowercased heading text with punctuation collapsed, so "Failure-Modes" and "failure modes" agree. */
+function normalizeHeading(value: string): string {
+	return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/**
+ * Every markdown heading in a body, normalized, so section lookup does not depend on heading depth.
+ *
+ * Fence tracking follows CommonMark: the opening run fixes both the marker character and its
+ * length, and only a bare run of that same character at least that long closes the block. Toggling
+ * on any fence-looking line is not good enough — a body that opens with four backticks and closes
+ * the block with three would otherwise put every required heading inside a code sample and still
+ * pass. Unrecognized markers keep the block open, which is the conservative direction: it can only
+ * fail validation, never fake a section.
+ */
+function markdownHeadings(content: string): Set<string> {
+	const headings = new Set<string>();
+	let openFence: { marker: string; length: number } | undefined;
+	for (const line of content.split("\n")) {
+		const fence = line.match(/^\s{0,3}(`{3,}|~{3,})(.*)$/);
+		if (openFence) {
+			if (fence && fence[2]!.trim() === "" && fence[1]!.startsWith(openFence.marker.repeat(openFence.length))) {
+				openFence = undefined;
+			}
+			continue;
+		}
+		if (fence) openFence = { marker: fence[1]![0]!, length: fence[1]!.length };
+		const match = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/);
+		if (!match) continue;
+		const normalized = normalizeHeading(match[1]);
+		if (normalized) headings.add(normalized);
+	}
+	return headings;
+}
+
+/**
+ * A skill_manifest is materialized into a real SKILL.md, so its body has to be usable as a
+ * procedure rather than readable as a note. Enforced on write only: `loadRevision` re-validates
+ * what is already on disk and it opts out, so a skill promoted before this rule existed still loads,
+ * still renders, and is still rollback-able rather than being quarantined out of discovery.
+ */
+function validateSkillManifestStructure(artifact: EvolutionArtifact): string[] {
+	const errors: string[] = [];
+	if (!hasText(artifact.applicability)) {
+		errors.push(`artifact ${artifact.id} skill_manifest needs applicability describing its trigger`);
+	}
+	if (!hasText(artifact.nonApplicability)) {
+		errors.push(`artifact ${artifact.id} skill_manifest needs nonApplicability describing its limits`);
+	}
+	const headings = markdownHeadings(typeof artifact.content === "string" ? artifact.content : "");
+	for (const required of REQUIRED_SKILL_BODY_SECTIONS) {
+		if (!required.aliases.some((alias) => headings.has(alias))) {
+			errors.push(
+				`artifact ${artifact.id} skill_manifest content is missing a ${required.section} section; add a markdown heading "## ${required.canonical}"`,
+			);
+		}
+	}
+	return errors;
+}
+
+/**
+ * The identity of an artifact's meaning, not of its record. `overrides` is excluded because it is a
+ * proposal-time instruction that is resolved away before anything is stored.
+ */
+export function evolutionArtifactHash(artifact: EvolutionArtifact): string {
+	return JSON.stringify({
+		kind: artifact.kind,
+		title: artifact.title,
+		content: artifact.content,
+		applicability: artifact.applicability,
+		nonApplicability: artifact.nonApplicability,
+		tokenBudget: artifact.tokenBudget,
+		metadata: artifact.metadata,
+	});
+}
+
+export interface EvolutionLogicalChanges {
+	added: number;
+	changed: number;
+	removed: number;
+}
+
+/**
+ * Counts the logical add/delete/replace a candidate makes to the active set.
+ *
+ * An artifact is charged against the entry it *replaces* rather than against its own id: its own id
+ * normally, or the id it names in `overrides`. Charging the incoming id instead would make a
+ * renamed update cost an add plus a delete, which is exactly the expensive path S07.2 exists to
+ * make cheap, and it would push authors back toward duplicate ids.
+ */
+function logicalArtifactChanges(
+	baseline: readonly EvolutionArtifact[],
+	candidate: readonly EvolutionArtifact[],
+): EvolutionLogicalChanges {
+	const baselineById = new Map(baseline.map((artifact) => [artifact.id, artifact]));
+	// Whether deletes exist at all depends on which promotion path this candidate takes, and
+	// `resolveOverrideArtifacts` is the authority on that: a candidate carrying `overrides` merges
+	// into the baseline and carries every untouched artifact forward, so nothing is removed.
+	// Charging deletes in that case would price an update for work it will not do, and would refuse
+	// any single-skill update against a baseline of five or more — exactly the case `overrides`
+	// exists to serve. Without `overrides` the set is replaced wholesale and a delete is real.
+	const merges = candidate.some((artifact) => artifact.overrides);
+	const replaced = new Set<string>();
+	let added = 0;
+	let changed = 0;
+	for (const artifact of candidate) {
+		const target = artifact.overrides?.skillId ?? artifact.id;
+		if (target === artifact.id) replaced.add(target);
+		const previous = baselineById.get(target);
+		if (!previous) {
+			added += 1;
+			continue;
+		}
+		if (artifact.overrides) replaced.add(target);
+		if (evolutionArtifactHash(previous) !== evolutionArtifactHash(artifact)) changed += 1;
+	}
+	return {
+		added,
+		changed,
+		removed: merges ? 0 : baseline.filter((artifact) => !replaced.has(artifact.id)).length,
+	};
+}
+
+function validateArtifact(artifact: EvolutionArtifact, seen: Set<string>, overrideTargets: Set<string>, enforceSkillBodyStructure: boolean): string[] {
 	const errors: string[] = [];
 	if (!ARTIFACT_KINDS.includes(artifact.kind)) errors.push(`unsupported artifact kind: ${String(artifact.kind)}`);
 	if (typeof artifact.id !== "string" || !artifact.id.startsWith(`evolved:${artifact.kind}:`)) {
@@ -425,8 +582,23 @@ function validateArtifact(artifact: EvolutionArtifact, seen: Set<string>): strin
 	if (hasExecutableContent(artifact)) {
 		errors.push(`artifact ${artifact.id} contains executable command, package, credential, or server content`);
 	}
+	if (artifact.overrides !== undefined) {
+		const target = artifact.overrides?.skillId;
+		if (typeof target !== "string" || !target.startsWith(`evolved:${artifact.kind}:`)) {
+			// Same rule the proposal schema already applies, so a candidate written through either
+			// door is held to the same naming discipline.
+			errors.push(`artifact ${artifact.id} overrides must name an evolved:${artifact.kind}: id`);
+		} else if (overrideTargets.has(target)) {
+			// Two artifacts claiming the same target would make the merge order-dependent, so the
+			// outcome would depend on array order rather than on what the author meant.
+			errors.push(`artifact ${artifact.id} overrides ${target}, which another artifact in this candidate also overrides`);
+		} else {
+			overrideTargets.add(target);
+		}
+	}
 	if (artifact.kind === "workflow_spec") errors.push(...validateWorkflowSpecMetadata(artifact));
 	if (artifact.kind === "executable_tool") errors.push(...validateExecutableToolManifest(artifact));
+	if (artifact.kind === "skill_manifest" && enforceSkillBodyStructure) errors.push(...validateSkillManifestStructure(artifact));
 	return errors;
 }
 
@@ -451,6 +623,15 @@ function validatePredictions(input: EvolutionCandidateInput): string[] {
 export function validateEvolutionCandidateInput(
 	input: EvolutionCandidateInput,
 	options?: EvolutionClockOptions,
+	/**
+	 * Deliberately not an exported option: the read path is the only consumer, and a public switch
+	 * that disables validation is a switch some future caller will disable by accident.
+	 * `loadRevision` re-validates what is already on disk, and a revision promoted before the skill
+	 * body rule existed must still load, render, and roll back; enforcing there would quarantine
+	 * every such skill and silently drop it out of discovery. Write paths leave it on, so nothing
+	 * non-conforming can become active.
+	 */
+	validation: { enforceSkillBodyStructure?: boolean } = {},
 ): EvolutionValidationReport {
 	const errors: string[] = [];
 	const warnings: string[] = [];
@@ -461,7 +642,10 @@ export function validateEvolutionCandidateInput(
 	if (!Array.isArray(input.artifacts) || input.artifacts.length === 0) errors.push("at least one artifact is required");
 	if (input.artifacts.length > MAX_ARTIFACTS_PER_CANDIDATE) errors.push("too many artifacts in one candidate");
 	const seen = new Set<string>();
-	for (const artifact of input.artifacts ?? []) errors.push(...validateArtifact(artifact, seen));
+	const overrideTargets = new Set<string>();
+	for (const artifact of input.artifacts ?? []) {
+		errors.push(...validateArtifact(artifact, seen, overrideTargets, validation.enforceSkillBodyStructure !== false));
+	}
 	const evalFixtureCount = input.artifacts.filter((artifact) => artifact.kind === "eval_fixture").length;
 	if (evalFixtureCount > 0 && (evalFixtureCount !== 1 || input.artifacts.length !== 1)) {
 		errors.push("eval_fixture verifier candidates must contain exactly one artifact and cannot mix behavioral artifacts");
@@ -497,10 +681,59 @@ export function canAutoPromoteGlobalEvolution(input: EvolutionCandidateInput): {
 	return { allowed: true };
 }
 
-function assertValidInput(input: EvolutionCandidateInput, options?: EvolutionClockOptions): EvolutionValidationReport {
+function assertValidInput(
+	input: EvolutionCandidateInput,
+	options?: EvolutionClockOptions,
+	baseline: readonly EvolutionArtifact[] = [],
+): EvolutionValidationReport {
 	const validation = validateEvolutionCandidateInput(input, options);
 	if (!validation.passed) throw new Error(`Invalid evolution candidate: ${validation.errors.join("; ")}`);
+	const changes = logicalArtifactChanges(baseline, input.artifacts);
+	const total = changes.added + changes.changed + changes.removed;
+	if (total > MAX_LOGICAL_CHANGES_PER_CANDIDATE) {
+		// Rejected whole, never trimmed. Cutting a candidate down to the budget would silently hand
+		// the author a different proposal than the one that was evaluated.
+		throw new Error(
+			`Evolution candidate exceeds the refinement budget: ${total} logical changes (${changes.added} added, ${changes.changed} changed, ${changes.removed} removed) exceeds the limit of ${MAX_LOGICAL_CHANGES_PER_CANDIDATE}`,
+		);
+	}
 	return validation;
+}
+
+/**
+ * Kinds whose content is prose someone reads and follows, so two of them saying the same thing
+ * differently is the near-duplicate S07.1 is about.
+ *
+ * `eval_fixture` is excluded because it already has its own exact-content dedup and a repeated trace
+ * is a legitimate record rather than a redundant instruction. `executable_tool` and `workflow_spec`
+ * are excluded on a different ground: their content is a JSON manifest under its own validation, and
+ * prose normalization would corrupt it — case-folding a JSON payload changes the values in it, not
+ * just its formatting.
+ */
+const PROSE_ARTIFACT_KINDS: readonly EvolutionArtifactKind[] = [
+	"prompt_note",
+	"memory",
+	"skill_manifest",
+	"subagent_spec",
+	"tool_spec",
+];
+
+/**
+ * Text reduced to what it says rather than how it is typed: NFKC, case-folded, markdown markers
+ * dropped, whitespace collapsed. Deliberately Unicode-aware — an ASCII-only filter would erase
+ * every CJK character and report two plainly different Chinese skills as the same text.
+ */
+function normalizedProse(text: string): string {
+	return text
+		.normalize("NFKC")
+		.toLowerCase()
+		.replace(/[#*_`>[\]()]/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+function proseArtifacts(artifacts: readonly EvolutionArtifact[]): EvolutionArtifact[] {
+	return artifacts.filter((artifact) => PROSE_ARTIFACT_KINDS.includes(artifact.kind));
 }
 
 function evalFixtureContentHashes(artifacts: readonly EvolutionArtifact[]): string[] {
@@ -557,20 +790,120 @@ function assertNoDuplicateEvalFixture(scopeRoot: string, input: EvolutionCandida
 	}
 }
 
+/**
+ * Every record an incoming candidate could be duplicating: candidates that are still live or
+ * already promoted, plus every revision. Both are checked because a proposal duplicated only
+ * against pending candidates would slip through the moment the other one is rejected.
+ */
+function comparableRecords(scopeRoot: string): { label: string; artifacts: readonly EvolutionArtifact[] }[] {
+	const records: { label: string; artifacts: readonly EvolutionArtifact[] }[] = [];
+	for (const candidate of listJsonRecords<EvolutionCandidate>(join(scopeRoot, "candidates"), "proposal.json")) {
+		if (candidate.status !== "proposed" && candidate.status !== "promoted") continue;
+		records.push({ label: `candidate ${candidate.id}`, artifacts: candidate.artifacts });
+	}
+	for (const revision of listJsonRecords<EvolutionRevision>(join(scopeRoot, "revisions"), "manifest.json")) {
+		records.push({ label: `revision ${revision.id}`, artifacts: revision.artifacts });
+	}
+	return records;
+}
+
+/**
+ * Refuses a behavioral artifact whose content is byte-identical to one already in the store.
+ *
+ * Byte-identical rather than "same id": a same-id artifact with identical content is a no-op
+ * proposal that would spend a revision to change nothing, and a different id with identical content
+ * is the near-duplicate copy this exists to stop. The eval_fixture check above uses the same
+ * shape, and its own meaning is untouched.
+ */
+function assertNoDuplicateProseArtifact(scopeRoot: string, input: EvolutionCandidateInput): void {
+	const incoming = proseArtifacts(input.artifacts);
+	if (incoming.length === 0) return;
+	// An artifact that declares `overrides` is stating which existing entry it supersedes, so it is
+	// an update even when its body is unchanged from that entry — a rename, in other words. Judging
+	// it by content alone would refuse the very move S07.2 added.
+	const incomingIds = new Set(incoming.map((artifact) => artifact.id));
+	const byContent = new Map<string, EvolutionArtifact>();
+	for (const artifact of incoming) {
+		if (artifact.overrides) continue;
+		byContent.set(sha256(artifact.content), artifact);
+	}
+	for (const record of comparableRecords(scopeRoot)) {
+		for (const artifact of proseArtifacts(record.artifacts)) {
+			// Promotion replaces the active set, so updating one skill means listing its untouched
+			// neighbors too, and those arrive byte-identical. A same-id artifact is that carried
+			// entry or an update, never a copy. Only content arriving under a *new* id is a
+			// duplicate, which is exactly the near-copy this exists to refuse.
+			if (incomingIds.has(artifact.id)) continue;
+			const clash = byContent.get(sha256(artifact.content));
+			if (clash) throw new Error(`Duplicate ${clash.kind} content already exists in ${record.label} as ${artifact.id}`);
+		}
+	}
+}
+
+/**
+ * Names behavioral artifacts that already say, in different words, what an incoming one says.
+ *
+ * A warning and not a refusal. Two skills that differ only in phrasing are the author's call, not
+ * the store's — a reviewer is told, the proposal still lands, and the promotion gate still decides
+ * whether it is worth having. Refusing here would block the ordinary case of restating a procedure
+ * more clearly, which is most of what a refinement is for.
+ *
+ * Artifacts that declare they are updating an existing one, or that reuse an existing id, are not
+ * reported: they are updates, and flagging an update as a near-duplicate of what it updates would
+ * fire on the honest path every time.
+ */
+function nearDuplicateProseWarnings(scopeRoot: string, input: EvolutionCandidateInput): string[] {
+	const warnings: string[] = [];
+	const incoming = new Map<string, EvolutionArtifact>();
+	const incomingIds = new Set<string>();
+	for (const artifact of proseArtifacts(input.artifacts)) {
+		if (artifact.overrides) continue;
+		incomingIds.add(artifact.id);
+		incoming.set(sha256(normalizedProse(artifact.content)), artifact);
+	}
+	if (incoming.size === 0) return warnings;
+	// A promoted candidate and the revision it produced both hold the same artifact, so the pair is
+	// reported once rather than once per record that happens to carry it.
+	const reported = new Set<string>();
+	for (const record of comparableRecords(scopeRoot)) {
+		for (const artifact of proseArtifacts(record.artifacts)) {
+			// A same-id artifact is an update of the record it collides with, not a copy of it.
+			if (incomingIds.has(artifact.id)) continue;
+			const near = incoming.get(sha256(normalizedProse(artifact.content)));
+			if (!near) continue;
+			const key = `${near.id} -> ${artifact.id}`;
+			if (reported.has(key)) continue;
+			reported.add(key);
+			warnings.push(`${near.id} says the same thing as ${artifact.id} in ${record.label}, differing only in wording`);
+		}
+	}
+	return warnings;
+}
+
 export function createEvolutionCandidate(
 	scopeRoot: string,
 	input: EvolutionCandidateInput,
 	options?: EvolutionClockOptions,
 ): EvolutionCandidate {
-	const validation = assertValidInput(input, options);
-	assertNoDuplicateEvalFixture(scopeRoot, input);
-	const id = nextId("candidate", options);
-	const createdAt = now(options);
 	// Capture the baseline here, from store state, on the one path every caller funnels through.
 	// A model proposal, the refine tool, and a direct caller therefore cannot choose the baseline
 	// their evidence will later be judged against. `null` records a genuine first candidate and is
 	// distinct from a record that predates this field.
-	const baselineRevisionId = loadCurrentEvolution(scopeRoot)?.revisionId ?? null;
+	//
+	// Read once and handed to validation, so the budget is measured against the very same revision
+	// the candidate records as its baseline. Measuring against a separate read could let a
+	// promotion in between produce a budget verdict for a baseline the record does not claim.
+	const current = loadCurrentEvolution(scopeRoot);
+	const baselineRevisionId = current?.revisionId ?? null;
+	// Nothing is written before these throw, so a refused candidate leaves no record at all.
+	const validation = assertValidInput(input, options, current ? loadRevision(scopeRoot, current.revisionId).artifacts : []);
+	assertNoDuplicateEvalFixture(scopeRoot, input);
+	assertNoDuplicateProseArtifact(scopeRoot, input);
+	// Recorded on the candidate rather than raised: a near-duplicate is something a reviewer should
+	// be shown, not a reason to refuse the proposal.
+	validation.warnings.push(...nearDuplicateProseWarnings(scopeRoot, input));
+	const id = nextId("candidate", options);
+	const createdAt = now(options);
 	const candidate: EvolutionCandidate = {
 		...input,
 		schemaVersion: EVOLUTION_SCHEMA_VERSION,
@@ -696,7 +1029,7 @@ function loadRevision(scopeRoot: string, revisionId: string): EvolutionRevision 
 	const revision = readJson<EvolutionRevision>(revisionPath(scopeRoot, revisionId));
 	if (!revision) throw new Error(`Evolution revision not found: ${revisionId}`);
 	if (revision.schemaVersion !== EVOLUTION_SCHEMA_VERSION) throw new Error(`Unsupported evolution revision schema: ${revision.schemaVersion}`);
-	const validation = validateEvolutionCandidateInput(revision);
+	const validation = validateEvolutionCandidateInput(revision, undefined, { enforceSkillBodyStructure: false });
 	if (!validation.passed) throw new Error(`Evolution revision failed validation: ${validation.errors.join("; ")}`);
 	const expectedHash = `sha256:${sha256(JSON.stringify(revision.artifacts))}`;
 	if (revision.contentHash !== expectedHash) throw new Error(`Evolution revision content hash mismatch: ${revisionId}`);
@@ -744,6 +1077,66 @@ export function loadCurrentEvolution(scopeRoot: string): EvolutionCurrent | unde
 		quarantineActiveRevision(scopeRoot, current, reason);
 		return undefined;
 	}
+}
+
+/**
+ * Resolves a candidate's `overrides` into the artifact set the revision will hold.
+ *
+ * A revision normally *replaces* the active set with the candidate's artifacts, which is right for
+ * "here is something new" and wrong for "here is the same skill, improved": the improved artifact
+ * would land beside its predecessor under a new id, or the predecessor would be dropped silently.
+ * An artifact carrying `overrides` therefore replaces the named active artifact in place, and the
+ * rest of the active set is carried forward instead of being discarded.
+ *
+ * Candidates with no override at all are returned untouched, so every candidate written before
+ * this field existed promotes exactly as it did.
+ *
+ * The baseline is the revision the candidate was captured against, which promotion has already
+ * proved is the current one. Merging against it rather than against whatever is live is what makes
+ * the result a function of evidence that was actually bound to the benchmark report.
+ */
+function resolveOverrideArtifacts(
+	scopeRoot: string,
+	candidate: EvolutionCandidate,
+	expectedBaselineRevision: string | null,
+): EvolutionArtifact[] {
+	const overrides = candidate.artifacts.filter((artifact) => artifact.overrides);
+	if (overrides.length === 0) return candidate.artifacts;
+	if (expectedBaselineRevision === null) {
+		throw new Error("Evolution candidate overrides an active skill, but no revision is active to override");
+	}
+	const baseline = loadRevision(scopeRoot, expectedBaselineRevision).artifacts;
+	const resolved = [...baseline];
+	for (const artifact of overrides) {
+		const target = artifact.overrides!.skillId;
+		const index = resolved.findIndex((existing) => existing.id === target);
+		if (index < 0) {
+			throw new Error(`Evolution candidate overrides ${target}, which is not active in baseline ${expectedBaselineRevision}`);
+		}
+		// The incoming artifact now occupies the target's slot. If its own id is already held by a
+		// different entry, the resolved set carries one id twice; loadRevision rejects duplicate
+		// ids, so that revision could never be read back and the entire active set would be
+		// quarantined out of discovery. One id cannot be both the target and its replacement.
+		const clash = resolved.findIndex((existing, position) => position !== index && existing.id === artifact.id);
+		if (clash >= 0) {
+			throw new Error(
+				`Evolution candidate overrides ${target} with ${artifact.id}, but ${artifact.id} is also active; an id cannot be both the override target and its replacement`,
+			);
+		}
+		// The instruction is resolved here, so the stored revision carries no proposal-time fields.
+		const { overrides: _overrides, ...rest } = artifact;
+		resolved[index] = rest as EvolutionArtifact;
+	}
+	for (const artifact of candidate.artifacts) {
+		if (artifact.overrides) continue;
+		const index = resolved.findIndex((existing) => existing.id === artifact.id);
+		// Reusing an id is how an update was expressed before this field existed, so it still
+		// replaces in place. Appending instead would leave two artifacts with one id, and a
+		// revision that fails its own duplicate-id check cannot be loaded back.
+		if (index >= 0) resolved[index] = artifact;
+		else resolved.push(artifact);
+	}
+	return resolved;
 }
 
 export function promoteEvolutionCandidate(
@@ -806,7 +1199,8 @@ export function promoteEvolutionCandidate(
 	}
 	const revisionId = nextId("revision", options);
 	const createdAt = now(options);
-	const contentHash = `sha256:${sha256(JSON.stringify(candidate.artifacts))}`;
+	const resolvedArtifacts = resolveOverrideArtifacts(scopeRoot, candidate, expectedBaselineRevision);
+	const contentHash = `sha256:${sha256(JSON.stringify(resolvedArtifacts))}`;
 	const revision: EvolutionRevision = {
 		schemaVersion: EVOLUTION_SCHEMA_VERSION,
 		id: revisionId,
@@ -815,7 +1209,7 @@ export function promoteEvolutionCandidate(
 		summary: candidate.summary,
 		rationale: candidate.rationale,
 		expectedOutcome: candidate.expectedOutcome,
-		artifacts: candidate.artifacts,
+		artifacts: resolvedArtifacts,
 		...(candidate.predictions ? { predictions: candidate.predictions } : {}),
 		contentHash,
 		...(options?.gateReport ? { gateReport: options.gateReport } : {}),
