@@ -1,7 +1,7 @@
 # Execution and Acceptance Record
 
-Status: in progress, Batch 0 and Batch 1 partially executed. This file is a handoff record, not
-a passing acceptance report.
+Status: offline implementation and acceptance closeout. Real-provider effectiveness remains
+unmeasured; final aggregate receipts and remote CI are recorded separately below.
 Parent: [proposal](README.md).
 Working branch: `refactor/simplification-learning-batch1`, branched from `main` at the base SHA
 before any product edit. Not merged, not published, no service enabled.
@@ -17,8 +17,8 @@ before any product edit. Not merged, not published, no service enabled.
   notices, `npm audit` reports 20 pre-existing vulnerabilities: 1 low, 5 moderate,
   12 high, 2 critical — not introduced by this iteration and not addressed here).
   `dist/` was absent at start.
-- PR URL and final CI revision: pending.
-- Capability/test gap matrix: pending; required before Batch 2 implementation.
+- PR URL: https://github.com/O-Pencil/Catui/pull/23. Final CI revision is recorded in the closeout receipt.
+- Capability/test gap matrix: the requirement rows below distinguish current implementation from deferred work.
 
 ### Baseline measurements (reproduced at base SHA)
 
@@ -83,12 +83,12 @@ plan-driven run never reproduces the CI dist boundary check.
 | S02 | Implemented (structural) | `package.json`, `.dev-docs/vibe-coding/verification-plan.json`, `.github/workflows/ci.yml`, `tsconfig.scripts.json`, `test/verification-contract.test.ts` (34), `test/verification-stage-order-recheck.test.ts` (9), `test/verification-ci-parity-recheck.test.ts` (10) | See S02 detail below | Three test files run more than once, each allowlisted per flow with a reason; CI runs two npm steps the plan does not describe, both on an explicit reasoned allowance list; the npm-run graph walk now has a named traversal strategy, so the global-visited alternative is tested rather than argued against; full-build scripts are recognised by a vocabulary that is itself checked against the graph, which found prepublishOnly missing from it; plan rules live in one helper and are counterexample-tested against mutated plan copies, and duplicated plan ids or commands are now reported because every plan lookup is find-based |
 | S03 | Implemented (structural) | `extensions/builtin/{typesafe,discipline,catpaw,humanizer,catail}/index.ts`, `extensions/builtin/catpaw/CATUI.md`, `test/bootstrap-routing.test.ts` (8 tests) | 4,388 → 3,176 chars, −27.6% | Routing effectiveness unmeasured (S09) |
 | S04 | Partial | `extensions/builtin/presence/index.ts`, `test/presence-soul-cleanup.test.ts` (7 tests) | Soul reads removed from both live paths; awakening candidate gated by env | Interactive smoke not run; quality evidence unavailable, so shipped default deliberately unchanged |
-| S05 | Partial (S05.4 closed) | `evolution-refiner.ts`, `test/evolution-refiner-redaction.test.ts` | Raw session evidence is now redacted before the model call; verified to fail on pre-fix code | S05.2 destination routing to memory / working notes unimplemented | Would need a second classifier; refused on scope grounds |
-| S06 | Missing (see SL03-A/B) | — | `evolution-distillation.ts`, `evolution-refine-tool.ts`, `evolution-auto.ts` exist | See SL03-A, SL03-B | Retrieval and rejection feedback are prompt changes; shipping them unmeasured repeats the mistake S03 was reviewed for |
-| S07 | Missing (blocked on decision, see SL03-C/D) | — | Size limits and rejection records exist | Edit budget, rejection feedback, update-over-duplicate | SL03-C needs a skill section grammar, which is a product-visible contract |
-| S08 | Partial (S08.1 partial, S08.5/S08.7 implemented) | `evolution-store.ts`, `evolution-types.ts`, `test/evolution-rollback-discovery.test.ts` (5), `test/evolution-baseline-binding.test.ts` (5) | Rollback now withdraws the revision from both discovery scans and deletes its materialized directory; a candidate declaring a stale baseline cannot promote | None remaining in the audited scope |
-| S09 | Blocked (no budget) | — | PawBench snapshot/import/comparison pipeline exists | A provider-backed executor run | No provider credentials or approved experiment budget in this environment |
-| S10 | Missing (see SL03-E) | — | Source-side observer and budgets exist | Behavioral-path budget reservation, evidence cursor | Needs a budget/opt-in decision; defaulting on would violate the proposal constraint |
+| S05 | Implemented within the accepted scope | `evolution-refiner.ts`, `test/evolution-refiner-redaction.test.ts`, `test/evolution-scope-and-stale-rejection.test.ts`, `test/evolution-baseline-binding.test.ts` | Redacted model input; isolated workspace roots; legacy candidates remain readable but fail closed when a revision is active | Routing notes into memory is deferred; no second classifier introduced |
+| S06 | Implemented (offline) | `evolution-auto.ts`, `evolution-refiner.ts`, `test/evolution-auto-provenance.test.ts`, `test/evolution-refiner-existing-skills.test.ts`, `test/evolution-skill-body-structure.test.ts`, `test/evolution-no-lesson-recheck.test.ts` | Scope-local retrieval, provenance classification and write-only body validation; malformed declarations leave state unchanged | Outcome labels do not replace benchmark evidence; effectiveness unmeasured |
+| S07 | Implemented (offline) | `evolution-store.ts`, `test/evolution-{overrides,edit-budget,skill-dedup,rejection-feedback,no-blacklist}.test.ts` | Four logical artifact edits; update mapping; pairwise dedup; bounded untrusted rejection feedback; refusals permit later re-evaluation | Artifact-level edits, not section-level edits; same-ID updates can restore prior content |
+| S08 | Implemented in the audited scope | `evolution-store.ts`, `test/evolution-rollback-discovery.test.ts`, `test/evolution-baseline-binding.test.ts` | Store captures the baseline; integrity-bound evidence and active revision must agree; rollback withdraws rejected skills | Offline benchmark fixtures establish gate behavior, not model improvement |
+| S09 | Unrun | Existing PawBench importer and benchmark comparator | Reproducible offline comparison command and frozen-run requirements below | No authorized provider experiment budget; no effectiveness conclusion |
+| S10 | Implemented (offline safeguards) | `evolution-budget.ts`, `evolution-auto.ts`, `test/evolution-{default-off,model-budget,evidence-cursor,concurrent-budget}.test.ts` | Inert observer; persisted evidence cursor; reserve-before-call ledger; cross-process exclusive lock | Orphaned locks require quiescent manual recovery; real task-stream effectiveness unmeasured |
 
 ### Batch 2 capability matrix
 
@@ -120,16 +120,16 @@ separately by a test that fails without the fix.
 | S07.3 at most four logical edits, enforced | `MAX_LOGICAL_CHANGES_PER_CANDIDATE` `evolution-store.ts` counted by `logicalArtifactChanges`, enforced in `assertValidInput` so an over-budget candidate is never persisted | `test/evolution-edit-budget.test.ts` (10 cases) | **implemented** — artifact-level add/change/delete, rejected whole |
 | S07.4 reject over-budget, do not truncate | `assertValidInput` `evolution-store.ts:501` throws before persistence | `evolution-store.test.ts` rejection cases | already-covered |
 | S07.5 feed rejected changes back to the refiner | `listRejectedCandidates` plus a bounded, redacted, explicitly untrusted history block in `planEvolutionCandidate` | `test/evolution-rejection-feedback.test.ts` (13 cases) | **implemented** — reasons and source revisions only, never bodies |
-| S07.6 no permanent blacklist | no blacklist exists; one scope-root-keyed `COOLDOWN_TURNS` gate in `evolution-auto.ts` now covers every proposing branch and is in-memory, so it expires and a restart clears it | `test/evolution-auto-cooldown.test.ts` (8 cases) | **implemented** — the repeated-structured-proposal gap is closed |
+| S07.6 no permanent blacklist | A session-bound persisted cursor enforces a finite turn window; rejected records do not bar later proposals | `test/evolution-auto-cooldown.test.ts`, `test/evolution-no-blacklist.test.ts` (8 cases) | **implemented** — changed content, later turns and fresh evidence permit re-evaluation |
 | S07.7 acceptance outcomes | stale baseline and scope mismatch both refused before anything is written; `evolutionScopeOfRoot` enforces scope/root agreement | `test/evolution-scope-and-stale-rejection.test.ts` (10 cases) | **implemented** — the scope half was a live policy bypass |
 | S08.1 bind ID, hash, corpus, envelope | `verifyEvolutionBenchmarkReport` `benchmark-comparison.ts:201`; `validateBenchmarkPair` `benchmark-evidence.ts:186` | `evolution-benchmark-promotion.test.ts` | already-covered except baseline revision |
-| S08.1 baseline revision bound | `EvolutionCandidateInput` `evolution-types.ts:79` has no `baselineRevisionId`; the field exists only in dead `prompts.ts:98` | none | missing |
+| S08.1 baseline revision bound | The store captures `EvolutionCandidate.baselineRevisionId` from the active revision, not from model input | `test/evolution-baseline-binding.test.ts` (9 cases) | **implemented** — stale candidates and mismatched reports fail closed; old records remain readable |
 | S08.2 validation separate from mutation inputs | held-out split enforced in `validateBenchmarkPair`; `verifyEvolutionBenchmarkReport` compares `candidateContentHash`, so mutation invalidates the report | `evolution-benchmark-promotion.test.ts` | already-covered |
 | S08.3 no manual override to bypass evidence | no override path found on the live path | `evolution-extension.test.ts` evidence-required case | already-covered |
 | S08.4 safety/cost/latency/slice/replay checks | `benchmark-comparison.ts:131-136` | `evolution-benchmark-promotion.test.ts` | already-covered |
 | S08.5 materialization and rollback change discovery | `rollbackEvolution` `evolution-store.ts:1003` rewrites the current pointer, but `evolution-store.ts:1098-1123` deliberately retains prior skills "so users benefit from all their accumulated skills" | `evolution-store.test.ts` rollback cases | **partial — design conflict, see below** |
 | S08.6 restart/persistence | store is file-backed and reloaded in existing tests | `evolution-store.test.ts` | already-covered |
-| S08.7 end-to-end discovery after rollback | no test calls `loadActiveEvolutionSkillPaths` after a rollback | none | missing |
+| S08.7 end-to-end discovery after rollback | Withdrawn revisions are excluded from active and historical skill discovery | `test/evolution-rollback-discovery.test.ts` | **implemented** — repeated rollback does not resurrect an earlier withdrawal |
 | S10.1 isolated/sequential/interleaved streams | `BUILTIN_HARNESS_EVAL_MANIFEST` `core/harness-eval/scenarios.ts:31` has no streams; only reachable via a hand-written manifest | `evolution-extension.test.ts:1054` | partial |
 | S10.2 reuse existing observer and budget | the observer exists (`evolution-auto.ts`) and is default-inert; the behavior path now also has a real budget (`evolution-budget.ts`) rather than only the unreachable source-side one | `test/evolution-default-off.test.ts` (11 cases), `test/evolution-model-budget.test.ts` (15) | **implemented** — observer stays default-inert; budget guards the one model call |
 | S10.3 require new evidence since last attempt | `evidence-cursor.json` per scope root, keyed to the turn stream that wrote it | `test/evolution-evidence-cursor.test.ts` (8 cases) | **implemented** — written only when a turn produces a candidate |
@@ -190,11 +190,10 @@ resurrect the first withdrawn revision. Both cases are covered by tests.
    `test/evolution-baseline-binding.test.ts`, 5 tests, all driving the real fail-closed gate with
    real integrity-bound benchmark evidence.
 
-Remaining gaps are not skipped. Each is recorded in
-[findings/SL03-remaining-gaps.md](findings/SL03-remaining-gaps.md) with a concrete design and, where
-one is needed, the specific product decision outstanding. Three of them (SL03-B, SL03-D, SL03-C)
-are prompt changes that cannot be justified without the S09 measurements, and shipping them
-unmeasured would repeat exactly the mistake S03 was reviewed for.
+The subsequently implemented retrieval, edit-budget, rejection-feedback and budget/cursor slices
+are recorded in the requirement matrix. Remaining effectiveness and compatibility decisions are
+listed in [findings/SL03-remaining-gaps.md](findings/SL03-remaining-gaps.md). Offline contracts
+justify their bounded implementation, not a claim of improved model performance.
 
 ### S01 detail
 
@@ -292,7 +291,7 @@ removed; the allowlist exists so the duplication cannot grow silently.
 Environment: macOS 26.6.2, Node v24.21.0, npm 11.19.0. Base `3d1cce1`, branch
 `refactor/simplification-learning-batch1`.
 
-**These receipts are from a single `npm run verify:full` on head `fd46a3f` only.** Earlier runs in
+**Historical receipts: the table below is from head `fd46a3f` and is not final-head evidence.** Earlier runs in
 this branch, and the CI results quoted on the pull request against earlier commits, are superseded
 and are not evidence for this head. Re-run any gate before relying on it.
 
@@ -329,17 +328,52 @@ Record frozen baseline/candidate IDs and hashes, corpus, repetitions, model and
 execution envelope, policy, metrics and uncertainty. Distinguish mock, pilot and
 gate-sufficient runs. Current status: not run; no effectiveness claim.
 
+| Pair | Required frozen inputs | Status |
+| --- | --- | --- |
+| Baseline vs S03 bootstrap only | Corpus/grader digest, provider/model/version, reasoning, tools, initial state, repetitions and budget | Unrun; no approved provider experiment budget |
+| Baseline vs S04 Presence candidate only | Same envelope; candidate greeting switch isolated from S03 | Unrun; default greeting unchanged |
+| Baseline vs one evolved skill | Candidate ID/hash and captured baseline revision; held-out task/slice mix and paired repetitions | Unrun; offline fixtures are not effectiveness evidence |
+
+The existing CLI compares already collected snapshots; it does not execute provider tasks.
+After an independently approved executor produces frozen snapshots, reproduce the offline comparison:
+
+```sh
+node --import tsx scripts/evolution-benchmark.ts \
+  --baseline /absolute/run/baseline.json --candidate /absolute/run/candidate.json \
+  --candidate-id EXISTING_CANDIDATE_ID --agent-dir /absolute/isolated-agent \
+  --scope session --session-id FROZEN_SESSION_ID --output /absolute/run/report.json
+```
+
+Use the candidate's actual stored baseline and the existing integrity/sample gates. Do not invent
+snapshots, lower thresholds, or activate a skill based on the offline regression fixtures.
+
+## Final closeout (2026-10-03)
+
+Codex took ownership after Grub stopped at 21/31 on provider quota errors. The stopped worker
+is not resumed during closeout. Completed scope: no-blacklist regression, workspace isolation,
+legacy-record compatibility, baseline test coverage, documentation and final aggregate verification.
+Main integration preserves its new session-bridge first entry followed by the unchanged S01
+load-order baseline, and preserves all three new bridge/supervision tests in test:tools.
+No public SDK subpath was added or removed. New prompt retrieval/rejection context is bounded;
+token neutrality or model effectiveness is not claimed. Explicit refinement now reserves budget
+before its pre-existing model call; the turn observer remains model-free and inert without lessons.
+
+Final aggregate and CI receipts will be filled after the merged branch passes verification.
+
 ## Compatibility, deviations and recovery
 
 Record intentional behavior changes, public API/schema changes, retained aliases,
 migrations, default settings, model-call effects, rollback procedure and rejected
-designs only when needed to explain a trade-off. Current status: pending.
+designs only when needed to explain a trade-off. Current boundaries: write-only skill body validation
+preserves old revisions; legacy proposals cannot bypass an active baseline; rollback retains unrelated
+historical skills; four edits count artifacts; abandoned budget locks require quiescent manual recovery.
 
 ## Independent acceptance
 
-- Structural: pending.
-- Behavioral: pending.
-- Effectiveness: pending.
-- Remaining work / reopening conditions: pending.
+- Structural: final aggregate receipt below; prior targeted checks passed.
+- Behavioral: offline contracts verified; manual interactive smoke not performed.
+- Effectiveness: unrun, no conclusion.
+- Remaining work / reopening conditions: approved frozen provider experiments, greeting decision,
+  memory routing and dead-cluster compatibility review, as recorded in SL03.
 
 Executor self-verification and independent reviewer acceptance are separate records.
