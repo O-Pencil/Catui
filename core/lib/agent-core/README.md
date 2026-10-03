@@ -1,6 +1,6 @@
 # @catui/agent-core
 
-> This package is derived from [Catui](https://github.com/O-Catui/Catui) (MIT License). Stateful agent with tool execution and event streaming. Built on `@catui/ai`.
+> This package is derived from [Catui](https://github.com/O-Pencil/Catui) (MIT License). Stateful agent with tool execution and event streaming. Built on `@catui/ai`.
 
 ## Installation
 

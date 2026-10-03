@@ -1,6 +1,6 @@
 # @catui/tui
 
-> This package is derived from [Catui](https://github.com/O-Catui/Catui) (GPL-3.0). Minimal terminal UI framework with differential rendering and synchronized output for flicker-free interactive CLI applications.
+> This package is derived from [Catui](https://github.com/O-Pencil/Catui) (GPL-3.0). Minimal terminal UI framework with differential rendering and synchronized output for flicker-free interactive CLI applications.
 
 ## Features
 

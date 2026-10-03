@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "repository": "O-Catui/Catui",
+  "repository": "O-Pencil/Catui",
   "description": "Authoritative full-verification membership for the CATUI/nanoPencil repository. Every entry maps to a canonical npm script; test/verification-contract.test.ts fails if this file and package.json drift apart.",
   "artifactRoot": ".catui/dev-loop",
   "commands": [

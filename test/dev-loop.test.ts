@@ -187,7 +187,7 @@ test("dev-loop GitHub provider converts failed PR checks to issue records", () =
 			{
 				name: "Test on Node.js 22",
 				state: "FAILURE",
-				link: "https://github.com/O-Catui/Catui/actions/runs/123/job/456",
+				link: "https://github.com/O-Pencil/Catui/actions/runs/123/job/456",
 				workflow: "CI",
 				bucket: "fail",
 				description: "Step failed",
@@ -300,7 +300,7 @@ async function writeTempPlan(overrides: Record<string, unknown>): Promise<string
 	const path = join(dir, "verification-plan.json");
 	const plan = {
 		schemaVersion: 1,
-		repository: "O-Catui/Catui",
+		repository: "O-Pencil/Catui",
 		description: "Test plan",
 		artifactRoot: ".catui/dev-loop",
 		commands: [{ id: "test", label: "Test", command: "npm test", required: true, category: "test" }],

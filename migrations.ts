@@ -11,8 +11,9 @@ import { CONFIG_DIR_NAME, getAgentDir, getBinDir } from "./config.js";
 import { defaultAgentDirContext, type AgentDirContext } from "./core/agent-dir/agent-dir-context.js";
 
 const MIGRATION_GUIDE_URL =
-	"https://github.com/O-Catui/Catui/blob/main/packages/coding-agent/CHANGELOG.md#extensions-migration";
-const EXTENSIONS_DOC_URL = "https://github.com/O-Catui/Catui/blob/main/packages/coding-agent/docs/extensions.md";
+	"https://github.com/O-Pencil/Catui/blob/main/CHANGELOG.md";
+const EXTENSIONS_DOC_URL =
+	"https://github.com/O-Pencil/Catui/blob/main/docs/sdk.md";
 
 /**
  * Migrate legacy oauth.json and settings.json apiKeys to auth.json.
@@ -79,7 +80,7 @@ export function migrateAuthToAuthJson(agentDir: string = getAgentDir()): string[
  * ~/.catui/agent/sessions/<encoded-cwd>/. This migration moves them
  * to the correct location based on the cwd in their session header.
  *
- * See: https://github.com/O-Catui/Catui/issues/320
+ * See: https://github.com/O-Pencil/Catui/issues/320
  */
 export function migrateSessionsFromAgentRoot(agentDir: string = getAgentDir()): void {
 	// Find all .jsonl files directly in agentDir (not in subdirectories)

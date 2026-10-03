@@ -1,175 +1,175 @@
-# §2 项目职责边界
+# §2 Project Responsibility Boundaries
 
-> 每个项目是什么、不是什么、技术栈、发布形态
+> What each project is and is not, technology stack, distribution form
 
 <!--
-[WHO]  每个项目的职责定义
+[WHO]  Responsibility definition for each project
 [FROM] catui-platform-charter.md §3 + PROJECT_OVERVIEW.md §四
-[TO]   各项目 README、03-relations
-[HERE] charter/02-boundaries.md — 职责边界
+[TO]   Each project's README, 03-relations
+[HERE] charter/02-boundaries.md — responsibility boundaries
 -->
 
 ---
 
-## 2.1 核心层
+## 2.1 Core layer
 
-### Catui — 本体心智核芯
+### Catui — Core mind runtime
 
-| 维度 | 定义 |
-|------|------|
-| **是** | Agent 引擎本体；提供模型对话、工具循环、记忆系统、Soul 进化、MCP 集成、Browser Harness；以 `@catui/agent` SDK 形式被嵌入，或作为 `catui` CLI 直接运行；暴露 ACP 协议供宿主接入 |
-| **不是** | 不暴露 HTTP API；不管 API Key / 多租户 / 计费；不是"一个 Agent"——它是"造 Agent 的引擎" |
-| **技术栈** | Node.js + TypeScript + React TUI |
-| **发布** | npm: `@catui/agent`；二进制: `catui` CLI |
-| **仓库** | `O-Catui/Catui` |
+| Dimension | Definition |
+|-----------|------------|
+| **Is** | The Agent engine itself; provides model conversation, tool loop, memory system, Soul evolution, MCP integration, Browser Harness; embedded via the `@catui/agent` SDK, or run directly as the `catui` CLI; exposes the ACP protocol for host integration |
+| **Is not** | Does not expose HTTP API; does not handle API Keys / multi-tenant / billing; is not "an Agent" — it is "an engine that makes Agents" |
+| **Stack** | Node.js + TypeScript + React TUI |
+| **Distribution** | npm: `@catui/agent`; binary: `catui` CLI |
+| **Repository** | `O-Pencil/Catui` |
 
-**核心能力**：
-- **NanoMem**: 持久记忆引擎，跨会话记忆沉淀
-- **NanoSoul**: 个性进化引擎，自适应性格养成
-- **Agent Core**: 状态管理与传输层
-- **AI Core**: 统一模型接口层（Anthropic / OpenAI / Gemini / DashScope / Ollama）
-- **Tool Extensions**: 文件系统、Shell、MCP、link-world、Browser Harness 等可插拔工具
+**Core capabilities**:
+- **NanoMem**: persistent memory engine, cross-session memory accumulation
+- **NanoSoul**: personality-evolution engine, adaptive character growth
+- **Agent Core**: state management and transport layer
+- **AI Core**: unified model interface layer (Anthropic / OpenAI / Gemini / DashScope / Ollama)
+- **Tool Extensions**: file system, Shell, MCP, link-world, Browser Harness — pluggable tools
 
-### Catui-Agent-Gateway — PAAS 网关层
+### Catui-Agent-Gateway — PAAS gateway layer
 
-| 维度 | 定义 |
-|------|------|
-| **是** | HTTP serving 层；托管多个 CatuiAgent 实例；OpenAI 兼容 API + SSE；EngineAdapter 抽象使引擎可替换；CATUIS_HOME 隔离多 Catui；Channel 子模块（钉钉/微信/飞书） |
-| **不是** | 不是引擎本体（import catui-agent）；不管用户系统、计费、Marketplace（那是 Asgard）；不直接服务终端用户的写作 UI（那是 editor） |
-| **技术栈** | Node.js + Hono |
-| **发布** | Docker 镜像；生产部署绑 127.0.0.1 + nginx 反代 |
-| **仓库** | `O-Catui/Catui-Agent-Gateway` |
-
----
-
-## 2.2 编排层
-
-### O-Mesh — 多 Agent 编排引擎
-
-| 维度 | 定义 |
-|------|------|
-| **是** | 多 Agent 协作引擎；任务分解与调度；Blackboard 横向通信协议；树状 + 横向通信模式 |
-| **不是** | 不实现 Agent 引擎（调度 Catui）；不暴露 HTTP API 给终端用户（通过 Gateway 间接服务） |
-| **技术栈** | Rust |
-| **发布** | CLI 工具 |
-| **仓库** | `O-Catui/O-Mesh` |
+| Dimension | Definition |
+|-----------|------------|
+| **Is** | HTTP serving layer; hosts multiple CatuiAgent instances; OpenAI-compatible API + SSE; EngineAdapter abstraction makes the engine swappable; CATUIS_HOME isolates multiple Catuis; Channel sub-module (DingTalk / WeChat / Feishu) |
+| **Is not** | Not the engine itself (import catui-agent); does not handle user system / billing / Marketplace (that's Asgard); does not directly serve end-user writing UI (that's editor) |
+| **Stack** | Node.js + Hono |
+| **Distribution** | Docker image; production deployment bound to 127.0.0.1 + nginx reverse proxy |
+| **Repository** | `O-Pencil/Catui-Agent-Gateway` |
 
 ---
 
-## 2.3 评估层
+## 2.2 Orchestration layer
 
-### Catui-Evaluate — Agent 评估框架
+### O-Mesh — multi-agent orchestration engine
 
-| 维度 | 定义 |
-|------|------|
-| **是** | LLM 评估框架（类似 Pytest 但专用于 LLM）；多维度指标（Task Completion / Tool Correctness / Goal Accuracy / Knowledge Retention / Plan Adherence）；基准测试 + 报告生成 |
-| **不是** | 不实现 Agent 功能；不直接修改 Agent 参数（产出报告，由人/AI 决策优化） |
-| **技术栈** | Python + DeepEval |
-| **发布** | PyPI 包 |
-| **仓库** | `O-Catui/Catui-Evaluate` |
-
-**评估维度**：
-
-| 指标 | 说明 |
-|------|------|
-| Task Completion | Agent 是否完成用户指定的任务 |
-| Tool Correctness | 工具调用（文件操作、bash 等）是否正确 |
-| Step Efficiency | 完成任务是否走了不必要的步骤 |
-| Knowledge Retention | 记忆系统的知识保持能力 |
-| Answer Relevancy | 响应与用户问题的相关性 |
-| Plan Adherence | 是否按编排计划执行 |
+| Dimension | Definition |
+|-----------|------------|
+| **Is** | Multi-agent collaboration engine; task decomposition and scheduling; Blackboard horizontal-communication protocol; tree + horizontal communication modes |
+| **Is not** | Does not implement an Agent engine (schedules Catui); does not expose HTTP API to end users (serves indirectly through Gateway) |
+| **Stack** | Rust |
+| **Distribution** | CLI tool |
+| **Repository** | `O-Catui/O-Mesh` |
 
 ---
 
-## 2.4 平台层
+## 2.3 Evaluation layer
 
-### Asgard-platform — 用户平台层
+### Catui-Evaluate — Agent evaluation framework
 
-| 维度 | 定义 |
-|------|------|
-| **是** | 多 Agent 管理平台；用户系统、API Key 管理、CatuiAgent CRUD、用量记录、计费策略、Agent Marketplace、Developer Console；通过 HTTP 代理到 Gateway |
-| **不是** | 不实现 Agent 引擎；不实现 HTTP serving 协议；不直接管容器进程（编排是阶段四 C 线） |
-| **技术栈** | FastAPI + PostgreSQL + JWT/SSE（后端）；React 19 + Vite + TailwindCSS 4（前端） |
-| **发布** | Docker compose；render.yaml |
-| **仓库** | `O-Catui/Asgard-platform`（含子模块 Asgard-api / Asgard-web） |
+| Dimension | Definition |
+|-----------|------------|
+| **Is** | LLM evaluation framework (similar to Pytest but specialized for LLM); multi-dimensional metrics (Task Completion / Tool Correctness / Goal Accuracy / Knowledge Retention / Plan Adherence); benchmark + report generation |
+| **Is not** | Does not implement Agent features; does not directly modify Agent parameters (produces reports; humans / AI decide how to optimize) |
+| **Stack** | Python + DeepEval |
+| **Distribution** | PyPI package |
+| **Repository** | `O-Pencil/Catui-Evaluate` |
 
----
+**Evaluation dimensions**:
 
-## 2.5 表现层
-
-### catui-editor — 创作表现层
-
-| 维度 | 定义 |
-|------|------|
-| **是** | AI-Native 写作编辑器；Desktop App + Web IDE；三模路由（本地 ACP / 内部 WS / 远程 HTTP）；富文本编辑 + 工作区管理 + Spark Design |
-| **不是** | 不构建 Agent 实例管理；不实现 HTTP server；不复刻 Asgard 的 CatuiAgent 创建 UI |
-| **技术栈** | Rust + Tauri + React/TypeScript |
-| **发布** | Tauri Desktop bundle（NSIS/MSI）；Web build |
-| **仓库** | `O-Catui/catui-editor` |
-
-### Catui-Game — 社会博弈表现层
-
-| 维度 | 定义 |
-|------|------|
-| **是** | Agent 在博弈场景中碰撞进化；社交推理 / 狼人杀等博弈游戏；多 Agent 策略博弈 |
-| **不是** | 不是通用游戏引擎；不实现 Agent 引擎 |
-| **技术栈** | Next.js + React |
-| **发布** | Web 应用（Vercel） |
-| **仓库** | `O-Catui/Catui-Game` |
-
-### Catui-Lesson — 知识习得表现层
-
-| 维度 | 定义 |
-|------|------|
-| **是** | 结构化学习与知识沉淀；AI 驱动的个性化学习路径 |
-| **不是** | 不是 LMS（学习管理系统）；不实现 Agent 引擎 |
-| **技术栈** | Next.js + React |
-| **发布** | Web 应用 |
-| **仓库** | `O-Catui/Catui-Lesson` |
-
-### Catui-Terminal — 具身环境
-
-| 维度 | 定义 |
-|------|------|
-| **是** | 物理世界锚点；文件 / Git / Shell 操作；与 Catui 协同提供完整具身能力 |
-| **不是** | 不是 Agent 引擎；不是 IDE（编辑能力由 editor 提供） |
-| **技术栈** | Go + Electron + TypeScript |
-| **发布** | Desktop 应用 |
-| **仓库** | `O-Catui/Catui-Terminal` |
+| Metric | Description |
+|--------|-------------|
+| Task Completion | Whether the Agent completes the user's specified task |
+| Tool Correctness | Whether tool calls (file ops, bash, etc.) are correct |
+| Step Efficiency | Whether the task is completed without unnecessary steps |
+| Knowledge Retention | Memory system's knowledge retention capability |
+| Answer Relevancy | How relevant the response is to the user's question |
+| Plan Adherence | Whether execution follows the orchestrated plan |
 
 ---
 
-## 2.6 渗透层
+## 2.4 Platform layer
 
-### Catui-Eidolon — 浏览器分身
+### Asgard-platform — user platform layer
 
-| 维度 | 定义 |
-|------|------|
-| **是** | Catui 在浏览器中的"幻影分身"；页面感知、DOM 操作、Side Panel 交互；双模运行（本地 Native Messaging → Catui；云端 OpenAI 兼容 API → Gateway）；站点授权与用户确认 |
-| **不是** | 不是浏览器自动化工具（那是 Catui 的 Browser Harness）；不实现 Agent 引擎；不暴露 HTTP API |
-| **技术栈** | React + TypeScript + Chrome Manifest V3（兼容 Edge） |
-| **发布** | Chrome Web Store / Edge Add-ons |
-| **仓库** | `O-Catui/Catui-Eidolon` |
-
-**与 Catui 的边界**：
-- `Catui` 是 Kernel，提供模型、记忆、人格、规划和推理
-- `Catui-Eidolon` 是浏览器宿主，拥有页面上下文、站点授权、DOM/Debugger 操作和侧边栏体验
-- Browser Harness 在终端/CLI 场景可被 Catui 直接调用；在 Eidolon 场景必须由 Eidolon 仲裁浏览器动作
-- `link-world` / `web_search` 属于网络检索路径；真实页面交互、登录态、截图、填写归 Eidolon
+| Dimension | Definition |
+|-----------|------------|
+| **Is** | Multi-Agent management platform; user system, API Key management, CatuiAgent CRUD, usage recording, billing policy, Agent Marketplace, Developer Console; proxies via HTTP to Gateway |
+| **Is not** | Does not implement the Agent engine; does not implement the HTTP serving protocol; does not directly manage container processes (orchestration is phase-4 work-line C) |
+| **Stack** | FastAPI + PostgreSQL + JWT/SSE (backend); React 19 + Vite + TailwindCSS 4 (frontend) |
+| **Distribution** | Docker compose; render.yaml |
+| **Repository** | `O-Catui/Asgard-platform` (contains submodules Asgard-api / Asgard-web) |
 
 ---
 
-## 2.7 项目速查矩阵
+## 2.5 Expression layer
 
-| 项目 | 层级 | 技术栈 | 发布形态 | GitHub |
-|------|------|--------|----------|--------|
-| Catui | 本体层 | Node.js + TS | npm / CLI | O-Catui/Catui |
-| Catui-Agent-Gateway | 网关层 | Node.js + Hono | Docker | O-Catui/Catui-Agent-Gateway |
-| O-Mesh | 编排层 | Rust | CLI | O-Catui/O-Mesh |
-| Catui-Evaluate | 评估层 | Python + DeepEval | PyPI | O-Catui/Catui-Evaluate |
-| Asgard-platform | 平台层 | FastAPI + React | Docker compose | O-Catui/Asgard-platform |
-| catui-editor | 表现层 | Rust/Tauri + React | Desktop / Web | O-Catui/catui-editor |
-| Catui-Eidolon | 渗透层 | React + Chrome MV3 | Browser Extension | O-Catui/Catui-Eidolon |
-| Catui-Game | 表现层 | Next.js + React | Web | O-Catui/Catui-Game |
-| Catui-Lesson | 表现层 | Next.js + React | Web | O-Catui/Catui-Lesson |
-| Catui-Terminal | 具身层 | Go + Electron | Desktop | O-Catui/Catui-Terminal |
+### catui-editor — authoring expression layer
+
+| Dimension | Definition |
+|-----------|------------|
+| **Is** | AI-native writing editor; Desktop App + Web IDE; three-mode routing (local ACP / internal WS / remote HTTP); rich-text editing + workspace management + Spark Design |
+| **Is not** | Does not build Agent-instance management; does not implement HTTP server; does not replicate Asgard's CatuiAgent creation UI |
+| **Stack** | Rust + Tauri + React/TypeScript |
+| **Distribution** | Tauri Desktop bundle (NSIS/MSI); Web build |
+| **Repository** | `O-Pencil/catui-editor` |
+
+### Catui-Game — social-game expression layer
+
+| Dimension | Definition |
+|-----------|------------|
+| **Is** | Agents collide and evolve in game-theoretic scenarios; social deduction / Werewolf-style games; multi-agent strategy games |
+| **Is not** | Not a general-purpose game engine; does not implement an Agent engine |
+| **Stack** | Next.js + React |
+| **Distribution** | Web app (Vercel) |
+| **Repository** | `O-Pencil/Catui-Game` |
+
+### Catui-Lesson — knowledge-acquisition expression layer
+
+| Dimension | Definition |
+|-----------|------------|
+| **Is** | Structured learning and knowledge accumulation; AI-driven personalized learning paths |
+| **Is not** | Not an LMS (Learning Management System); does not implement an Agent engine |
+| **Stack** | Next.js + React |
+| **Distribution** | Web app |
+| **Repository** | `O-Pencil/Catui-Lesson` |
+
+### Catui-Terminal — embodied environment
+
+| Dimension | Definition |
+|-----------|------------|
+| **Is** | Physical-world anchor; file / Git / Shell operations; collaborates with Catui to provide complete embodiment |
+| **Is not** | Not an Agent engine; not an IDE (editing capability is provided by editor) |
+| **Stack** | Go + Electron + TypeScript |
+| **Distribution** | Desktop application |
+| **Repository** | `O-Pencil/Catui-Terminal` |
+
+---
+
+## 2.6 Infiltration layer
+
+### Catui-Eidolon — browser-side clone
+
+| Dimension | Definition |
+|-----------|------------|
+| **Is** | Catui's "phantom clone" in the browser; page sensing, DOM manipulation, Side-Panel interaction; dual-mode (local Native Messaging → Catui; cloud OpenAI-compatible API → Gateway); site authorization and user confirmation |
+| **Is not** | Not a browser-automation tool (that's Catui's Browser Harness); does not implement an Agent engine; does not expose HTTP API |
+| **Stack** | React + TypeScript + Chrome Manifest V3 (Edge compatible) |
+| **Distribution** | Chrome Web Store / Edge Add-ons |
+| **Repository** | `O-Pencil/Catui-Eidolon` |
+
+**Boundary with Catui**:
+- `Catui` is the Kernel, providing models, memory, personality, planning, and reasoning
+- `Catui-Eidolon` is the browser host, owning page context, site authorization, DOM/Debugger operations, and side-panel experience
+- Browser Harness is callable directly by Catui in terminal / CLI scenarios; in Eidolon scenarios browser actions must be arbitrated by Eidolon
+- `link-world` / `web_search` belong to network-retrieval paths; real page interaction, login state, screenshot, filling-in belong to Eidolon
+
+---
+
+## 2.7 Project quick-reference matrix
+
+| Project | Layer | Stack | Distribution form | GitHub |
+|---------|-------|-------|-------------------|--------|
+| Catui | Ontology | Node.js + TS | npm / CLI | O-Pencil/Catui |
+| Catui-Agent-Gateway | Gateway | Node.js + Hono | Docker | O-Pencil/Catui-Agent-Gateway |
+| O-Mesh | Orchestration | Rust | CLI | O-Catui/O-Mesh |
+| Catui-Evaluate | Evaluation | Python + DeepEval | PyPI | O-Pencil/Catui-Evaluate |
+| Asgard-platform | Platform | FastAPI + React | Docker compose | O-Catui/Asgard-platform |
+| catui-editor | Expression | Rust/Tauri + React | Desktop / Web | O-Pencil/catui-editor |
+| Catui-Eidolon | Infiltration | React + Chrome MV3 | Browser Extension | O-Pencil/Catui-Eidolon |
+| Catui-Game | Expression | Next.js + React | Web | O-Pencil/Catui-Game |
+| Catui-Lesson | Expression | Next.js + React | Web | O-Pencil/Catui-Lesson |
+| Catui-Terminal | Embodiment | Go + Electron | Desktop | O-Pencil/Catui-Terminal |

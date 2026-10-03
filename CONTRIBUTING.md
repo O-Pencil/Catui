@@ -11,7 +11,7 @@ By participating, you agree to uphold our community standards.
 
 ### Reporting Bugs
 
-- Search existing [issues](https://github.com/O-Catui/Catui/issues) before creating a new one
+- Search existing [issues](https://github.com/O-Pencil/Catui/issues) before creating a new one
 - Use the **Bug Report** template when available
 - Include:
   - Node.js and npm versions

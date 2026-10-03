@@ -32,7 +32,7 @@
 	"license": "GPL-3.0",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/O-Catui/Catui.git"
+		"url": "git+https://github.com/O-Pencil/Catui.git"
 	},
 	"engines": {
 		"node": ">=20.0.0"

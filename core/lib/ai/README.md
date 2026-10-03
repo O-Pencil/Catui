@@ -1,6 +1,6 @@
 # @catui/ai
 
-> This package is derived from [Catui](https://github.com/O-Catui/Catui) (MIT License). It provides a unified LLM API with automatic model discovery, provider configuration, token and cost tracking.
+> This package is derived from [Catui](https://github.com/O-Pencil/Catui) (MIT License). It provides a unified LLM API with automatic model discovery, provider configuration, token and cost tracking.
 
 Unified LLM API with automatic model discovery, provider configuration, token and cost tracking, and simple context persistence and hand-off to other models mid-session.
 

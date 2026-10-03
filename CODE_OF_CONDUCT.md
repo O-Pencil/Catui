@@ -46,7 +46,7 @@ an individual is officially representing the community in public spaces.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement at:
-- Opening an issue on [GitHub](https://github.com/O-Catui/Catui/issues)
+- Opening an issue on [GitHub](https://github.com/O-Pencil/Catui/issues)
 
 All complaints will be reviewed and investigated promptly and fairly.
 

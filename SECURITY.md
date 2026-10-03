@@ -20,7 +20,7 @@ If you discover a security vulnerability within Catui, please report it responsi
 Instead, please report them through one of the following methods:
 
 1. **GitHub Private Vulnerability Reporting** (Recommended)
-   - Go to the [Security tab](https://github.com/O-Catui/Catui/security/advisories/new) of the repository
+   - Go to the [Security tab](https://github.com/O-Pencil/Catui/security/advisories/new) of the repository
    - Click "Report a vulnerability"
    - Fill out the vulnerability reporting form
 
