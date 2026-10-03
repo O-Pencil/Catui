@@ -14,7 +14,8 @@
  *
  * This wrapper registers the skill via resources_discover only (on-demand loading through the
  * `skill` tool), so the 8KB skill body never enters the default system prompt. The bootstrap
- * note is intentionally short (~6 lines) to keep token overhead minimal.
+ * note stays short because every catalogued skill's name and description already reach the
+ * default prompt through the skill catalog; this note only states the routing boundary.
  */
 
 import { existsSync } from "node:fs";
@@ -28,10 +29,8 @@ const SKILL_DIR = __dirname;
 export const HUMANIZER_BOOTSTRAP_PROMPT = [
 	"## Humanizer (vendored writing-quality skill)",
 	"",
-	"The `humanizer` skill is bundled as a Catui extension. Use it when editing or reviewing",
-	"user-facing prose (docs, READMEs, PR descriptions, blog posts): it removes AI-writing tells",
-	"without changing meaning and never invents facts or sources. Load SKILL.md via the `skill`",
-	"tool when the task involves prose, not code.",
+	"Use `humanizer` when editing or reviewing user-facing prose, not code. It removes AI-writing tells",
+	"without changing meaning and never invents facts or sources. Load SKILL.md via the `skill` tool.",
 ].join("\n");
 
 export default async function humanizerExtension(api: ExtensionAPI): Promise<void> {

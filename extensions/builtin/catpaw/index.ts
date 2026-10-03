@@ -24,17 +24,9 @@ const SKILL_DIR = __dirname;
 const BOOTSTRAP_PROMPT = [
 	"## Catpaw (vendored UI/UX design skill)",
 	"",
-	"The `catpaw` skill is bundled as a Catui extension. Treat it as design-direction guidance when",
-	"the user asks to design, redesign, critique, polish, audit, or otherwise improve a frontend",
-	"interface. Load the SKILL.md via the `skill` tool when the task matches its description.",
-	"",
-	"Catui notes:",
-	"- The skill body and `reference/*.md` are loaded normally through Catui's skill system.",
-	"- Scripts under `scripts/` are Claude Code / Cursor / Codex harness scripts (hooks, live",
-	"  iteration, browser screenshot capture). Catui does NOT execute them automatically. If a",
-	"  referenced command needs to run, surface it to the user instead of running it via `bash`.",
-	"- Agent configs under `agents/*.toml` describe Claude Code sub-agents and are not consumed by",
-	"  Catui. They are kept here so the vendored bundle stays intact for cross-harness reuse.",
+	"`scripts/` and `agents/*.toml` in this bundle target the Claude Code / Cursor / Codex harness;",
+	"Catui runs neither. If a referenced command needs to run, surface it to the user instead of",
+	"running it via `bash`. Full detail: [CATUI.md](CATUI.md).",
 ].join("\n");
 
 export default async function catpawExtension(api: ExtensionAPI): Promise<void> {

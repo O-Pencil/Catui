@@ -1,11 +1,14 @@
 /**
  * [WHO]: Human-readable status, inspection, command result, and prompt injection formatting
- * [FROM]: Depends on local evolution types only
+ * [FROM]: Depends on local evolution types and the store's shared artifact hash, so the change list and the refinement budget count a change the same way
  * [TO]: Consumed by optional evolution extension entry and tests
  * [HERE]: extensions/optional/evolution/evolution-format.ts - presentation boundary for controlled evolution
  */
 
 import type { EvolutionArtifact, EvolutionAttribution, EvolutionCandidate, EvolutionInspection, EvolutionPrediction, EvolutionRevision } from "./evolution-types.js";
+// The change list a reviewer is shown must use the same notion of "this artifact changed" that the
+// refinement budget counts, so both sides hash through one function rather than two copies.
+import { evolutionArtifactHash } from "./evolution-store.js";
 
 function compact(text: string, limit = 220): string {
 	const normalized = text.replace(/\s+/g, " ").trim();
@@ -101,18 +104,6 @@ export function formatRevision(revision: EvolutionRevision): string {
 	].filter(Boolean).join("\n");
 }
 
-function artifactHash(artifact: EvolutionArtifact): string {
-	return JSON.stringify({
-		kind: artifact.kind,
-		title: artifact.title,
-		content: artifact.content,
-		applicability: artifact.applicability,
-		nonApplicability: artifact.nonApplicability,
-		tokenBudget: artifact.tokenBudget,
-		metadata: artifact.metadata,
-	});
-}
-
 export function formatEvolutionChanges(inspection: EvolutionInspection, revisionId?: string): string {
 	const revision = revisionId
 		? inspection.revisions.find((item) => item.id === revisionId)
@@ -126,7 +117,7 @@ export function formatEvolutionChanges(inspection: EvolutionInspection, revision
 	const added = revision.artifacts.filter((artifact) => !previousById.has(artifact.id));
 	const changed = revision.artifacts.filter((artifact) => {
 		const previous = previousById.get(artifact.id);
-		return previous && artifactHash(previous) !== artifactHash(artifact);
+		return previous && evolutionArtifactHash(previous) !== evolutionArtifactHash(artifact);
 	});
 	const removed = (predecessor?.artifacts ?? []).filter((artifact) => !currentById.has(artifact.id));
 	const usages = inspection.usages.filter((usage) => usage.revisionId === revision.id);

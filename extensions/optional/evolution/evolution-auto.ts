@@ -1,5 +1,5 @@
 /**
- * [WHO]: EvolutionAutoObserver turns explicit reusable-lesson and structured turn output into automatically activated evolution artifacts
+ * [WHO]: EvolutionAutoObserver turns explicit reusable-lesson and structured turn output into candidate records, rate limited per scope root; activation still requires the store evidence gate
  * [FROM]: Depends on extension turn_end context, evolution gate, and evolution store validation/persistence
  * [TO]: Consumed by optional evolution extension entry
  * [HERE]: extensions/optional/evolution/evolution-auto.ts - deterministic loop-level self-evolution observer with scope gates
@@ -14,11 +14,28 @@ import {
 	createEvolutionCandidate,
 	getEvolutionScopeRoot,
 	promoteEvolutionCandidate,
+	readEvolutionEvidenceCursor,
+	recordEvolutionEvidenceCursor,
 	recordEvolutionGateFailure,
 } from "./evolution-store.js";
 import type { EvolutionArtifactKind, EvolutionScope } from "./evolution-types.js";
 
 const COOLDOWN_TURNS = 3;
+
+/**
+ * Provenance of an auto-observed candidate.
+ *
+ * Neither turn-end source is externally verified: both originate in the assistant's own
+ * output. Recording that honestly is the point — marking the structured branch `verified` would
+ * be the same self-report wearing a different label. Only the store's evidence gate may activate
+ * a candidate, so this field describes provenance and confers nothing.
+ */
+const PROVENANCE = {
+	/** Model emitted a well-formed `catui_evolution` object. Still a self-declaration. */
+	structuredDeclaration: "model_structured_declaration",
+	/** Model wrote a line matching LESSON_PATTERN. Free prose, no structured basis. */
+	proseSelfReport: "model_prose_self_report",
+} as const;
 const LESSON_PATTERN = /(?:Reusable lesson|Evolution lesson)\s*:\s*([^\n]+)/i;
 
 function extractText(message: unknown): string {
@@ -107,8 +124,22 @@ function structuredProposal(text: string):
 	return undefined;
 }
 
+/**
+ * One rate limit for every branch that can create a candidate, keyed by the scope root it writes
+ * to rather than by session.
+ *
+ * Keying by session was right only while session scope was the sole writer. A structured proposal
+ * may target global or workspace, and two sessions proposing the same global artifact each got
+ * their own budget; keying by root makes a scope's limit that scope's, and a workspace proposal can
+ * no longer be muted by an unrelated session's memory.
+ *
+ * The last consumed turn is held in that scope's on-disk evidence cursor rather than in this
+ * instance, because a cursor that forgets on restart is not a cursor. What the cursor does *not* do
+ * is outlast its own turn window: it suppresses a fixed number of turns, new evidence is always
+ * admitted, and a stream belonging to a different session starts from nothing. That keeps it a
+ * bounded re-read of recent work rather than a standing judgement about an idea.
+ */
 export class EvolutionAutoObserver {
-	#lastCandidateTurnBySession = new Map<string, number>();
 	#runGate: EvolutionGateRunner;
 
 	constructor(options: { runGate?: EvolutionGateRunner } = {}) {
@@ -119,15 +150,24 @@ export class EvolutionAutoObserver {
 		const sessionId = ctx.sessionManager.getSessionId();
 		const text = extractText(event.message);
 		const structured = structuredProposal(text);
-		if (structured) {
-			const root = getEvolutionScopeRoot(
+		// The root any branch would write to, resolved before the branches so one check can cover
+		// all of them. Previously the structured branches skipped the cooldown entirely, so an
+		// identical `catui_evolution` proposal created a fresh candidate on every single turn.
+		const root = structured
+			? getEvolutionScopeRoot(
 				ctx.agentDir,
 				structured.scope === "global"
 					? { scope: "global" }
 					: structured.scope === "workspace"
 						? { scope: "workspace", cwd: ctx.cwd }
 						: { scope: "session", sessionId },
-			);
+			)
+			: getEvolutionScopeRoot(ctx.agentDir, { scope: "session", sessionId });
+		// Read from disk, not from this instance, so a restart cannot make the observer re-consume
+		// turns it already turned into candidates. A cursor from another session does not apply.
+		const cursor = readEvolutionEvidenceCursor(root, sessionId);
+		if (cursor !== undefined && event.turnIndex - cursor.lastTurnIndex < COOLDOWN_TURNS) return { skipped: "cooldown" };
+		if (structured) {
 			if (structured.kind === "eval_fixture") {
 				if (structured.scope !== "workspace") return { skipped: "eval_fixture_scope" };
 				if (!structured.tracePath) return { skipped: "eval_fixture_trace_path" };
@@ -148,7 +188,12 @@ export class EvolutionAutoObserver {
 							metadata: { scenarioId, tracePath: relative(resolve(ctx.cwd), fixture.resolvedTracePath) },
 						},
 					],
-					evidence: { source: "turn_end_structured", turnIndex: event.turnIndex, tracePath: structured.tracePath },
+					evidence: {
+						source: "turn_end_structured",
+						turnIndex: event.turnIndex,
+						tracePath: structured.tracePath,
+						provenance: PROVENANCE.structuredDeclaration,
+					},
 				});
 				const currentGateReport = await this.#runGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId });
 				if (!currentGateReport.passed) {
@@ -161,7 +206,7 @@ export class EvolutionAutoObserver {
 						recordEvolutionGateFailure(root, candidate.id, { gateReport: fixtureGateReport });
 					}
 				}
-				this.#lastCandidateTurnBySession.set(sessionId, event.turnIndex);
+				recordEvolutionEvidenceCursor(root, sessionId, event.turnIndex);
 				return { candidateId: candidate.id };
 			}
 			const input = {
@@ -182,7 +227,11 @@ export class EvolutionAutoObserver {
 						...(structured.nonApplicability ? { nonApplicability: structured.nonApplicability } : {}),
 					},
 				],
-				evidence: { source: "turn_end_structured", turnIndex: event.turnIndex },
+				evidence: {
+					source: "turn_end_structured",
+					turnIndex: event.turnIndex,
+					provenance: PROVENANCE.structuredDeclaration,
+				},
 			};
 			const candidate = createEvolutionCandidate(root, input);
 			const globalPolicy = structured.scope === "global" ? canAutoPromoteGlobalEvolution(input) : { allowed: true };
@@ -194,14 +243,11 @@ export class EvolutionAutoObserver {
 					recordEvolutionGateFailure(root, candidate.id, { gateReport });
 				}
 			}
-			this.#lastCandidateTurnBySession.set(sessionId, event.turnIndex);
+			recordEvolutionEvidenceCursor(root, sessionId, event.turnIndex);
 			return { candidateId: candidate.id };
 		}
-		const lastTurn = this.#lastCandidateTurnBySession.get(sessionId);
-		if (lastTurn !== undefined && event.turnIndex - lastTurn < COOLDOWN_TURNS) return { skipped: "cooldown" };
 		const lesson = text.match(LESSON_PATTERN)?.[1]?.trim();
 		if (!lesson) return { skipped: "no_lesson" };
-		const root = getEvolutionScopeRoot(ctx.agentDir, { scope: "session", sessionId });
 		const candidate = createEvolutionCandidate(root, {
 			scope: "session",
 			summary: "Auto-observed reusable lesson",
@@ -219,6 +265,7 @@ export class EvolutionAutoObserver {
 			evidence: {
 				source: "turn_end",
 				turnIndex: event.turnIndex,
+				provenance: PROVENANCE.proseSelfReport,
 			},
 		});
 		const gateReport = await this.#runGate(candidate, { agentDir: ctx.agentDir, cwd: ctx.cwd, sessionId });
@@ -227,7 +274,7 @@ export class EvolutionAutoObserver {
 		} else {
 			recordEvolutionGateFailure(root, candidate.id, { gateReport });
 		}
-		this.#lastCandidateTurnBySession.set(sessionId, event.turnIndex);
+		recordEvolutionEvidenceCursor(root, sessionId, event.turnIndex);
 		return { candidateId: candidate.id };
 	}
 }

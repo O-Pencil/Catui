@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "typeRoots": [
+      "./node_modules/@types"
+    ]
+  },
+  "include": [
+    "scripts/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "core/lib"
+  ],
+  "tscInternal": {
+    "preservedWhitespace": true
+  },
+  "extends": "./tsconfig.json"
+}

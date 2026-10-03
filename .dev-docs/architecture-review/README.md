@@ -46,6 +46,7 @@ This is a one-shot exercise. After the maintainer has acted on the Arch Agent's 
 > **图例**：✅ 活文档（持续维护，日常入口）· 📦 已结案专项评审（WHY 归档，改对应代码时回查）· 🗄️ 重构期操作手册（历史留存，不再维护）· 🌱 演进组（net-new，按需）
 
 **✅ 活文档（日常入口）**
+- `simplification-learning-review/README.md` — proposed iteration handoff: extension/prompt simplification, verification alignment, and evidence-gated skill-learning gap closure; execution and independent acceptance pending.
 - `../feature-workflow.md` — ★ **开发前必读**：层级归属决策 + 四步循环 + 验收门（从根 `AGENTS.md` 链入）
 - `REFACTOR-LEDGER.md` — ★ 收益结论 / 已发现问题(D1-D5) / 未完成项(P7/P8) / 已接受 trade-off
 - `target-architecture.md` — 端态目录 + 功能域映射（结构权威，层级归属判据）

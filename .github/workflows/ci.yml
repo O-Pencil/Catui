@@ -42,13 +42,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # One build for the whole job. Every later step is a canonical npm script listed in
+      # .dev-docs/vibe-coding/verification-plan.json; artifact tests run only after this build.
       - name: Build project
         run: npm run build
         env:
           CI: true
 
-      - name: Run type check
-        run: npx tsc --noEmit
+      - name: Run type check (product and scripts)
+        run: npm run typecheck
         env:
           CI: true
 
@@ -59,6 +61,21 @@ jobs:
 
       - name: Verify package boundary (BR01, dist embed resolves)
         run: npm run verify:package-boundary:dist
+        env:
+          CI: true
+
+      - name: Verify verification plan/script contract
+        run: npm run verify:contract
+        env:
+          CI: true
+
+      - name: Run release packaging contract tests
+        run: npm run test:release-contracts
+        env:
+          CI: true
+
+      - name: Run post-build artifact tests
+        run: npm run test:artifact
         env:
           CI: true
 
@@ -82,8 +99,33 @@ jobs:
         env:
           CI: true
 
-      - name: Run context continuity tests
-        run: node --test --import tsx test/context-management.test.ts test/context-window.test.ts
+      - name: Run runtime owner, registry and bootstrap tests
+        run: npm run test:runtime-owners
+        env:
+          CI: true
+
+      - name: Run MCP and system prompt tests
+        run: npm run test:mcp
+        env:
+          CI: true
+
+      - name: Run session management tests
+        run: npm run test:sessions
+        env:
+          CI: true
+
+      - name: Run presence lifecycle tests
+        run: npm run test:presence
+        env:
+          CI: true
+
+      - name: Run verification plan/script contract in the test chain
+        run: npm run test:contract
+        env:
+          CI: true
+
+      - name: Run evolution evidence and lifecycle boundary tests
+        run: npm run test:evolution-boundaries
         env:
           CI: true
 

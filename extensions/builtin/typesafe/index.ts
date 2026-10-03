@@ -12,11 +12,10 @@ const skillsPath = join(dirname(fileURLToPath(import.meta.url)), "skills");
 
 export const DECISION_GUIDANCE = [
   "## Decision, tool, evaluation loop",
-  "Before a tool call, identify the missing evidence or intended change and the result that would justify the next step. Answer directly when no tool is needed.",
-  "Choose an available tool with the narrowest suitable scope; ground its arguments in observed state and its schema. Keep facts separate from assumptions. Batch independent reads; sequence dependent work and writes.",
-  "After results arrive, check errors, evidence freshness and progress toward the user's acceptance criteria before acting again. Verify changed behavior with a proportionate check. A successful call or typed output alone does not prove task success.",
-  "If an attempt makes no progress, inspect the failure and change the hypothesis, inputs or approach; do not repeat unchanged calls indefinitely. Stop when complete or explain the concrete blocker. Uncertainty is not permission for side effects.",
-  "For complex tool workflows, load agent-decision-loop. For TypeSafe System One integrations, load typesafe-ai and its current docs. Ordinary Catui work needs no TypeSafe API call. Follow explicit user instructions.",
+  "Before a tool call, name the missing evidence or intended change and the result that would justify the next step. Answer directly when no tool is needed.",
+  "Pick the narrowest suitable tool; ground its arguments in observed state and its schema. Keep facts separate from assumptions. Batch independent reads; sequence dependent work and writes.",
+  "After results arrive, check errors, evidence freshness and progress toward the user's acceptance criteria before acting again. A successful call or typed output does not prove task success.",
+  "If an attempt makes no progress, change the hypothesis, inputs or approach; do not repeat unchanged calls. Stop when complete or name the concrete blocker. Uncertainty is not permission for side effects.",
 ].join("\n");
 
 export default function typesafeExtension(api: ExtensionAPI): void {

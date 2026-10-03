@@ -30,9 +30,7 @@ const DISCIPLINE_SKILLS = [
 const BOOTSTRAP_PROMPT = [
 	"## Catui Engineering Discipline",
 	"",
-	"Catui ships default discipline skills for coding work. Treat them as executable workflow guidance, not background reading.",
-	"",
-	"Before taking action, check whether one of these skills applies. If it does, call the `skill` tool or load the matching SKILL.md before other tool use or implementation:",
+	"The bundled discipline skills are executable workflow guidance, not background reading. Before other tool use or implementation, load the matching SKILL.md via the `skill` tool when one of these applies:",
 	DISCIPLINE_SKILLS.map((name) => `- ${name}`).join("\n"),
 	"",
 	"Hard gates:",

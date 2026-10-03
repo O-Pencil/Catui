@@ -141,7 +141,7 @@ export function compareEvolutionBenchmarks(
 	baselineInput: unknown,
 	candidateInput: unknown,
 	policy: EvolutionBenchmarkPolicyV1,
-	options: { candidateId: string; checkedAt?: string },
+	options: { candidateId: string; baselineRevisionId: string | null; checkedAt?: string },
 ): EvolutionBenchmarkPromotionReportV1 {
 	const pair = validateBenchmarkPair(baselineInput, candidateInput, options.candidateId, policy);
 	const baselineTasks = taskRates(pair.baselineHeldout);
@@ -186,6 +186,7 @@ export function compareEvolutionBenchmarks(
 		kind: "catui-evolution-benchmark-promotion-report",
 		candidateId: options.candidateId,
 		candidateContentHash: pair.candidate.candidateContentHash!,
+		baselineRevisionId: options.baselineRevisionId,
 		checkedAt: options.checkedAt ?? new Date().toISOString(),
 		corpus: pair.baseline.corpus,
 		baselineSnapshotHash: digest(pair.baseline),
@@ -202,6 +203,7 @@ export function verifyEvolutionBenchmarkReport(
 	value: unknown,
 	candidateId: string,
 	candidateContentHash: string,
+	baselineRevisionId: string | null,
 ): value is EvolutionBenchmarkPromotionReportV1 {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
 	const report = value as Partial<EvolutionBenchmarkPromotionReportV1>;
@@ -209,6 +211,8 @@ export function verifyEvolutionBenchmarkReport(
 		|| report.kind !== "catui-evolution-benchmark-promotion-report"
 		|| report.candidateId !== candidateId
 		|| report.candidateContentHash !== candidateContentHash
+		|| (report.baselineRevisionId !== baselineRevisionId
+			&& !(report.baselineRevisionId === undefined && baselineRevisionId === null))
 		|| typeof report.passed !== "boolean"
 		|| typeof report.contentHash !== "string"
 		|| !Array.isArray(report.checks)
