@@ -89,19 +89,31 @@ npx tsc --noEmit
 
 ## Project Structure
 
+See [`AGENTS.md`](./AGENTS.md) for the full architecture map. The shorthand:
+
 ```
 Catui/
-├── packages/           # Core packages
-│   ├── agent-core/    # Agent framework
-│   ├── ai/            # LLM integration
-│   ├── tui/           # Terminal UI
-│   ├── mem-core/      # Memory system
-│   └── soul-core/     # AI personality
-├── modes/             # Interaction modes
-├── extensions/        # Plugin system
-├── cli.ts             # CLI entry point
-└── core/              # Core logic
+├── cli.ts, main.ts, config.ts, index.ts   # SDK / CLI entry surface
+├── core/
+│   ├── runtime/                            # AgentSession facade + focused runtime owners
+│   ├── lib/{ai,agent-core,tui}/            # Private runtime libraries (npm workspaces)
+│   ├── platform/                           # Config / i18n / telemetry / exec / utils
+│   ├── extensions-host/                    # Extension loader / runner / types
+│   ├── tools/                              # bash / read / edit / write / grep / find / ls / source
+│   ├── mcp/                                # MCP client + adapter
+│   ├── session/                            # Session manager + compaction
+│   ├── model/                              # Model registry + providers
+│   ├── prompt/                             # System prompt + prompt templates
+│   ├── sub-agent/                          # Agent tool + worktree isolation
+│   └── workspace/                          # Worktree manager
+├── modes/{interactive,print,rpc,acp,remote}   # Run modes
+├── extensions/{builtin,optional}/            # Built-in and opt-in extensions
+├── packages/{protocol,mem-core}/             # Published protocol + memory packages
+│   # soul-core is retained standalone, outside the root workspace
+└── apps/mobile/                             # Mobile web UI (separate toolchain)
 ```
+
+Detailed P2 module lists live in each module's `AGENT.md`; the full P3 contracts live in source headers.
 
 ## Style Guidelines
 

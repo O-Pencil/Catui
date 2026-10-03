@@ -326,6 +326,25 @@ Extensions can:
 | `humanizer` | Vendored writing-quality skill: removes AI-writing tells from prose without changing meaning or inventing facts |
 | `mcp` | MCP protocol support |
 | `security-audit` | Security vulnerability detection |
+| `ask-user-question` | Structured ask-the-user prompts that route through a single shared slot |
+| `btw` | "By the way" interjections to surface tangential context without losing the main thread |
+| `debug` | Runtime debugging helpers and diagnostics overlays |
+| `diagnostics` | Self-diagnostic event capture + structured log surface |
+| `goal` | `/goal` long-running autonomous goal pursuit (codex-goal lineage) |
+| `idle-think` | Idle-turn "thinking" hooks — fills silent pauses with background reasoning |
+| `insights` | Per-session / cross-session insights, dashboards, and HTML report export |
+| `lsp` | Language-server integration for symbol / definition / refactor tools |
+| `next-step` | Suggestion-of-next-step nudges after the agent settles |
+| `notebook` | Notebook-edit tool wrapper |
+| `plan` | `/plan` mode and plan-mode-aware command dispatch |
+| `presence` | Persona / soul / memory presence rendering in the TUI footer and idle lines |
+| `recap` | Session recap: summarize prior turns on session resume |
+| `sal` | Stale-Aware Loop (long-running task harness with budget gates) |
+| `skill-tool` | Direct `Skill` tool exposure for callers that need explicit invocation |
+| `subagent` | CC-style Agent tool: spawn isolated sub-sessions with their own context |
+| `task` | Task-list / todo management and progress display |
+| `teach` | Structured teaching mode — walk a user through a topic step by step |
+| `team` | Multi-agent team orchestration with shared scratchpad |
 
 ### Tools (`core/tools/`)
 

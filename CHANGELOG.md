@@ -1,5 +1,28 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- Update CONTRIBUTING.md project-structure section to match the current layout (agent-core / ai / tui now live under `core/lib/`, plus the full `core/` / `modes/` / `extensions/` / `packages/` breakdown).
+- Update AGENTS.md P1 Built-in Extensions table: previously listed 13 extensions while the directory actually contains 33; the table now lists all 33 so newcomers can see what's available without scanning the filesystem.
+
+### Documentation
+- Translate AGENTS.md mandatory workflow section (FEATURE WORKFLOW block), `.dev-docs/feature-workflow.md`, the entire `charter/` directory (9 files), and `extensions/builtin/{link-world,security-audit}/README.md` from Chinese to English.
+- Translate persona files (`assets/personas/{aria,lucy,rem,sage,vex,pencil}/CATUI.md` plus 6 `SKILL.md` files) from Chinese to English; persona voices preserved.
+- Translate `issues/0013-cron-tasks-path-mismatch.md` and `tests/characterization/README.md` from Chinese to English.
+
+### Fixed
+- Replace 74 fork-residue references from `O-Catui/Catui` / `O-Catui/catui` to `O-Pencil/Catui` across docs, source code comments, test fixtures, package metadata, theme JSON `$schema` fields, and user-visible download URLs in `config.ts`.
+
+### Maintenance
+- Remove 32 process / stub / dead files from `docs/`:
+  - 6 Chinese reverse-engineering notes for Claude Code / Codex (cc-agent-design, cc-tui-design, codex-goal-command-impl, codex-goal-vs-grub, planmode, scan-report)
+  - 16 internal plan/spec files under `docs/superpowers/` and `docs/compose/`
+  - 10 27-line stub docs that were Obsidian-style AI-agent navigation templates (custom-provider, extensions, keybindings, models, packages, prompt-templates, providers, skills, themes, tui)
+  - Empty `.codex` file and the dead `charter-sync-notify.yml` workflow that pointed at a non-existent file
+- Correct `.github/CODEOWNERS` per-package paths (`/packages/agent-core/`, `/packages/ai/`, `/packages/tui/` moved to `core/lib/` long ago, so PR-review auto-routing was silently broken).
+- Fix `feature_request.yml` line 99 URL typo (`github.com-O-Pencil` → `github.com/O-Pencil`).
+
 ## [1.2.25] - 2026-09-08
 
 ### Added
