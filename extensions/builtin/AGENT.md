@@ -3,6 +3,7 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
+Supervision: goal/index.ts, grub/index.ts and plan/index.ts declare live owner snapshots and remote command eligibility through the host API; original handlers own effects. goal/goal-command.ts supports delegated edits/replacement, ask-user-question/ask-user-question-tool.ts routes explicit questions, and plan/exit-plan-mode-tool.ts limits delegated approval to standard execution with stale-content rejection.
 typesafe/index.ts: typesafeExtension, DECISION_GUIDANCE — default passive decision/tool/evaluation guidance and TypeSafe skill discovery; see typesafe/AGENT.md.
 grub/grub-dispatch.ts: GrubDispatch, exclusive continuation lease, deferred idle dispatch, exact prompt ownership, cancellation and run attribution
 context-management/index.ts: Default context continuity extension, session_history/working_notes/new_context tools and transient context-budget hints; see context-management/AGENT.md

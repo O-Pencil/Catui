@@ -16,7 +16,7 @@ export type ParsedGoalCommand =
 	| { type: "resume" }
 	| { type: "set"; objective: string };
 
-const SUBCOMMANDS = new Set(["clear", "edit", "pause", "resume", "help"]);
+const SUBCOMMANDS = new Set(["show", "clear", "edit", "pause", "resume", "help"]);
 
 export function parseGoalCommand(input: string): ParsedGoalCommand {
 	const trimmed = input.trim();
@@ -24,6 +24,8 @@ export function parseGoalCommand(input: string): ParsedGoalCommand {
 	const lower = trimmed.toLowerCase();
 	if (SUBCOMMANDS.has(lower)) {
 		switch (lower) {
+			case "show":
+				return { type: "show" };
 			case "clear":
 				return { type: "clear" };
 			case "edit":
@@ -57,6 +59,7 @@ export function buildGoalHelp(): string {
 export function getGoalArgumentCompletions(argumentPrefix: string): AutocompleteItem[] {
 	const prefix = argumentPrefix.trim().toLowerCase();
 	const candidates = [
+		{ value: "show", label: "show", description: "Show the goal and budget" },
 		{ value: "clear", label: "clear", description: "Clear the goal" },
 		{ value: "edit", label: "edit", description: "Edit the current objective" },
 		{ value: "pause", label: "pause", description: "Pause auto-continuation" },

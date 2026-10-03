@@ -2,7 +2,7 @@
  * [WHO]: planExtension - registers /plan command, EnterPlanMode/ExitPlanMode tools, plan mode state management, permission gating, and workflow prompt injection
  * [FROM]: Depends on core/extensions-host/types, ./types, ./plan-file-manager, ./plan-permissions, ./plan-workflow-prompt, ./enter-plan-mode-tool, ./exit-plan-mode-tool, ./plan-agents
  * [TO]: Auto-loaded by builtin-extensions.ts as a default extension
- * [HERE]: extensions/builtin/plan/index.ts - main plan mode extension entry point
+ * [HERE]: extensions/builtin/plan/index.ts - plan mode entry, owner snapshot and constrained remote command contract
  */
 
 import type {
@@ -169,6 +169,10 @@ function displayPlan(api: ExtensionAPI, ctx: ExtensionCommandContext): void {
 // ============================================================================
 
 export default async function planExtension(api: ExtensionAPI) {
+	api.supervision?.registerSnapshot("plan", ctx => ({
+		mode: getSessionState(api, ctx).state.mode,
+		path: getPlanFilePath(api.events), content: getPlan(api.events),
+	}));
 	// =========================================================================
 	// Register tools
 	// =========================================================================
@@ -279,6 +283,7 @@ export default async function planExtension(api: ExtensionAPI) {
 	};
 
 	api.registerCommand("plan:validate", {
+		supervision: { usage: "/plan:validate", busyUsage: "/plan:validate", effect: "Validate the current plan structure without approving execution.", allowBusy: () => true },
 		description: "Validate the current plan structure",
 		handler: handlePlanValidateCommand,
 	});
@@ -358,6 +363,11 @@ export default async function planExtension(api: ExtensionAPI) {
 	});
 
 	api.registerCommand("plan", {
+		supervision: {
+			usage: "/plan [task description] | exit (request approval); current plan is available in the snapshot",
+			effect: "Enter read-only planning, inspect the plan, or request standard execution approval. Remote approval never enables elevated permissions.",
+			validate: args => { if (/^(open|approve)(\s|$)/.test(args.trim())) throw new Error("Use plan snapshots and decision requests; local editor/team approval is not remotely supported"); },
+		},
 		description: "Plan, edit, validate, approve, or exit the current session plan",
 		getArgumentCompletions: getPlanArgumentCompletions,
 		handler: async (args: string, ctx: ExtensionCommandContext) => {

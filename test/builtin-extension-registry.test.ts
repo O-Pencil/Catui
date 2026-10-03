@@ -35,11 +35,11 @@ const BASELINE_LOAD_ORDER = [
 	"catpaw", "humanizer", "catail", "evolution",
 ];
 
-test("default load order is unchanged from the S01 baseline", () => {
+test("main's session bridge precedes the unchanged S01 baseline load order", () => {
 	const previous = process.env.CATUI_ENABLE_BROWSER_EXTENSION;
 	try {
 		delete process.env.CATUI_ENABLE_BROWSER_EXTENSION;
-		assert.deepEqual(loadedIds(), BASELINE_LOAD_ORDER);
+		assert.deepEqual(loadedIds(), ["session-bridge", ...BASELINE_LOAD_ORDER]);
 	} finally {
 		if (previous === undefined) delete process.env.CATUI_ENABLE_BROWSER_EXTENSION;
 		else process.env.CATUI_ENABLE_BROWSER_EXTENSION = previous;

@@ -1,5 +1,5 @@
 /**
- * [WHO]: createExitPlanModeTool()
+ * [WHO]: createExitPlanModeTool(), local or delegated standard approval with stale-plan rejection
  * [FROM]: Depends on @sinclair/typebox, core/extensions-host/types, ./types, ./plan-permissions, ./plan-workflow-prompt, ./plan-file-manager, ./plan-validation, ./teammate-approval
  * [TO]: Consumed by plan extension index.ts
  * [HERE]: extensions/builtin/plan/exit-plan-mode-tool.ts - ExitPlanMode tool for model-requested plan approval
@@ -242,28 +242,35 @@ export function createExitPlanModeTool(
 				? `\nRequested permissions:\n${allowedPrompts.map((p) => `  - ${p.tool}: ${p.prompt}`).join("\n")}\n`
 				: "";
 
+			const supervised = api.supervision?.active === true;
+			const approvalSessionId = supervised ? ctx.sessionManager.getSessionId() : undefined;
 			const choice = await ctx.ui.select(
 				[
 					"Plan ready for review:",
 					`Plan file: ${planFilePath}`,
 					"",
-					preview,
-					plan && plan.length > 1200 ? "\n...(truncated)" : "",
+					supervised ? plan || "No plan content was written." : preview,
+					!supervised && plan && plan.length > 1200 ? "\n...(truncated)" : "",
 					allowedPromptsBlock,
 					"Choose next action:",
 				].join("\n"),
-				[
+				supervised ? ["Execute plan (standard)", "Keep planning", "Reject plan"] : [
 					"Execute plan (standard)",
 					"Execute plan (elevated mode)",
 					"Execute plan (clear context + elevated)",
 					"Keep planning",
 					"Reject plan",
 				],
+				{ delegatable: true, signal: _signal },
 			);
+			if (choice === undefined) throw new Error("Plan decision cancelled; no approval granted.");
+			if (supervised && (!api.supervision?.active || ctx.sessionManager.getSessionId() !== approvalSessionId || sessionState.state.mode !== "plan" || getPlan(api.events) !== (inputPlan ?? filePlan))) {
+				throw new Error("Plan changed while awaiting review; request approval again.");
+			}
 
 			// Handle "Keep planning" — reject, stay in plan mode
 			if (choice === "Keep planning") {
-				ctx.abort();
+				if (!supervised) ctx.abort();
 				throw new Error(
 					"User chose to keep planning. Stay in plan mode, revise the plan file, and call ExitPlanMode again when ready.",
 				);
@@ -271,7 +278,7 @@ export function createExitPlanModeTool(
 
 			// Handle "Reject plan" — reject with feedback
 			if (choice === "Reject plan") {
-				ctx.abort();
+				if (!supervised) ctx.abort();
 				throw new Error(
 					"User rejected the plan. Stay in plan mode and revise the plan based on user feedback.",
 				);
