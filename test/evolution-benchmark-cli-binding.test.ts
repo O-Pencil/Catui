@@ -33,7 +33,22 @@ function input(artifactId: string): EvolutionCandidateInput {
 			kind: "skill_manifest",
 			id: artifactId,
 			title: "Seeded",
-			content: "A procedure.",
+			// A compliant body: the CLI binding under test is the report, not the skill text.
+			// Derived from the id: these tests put several candidates in one scope, and a shared
+			// body under different ids is byte-identical duplicate content, which the store refuses.
+			content: [
+				"## Prerequisites",
+				"The matching task is already identified.",
+				"",
+				"## Steps",
+				`Work the matching task, per ${artifactId}.`,
+				"",
+				"## Pitfalls",
+				"Do not widen this to unrelated tasks.",
+				"",
+				"## Verification",
+				"Confirm the matching task's own success signal.",
+			].join("\n"),
 			applicability: "Matching task.",
 			nonApplicability: "Unrelated task.",
 		}],

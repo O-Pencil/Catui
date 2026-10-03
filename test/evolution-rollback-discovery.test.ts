@@ -41,12 +41,28 @@ function currentRevisionId(scopeRoot: string): string {
 	return JSON.parse(readFileSync(join(scopeRoot, "current.json"), "utf8")).revisionId;
 }
 
-function artifact(id: string, content: string): EvolutionArtifact {
+/**
+ * `label` is what these rollback tests distinguish skills by; the body only has to be a compliant
+ * skill, so it is built here rather than repeated at every call site.
+ */
+function artifact(id: string, label: string): EvolutionArtifact {
 	return {
 		kind: "skill_manifest",
 		id,
 		title: `Skill ${id}`,
-		content,
+		content: [
+			"## Prerequisites",
+			"The matching task is already identified.",
+			"",
+			"## Steps",
+			label,
+			"",
+			"## Pitfalls",
+			"Do not widen this to unrelated tasks.",
+			"",
+			"## Verification",
+			"Confirm the matching task's own success signal.",
+		].join("\n"),
 		applicability: "When the matching task appears.",
 		nonApplicability: "Not for unrelated tasks.",
 	};

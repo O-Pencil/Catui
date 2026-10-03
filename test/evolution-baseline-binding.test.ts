@@ -93,14 +93,37 @@ function gateFor(candidate: EvolutionCandidate): EvolutionGateReport {
 	};
 }
 
-const SKILL_ARTIFACT = {
-	kind: "skill_manifest",
-	id: "evolved:skill_manifest:captured-baseline",
-	title: "Captured baseline",
-	content: "A reusable procedure that a real refiner run proposed.",
-	applicability: "When the matching task appears.",
-	nonApplicability: "Not for unrelated tasks.",
-} as const;
+/**
+ * The body is derived from the id, not shared. These tests are about baseline capture, and they
+ * need several candidates in one scope; a single shared body under different ids is byte-identical
+ * duplicate content, which the store now refuses on purpose.
+ */
+function skillArtifact(id: string) {
+	return {
+		kind: "skill_manifest" as const,
+		id,
+		title: `Skill ${id}`,
+		// Skill bodies must carry all four sections. These tests are about baseline capture, so the
+		// body is a compliant placeholder rather than the old one-line summary.
+		content: [
+			"## Prerequisites",
+			"The matching task is already identified.",
+			"",
+			"## Steps",
+			`Work the matching task, per ${id}.`,
+			"",
+			"## Pitfalls",
+			"Do not widen this to unrelated tasks.",
+			"",
+			"## Verification",
+			"Confirm the matching task's own success signal.",
+		].join("\n"),
+		applicability: "When the matching task appears.",
+		nonApplicability: "Not for unrelated tasks.",
+	};
+}
+
+const SKILL_ARTIFACT = skillArtifact("evolved:skill_manifest:captured-baseline");
 
 /** A refiner call whose model output is fully controlled, including fields it tries to set. */
 function refinerContext(modelJson: unknown): ExtensionCommandContext {
@@ -113,7 +136,7 @@ function refinerContext(modelJson: unknown): ExtensionCommandContext {
 }
 
 function modelProposal(extra: Record<string, unknown> = {}): unknown {
-	return { artifacts: [SKILL_ARTIFACT], predictions: [], ...extra };
+	return { artifacts: [skillArtifact("evolved:skill_manifest:captured-baseline")], predictions: [], ...extra };
 }
 
 function withRoot(run: (scopeRoot: string) => void | Promise<void>): Promise<void> {
@@ -133,7 +156,7 @@ function directInput(artifactId = "evolved:skill_manifest:direct-seed"): Evoluti
 		summary: "seed a revision",
 		rationale: "measured improvement",
 		expectedOutcome: "held-out success improves",
-		artifacts: [{ ...SKILL_ARTIFACT, id: artifactId }],
+		artifacts: [skillArtifact(artifactId)],
 	};
 }
 
@@ -162,7 +185,7 @@ test("the refiner cannot choose the baseline; the store captures it", async () =
 		const input = await planEvolutionCandidate(
 			refinerContext(modelProposal({
 				baselineRevisionId: "revision-the-model-invented",
-				artifacts: [{ ...SKILL_ARTIFACT, baselineRevisionId: "revision-the-model-invented" }],
+				artifacts: [{ ...skillArtifact("evolved:skill_manifest:captured-baseline"), baselineRevisionId: "revision-the-model-invented" }],
 			})),
 			"workspace",
 			"propose a refinement",

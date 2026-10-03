@@ -1,6 +1,6 @@
 /**
- * [WHO]: LLM proposal prompt, JSON extraction, and candidate input normalization for /refine
- * [FROM]: Depends on extension context completion APIs and local evolution contracts
+ * [WHO]: Existing-scope artifact inventory, LLM proposal prompt, JSON extraction, and candidate input normalization for /refine
+ * [FROM]: Depends on extension context completion APIs, evolution-store for the target scope root, and local evolution contracts
  * [TO]: Consumed by optional evolution extension command handler
  * [HERE]: extensions/optional/evolution/evolution-refiner.ts - untrusted model output boundary
  */
@@ -8,6 +8,7 @@
 import type { ExtensionCommandContext } from "../../../core/extensions-host/types.js";
 import type { SessionEntry } from "../../../core/session/session-manager.js";
 import { redactEvolutionEvidence } from "./prompts.js";
+import { getEvolutionScopeRoot, loadActiveEvolutionArtifacts } from "./evolution-store.js";
 import type { EvolutionArtifact, EvolutionArtifactKind, EvolutionCandidateInput, EvolutionPredictionDirection, EvolutionScope } from "./evolution-types.js";
 
 const REFINER_SYSTEM_PROMPT = `You are Catui's controlled self-evolution proposal writer.
@@ -16,12 +17,19 @@ Create small, evidence-backed declarative harness improvements from the current 
 Allowed artifact kinds:
 - prompt_note: supplemental behavior note, never the base system prompt.
 - memory: durable fact, preference, failure, decision, or outcome.
-- skill_manifest: non-executable reusable procedure description only.
+- skill_manifest: non-executable reusable procedure description only. Its body must carry four
+  markdown headings, "## Prerequisites", "## Steps", "## Pitfalls", and "## Verification", and it
+  must set applicability (what triggers it) and nonApplicability (where it does not apply). A body
+  missing any of them is rejected at the store before it can become active.
 - subagent_spec: non-executable delegation role description only.
 - tool_spec: non-executable capability description only.
 
 Never propose source patches, JavaScript, TypeScript, Python, shell commands, package installs, MCP server commands, network endpoints, credentials, or permission escalation.
 IDs must be namespaced as evolved:<kind>:<stable-slug>.
+
+If the change refines a skill already listed as active at this scope, set
+"overrides": { "skillId": "<that id>" } on it. That updates the existing skill in place instead of
+adding a near-duplicate beside it. Leave "overrides" off when the artifact is genuinely new.
 
 Return JSON only:
 {
@@ -46,6 +54,7 @@ Return JSON only:
       "applicability": "when to use",
       "nonApplicability": "when not to use",
       "tokenBudget": 80,
+      "overrides": { "skillId": "evolved:skill_manifest:the-id-being-improved" },
       "metadata": {}
     }
   ]
@@ -82,6 +91,60 @@ function sessionExcerpt(entries: readonly SessionEntry[]): string {
 		.slice(-40)
 		.join("\n\n")
 		.slice(-24_000);
+}
+
+/**
+ * Active artifacts already live at this scope, listed so the refiner updates one instead of
+ * emitting a near-duplicate under a fresh id. Titles and ids only: the full body of a live skill
+ * is not the refiner's to restate, and the model is about to author a competing version of it.
+ *
+ * Bounded because this is prompt text on every refine call. A large library degrades the
+ * instruction it sits inside, which is the opposite of the intent.
+ */
+const MAX_EXISTING_ARTIFACTS_LISTED = 40;
+
+function existingArtifactInventory(ctx: ExtensionCommandContext, scope: EvolutionScope): string {
+	// Mirrors the selector the command handler builds, so the refiner reads the same scope root
+	// the candidate will be written to. Reusing that rule keeps the two from drifting.
+	const scopeRoot = getEvolutionScopeRoot(
+		ctx.agentDir,
+		scope === "global"
+			? { scope }
+			: scope === "workspace"
+				? { scope, cwd: ctx.cwd }
+				: { scope, sessionId: ctx.sessionManager.getSessionId() },
+	);
+	let active: EvolutionArtifact[];
+	try {
+		active = loadActiveEvolutionArtifacts(scopeRoot);
+	} catch {
+		// A missing or unreadable revision must not block a proposal; the refiner simply has no
+		// inventory and behaves exactly as it did before this lookup existed.
+		return "";
+	}
+	if (active.length === 0) return "";
+	const listed = active.slice(0, MAX_EXISTING_ARTIFACTS_LISTED);
+	const lines = listed.map((artifact) => `- ${artifact.id} (${artifact.kind}): ${artifact.title}`);
+	const overflow = active.length - listed.length;
+	return [
+		"Already active at this scope. Reuse one of these ids when your change refines existing work;",
+		"propose a new id only when nothing above covers it.",
+		...lines,
+		...(overflow > 0 ? [`- ...and ${overflow} more not listed.`] : []),
+	].join("\n");
+}
+
+/**
+ * The model is asked for `"overrides": { "skillId": "..." }`, but an untrusted payload can put a
+ * string or a nested object there. The store rejects anything malformed; normalizing here keeps
+ * the rejection message about the real problem instead of a type mismatch.
+ */
+function normalizeOverrides(value: Record<string, unknown>): { overrides?: { skillId: string } } {
+	const raw = value.overrides;
+	if (typeof raw === "string") return raw.trim() ? { overrides: { skillId: raw } } : {};
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
+	const skillId = (raw as Record<string, unknown>).skillId;
+	return typeof skillId === "string" && skillId.trim() ? { overrides: { skillId } } : {};
 }
 
 function extractJson(text: string): unknown {
@@ -121,6 +184,7 @@ function normalizeArtifact(value: unknown): EvolutionArtifact | undefined {
 		...(typeof record.metadata === "object" && record.metadata !== null && !Array.isArray(record.metadata)
 			? { metadata: record.metadata as Record<string, unknown> }
 			: {}),
+		...normalizeOverrides(record),
 	};
 }
 
@@ -129,11 +193,15 @@ export async function planEvolutionCandidate(
 	scope: EvolutionScope,
 	instructions: string,
 ): Promise<EvolutionCandidateInput> {
+	// The inventory is built first but joined inside the redacted block below, so a persisted id
+	// or title carrying a secret or private path is scrubbed on the same path as session text.
+	const inventory = existingArtifactInventory(ctx, scope);
 	// Session text is untrusted data that may contain credentials or private paths. Redact before
 	// it leaves the process, not after the model has already seen it.
 	const userMessage = redactEvolutionEvidence(
 		[
 			instructions ? `User refinement instructions:\n${instructions}` : "User refinement instructions: propose the smallest useful reusable harness update.",
+			...(inventory ? ["", inventory] : []),
 			"",
 			"Recent session trajectory:",
 			sessionExcerpt(ctx.sessionManager.getEntries()),
