@@ -1,6 +1,6 @@
 /**
  * [WHO]: Existing-scope artifact inventory, LLM proposal prompt, JSON extraction, and candidate input normalization for /refine
- * [FROM]: Depends on extension context completion APIs, evolution-store for the target scope root and its rejected candidates, and local evolution contracts
+ * [FROM]: Depends on extension context completion APIs, evolution-budget for the pre-call reservation, evolution-store for the target scope root and its rejected candidates, and local evolution contracts
  * [TO]: Consumed by optional evolution extension command handler
  * [HERE]: extensions/optional/evolution/evolution-refiner.ts - untrusted model output boundary
  */
@@ -8,6 +8,7 @@
 import type { ExtensionCommandContext } from "../../../core/extensions-host/types.js";
 import type { SessionEntry } from "../../../core/session/session-manager.js";
 import { redactEvolutionEvidence } from "./prompts.js";
+import { reserveEvolutionModelCall } from "./evolution-budget.js";
 import { getEvolutionScopeRoot, listRejectedCandidates, loadActiveEvolutionArtifacts } from "./evolution-store.js";
 import type { EvolutionArtifact, EvolutionArtifactKind, EvolutionCandidate, EvolutionCandidateInput, EvolutionPredictionDirection, EvolutionScope } from "./evolution-types.js";
 
@@ -263,6 +264,12 @@ export async function planEvolutionCandidate(
 		].join("\n"),
 		[ctx.cwd, ctx.agentDir],
 	);
+	// Reserved immediately before the call, and only here: this is the one place in the extension
+	// that reaches a model, so it is the one place a budget has to be enforced to be a budget.
+	// A refusal throws before `completeSimple` is touched, which is what makes "budget exhausted"
+	// mean zero calls rather than "one call then a complaint".
+	const reservation = reserveEvolutionModelCall(ctx.agentDir);
+	if (!reservation.reserved) throw new Error(reservation.message);
 	const response = await ctx.completeSimple(REFINER_SYSTEM_PROMPT, userMessage);
 	if (!response) throw new Error("Refine unavailable: no model response. Check the selected model and API key.");
 	const parsed = extractJson(response);

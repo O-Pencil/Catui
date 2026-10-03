@@ -133,7 +133,7 @@ separately by a test that fails without the fix.
 | S10.1 isolated/sequential/interleaved streams | `BUILTIN_HARNESS_EVAL_MANIFEST` `core/harness-eval/scenarios.ts:31` has no streams; only reachable via a hand-written manifest | `evolution-extension.test.ts:1054` | partial |
 | S10.2 reuse existing observer and budget | the observer exists (`evolution-auto.ts`) and is default-inert; the budget mechanism still exists only on the source side (`automation.ts`, no live importer) | `test/evolution-default-off.test.ts` (11 cases) | **partial** — the behavioral path reuses the observer with no model call and no disk write; the budget is still source-side only |
 | S10.3 require new evidence since last attempt | no evidence cursor in the behavioral scope | none | missing |
-| S10.4 reserve budget before calling a model | no reservation on the live path | none | missing |
+| S10.4 reserve budget before calling a model | `evolution-budget.ts` reserves against a daily owner-only ledger under the existing evolution root, immediately before the extension's only `completeSimple` | `test/evolution-model-budget.test.ts` (13 cases) | **implemented** — exhausted means zero model calls |
 
 **Store-validation compatibility change, and why the rule is write-only.** S06.6 adds a
 structural requirement to `skill_manifest` bodies. The first implementation put the check inside

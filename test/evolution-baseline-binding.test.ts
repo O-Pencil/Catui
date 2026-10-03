@@ -38,8 +38,6 @@ import type {
 } from "../extensions/optional/evolution/evolution-types.js";
 import type { ExtensionCommandContext } from "../core/extensions-host/types.js";
 
-const AGENT_DIR = "/tmp/catui-evo-baseline-agent";
-const CWD = "/tmp/catui-evo-baseline-cwd";
 
 function runs(role: "baseline" | "candidate"): EvolutionBenchmarkRunV1[] {
 	return Array.from({ length: 40 }, (_, task) => Array.from({ length: 3 }, (_, repetition) => {
@@ -127,10 +125,14 @@ function skillArtifact(id: string) {
 const SKILL_ARTIFACT = skillArtifact("evolved:skill_manifest:captured-baseline");
 
 /** A refiner call whose model output is fully controlled, including fields it tries to set. */
-function refinerContext(modelJson: unknown): ExtensionCommandContext {
+/**
+ * A distinct agent directory per test, because the refiner reserves against a daily model-call
+ * budget. One shared directory made later tests depend on how many calls the earlier ones spent.
+ */
+function refinerContext(modelJson: unknown, dirs: { cwd: string; agentDir: string }): ExtensionCommandContext {
 	return {
-		cwd: CWD,
-		agentDir: AGENT_DIR,
+		cwd: dirs.cwd,
+		agentDir: dirs.agentDir,
 		// getSessionId is required once the refiner resolves a session-scope root, which it now does
 		// for every scope, not just the ones that happen to need a session.
 		sessionManager: { getEntries: () => [], getSessionId: () => "baseline-test" },
@@ -142,12 +144,13 @@ function modelProposal(extra: Record<string, unknown> = {}): unknown {
 	return { artifacts: [skillArtifact("evolved:skill_manifest:captured-baseline")], predictions: [], ...extra };
 }
 
-function withRoot(run: (scopeRoot: string) => void | Promise<void>): Promise<void> {
+function withRoot(run: (scopeRoot: string, dirs: { cwd: string; agentDir: string }) => void | Promise<void>): Promise<void> {
 	// A real scope root, not a bare directory: the store now derives the scope from the root it is
 	// given and refuses a candidate whose declared scope disagrees with it.
 	const root = mkdtempSync(join(tmpdir(), "catui-evo-baseline-"));
-	const scopeRoot = getEvolutionScopeRoot(join(root, "agent"), { scope: "session", sessionId: "baseline-test" });
-	return Promise.resolve(run(scopeRoot)).finally(() => rmSync(root, { recursive: true, force: true }));
+	const dirs = { cwd: join(root, "work"), agentDir: join(root, "agent") };
+	const scopeRoot = getEvolutionScopeRoot(dirs.agentDir, { scope: "session", sessionId: "baseline-test" });
+	return Promise.resolve(run(scopeRoot, dirs)).finally(() => rmSync(root, { recursive: true, force: true }));
 }
 
 function candidateById(scopeRoot: string, candidateId: string): EvolutionCandidate {
@@ -183,7 +186,7 @@ test("the store captures a null baseline for a first candidate, from state not f
 });
 
 test("the refiner cannot choose the baseline; the store captures it", async () => {
-	await withRoot(async (scopeRoot) => {
+	await withRoot(async (scopeRoot, dirs) => {
 		const seed = createEvolutionCandidate(scopeRoot, directInput());
 		const r1 = promoteEvolutionCandidate(scopeRoot, seed.id, { approvedBy: "test", gateReport: gateFor(seed) }).id;
 
@@ -192,7 +195,7 @@ test("the refiner cannot choose the baseline; the store captures it", async () =
 			refinerContext(modelProposal({
 				baselineRevisionId: "revision-the-model-invented",
 				artifacts: [{ ...skillArtifact("evolved:skill_manifest:captured-baseline"), baselineRevisionId: "revision-the-model-invented" }],
-			})),
+			}), dirs),
 			// The scope the refiner is asked for must match the root the candidate is written to.
 			"session",
 			"propose a refinement",
@@ -324,11 +327,11 @@ test("a legacy record with nothing active can still promote", async () => {
 });
 
 test("the refiner -> store -> promotion chain works end to end with a captured baseline", async () => {
-	await withRoot(async (scopeRoot) => {
+	await withRoot(async (scopeRoot, dirs) => {
 		const seed = createEvolutionCandidate(scopeRoot, directInput());
 		const r1 = promoteEvolutionCandidate(scopeRoot, seed.id, { approvedBy: "test", gateReport: gateFor(seed) }).id;
 
-		const input = await planEvolutionCandidate(refinerContext(modelProposal()), "session", "propose a refinement");
+		const input = await planEvolutionCandidate(refinerContext(modelProposal(), dirs), "session", "propose a refinement");
 		const candidate = createEvolutionCandidate(scopeRoot, input);
 		assert.equal(candidate.baselineRevisionId, r1, "baseline captured from the live scope");
 
