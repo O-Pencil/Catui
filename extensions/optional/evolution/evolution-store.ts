@@ -1,5 +1,5 @@
 /**
- * [WHO]: Evolution ledger path resolution, candidate/revision validation, skill_manifest body structure enforcement, the refinement change budget, the shared artifact hash, and behavioral prose dedup, no-IO executable DSL manifests, usage records, prediction manifests, post-hoc attribution, eval_fixture dedupe/retention, gated promotion, quarantine, rollback, and conservative auto-rollback
+ * [WHO]: Evolution ledger path resolution, candidate/revision validation, rejected-candidate listing, skill_manifest body structure enforcement, the refinement change budget, the shared artifact hash, and behavioral prose dedup, no-IO executable DSL manifests, usage records, prediction manifests, post-hoc attribution, eval_fixture dedupe/retention, gated promotion, quarantine, rollback, and conservative auto-rollback
  * [FROM]: Depends on node fs/path/crypto for owner-only runtime state below agentDir/evolution/v1
  * [TO]: Consumed by optional evolution extension command handlers and tests
  * [HERE]: extensions/optional/evolution/evolution-store.ts - durable store for controlled self-evolution
@@ -818,26 +818,32 @@ function comparableRecords(scopeRoot: string): { label: string; artifacts: reado
 function assertNoDuplicateProseArtifact(scopeRoot: string, input: EvolutionCandidateInput): void {
 	const incoming = proseArtifacts(input.artifacts);
 	if (incoming.length === 0) return;
-	// An artifact that declares `overrides` is stating which existing entry it supersedes, so it is
-	// an update even when its body is unchanged from that entry — a rename, in other words. Judging
-	// it by content alone would refuse the very move S07.2 added.
-	const incomingIds = new Set(incoming.map((artifact) => artifact.id));
-	const byContent = new Map<string, EvolutionArtifact>();
+	const found: string[] = [];
+	// Compared pairwise in both directions. A batch-wide exemption is the hole: carrying one skill
+	// forward puts its id in the incoming set, and that then excused every *other* stored artifact,
+	// so a fresh copy arriving in the same batch went unnoticed. Only `a.id === b.id` may skip a
+	// pair, and only for that one pair.
+	//
+	// Within the candidate first, because a copy can arrive with nothing in the store to collide
+	// with: a fresh scope has no records, so the ledger check alone would find nothing.
 	for (const artifact of incoming) {
 		if (artifact.overrides) continue;
-		byContent.set(sha256(artifact.content), artifact);
-	}
-	for (const record of comparableRecords(scopeRoot)) {
-		for (const artifact of proseArtifacts(record.artifacts)) {
-			// Promotion replaces the active set, so updating one skill means listing its untouched
-			// neighbors too, and those arrive byte-identical. A same-id artifact is that carried
-			// entry or an update, never a copy. Only content arriving under a *new* id is a
-			// duplicate, which is exactly the near-copy this exists to refuse.
-			if (incomingIds.has(artifact.id)) continue;
-			const clash = byContent.get(sha256(artifact.content));
-			if (clash) throw new Error(`Duplicate ${clash.kind} content already exists in ${record.label} as ${artifact.id}`);
+		for (const other of incoming) {
+			if (other.id === artifact.id) continue;
+			if (artifact.content === other.content) {
+				found.push(`Duplicate ${artifact.kind} content in one candidate: ${artifact.id} and ${other.id} carry identical content`);
+			}
+		}
+		for (const record of comparableRecords(scopeRoot)) {
+			for (const existing of proseArtifacts(record.artifacts)) {
+				if (existing.id === artifact.id) continue;
+				if (artifact.content === existing.content) {
+					found.push(`Duplicate ${artifact.kind} content already exists in ${record.label} as ${existing.id}`);
+				}
+			}
 		}
 	}
+	if (found.length > 0) throw new Error(found[0]!);
 }
 
 /**
@@ -853,28 +859,30 @@ function assertNoDuplicateProseArtifact(scopeRoot: string, input: EvolutionCandi
  * fire on the honest path every time.
  */
 function nearDuplicateProseWarnings(scopeRoot: string, input: EvolutionCandidateInput): string[] {
+	const incoming = proseArtifacts(input.artifacts);
+	if (incoming.length === 0) return [];
 	const warnings: string[] = [];
-	const incoming = new Map<string, EvolutionArtifact>();
-	const incomingIds = new Set<string>();
-	for (const artifact of proseArtifacts(input.artifacts)) {
-		if (artifact.overrides) continue;
-		incomingIds.add(artifact.id);
-		incoming.set(sha256(normalizedProse(artifact.content)), artifact);
-	}
-	if (incoming.size === 0) return warnings;
-	// A promoted candidate and the revision it produced both hold the same artifact, so the pair is
-	// reported once rather than once per record that happens to carry it.
+	// Reported once per (incoming, existing) pair, and pairwise for the same reason the refusal is:
+	// a batch-wide id set would let a carried-forward skill hide a second near-copy beside it.
 	const reported = new Set<string>();
-	for (const record of comparableRecords(scopeRoot)) {
-		for (const artifact of proseArtifacts(record.artifacts)) {
-			// A same-id artifact is an update of the record it collides with, not a copy of it.
-			if (incomingIds.has(artifact.id)) continue;
-			const near = incoming.get(sha256(normalizedProse(artifact.content)));
-			if (!near) continue;
-			const key = `${near.id} -> ${artifact.id}`;
-			if (reported.has(key)) continue;
-			reported.add(key);
-			warnings.push(`${near.id} says the same thing as ${artifact.id} in ${record.label}, differing only in wording`);
+	const compare = (artifact: EvolutionArtifact, other: EvolutionArtifact, label: string): void => {
+		// A same-id artifact is an update of what it collides with, not a copy, and an artifact
+		// declaring `overrides` has said which entry it supersedes.
+		if (artifact.overrides) return;
+		if (other.id === artifact.id) return;
+		// Keyed on the unordered pair: comparing both directions would report the same single fact
+		// twice, and a reviewer reading two lines about one collision would rightly distrust both.
+		const [first, second] = [artifact.id, other.id].sort();
+		const key = `${first}\u0000${second}`;
+		if (reported.has(key)) return;
+		if (sha256(normalizedProse(artifact.content)) !== sha256(normalizedProse(other.content))) return;
+		reported.add(key);
+		warnings.push(`${first} and ${second} say the same thing in ${label}, differing only in wording`);
+	};
+	for (const artifact of incoming) {
+		for (const other of incoming) compare(artifact, other, "this candidate");
+		for (const record of comparableRecords(scopeRoot)) {
+			for (const existing of proseArtifacts(record.artifacts)) compare(artifact, existing, record.label);
 		}
 	}
 	return warnings;
@@ -1392,6 +1400,21 @@ export function recordEvolutionAttributionAndMaybeRollback(
 		rollbackBy: rollback.activatedBy,
 	});
 	return { attribution, rollback };
+}
+
+/**
+ * Rejected candidates at this scope, most recently rejected first.
+ *
+ * Read for the refiner's history block, so it deliberately returns the whole record rather than a
+ * pre-shaped summary: what counts as untrusted is decided at the point where the text becomes
+ * prompt, not here. Rejected records are excluded from duplicate detection for the same reason they
+ * are included here — a proposal that failed once is still allowed to be made again, because the
+ * conditions that failed it may no longer hold.
+ */
+export function listRejectedCandidates(scopeRoot: string): EvolutionCandidate[] {
+	return listJsonRecords<EvolutionCandidate>(join(scopeRoot, "candidates"), "proposal.json")
+		.filter((candidate) => candidate.status === "rejected")
+		.sort((a, b) => (b.rejectedAt ?? "").localeCompare(a.rejectedAt ?? ""));
 }
 
 export function rejectEvolutionCandidate(

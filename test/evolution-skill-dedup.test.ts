@@ -20,10 +20,13 @@ import { join } from "node:path";
 import {
 	createEvolutionCandidate,
 	getEvolutionScopeRoot,
+	inspectEvolution,
 	loadActiveEvolutionArtifacts,
+	loadCurrentEvolution,
 	promoteEvolutionCandidate,
 	validateEvolutionCandidateInput,
 } from "../extensions/optional/evolution/evolution-store.js";
+import { planEvolutionCandidate } from "../extensions/optional/evolution/evolution-refiner.js";
 import { compareEvolutionBenchmarks, DEFAULT_EVOLUTION_BENCHMARK_POLICY } from "../extensions/optional/evolution/benchmark-comparison.js";
 import type { EvolutionBenchmarkRunV1, EvolutionBenchmarkSnapshotV1 } from "../extensions/optional/evolution/benchmark-types.js";
 import type { EvolutionArtifact, EvolutionCandidate, EvolutionCandidateInput, EvolutionGateReport } from "../extensions/optional/evolution/evolution-types.js";
@@ -310,6 +313,98 @@ test("a same-id artifact is an update, never a copy, and is never refused", asyn
 			skill("evolved:skill_manifest:two-renamed", "Two, revised.", { skillId: "evolved:skill_manifest:two" }),
 		]));
 		assert.equal(renamed.status, "proposed", "a declared rename is an update, not a copy");
+	});
+});
+
+test("carrying a skill forward does not excuse a fresh copy arriving beside it", async () => {
+	// Regression from supervisor review. The exemption was a batch-wide set of incoming ids, so
+	// carrying the original forward put its id in that set and it then excused every *other* stored
+	// artifact — which is precisely a copy riding in on the back of a legitimate update.
+	await withScopeRoot((scopeRoot) => {
+		promote(scopeRoot, [note("evolved:prompt_note:old", "Same text.")]);
+
+		assert.throws(
+			() => createEvolutionCandidate(scopeRoot, input([
+				note("evolved:prompt_note:old", "Same text."),
+				note("evolved:prompt_note:new", "Same text."),
+			])),
+			/Duplicate prompt_note content in one candidate/,
+		);
+		// And the copy alone, which the ledger check already caught, is still caught.
+		assert.throws(
+			() => createEvolutionCandidate(scopeRoot, input([note("evolved:prompt_note:new2", "Same text.")])),
+			/Duplicate prompt_note content already exists in/,
+		);
+	});
+});
+
+test("two identical bodies inside one candidate are refused on an empty scope", async () => {
+	// Nothing in the store to collide with, so a ledger-only check finds nothing at all.
+	await withScopeRoot((scopeRoot) => {
+		assert.throws(
+			() => createEvolutionCandidate(scopeRoot, input([
+				note("evolved:prompt_note:one", "Twin."),
+				note("evolved:prompt_note:two", "Twin."),
+			])),
+			/Duplicate prompt_note content in one candidate: evolved:prompt_note:one and evolved:prompt_note:two/,
+		);
+		assert.equal(inspectEvolution(scopeRoot).candidates.length, 0);
+	});
+});
+
+test("a near-duplicate riding along with a carried skill is still reported", async () => {
+	await withScopeRoot((scopeRoot) => {
+		promote(scopeRoot, [note("evolved:prompt_note:old", "Read the output, then quote it.")]);
+
+		const candidate = createEvolutionCandidate(scopeRoot, input([
+			note("evolved:prompt_note:old", "Read the output, then quote it."),
+			note("evolved:prompt_note:reworded", "read the  output,\n\tthen quote it."),
+		]));
+
+		assert.deepEqual(
+			candidate.validation.warnings.filter((warning) => /differing only in wording/.test(warning)),
+			["evolved:prompt_note:old and evolved:prompt_note:reworded say the same thing in this candidate, differing only in wording"],
+			"the carried skill must not hide the reworded copy standing next to it",
+		);
+	});
+});
+
+test("a refused duplicate costs no model call and leaves the active pointer alone", async () => {
+	await withScopeRoot(async (scopeRoot) => {
+		promote(scopeRoot, [note("evolved:prompt_note:kept", "Kept."), note("evolved:prompt_note:other", "Other.")]);
+		const pointerBefore = loadCurrentEvolution(scopeRoot)?.revisionId;
+		const activeBefore = loadActiveEvolutionArtifacts(scopeRoot).map((artifact) => artifact.id);
+
+		// Drive the real refiner, then hand its output to the store exactly as the command does.
+		let modelCalls = 0;
+		let captured = "";
+		const ctx = {
+			agentDir: join(scopeRoot, "..", "agent"),
+			cwd: process.cwd(),
+			sessionManager: { getSessionId: () => SESSION_ID, getEntries: () => [] },
+			completeSimple: async (_system: string, user: string) => {
+				modelCalls += 1;
+				captured = user;
+				return JSON.stringify({
+					summary: "s", rationale: "r", expectedOutcome: "e",
+					artifacts: [
+						{ id: "evolved:prompt_note:kept", kind: "prompt_note", title: "Kept", content: "Kept." },
+						{ id: "evolved:prompt_note:copy", kind: "prompt_note", title: "Copy", content: "Kept." },
+					],
+				});
+			},
+		} as unknown as Parameters<typeof planEvolutionCandidate>[0];
+		const planned = await planEvolutionCandidate(ctx, "session", "refine");
+
+		assert.equal(modelCalls, 1, "the refiner asks the model once");
+		assert.match(captured, /User refinement instructions/, "precondition: the refiner issued its prompt");
+		assert.throws(
+			() => createEvolutionCandidate(scopeRoot, { scope: "session", summary: "s", rationale: "r", expectedOutcome: "e", artifacts: planned.artifacts, evidence: { source: "session" } }),
+			/Duplicate prompt_note content in one candidate/,
+		);
+		assert.equal(modelCalls, 1, "refusal happens at the store boundary, after the single model call");
+		assert.equal(loadCurrentEvolution(scopeRoot)?.revisionId, pointerBefore, "the active pointer must not move");
+		assert.deepEqual(loadActiveEvolutionArtifacts(scopeRoot).map((artifact) => artifact.id), activeBefore);
 	});
 });
 
