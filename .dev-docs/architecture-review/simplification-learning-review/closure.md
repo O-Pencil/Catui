@@ -358,7 +358,23 @@ No public SDK subpath was added or removed. New prompt retrieval/rejection conte
 token neutrality or model effectiveness is not claimed. Explicit refinement now reserves budget
 before its pre-existing model call; the turn observer remains model-free and inert without lessons.
 
-Final aggregate and CI receipts will be filled after the merged branch passes verification.
+### Local final receipt
+
+`npm run verify:full` on `98afe7a` (after integrating main `491b317`) exited 0:
+922 tests, 922 passed, 0 failed/skipped/cancelled. `build` and `build:deps` each executed once.
+DIP passed; quality scanned 778 TypeScript files; static and dist package boundaries passed;
+product and scripts typechecks passed; all contract, artifact, evolution and harness gates passed.
+Full log: `/tmp/catui-closeout-verify-full.log` on the acceptance host (temporary local evidence).
+The subsequent receipt-only commit changes this document, not product code or test configuration.
+
+Independent baseline traversal compared the actual base `3d1cce1:package.json` with current scripts:
+45 baseline test files, 90 current reachable files, zero missing baseline files. Targeted closeout
+checks passed: no-blacklist/legacy/scope/contract 63 tests, registry/bridge integration 39 tests.
+Headless CLI `--version` and `--help` exited 0; manual interactive smoke and provider experiments
+remain unrun. `git diff --check` passed; `.catea/` and `.obsidian/` remain untouched and untracked.
+
+Remote final CI and merge status are verified on PR #23 after pushing the receipt commit;
+historical PR checks are not reused as final evidence.
 
 ## Compatibility, deviations and recovery
 
