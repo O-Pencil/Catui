@@ -1,5 +1,5 @@
 /**
- * [WHO]: Daily reservation ledger for the extension's only model call, refused before the call is made
+ * [WHO]: Daily reservation ledger for the extension's only model call, refused before the call is made and serialized across processes by an exclusive lock
  * [FROM]: Depends on Node fs/path and no model or network access
  * [TO]: Consumed by evolution-refiner, the only caller of completeSimple in this extension
  * [HERE]: extensions/optional/evolution/evolution-budget.ts - reserve-before-call budget guard
@@ -21,7 +21,7 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 export interface EvolutionBudgetPolicy {
@@ -54,7 +54,7 @@ export const DEFAULT_EVOLUTION_BUDGET: Readonly<EvolutionBudgetPolicy> = {
 
 export type BudgetReservation =
 	| { reserved: true; day: string; calls: number; remainingCalls: number }
-	| { reserved: false; reason: "budget_exhausted"; day: string; calls: number; message: string };
+	| { reserved: false; reason: "budget_exhausted" | "budget_locked"; day: string; calls: number; message: string };
 
 /** Under the existing evolution root, beside the other private state. No new directory, no daemon, no timer. */
 function budgetPath(agentDir: string): string {
@@ -108,7 +108,6 @@ function peekState(path: string, now: Date): { state: EvolutionBudgetState; corr
 }
 
 function saveState(path: string, state: EvolutionBudgetState): void {
-	mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
 	// A unique temporary name, not a fixed ".tmp". A fixed name means two processes write the same
 	// scratch file and one of them renames the other's half-written ledger into place.
 	const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
@@ -135,6 +134,87 @@ function quarantineCorruptLedger(path: string): void {
 }
 
 /**
+ * An exclusive lock around the read-modify-write, so the cap is a cap across processes and not
+ * just within one.
+ *
+ * `open(..., "wx")` is the primitive: it creates the file or fails, atomically, which is the one
+ * filesystem operation the platform already guarantees is exclusive. The lock carries a staleness
+ * window because a process that dies inside the critical section would otherwise wedge the budget
+ * permanently — a cap that can be deadlocked away by one crash is not a cap.
+ *
+ * The wait is synchronous because the reservation has to be atomic with respect to the caller's
+ * next `await`, which means it cannot be an async function. `Atomics.wait` on a scratch buffer is
+ * the only synchronous sleep available, and the alternative — a busy spin — would burn a core in
+ * exactly the situation where a process is already struggling.
+ */
+const LOCK_STALE_MS = 5_000;
+const LOCK_ATTEMPTS = 60;
+const LOCK_BACKOFF_MS = 20;
+
+function sleepSync(ms: number): void {
+	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function lockContention(error: unknown): boolean {
+	return (error as NodeJS.ErrnoException)?.code === "EEXIST";
+}
+
+/** A lock older than the staleness window belongs to a process that is not coming back. */
+function lockIsStale(lockPath: string, now: Date): boolean {
+	try {
+		return now.getTime() - statSync(lockPath).mtimeMs > LOCK_STALE_MS;
+	} catch {
+		// Vanished between the failed open and here, which is the same as not held.
+		return true;
+	}
+}
+
+/**
+ * Runs `run` holding the lock, or reports that the lock could not be taken.
+ *
+ * Exhausting the attempts is reported rather than proceeded through: proceeding unlocked is the
+ * exact race this exists to remove, and a budget that is occasionally unenforced is worse than one
+ * that occasionally refuses, because the refusal is visible and the unenforced call is not.
+ */
+function withBudgetLock<T>(path: string, now: Date, run: () => T): { ok: true; value: T } | { ok: false; reason: "lock_unavailable" } {
+	const lockPath = `${path}.lock`;
+	for (let attempt = 0; attempt < LOCK_ATTEMPTS; attempt += 1) {
+		let handle: number | undefined;
+		try {
+			handle = openSync(lockPath, "wx", 0o600);
+		} catch (error) {
+			if (!lockContention(error)) throw error;
+			if (lockIsStale(lockPath, now)) {
+				try {
+					unlinkSync(lockPath);
+				} catch {
+					// Another waiter got there first; the next attempt sees the outcome.
+				}
+				continue;
+			}
+			sleepSync(LOCK_BACKOFF_MS);
+			continue;
+		}
+		try {
+			writeFileSync(handle, `${JSON.stringify({ pid: process.pid, acquiredAt: now.toISOString() })}\n`, { encoding: "utf8" });
+			return { ok: true, value: run() };
+		} finally {
+			try {
+				closeSync(handle);
+			} catch {
+				// Already closed or never opened for writing; the unlink below is what matters.
+			}
+			try {
+				unlinkSync(lockPath);
+			} catch {
+				// Someone broke our stale lock; theirs is the one that will be cleaned up next.
+			}
+		}
+	}
+	return { ok: false, reason: "lock_unavailable" };
+}
+
+/**
  * Reserves one model call, or refuses.
  *
  * Synchronous on purpose: within one process the read and the charge cannot be separated by an
@@ -153,6 +233,26 @@ export function reserveEvolutionModelCall(
 	now: Date = new Date(),
 ): BudgetReservation {
 	const path = budgetPath(agentDir);
+	mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+	const locked = withBudgetLock(path, now, () => settleReservation(path, policy, now));
+	if (!locked.ok) {
+		return {
+			reserved: false,
+			reason: "budget_locked",
+			day: utcDay(now),
+			calls: 0,
+			message: `Evolution budget ledger is held by another process; no model call was made. Try again once it clears.`,
+		};
+	}
+	return locked.value;
+}
+
+/** The whole read-decide-write sequence, which only ever runs while the lock is held. */
+function settleReservation(
+	path: string,
+	policy: Readonly<EvolutionBudgetPolicy>,
+	now: Date,
+): BudgetReservation {
 	const { state, corrupt } = peekState(path, now);
 	if (corrupt) {
 		// The repair lives here rather than in the reader, and the exhausted ledger is written back
