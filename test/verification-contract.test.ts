@@ -12,6 +12,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { orderingViolations, planStageScriptNames } from "./helpers/verification-order.js";
+import { ciNpmRuns, ciRawTestRuns } from "./helpers/verification-ci.js";
 import { join } from "node:path";
 
 const ROOT = process.cwd();
@@ -625,12 +626,11 @@ test("no test file executes more than once in the aggregate flow beyond the know
 	);
 });
 
-/** Every `run: npm run <script>` across all workflows. */
+const WORKFLOW_DIR = join(ROOT, ".github", "workflows");
+
+/** Every `run: npm run <script>` across all workflows, via the shared scanner. */
 function ciScriptRuns(): string[] {
-	const dir = join(ROOT, ".github", "workflows");
-	return readdirSync(dir)
-		.filter((file) => file.endsWith(".yml"))
-		.flatMap((file) => [...readFileSync(join(dir, file), "utf8").matchAll(/run: npm run ([\w:-]+)/g)].map((match) => `npm run ${match[1]}`));
+	return ciNpmRuns(WORKFLOW_DIR).map((run) => run.command);
 }
 
 test("CI runs every required plan command", () => {
@@ -647,10 +647,7 @@ test("CI runs every required plan command", () => {
 
 test("CI does not run tests outside the plan", () => {
 	// A raw `node --test` step in CI is how context-management.test.ts lost its home at base.
-	const dir = join(ROOT, ".github", "workflows");
-	const raw = readdirSync(dir)
-		.filter((file) => file.endsWith(".yml"))
-		.flatMap((file) => [...readFileSync(join(dir, file), "utf8").matchAll(/run: node --test[^\n]*/g)].map((match) => `${file}: ${match[0]}`));
+	const raw = ciRawTestRuns(WORKFLOW_DIR).map((run) => `${run.file}: ${run.line}`);
 	assert.deepEqual(raw, [], "CI must invoke test suites through npm scripts so the plan stays accurate.");
 });
 
