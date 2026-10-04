@@ -54,11 +54,11 @@ AgentSession.prompt() (`core/runtime/agent-session.ts:1117`)
 - tool not being called → tool orchestration at `core/tools/orchestrator.ts`
 
 ## See Also
-[[C2-session-context|C2 Context]] ([C2](C2-session-context.md))
+[[C2-session-context|C2 Context]] (the `C2-session-context.md` page is the next concept you write into your vault, in the same `wiki/concepts/` directory; the wikilink works once you've created it)
 ```
 
 **Backlink convention** (single line that works in both Obsidian's graph and Claude's navigation):
-`[[C2-session-context|C2 Context]] ([C2](C2-session-context.md))`. Neighboring concepts link to each other; Obsidian's graph then grows your "mental map".
+`[[C2-session-context|C2 Context]]` plus the path-style link to the same file inside your vault. The point is "neighboring concepts link to each other"; Obsidian's graph then grows your "mental map" once you've written the C2 page.
 
 **Frontmatter** must include `title/category/sources/created/updated/tags/summary`; `confidence` is self-rated (mark it `low` if you don't fully understand yet — that reminds you to revisit).
 

@@ -1,5 +1,11 @@
 # Catui
 
+[![CI](https://github.com/O-Pencil/Catui/actions/workflows/ci.yml/badge.svg)](https://github.com/O-Pencil/Catui/actions/workflows/ci.yml)
+[![Quality](https://github.com/O-Pencil/Catui/actions/workflows/quality.yml/badge.svg)](https://github.com/O-Pencil/Catui/actions/workflows/quality.yml)
+[![npm version](https://img.shields.io/npm/v/catui-agent.svg)](https://www.npmjs.com/package/catui-agent)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520-339933)](https://nodejs.org/)
+
 ![Catui — Your terminal. Your coding companion.](assets/readme/header.png)
 
 A terminal-first AI coding agent with persistent project memory, selectable personas,

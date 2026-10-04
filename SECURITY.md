@@ -25,7 +25,7 @@ Instead, please report them through one of the following methods:
    - Fill out the vulnerability reporting form
 
 2. **Email** (if GitHub private reporting is unavailable)
-   - Send an email to the maintainers with:
+   - Send an email to `security@o-pencil.org` with:
      - Description of the vulnerability
      - Steps to reproduce
      - Potential impact

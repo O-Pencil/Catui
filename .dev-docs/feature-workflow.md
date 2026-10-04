@@ -35,7 +35,7 @@ This document = turning architecture review from a "one-off refactor handbook" i
 
 | Step | Question | Must-read material | Output |
 |------|----------|--------------------|--------|
-| **1. Feature intake** | What capability is changing? Which layer does it land in? | **§2b Layer-ownership decision** (core), [`target-architecture.md`](./architecture-review/target-architecture.md), the relevant module's P2 `AGENT.md` | One-sentence intent + blast-radius list + **directory placement** |
+| **1. Feature intake** | What capability is changing? Which layer does it land in? | **§2b Layer-ownership decision** (core), the target-state notes (in git history under `architecture-review/target-architecture.md`), the relevant module's P2 `AGENT.md` | One-sentence intent + blast-radius list + **directory placement** |
 | **2. Feasibility & boundary** | Does the current architecture already have an owner? Risk of cross-layer / reverse import / duplicate rules? | Relevant P2/P3, [`evolution/dev-conventions.md`](./architecture-review/evolution/dev-conventions.md), historical review/finding | Placement judgment: **pure move / local edit / hybrid / needs dedicated review** (§3) |
 | **3. Architecture-fit design** | How to implement within existing layers without adding new coupling? | §4 implementation principles | Design draft: owner, ports, dependency direction, compatibility, token / perf impact |
 | **4. Acceptance review** | Does the feature work? Docs in sync? Gates green? | §5 acceptance gates | Verdict: **pass / need more tests / need ADR for trade-off** |
@@ -143,7 +143,7 @@ See per-review subdirectories for the WHY (historical decision files): [runtime-
 | **Package boundary** | Public-package vs internal-library boundary (BR01) | `npm run verify:package-boundary` (`:dist` verifies embedded libs resolve) | [x] static→`quality.yml`; `:dist`→`ci.yml` (post-build) |
 | **Public API** | Compatibility explicit | Symbol diff against `architecture-review/baseline/public-api-symbols-main.txt` | Manual; **don't break by default; intentional API diffs require an intentional-diff declaration (major window)** |
 | **Token / perf** | No silent cost growth | Manual review: LLM call chain / provider laziness / prompt injection neutral? | Manual |
-| **UX smoke** | User paths still usable | Per [`beta-smoke-checklist.md`](./architecture-review/beta-smoke-checklist.md) | Manual, focused on default paths + error fallbacks |
+| **UX smoke** | User paths still usable | Per the smoke checklist (in git history under `architecture-review/beta-smoke-checklist.md`) | Manual, focused on default paths + error fallbacks |
 
 > **All 5 automated gates are wired into CI** (DIP / quality / build / tsc / package-boundary). Manual gates (public API diff / token-perf / UX smoke) are walked per PR review and the smoke checklist as needed.
 
@@ -166,7 +166,7 @@ Walk through this before opening a PR (corresponds to §5):
 
 ## 7. References (sources for the review mindset)
 
-- [`architecture-review/methodology.md`](./architecture-review/methodology.md) — Review vocabulary and cognition layers (Phenomenon / Essence / Philosophy).
-- [`architecture-review/target-architecture.md`](./architecture-review/target-architecture.md) — Target directory + functional-domain mapping.
+- `architecture-review/methodology.md` (git history) — Review vocabulary and cognition layers (Phenomenon / Essence / Philosophy).
+- `architecture-review/target-architecture.md` (git history) — Target directory + functional-domain mapping.
 - [`architecture-review/REFACTOR-LEDGER.md`](./architecture-review/REFACTOR-LEDGER.md) — Refactor-outcome conclusions, found issues, accepted trade-offs, outstanding items (P7 / P8).
 - [`architecture-review/evolution/dev-conventions.md`](./architecture-review/evolution/dev-conventions.md) — Post-refactor development conventions.

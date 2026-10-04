@@ -226,5 +226,12 @@
     "type": "git",
     "url": "git+ssh://git@github.com/O-Pencil/Catui.git"
   },
-  "homepage": "https://github.com/O-Pencil/Catui"
+  "homepage": "https://github.com/O-Pencil/Catui",
+  "bugs": {
+    "url": "https://github.com/O-Pencil/Catui/issues",
+    "email": "security@o-pencil.org"
+  },
+  "funding": {
+    "url": "https://github.com/sponsors/O-Pencil"
+  }
 }

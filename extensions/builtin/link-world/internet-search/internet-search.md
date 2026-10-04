@@ -1,65 +1,67 @@
 ---
 name: internet-search
-description: 当用户需要联网搜索最新信息、新闻、在线内容时使用此技能。包括搜索 Twitter、YouTube、Bilibili、知乎、微博、小红书等平台。
+description: Use this skill when the user needs online search for the latest information, news, or online content. Includes search for Twitter, YouTube, Bilibili, Zhihu, Weibo, XiaoHongShu, and other platforms.
 ---
 
-# 互联网搜索
+# Internet Search
 
-## 触发条件
+## Trigger conditions
 
-当用户请求以下内容时使用此技能：
-- 搜索互联网、联网搜索、网络搜索
-- 查找最新新闻、资讯、信息
-- 搜索 YouTube、Bilibili、Twitter、小红书、微博等内容
-- 查找某个话题的最新讨论
-- 获取实时信息或热点内容
+Use this skill when the user requests any of the following:
 
-## 执行步骤
+- Search the internet / online search / web search
+- Look up the latest news, current information, recent updates
+- Search YouTube, Bilibili, Twitter, XiaoHongShu, Weibo, etc.
+- Find the latest discussion on some topic
+- Get real-time information or trending content
 
-### 步骤 1：检查 agent-reach 是否安装
+## Execution steps
 
-运行以下命令检查 agent-reach 是否可用：
+### Step 1: Check whether agent-reach is installed
+
+Run the following command to check whether agent-reach is available:
 
 ```bash
 agent-reach --version
 ```
 
-### 步骤 2：如果未安装
+### Step 2: If not installed
 
-如果 agent-reach 命令不可用，告知用户需要先安装：
+If the `agent-reach` command is not available, tell the user they need to install it first:
 
-> link-world (agent-reach) 未安装。请先运行 `/link-world` 安装 agent-reach 以支持联网搜索功能。
+> link-world (agent-reach) is not installed. Please run `/link-world` first to install agent-reach so the internet-search feature works.
 
-### 步骤 3：如果已安装
+### Step 3: If installed
 
-根据用户需求，使用 linkworld.md 中定义的工具进行搜索。
+According to the user's request, use the tools defined in `linkworld.md`.
 
-**完整命令参考请查阅：extensions/link-world/linkworld.md**
+**For the full command reference, see: `extensions/builtin/link-world/linkworld.md`**
 
-| 场景 | 推荐工具 | 示例命令 |
-|------|----------|----------|
-| 搜索 Twitter/X 推文 | xreach | `xreach search "关键词" --json` |
-| 解析 YouTube 视频 | yt-dlp | `yt-dlp --dump-json "视频URL"` |
-| 解析 Bilibili 视频 | yt-dlp | `yt-dlp --dump-json "视频URL"` |
-| 搜索 Reddit 帖子 | curl | `curl -s "https://reddit.com/r/xxx/search.json?q=关键词"` |
-| 搜索 GitHub 仓库 | gh | `gh search repos "关键词" --limit 5` |
-| 读取网页内容 | curl + Jina | `curl -s "https://r.jina.ai/网页URL"` |
-| 通用搜索引擎 | Exa (MCP) | `mcporter call 'exa.web_search_exa(query: "关键词", num_results: 5)'` |
-| 搜索小红书笔记 | 小红书 (MCP) | `mcporter call 'xiaohongshu.search_feeds(keyword: "关键词", limit: 5)'` |
-| 解析抖音视频 | 抖音 (MCP) | `mcporter call 'douyin.parse_douyin_video_info(url: "视频URL")'` |
+| Scenario | Recommended tool | Example command |
+|----------|------------------|-----------------|
+| Search Twitter/X tweets | xreach | `xreach search "keyword" --json` |
+| Parse a YouTube video | yt-dlp | `yt-dlp --dump-json "video URL"` |
+| Parse a Bilibili video | yt-dlp | `yt-dlp --dump-json "video URL"` |
+| Search Reddit threads | curl | `curl -s "https://reddit.com/r/xxx/search.json?q=keyword"` |
+| Search GitHub repos | gh | `gh search repos "keyword" --limit 5` |
+| Read web page content | curl + Jina | `curl -s "https://r.jina.ai/page URL"` |
+| General web search | Exa (MCP) | `mcporter call 'exa.web_search_exa(query: "keyword", num_results: 5)'` |
+| Search XiaoHongShu notes | XiaoHongShu (MCP) | `mcporter call 'xiaohongshu.search_feeds(keyword: "keyword", limit: 5)'` |
+| Parse Douyin video | Douyin (MCP) | `mcporter call 'douyin.parse_douyin_video_info(url: "video URL")'` |
 
-### 步骤 4：返回结果
+### Step 4: Return the result
 
-将搜索结果整理后返回给用户，包括：
-- 来源平台
-- 标题
-- 内容摘要
-- 链接
+Organize the search result and return it to the user, including:
 
-## 注意事项
+- Source platform
+- Title
+- Content summary
+- Link
 
-1. 遵守平台的 API 使用规范
-2. 如需登录平台的搜索功能，确保用户已配置认证信息
-3. 如果搜索失败，尝试其他平台或告知用户可能的错误原因
-4. YouTube/Bilibili 需要提供具体的视频 URL，不能直接搜索关键词
-5. 详细的配置说明（Cookie、代理等）请参考 linkworld.md
+## Cautions
+
+1. Follow each platform's API usage rules.
+2. If you need to log in to a platform for search, make sure the user has configured authentication.
+3. If the search fails, try another platform or tell the user the likely cause of the error.
+4. YouTube / Bilibili need a specific video URL — they can't be searched by keyword directly.
+5. For detailed configuration notes (cookies, proxy, etc.), see `linkworld.md`.

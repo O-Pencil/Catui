@@ -9,7 +9,7 @@ purpose: |
   After refactor, verify each "function correct" without comparing implementations. Completeness = acceptance strength (UI01 core risk).
 source_of_truth: modes/interactive/interactive-mode.ts @ 7960 lines (pre-split snapshot)
 legend:
-  owner: prospective controller to extract into (see P5 §status-survey cluster table / gates.md Single-Owner)
+  owner: prospective controller to extract into (see P5 §status-survey cluster table in git history)
   verify: post-refactor confirmation column (⬜ pending / [x] pass / ✗ regression / **Warning:** intentional change — declared)
 ```
 
@@ -250,10 +250,10 @@ Issues:
 
 **Already decided (2026-06-02)**:
 
-- [x] **Per-feature hybrid decision**: don't mark per-row; **inherit the cluster decision** of the owner (see [refactor-plan §pure-move vs rewrite](./refactor-plan.md)).
+- [x] **Per-feature hybrid decision**: don't mark per-row; **inherit the cluster decision** of the owner (see git history).
 - [x] **D render acceptance granularity**: this round uses **coarse functional acceptance**; per-state fine-grained verification deferred to UI04 (see D section).
-- [x] **input-submit as a separate card**: → [UI06](./findings/UI06-input-submit-pipeline.md), extract `input-submit-controller`; after UI07 adds `settings-overlay-controller` the controller set is 9.
-- [x] **Double-tap esc / esc dispatch ownership**: `onEscape` is single-key multi-target dispatch — **mount wires it** (check state, then forward), branches delegate to owner (abort → cancellation, empty double-tap → tree-overlay, queue restore → queue). See [gates.md esc-dispatch row](./gates.md).
+- [x] **input-submit as a separate card**: extract `input-submit-controller`; after UI07 adds `settings-overlay-controller` the controller set is 9 (see git history).
+- [x] **Double-tap esc / esc dispatch ownership**: `onEscape` is single-key multi-target dispatch — **mount wires it** (check state, then forward), branches delegate to owner (abort → cancellation, empty double-tap → tree-overlay, queue restore → queue). See git history.
 
 **Still needs your call (point 4, 3 choices) — how to accept extension dynamic commands / keybindings / widgets**:
 

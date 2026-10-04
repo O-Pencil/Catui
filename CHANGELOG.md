@@ -16,6 +16,16 @@
 - Translate all 11 remaining `.dev-docs/` files that were kept after the docs-cleanup commit (REFACTOR-LEDGER.md, evolution/dev-conventions.md, bash ADR + HANDOFF, the 4 interactive-ui-review analysis docs) from Chinese to English. Stripped status-marker emoji from the kept files too. The mandatory-reading `dev-conventions.md` is now English.
 - Repair dead links surfaced by the docs cleanup: removed 23 broken `.dev-docs/architecture-review/{findings,execution-plan,handoff}/...` refs from `core/runtime/AGENT.md` (replaced links with stable review-card labels like `CW01`, `AS02`–`AS11`, `RC01` plus a one-paragraph note explaining where to find the underlying content — git history), `charter/README.md` (replaced 4 dead maintainer-doc links with a "consult git history" pointer), `AGENTS.md` (one line about `session-bridge-review/`), and `packages/protocol/AGENT.md` (the `sdk-surface-review/protocol-inventory.md` link).
 - Add `.catea/` and `.obsidian/` to `.gitignore` (defense in depth — they were untracked but could be added by an overzealous `git add -A`).
+- Translate `extensions/builtin/link-world/internet-search/internet-search.md` from Chinese to English (this file ships in the npm package; was the largest remaining non-deleted user-facing Chinese file in the project).
+- Repair the 11 remaining broken `.md` links surfaced by the audit: `.dev-docs/feature-workflow.md` (4 — `target-architecture.md`, `beta-smoke-checklist.md`, `methodology.md`), `.dev-docs/architecture-review/interactive-ui-review/extension-ui-analysis.md` (1), `.dev-docs/architecture-review/interactive-ui-review/feature-inventory.md` (3 — `refactor-plan.md`, `UI06-input-submit-pipeline.md`, `gates.md`), `extensions/builtin/link-world/linkworld.md` (1 — `troubleshooting.md`), `learning-framework/kb-integration.md` (2 — `C2-session-context.md`).
+- Fix hardcoded local author path in `packages/mem-core/test-dream.ts:9` (`/Users/cunyu666/.catui/agent/memory` → `join(homedir(), ".catui", "agent", "memory")`).
+- Add real contact email `security@o-pencil.org` to `SECURITY.md` (the email branch was previously empty — only GitHub Private Reporting was actionable).
+- Add `bugs` and `funding` fields to `package.json` (npm page previously had no "Report a bug" link and no funding link).
+- Fix the wrong AGENTS.md description of `sal` (was "Stale-Aware Loop" — actually Structural Anchor Localization).
+- Replace the empty `FUNDING.yml` template with the real `github: [O-Pencil]` target (the file had all-empty arrays; npm / GitHub was displaying a no-op).
+- Add CI / npm / license / Node-version badges to `README.md` (was zero badges).
+- Rewrite `.dev-docs/README.md` to match the post-cleanup directory state (it still pointed at deleted `CLAUDE.md` / `.PENCIL.md` / `sal/` / `diagnosis/` / `self-awareness/` / `data/` / `scripts/self-diagnosis/` and the removed `extensions/defaults/` rule).
+- Delete `.dev-docs/OPEN-SOURCE-CLEANUP.md` (the working checklist that drove this round — its own header says "delete after cleanup; don't leave it in the published surface").
 
 ### Fixed
 - Replace 74 fork-residue references from `O-Catui/Catui` / `O-Catui/catui` to `O-Pencil/Catui` across docs, source code comments, test fixtures, package metadata, theme JSON `$schema` fields, and user-visible download URLs in `config.ts`.

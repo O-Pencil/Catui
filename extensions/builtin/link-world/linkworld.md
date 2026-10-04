@@ -124,7 +124,7 @@ agent-reach configure twitter-cookies "PASTED_STRING"
 > 2. Confirm the user has configured a proxy: `agent-reach configure proxy http://user:pass@ip:port`
 > 3. link-world handles the rest automatically — no further user action required
 >
-> If the user reports "fetch failed", see [troubleshooting.md](troubleshooting.md)
+> If the user reports "fetch failed", see the troubleshooting section (the dedicated `troubleshooting.md` was removed during the docs cleanup; current escape-hatch is to re-run `agent-reach install` after verifying proxy config).
 
 **Reddit & Bilibili full access (server users):**
 > "Reddit and Bilibili block server IPs. To unlock full access, I need a residential proxy. You can get one at https://webshare.io ($1/month). Send me the proxy address."

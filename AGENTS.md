@@ -339,7 +339,7 @@ Extensions can:
 | `plan` | `/plan` mode and plan-mode-aware command dispatch |
 | `presence` | Persona / soul / memory presence rendering in the TUI footer and idle lines |
 | `recap` | Session recap: summarize prior turns on session resume |
-| `sal` | Stale-Aware Loop (long-running task harness with budget gates) |
+| `sal` | Structural Anchor Localization: experience-driven cognitive-map primitives that boost memory recall quality |
 | `skill-tool` | Direct `Skill` tool exposure for callers that need explicit invocation |
 | `subagent` | CC-style Agent tool: spawn isolated sub-sessions with their own context |
 | `task` | Task-list / todo management and progress display |

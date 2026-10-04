@@ -114,7 +114,7 @@ extension-ui is **heavily coupled to editor-shell**: prompts mount into `editorC
 4. **Editor-shell restoration**: after dismiss / custom close → `remountEditorShell` + editor text / focus restored.
 5. **Abort semantics**: signal aborted → resolve(undefined) + clean up listener.
 6. **Persistent surfaces**: widget / footer / header / status set / clear / render behavior unchanged; `resetExtensionUI` cleans everything.
-7. **Behavioral review**: during extraction, **proactively verify** extension prompt / overlay / widget (per A contract + C built-in manual tests; see [behavior-review-log](./behavior-review-log.md)).
+7. **Behavioral review**: during extraction, **proactively verify** extension prompt / overlay / widget (per A contract + C built-in manual tests; see the `behavior-review-log.md` in git history).
 
 ---
 

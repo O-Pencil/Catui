@@ -3,10 +3,14 @@
  * Test script for dream (consolidate) functionality
  */
 
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import { NanoMemEngine } from "./src/engine.js";
 import { getConfig } from "./src/config.js";
 
-const memoryDir = process.env.NANOMEM_MEMORY_DIR || "/Users/cunyu666/.catui/agent/memory";
+const memoryDir =
+	process.env.NANOMEM_MEMORY_DIR || join(homedir(), ".catui", "agent", "memory");
 
 console.log("Testing dream (consolidate) functionality...");
 console.log(`Memory dir: ${memoryDir}`);
