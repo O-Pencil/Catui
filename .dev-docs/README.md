@@ -25,12 +25,20 @@ All three read overlapping fields out of the same tables. The shared substrate i
 ```
 .dev-docs/
 ├── README.md                  ← this file (entry point)
+├── feature-workflow.md        ← canonical development workflow (mandatory reading per AGENTS.md)
+├── architecture-review/       ← historical per-topic review notes (P0–P8 refactor)
+│   ├── REFACTOR-LEDGER.md      ← sign-off / outcome index
+│   ├── evolution/              ← post-refactor development conventions
+│   ├── bash-{stdin-pipe,pre-execution-approval-decision}/   ← bash-tool ADRs
+│   └── interactive-ui-review/  ← P5 UI-split review notes
+├── vibe-coding/                ← verification workflow artifacts (the file under this is the source of truth)
+│   └── verification-plan.json
 ├── data/                      ← the developer insforge backend; what's in it, how it's used
 │   └── field-purpose-matrix.md  (forthcoming — A in the GSA rollout)
 ├── sal/                       ← SAL experiments
-│   ├── roadmap.md              (forthcoming — migrated from docs/SAL总体路线...)
-│   ├── cognitive-map.md        (forthcoming — migrated from docs/认知地图架构草案.md)
-│   └── eval-method.md          (forthcoming — migrated from docs/SAL实验评估方式...)
+│   ├── roadmap.md              (forthcoming — migrated from docs/SAL*...)
+│   ├── cognitive-map.md        (forthcoming — migrated from docs/cognitive-map*...)
+│   └── eval-method.md          (forthcoming — migrated from docs/SAL-eval-method*...)
 ├── diagnosis/                 ← explicit issue triage
 │   ├── sop.md                  (forthcoming — migrated from docs/daily-issue-sop.md, rewritten)
 │   └── audit-2026-05-17.md     (forthcoming — migrated from docs/insforge-audit-2026-05-17.md)
@@ -38,7 +46,7 @@ All three read overlapping fields out of the same tables. The shared substrate i
     └── charter.md              (here; governance + roadmap)
 ```
 
-Empty subdirectories above will fill in during step D of the GSA rollout (document migration). The matrix at `data/field-purpose-matrix.md` is step A.
+The review directories and their internal `findings/` are **historical artifacts**, kept for traceability. Day-to-day development follows `feature-workflow.md`. Empty subdirectories above will fill in during step D of the GSA rollout (document migration). The matrix at `data/field-purpose-matrix.md` is step A.
 
 ---
 
@@ -54,12 +62,15 @@ Empty subdirectories above will fill in during step D of the GSA rollout (docume
 
 ## Reading order for a new maintainer
 
-1. `data/field-purpose-matrix.md` — what data exists, which fields are alive, what each is for.
-2. The subdirectory matching your goal (`sal/` for cognitive map work, `diagnosis/` for triaging open tickets, `self-awareness/` for reflexive-task R&D).
-3. `self-awareness/charter.md` is the long story of how this whole structure came to be — useful once you've seen the data.
+1. `feature-workflow.md` — canonical development workflow (mandatory per AGENTS.md).
+2. `architecture-review/REFACTOR-LEDGER.md` — what the refactor did and what trade-offs were accepted.
+3. `architecture-review/evolution/dev-conventions.md` — current "where does new code go" rules.
+4. The subdirectory matching your goal (`sal/` for cognitive map work, `diagnosis/` for triaging open tickets, `self-awareness/` for reflexive-task R&D).
+5. `self-awareness/charter.md` is the long story of how this whole structure came to be — useful once you've seen the data.
 
 ---
 
 ## Provenance
 
 - 2026-05-17: created during the GSA rollout. SAL and self-diagnosis work prior to that lived in `docs/` (gitignored) and is being migrated in here.
+- 2026-10: directory pruned during the docs cleanup — internal process records under `architecture-review/{findings,execution-plan,handoff,closure}` were removed (decision records moved to git history); the AGENT.md member list / dev-conventions / REFACTOR-LEDGER remain.

@@ -422,8 +422,8 @@ Built-in commands (`core/slash-commands.ts`):
 
 `session-bridge` is default-loaded from `extensions/optional/session-bridge/`;
 the command stays inactive until `/bridge start`. First use offers bundled Codex
-plugin installation; `/bridge setup` repairs setup. See its README and
-`.dev-docs/architecture-review/session-bridge-review/` for receipt and lifecycle rules.
+plugin installation; `/bridge setup` repairs setup. See its README for receipt
+and lifecycle rules (the internal review notes are no longer in the repo).
 The bridge exposes live command capabilities, owner snapshots for Grub/Goal/Plan,
 asynchronous command receipts and delegated questions/standard plan approvals.
 Only owner-enabled commands are remotely executable; elevation stays local.

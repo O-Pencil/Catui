@@ -48,25 +48,27 @@ NanoSoul is suspended: SDK and AgentSession no longer initialize, refresh, injec
 
 > The DIP fourth axis: **which concern is owned by which file, with what capability contract, and why**.
 > Member List = WHAT/WHERE (structure). This table = WHO-OWNS-WHAT + WHY. The Owner column is
-> verify-dip-checked (every owner is a real member above). WHY links to the decision record; the
-> generated `llm-wiki/` carries the symbol/dependency detail. Keep this table updated on any
-> ownership move (same covenant as the member list).
+> verify-dip-checked (every owner is a real member above). The Why column carries stable review-card
+> labels (e.g. `CW01`, `AS02`–`AS11`, `RC01`); the underlying review cards were internal process
+> records and have been moved out of the repository, so the labels now point to git history
+> rather than living documents. The generated `llm-wiki/` carries the symbol/dependency detail.
+> Keep this table updated on any ownership move (same covenant as the member list).
 
 | Concern | Owner | Capability contract | Why (review card) |
 |---------|-------|---------------------|-------------------|
-| model-requested working window transition | `context-window-controller.ts` | private named persistence/model capabilities; AgentSession facade and SDK prepareContext binding | [CW01](../../.dev-docs/architecture-review/context-window-review/findings/CW01-boundaries.md) |
-| model set/cycle + thinking level | `model-controller.ts` | `ModelControllerContext` | [AS02](../../.dev-docs/architecture-review/runtime-session-review/findings/AS02-model-controller-boundary.md), [AS03](../../.dev-docs/architecture-review/runtime-session-review/findings/AS03-session-switch-state-restore.md) |
-| manual + auto compaction (+ abort slots) | `compaction-controller.ts` | `CompactionControllerContext` | [AS04](../../.dev-docs/architecture-review/runtime-session-review/findings/AS04-compaction-coordinator-placeholder.md) |
-| loop-driven compaction decisions (overflow/threshold) + in-loop model-error recovery | `session-compaction-coordinator.ts` | `SessionCompactionCoordinatorContext` | [AS04](../../.dev-docs/architecture-review/runtime-session-review/findings/AS04-compaction-coordinator-placeholder.md) |
-| session-tree navigation + branch summary | `session-tree-controller.ts` | `SessionTreeControllerContext` | [AS10](../../.dev-docs/architecture-review/runtime-session-review/findings/AS10-tree-navigation-boundary.md) |
-| session new/switch/fork (identity change) | `session-lifecycle-controller.ts` | `SessionLifecycleControllerContext` | [AS08](../../.dev-docs/architecture-review/runtime-session-review/findings/AS08-session-lifecycle-boundary.md), [AS11](../../.dev-docs/architecture-review/runtime-session-review/findings/AS11-session-fork-boundary.md) |
-| tool runtime merge/adapt/active/registry | `tool-runtime-controller.ts` | `ToolRuntimeBuildOptions/Result` | [AS05](../../.dev-docs/architecture-review/runtime-session-review/findings/AS05-tool-runtime-controller-boundary.md) |
-| journaling and recovery ordering | `session-event-handler.ts` | `SessionEventContext` | [RC01](../../.dev-docs/architecture-review/runtime-skills-cleanup-review/findings/RC01-boundaries.md) |
+| model-requested working window transition | `context-window-controller.ts` | private named persistence/model capabilities; AgentSession facade and SDK prepareContext binding | CW01 |
+| model set/cycle + thinking level | `model-controller.ts` | `ModelControllerContext` | AS02, AS03 |
+| manual + auto compaction (+ abort slots) | `compaction-controller.ts` | `CompactionControllerContext` | AS04 |
+| loop-driven compaction decisions (overflow/threshold) + in-loop model-error recovery | `session-compaction-coordinator.ts` | `SessionCompactionCoordinatorContext` | AS04 |
+| session-tree navigation + branch summary | `session-tree-controller.ts` | `SessionTreeControllerContext` | AS10 |
+| session new/switch/fork (identity change) | `session-lifecycle-controller.ts` | `SessionLifecycleControllerContext` | AS08, AS11 |
+| tool runtime merge/adapt/active/registry | `tool-runtime-controller.ts` | `ToolRuntimeBuildOptions/Result` | AS05 |
+| journaling and recovery ordering | `session-event-handler.ts` | `SessionEventContext` | RC01 |
 | queue display and next-turn context | `session-message-queue.ts` | `SessionMessageQueue` | RC01 |
 | trace recorder lifetime | `session-run-trace.ts` | `SessionRunTrace` | RC01 |
 | pure usage/statistics queries | `session-queries.ts` | snapshot arguments | RC01 |
 | extension resource discovery | `extension-resources.ts` | runner, cwd, extend callback | RC01 |
-| extension event mapping + turn indexing | `event-bridge.ts` | `ExtensionEventBridgeDeps` | [AS07](../../.dev-docs/architecture-review/runtime-session-review/findings/AS07-event-bridge-boundary.md) |
+| extension event mapping + turn indexing | `event-bridge.ts` | `ExtensionEventBridgeDeps` | AS07 |
 | bash execution + pending-message queue | `bash-runner.ts` | closure deps (`BashRunnerDeps`) | P4.1 |
 | runtime prompt resource assembly | `prompt-assembly.ts` | function deps | P4 |
 | HTML export + last assistant text | `export-bridge.ts` | function deps | P4 |
@@ -74,7 +76,7 @@ NanoSoul is suspended: SDK and AgentSession no longer initialize, refresh, injec
 | semantic run trace persistence | `run-trace-jsonl.ts` | `RunTraceSink` + validated JSONL reader/writer | versioned offline replay, benchmark transcript visibility, and audit boundary |
 | pure thinking-level / model-cycle logic | `thinking-levels.ts`, `model-cycle.ts` | pure functions (no session state) | P4.2 |
 | cancellation slot / listener registry (primitives) | `../platform/abort-slot.ts`, `../platform/listeners.ts` | reusable primitives | P4.2 |
-| composition root: state, facade, loop continuation, teardown | `agent-session.ts` | — (owns adapters + orchestration) | [AS06](../../.dev-docs/architecture-review/runtime-session-review/findings/AS06-agent-session-public-facade.md); reload [AS09 deferred], teardown [AS12 rejected] |
+| composition root: state, facade, loop continuation, teardown | `agent-session.ts` | — (owns adapters + orchestration) | AS06; reload AS09 deferred, teardown AS12 rejected |
 
 **Reading order for a new maintainer**: this table → the owner file's P3 header (local contract) → the review card (why this boundary) → `llm-wiki/pages/*/symbols.md` (exported surface).
 

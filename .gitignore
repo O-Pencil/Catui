@@ -72,6 +72,10 @@ agent-workspace/
 .qwen
 .roo
 .trae
+
+# Local personal vaults / Obsidian workspaces (learning-framework, oh-my-wiki, etc.)
+.catea/
+.obsidian/
 .windsurf
 
 # Benchmark results (local baselines)

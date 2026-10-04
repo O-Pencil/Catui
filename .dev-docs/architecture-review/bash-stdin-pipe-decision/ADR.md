@@ -2,51 +2,51 @@
 
 ```yaml
 adr_id: bash-stdin-pipe-decision
-status: implemented-but-reopened   # 2026-07-05 实施 + 五道门 + 回归 PASS；2026-07-05 二次实测发现未解决用户最初问题
+status: implemented-but-reopened   # 2026-07-05 implemented + 5 gates + regression PASS; 2026-07-05 second test run revealed the user's original issue is NOT solved
 created_at: 2026-07-05
 reopened_at: 2026-07-05
-reopen_reason: 30s stdin timer is **defensive fallback only**, not the real fix.
-              User's actual pain is "command never showed it needed input". timer
-              just prevents infinite hang; user still can't answer y/N from TUI,
-              still can't see the prompt. Real fix needs pre-execution gate
-              (hermes-agent style: dangerous pattern detection + TUI selector +
+reopen_reason: The 30s stdin timer is a **defensive fallback only**, not the real fix.
+              The user's actual pain is "the command never showed it needed input". The timer
+              just prevents an infinite hang; the user still can't answer y/N from the TUI,
+              still can't see the prompt. The real fix needs a pre-execution gate
+              (hermes-agent style: dangerous-pattern detection + TUI selector +
               session persistence + fail-closed default). Layer 1 (stdin timer)
-              stays as the safety net; layers 2-3 deferred to next ADR.
+              stays as the safety net; layers 2-3 deferred to the next ADR.
 scope_now: core/tools/bash.ts (Layer 1 — implemented)
 scope_next: TBD by successor ADR (`bash-pre-execution-approval-decision`)
 references:
-  - ../../scripts/_scratch/interactive-bash-repro/ (Layer 1 repro)
+  - ../../scripts/_scratch/interactive-bash-repro/ (Layer 1 reproduction)
   - ../../scripts/_scratch/test-real-bash-debug.mjs (Layer 1 verification)
   - hermes-agent approval_callback in callbacks.py:186-241 (inspiration for Layer 2)
   - hermes-agent DANGEROUS_PATTERNS in tools/approval.py:498+ (inspiration for Layer 2)
 ```
 
-## Context（背景）
+## Context
 
-`core/tools/bash.ts:130` 的 spawn 配置 `stdio: ["ignore", "pipe", "pipe"]`，导致任何交互式命令（`read -p`、`npm init`、`npx create-x`、`git push -f`、`ssh-add` 等）在收到 stdin EOF 时：
+The `core/tools/bash.ts:130` spawn config `stdio: ["ignore", "pipe", "pipe"]` causes any interactive command (`read -p`, `npm init`, `npx create-x`, `git push -f`, `ssh-add`, etc.) to:
 
-- **某些 CLI**：立即 exit=1（用户看到"失败"，但实际是 stdin 被切）
-- **某些 CLI**：hang 等 stdin 永远不退（用户看到 spinner 一直转、"卡住了"）
+- **Some CLIs**: exit immediately with code 1 on stdin EOF (user sees "failure", but it's actually stdin being cut)
+- **Some CLIs**: hang forever waiting for stdin (user sees the spinner spin indefinitely, "stuck")
 
-用户实测：执行 `npx create-xxx` 类命令，TUI 里 spinner 不动，看不到"是否在等输入"或"已失败"的明确信号。
+User reproduction: running `npx create-xxx` shows the TUI spinner frozen, with no signal whether the command is waiting for input or already failed.
 
-**复现脚本**：`scripts/_scratch/interactive-bash-repro/compare.mjs` 输出：
+**Reproduction script**: `scripts/_scratch/interactive-bash-repro/compare.mjs` outputs:
 
 ```
 [A: stdio=ignore] Do you want to proceed? (y/N)
 [A: stdio=ignore] [exit=1]
 [B: stdio=pipe   ] Do you want to proceed? (y/N)
-[B: stdio=pipe   ] [KILLED: 2s 内无响应]
+[B: stdio=pipe   ] [KILLED: no response in 2s]
 [B: stdio=pipe   ] [exit=null]
 ```
 
-——`[B]` 形态（"看起来卡住"）正是用户报告的现象。
+The `[B]` pattern ("looks stuck") is exactly what the user reported.
 
-## Decision（决策 · 2026-07-05 拍板）
+## Decision (ratified 2026-07-05)
 
-**最小改动**：把 `bash.ts:130` 改成 `stdio: ["pipe", "pipe", "pipe"]` + 增加 stdin timeout 保护（默认 30s，超时后 `child.stdin.end()` 强制 EOF）。
+**Minimal change**: change `bash.ts:130` to `stdio: ["pipe", "pipe", "pipe"]` and add a stdin-timeout guard (default 30s; on timeout, `child.stdin.end()` to force EOF).
 
-### 具体改动
+### Specific change
 
 ```diff
   // core/tools/bash.ts:130
@@ -54,90 +54,90 @@ references:
 + stdio: ["pipe", "pipe", "pipe"],
 ```
 
-加 stdin timeout 逻辑（伪代码，示意）：
+Add the stdin-timeout logic (pseudocode):
 
 ```ts
 let stdinTimedOut = false;
 const stdinTimeoutMs = options.stdinTimeoutMs ?? 30_000;
 const stdinTimer = setTimeout(() => {
   stdinTimedOut = true;
-  child.stdin.end();   // 强制 EOF，让命令走默认值
+  child.stdin.end();   // force EOF so the command takes its defaults
 }, stdinTimeoutMs);
 child.on("close", () => clearTimeout(stdinTimer));
 ```
 
-### 为什么"只改这一行 + 加超时"是安全的
+### Why "only this one line + a timeout" is safe
 
-| 当前（ignore）| 改后（pipe + timeout）|
-|---|---|
-| read 立即 EOF → 命令立即 exit=1 | read 等 stdin，30s 后 stdin.end() 强制 EOF，命令走默认值 |
-| spinner 短停，TaskOutput 报失败 | spinner 转 30s，TaskOutput 显示 prompt，30s 后命令按默认完成 |
-| **对模型**：命令快速失败、立即重新规划 | **对模型**：命令走默认选项、继续执行 |
+| Before (ignore) | After (pipe + timeout) |
+|-----------------|------------------------|
+| `read` gets immediate EOF → command exits 1 immediately | `read` waits for stdin; after 30s, `stdin.end()` forces EOF, command takes defaults |
+| Spinner stops briefly, TaskOutput reports failure | Spinner runs 30s, TaskOutput shows the prompt, then command completes with defaults |
+| **For the model**: command fails fast, immediately replans | **For the model**: command takes defaults and continues |
 
-**两个关键保护**：
+**Two key guards**:
 
-1. **30s 超时**：防止命令永远 hang（替代 Ctrl+C）
-2. **`child.stdin.end()` 强制 EOF**：让命令在 timeout 后按默认行为继续（不是 SIGKILL 杀死）
+1. **30s timeout**: prevents the command from hanging forever (replaces Ctrl+C).
+2. **`child.stdin.end()` forced EOF**: lets the command continue with default behavior after timeout (instead of SIGKILL).
 
-### 选这条（而不是其他候选）的理由
+### Why this option (and not the others)
 
-| 候选 | 评估 | 选择 |
-|------|------|------|
-| **A. 不改**（用户用 Ctrl+C 救场）| 用户痛点不解 | ❌ |
-| **B. 改 stdio='pipe' 不带 timeout** | 改完后命令会 hang 永远不退，比现在更糟 | ❌ |
-| **C. 改 stdio='pipe' + 30s timeout**（本决策）| 最小改动、最大安全边界 | ✅ |
-| **D. 改 stdio='pipe' + TUI 桥接 + prompt 检测 + UI 提示** | 真正能让用户在 TUI 里回答 y/N | ❌（工程量大；本 ADR 只解决 80% 场景）|
-| **E. 完整重构 bash tool**（sandbox / pty / 全交互模式）| 长期方案 | ❌（deferred，见 §Reopen）|
+| Candidate | Evaluation | Choose |
+|-----------|------------|--------|
+| **A. Do nothing** (user saves with Ctrl+C) | User's pain point unresolved | [ ] |
+| **B. Change stdio to "pipe" without timeout** | After change, command hangs forever — worse than now | [ ] |
+| **C. Change stdio to "pipe" + 30s timeout** (this decision) | Minimal change, maximum safety guard | [x] |
+| **D. Change stdio to "pipe" + TUI bridge + prompt detection + UI hint** | Truly lets the user answer y/N from TUI | [ ] (large effort; this ADR only solves 80% of cases) |
+| **E. Full bash-tool refactor** (sandbox / pty / full interactive mode) | Long-term solution | [ ] (deferred — see §Reopen) |
 
-**本 ADR 只动 1-2 行**；完整交互支持（D）作为 reopen 触发条件；不要在本 ADR 里做。
+**This ADR only changes 1-2 lines**; full interactive support (D) is the reopen trigger; do not do it in this ADR.
 
-### 不在范围内（Non-Goals）
+### Non-Goals
 
-- ❌ 不做 TUI stdin 桥接（用户不能在 TUI 内回答 y/N）
-- ❌ 不做 prompt 检测（不主动告知"命令在等输入"）
-- ❌ 不做 bash tool 整体重构
-- ❌ 不动 background task 的 spawn（background task 也用 `ops.exec`，**继承同一修复**——这是预期收益，不需要单独改）
+- [ ] No TUI stdin bridge (user can't answer y/N from TUI)
+- [ ] No prompt detection (no proactive "this command is waiting for input" signal)
+- [ ] No full bash-tool refactor
+- [ ] No change to background-task spawn (background tasks also use `ops.exec`, **inheriting this fix** — intended, no separate change needed)
 
-### 已知 trade-off
+### Known trade-offs
 
-- **30s 超时期间**：用户看到的现象跟现在"卡住"几乎一样（spinner 转、TaskOutput 显示 prompt）——**视觉改进微小**
-- **不能输入 y/N**：用户如果想真回答，需要**手动开终端重跑命令**（或加参数跳过 prompt，如 `yes | npx create-x`）
-- **30s 可能不够**（慢速 CLI、慢网络下载）：但 timeout 可调，用户/扩展可重写
+- **During the 30s timeout**: what the user sees is almost identical to "stuck" today (spinner runs, TaskOutput shows the prompt) — **minor visual improvement**.
+- **Cannot input y/N**: if the user really wants to answer, they have to **manually open a terminal and rerun** (or pass args to skip the prompt, e.g. `yes | npx create-x`).
+- **30s may not be enough** (slow CLIs, slow network downloads): but the timeout is configurable, and users / extensions can override.
 
-**这些 trade-off 都接受**——因为本 ADR 是"先消除立即失败 + 永远 hang"，**完整修复在 D 里**。
+**All these trade-offs are accepted** — this ADR's job is "first remove the immediate failure + the infinite hang"; full fix is D.
 
-## Consequences（影响）
+## Consequences
 
-- ✅ 之前 EOF 立即失败的命令（如 `read -p`）现在能等 30s 走默认
-- ✅ 之前 hang 的命令（少数 CLI）30s 后被强制 EOF
-- ✅ background task 继承同样修复（stdin 也 pipe + timeout）
-- ⚠️ `child.stdin` 现在是 `Writable | null`——需要保证后续清理路径（spawn 失败时、signal abort 时不泄漏）
-- ⚠️ 30s 是默认值，**某些命令可能不够**——后续可让 BashOperations 接受 stdinTimeoutMs 参数
+- [x] Commands that used to fail on EOF immediately (e.g. `read -p`) can now wait 30s and take defaults.
+- [x] Commands that used to hang (a few CLIs) are forced to EOF after 30s.
+- [x] Background tasks inherit the same fix (stdin is also pipe + timeout).
+- **Warning:** `child.stdin` is now `Writable | null` — must guarantee cleanup paths (on spawn failure / signal abort, no leak).
+- **Warning:** 30s is the default; **some commands may need more** — later, `BashOperations` should accept a `stdinTimeoutMs` option.
 
-## Reopen 触发条件
+## Reopen triggers
 
-满足任一条件，本 ADR reopen，升级到 D（完整交互支持）或 E（整体重构）：
+If any of these hold, reopen this ADR and escalate to D (full interactive support) or E (full refactor):
 
-1. 用户实测中 30s 超时频繁不够（多数场景需要更久）
-2. 出现新的报告："命令又立刻失败了"（说明 stdin end() 的副作用有问题）
-3. 用户开始**需要**在 TUI 内回答 y/N（不只是想看 prompt）
-4. bash tool 的 sandbox 化或 pty 化被列入下季度计划
+1. User testing shows the 30s timeout is frequently insufficient (most scenarios need longer).
+2. A new report appears: "the command failed immediately again" (suggests `stdin.end()` side effects have a problem).
+3. Users start **needing** to answer y/N from the TUI (not just see the prompt).
+4. Bash-tool sandboxing or pty-ization is on next quarter's plan.
 
-## Acceptance（实施后回填 · 2026-07-05）
+## Acceptance (filled in after implementation · 2026-07-05)
 
-- [x] bash.ts stdio 改 'pipe'（[bash.ts:148](../../../core/tools/bash.ts)）
-- [x] stdin timeout 30s + child.stdin.end() 逻辑落地（[bash.ts:163-180](../../../core/tools/bash.ts)）
-- [x] 真实回归脚本 `bash-regression.mjs` 跑通：
-  - read -p 默认 stdin 超时：**elapsed=30096ms**（精确 30s），exit=1
-  - echo hello 无 stdin：**elapsed=81ms**，exit=0
-  - ls 失败立即退：**elapsed=55ms**，exit=2
-  - 之前 `compare.mjs` 的 `[B: stdio=pipe] [KILLED: 2s 内无响应]` 形态**消除**
-- [x] 五道验收门通过：
-  - `verify:dip` ✅ 591 P3 头合规
-  - `verify:quality` ✅ 659 文件，0 环
-  - `verify:package-boundary` ✅
-  - `tsc --noEmit` ✅ exit=0
-  - `build:deps` ✅
-- [x] P3 头更新（[bash.ts:1-9](../../../core/tools/bash.ts)）
-- [x] 复现脚本 `interactive-bash-repro/compare.mjs` 仍可跑（作为历史 regression 参考）
-- [ ] commit message 包含 reopen 条件链接（commit 时回填）
+- [x] `bash.ts` stdio changed to `'pipe'` ([bash.ts:148](../../../core/tools/bash.ts))
+- [x] 30s stdin timeout + `child.stdin.end()` logic landed ([bash.ts:163-180](../../../core/tools/bash.ts))
+- [x] Real regression script `bash-regression.mjs` runs:
+  - `read -p` default stdin timeout: **elapsed=30096ms** (exactly 30s), exit=1
+  - `echo hello` no stdin: **elapsed=81ms**, exit=0
+  - `ls` failing fast: **elapsed=55ms**, exit=2
+  - The previous `[B: stdio=pipe] [KILLED: no response in 2s]` pattern **eliminated**
+- [x] Five acceptance gates passed:
+  - `verify:dip` [x] 591 P3 headers compliant
+  - `verify:quality` [x] 659 files, 0 cycles
+  - `verify:package-boundary` [x]
+  - `tsc --noEmit` [x] exit=0
+  - `build:deps` [x]
+- [x] P3 header updated ([bash.ts:1-9](../../../core/tools/bash.ts))
+- [x] Reproduction script `interactive-bash-repro/compare.mjs` still runs (kept as a historical regression reference)
+- [ ] commit message includes the reopen-conditions link (fill in at commit time)

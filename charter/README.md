@@ -101,13 +101,7 @@ push to main with `charter/` directory changes: target repos are listed in [`08-
 
 Maintainer-internal runbooks, SAL experiments, diagnosis SOPs, architecture reviews, etc. all live under `.dev-docs/`, with this charter as their single entry point.
 
-| Document | Content |
-|----------|---------|
-| [.dev-docs/README.md](../.dev-docs/README.md) | Maintainer-manual entry (what to read, where to start) |
-| [.dev-docs/sal/roadmap.md](../.dev-docs/sal/roadmap.md) | SAL cognitive-graph experiment plan |
-| [.dev-docs/diagnosis/sop.md](../.dev-docs/diagnosis/sop.md) | Daily issue-triage flow |
-| [.dev-docs/self-awareness/charter.md](../.dev-docs/self-awareness/charter.md) | Self-diagnosis governance and roadmap |
-| [.dev-docs/architecture-review/README.md](../.dev-docs/architecture-review/README.md) | Architecture Review Agent flow |
+The internal process records (SAL roadmap, diagnosis SOPs, self-diagnosis governance, per-review architecture notes) were deliberately removed from the public repo; only the maintainer entry point and the framework / workflow documents remain under `.dev-docs/`. Consult git history if you need to recover specific artifacts.
 
 **Maintainer boundary contract**:
 - No cron / no auto-scheduling; all runs are manually dispatched

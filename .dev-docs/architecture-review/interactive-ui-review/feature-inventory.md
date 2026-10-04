@@ -1,64 +1,64 @@
-# interactive-mode 功能特性清单 v1
+# interactive-mode Feature Inventory v1
 
 ```yaml
 doc: feature-inventory
-version: v1     # 代码扫全 + 5 主观项已定(含扩展验收 = A 契约 + C 内置手测)；UI01 blocker 解除
+version: v1     # full code scan + 5 subjective items settled (extension acceptance = A contract + C built-in manual tests); UI01 blocker cleared
 parent: ./README.md
 purpose: |
-  P5 的验收基准（功能验收，非 characterization）+ 维护者特性目录。
-  重构后逐条确认「功能正确」，不比对实现。完整度 = 验收强度（UI01 核心风险）。
-source_of_truth: modes/interactive/interactive-mode.ts @ 7960 行（拆前快照）
+  P5 acceptance baseline (functional acceptance, not characterization) + maintainer feature catalog.
+  After refactor, verify each "function correct" without comparing implementations. Completeness = acceptance strength (UI01 core risk).
+source_of_truth: modes/interactive/interactive-mode.ts @ 7960 lines (pre-split snapshot)
 legend:
-  owner: 拟拆入的 controller（见 P5 §现状摸底簇表 / gates.md Single-Owner）
-  verify: 重构后确认列（⬜ 待验 / ✅ 通过 / ✗ 回归 / ⚠️ 有意变更-已声明）
+  owner: prospective controller to extract into (see P5 §status-survey cluster table / gates.md Single-Owner)
+  verify: post-refactor confirmation column (⬜ pending / [x] pass / ✗ regression / **Warning:** intentional change — declared)
 ```
 
-> **怎么用**：每条 = `触发 → 预期行为(验收标准)`。重构后按"触发"复现，确认"预期"成立即 ✅。
-> 有意改了行为/符号 → 标 ⚠️ 并在对应 review 卡/Phase 写明（GB-2），不算回归。
-> **v0 是反推骨架，maintainer 需校全**（漏列 = 该功能无保护）。
+> **How to use**: each row = `trigger → expected behavior (acceptance criterion)`. After refactor reproduce by "trigger" and confirm "expected" → [x].
+> Intentionally changed behavior / symbols → mark **Warning:** and document in the corresponding review card / Phase (GB-2), does not count as regression.
+> **v0 is the reverse-engineered skeleton; maintainer must verify completeness** (missing entry = that feature has no protection).
 
 ---
 
-## P5 验收优先级（operator checklist）
+## P5 Acceptance Priority (operator checklist)
 
-> **执行顺序**：每个较大切片后先跑 P0 必测主路径；再按该切片 owner 跑重点验收；最后回填下方 A-F 表的相关行。P5 接受重写，所以验收目标是"功能正确 + 边界更清楚"，不是逐字节/逐符号一致。
+> **Execution order**: after each major slice, run P0 critical-path tests first; then run owner-specific acceptance; finally fill in the A-F tables below. P5 accepts rewrites, so the acceptance goal is "function correct + boundary clearer", not byte-for-byte / symbol-for-symbol identical.
 
-### P0 必测主路径（每个较大切片后都测）
+### P0 Critical path (run after each major slice)
 
-| 路径 | 验收标准 | verify |
-|------|----------|--------|
-| TUI 启动 | interactive mode 可进入，首屏状态/footer/editor 正常渲染 | ⬜ |
-| 普通 prompt | 输入普通文本后能提交、收到 assistant 响应、消息入会话 | ⬜ |
-| 流式稳定 | streaming 期间文本增量显示；结束后 editor focus 恢复且可继续输入 | ⬜ |
-| 中断/取消 | `esc` / `ctrl+c` 在运行中能中断或进入既有取消路径；TUI 不挂死 | ⬜ |
-| 输入路由 | 普通文本、slash、bash 前缀、附件输入不会互相误路由 | ⬜ |
-| 错误可恢复 | 错误显示到 UI；下一条输入仍可继续 | ⬜ |
-| 会话持久化 | 当前会话可保存；重进或 resume 后能看到历史 | ⬜ |
+| Path | Acceptance criterion | verify |
+|------|----------------------|--------|
+| TUI startup | Interactive mode enters; home screen status / footer / editor render normally | ⬜ |
+| Plain prompt | Submit plain text, receive assistant response, message enters session | ⬜ |
+| Streaming stability | During streaming, text appears incrementally; after end, editor focus restores and input is ready | ⬜ |
+| Interrupt / cancel | `esc` / `ctrl+c` during run interrupts or takes the existing cancel path; TUI doesn't hang | ⬜ |
+| Input routing | Plain text / slash / bash prefix / attachment input don't route into each other incorrectly | ⬜ |
+| Error recoverable | Errors surface in UI; next input can still proceed | ⬜ |
+| Session persistence | Current session can save; after re-entry or resume, history is visible | ⬜ |
 
-### P0 非功能约束（每刀 review 必查）
+### P0 Non-functional constraints (every slice review checks)
 
-| 约束 | 验收标准 | verify |
-|------|----------|--------|
-| Token neutrality | UI 拆分不得新增默认 prompt/context/system message/tool result 内容；不得改变发送给模型的 user message、attachments、follow-up、compaction 指令语义；用户实际 token 消耗不因拆分增加 | ⬜ |
-| Compatibility preservation | TUI 入口、slash/keybinding、extension UI API、public exports、配置文件格式保持兼容；有意破坏必须按 GB-2 记录并经接受 | ⬜ |
-| Data fallback preservation | settings/auth/provider/session/extension surface 的缺省值、缺失文件、读取失败、取消路径、半写入兜底不弱化 | ⬜ |
-| Performance neutrality | P5 不做性能优化，但也不得明显劣化冷启动、首屏、overlay 打开、输入提交、streaming render；controller 构造不引入 eager heavy work | ⬜ |
-| Responsibility-only change | 当前阶段目标是职责切分和后续编码约束；除已声明 GB-2 外，不借重构改变产品语义 | ⬜ |
+| Constraint | Acceptance criterion | verify |
+|------------|----------------------|--------|
+| Token neutrality | UI split must not add default prompt / context / system message / tool-result content; must not change user-message / attachments / follow-up / compaction-instruction semantics sent to the model; user's actual token consumption does not increase because of the split | ⬜ |
+| Compatibility preservation | TUI entry, slash / keybinding, extension UI API, public exports, config file format stay compatible; intentional breakage must be recorded per GB-2 and accepted | ⬜ |
+| Data fallback preservation | settings / auth / provider / session / extension surface defaults, missing-file, read-failure, cancel path, half-write fallbacks must not be weakened | ⬜ |
+| Performance neutrality | P5 is not performance optimization, but must not noticeably degrade cold start, first-paint, overlay-open, input-submit, streaming-render; controller construction must not introduce eager heavy work | ⬜ |
+| Responsibility-only change | This phase's goal is responsibility split + follow-up code constraints; apart from declared GB-2 items, do not use the refactor to change product semantics | ⬜ |
 
-### Owner 重点验收
+### Owner-specific acceptance
 
-| Owner | 必测重点 |
-|-------|----------|
-| model-overlay | `/model` overlay；`/model provider/model-id` 精确选择；选模型前必须 ensure provider 配置成功；配置取消不得切换或写默认模型；provider→model flow；`/scoped-models`；cycle model；cycle thinking；footer/border/status 更新 |
-| auth/provider-config | `/apikey`；`/login`；`/logout`；custom provider 的 base URL / API key / model name 配置；取消不产生半写入；配置后 registry 可刷新并被 model-overlay 使用 |
-| settings-overlay | `/settings`；theme preview/apply；image 相关开关；thinking block hide/show 后 rebuild；editor padding/autocomplete；token stats/buddy/presence/quiet startup 等设置能保存 |
-| tree-overlay | `/resume`；`/tree`；`/fork`；`/new`；选择器导航、过滤、排序、重命名/删除与 banner 状态 |
-| slash-dispatcher | 内置 slash 命令路由到对应 owner；未知命令行为不变；扩展命令不被吞；`/compact`、`/mcp`、`/resources`、`/status`、`/usage` 保持可达；保留既有彩蛋 |
-| input-submit | 普通 prompt；slash 不作为 prompt 发送；扩展 slash command；`!`/`!!` bash；附件提交；streaming steer/follow-up/queue；compaction queue；optimistic rollback |
-| extension-ui | select/input/editor/confirm；单活动 prompt；focus/text restore；custom overlay handle/onHandle；inline custom restore；widget/footer/header/status set/clear；`setEditorComponent` callbacks/keybindings；reset 清理所有 extension surfaces |
-| render layer | `agent_start`/`message_update`/tool events/end；工具展开/折叠；thinking show/hide；image tool result；error/abort/retry/compaction 顺序；chat rebuild |
+| Owner | Must-test focus |
+|-------|-----------------|
+| model-overlay | `/model` overlay; `/model provider/model-id` exact pick; must ensure provider config success before picking model; cancelled config must not switch or write default model; provider → model flow; `/scoped-models`; cycle model; cycle thinking; footer / border / status update |
+| auth / provider-config | `/apikey`; `/login`; `/logout`; custom-provider base URL / API key / model name config; cancellation must not produce half-writes; registry refresh after config + consumed by model-overlay |
+| settings-overlay | `/settings`; theme preview/apply; image-related toggles; thinking-block show/hide + rebuild; editor padding / autocomplete; token stats / buddy / presence / quiet startup etc. settings can save |
+| tree-overlay | `/resume`; `/tree`; `/fork`; `/new`; selector nav / filter / sort / rename / delete + banner state |
+| slash-dispatcher | Built-in slash commands route to owner; unknown command behavior unchanged; extension commands not swallowed; `/compact`, `/mcp`, `/resources`, `/status`, `/usage` stay reachable; existing easter eggs preserved |
+| input-submit | Plain prompt; slash not sent as prompt; extension slash command; `!` / `!!` bash; attachment submit; streaming steer / follow-up / queue; compaction queue; optimistic rollback |
+| extension-ui | select / input / editor / confirm; single-active prompt; focus / text restore; custom overlay handle / onHandle; inline custom restore; widget / footer / header / status set / clear; `setEditorComponent` callbacks / keybindings; reset clears all extension surfaces |
+| render layer | `agent_start` / `message_update` / tool events / end; tool expand / collapse; thinking show / hide; image tool result; error / abort / retry / compaction order; chat rebuild |
 
-### 验收记录模板
+### Acceptance record template
 
 ```text
 Slice:
@@ -76,193 +76,193 @@ Issues:
 
 ---
 
-## A. Slash 命令（33 条，owner: slash-dispatcher 除非另注）
+## A. Slash commands (33 entries; owner: slash-dispatcher unless noted)
 
-| 命令 | 触发 | 预期行为(验收标准) | owner | verify |
-|------|------|-------------------|-------|--------|
-| `/model [term]` | 输入 | 打开模型选择 overlay；带 term 则预过滤 | model-overlay | ⬜ |
-| `/scoped-models` | 输入 | 打开 scoped-models 选择器 | model-overlay | ⬜ |
-| `/thinking [lvl]` | 输入 | 切换/设置 thinking level | model-overlay | ⬜ |
-| `/agent-loop` | 输入 | 切换 agent loop framework | slash-dispatcher | ⬜ |
-| `/settings` | 输入 | 打开设置选择器 | settings-overlay/mount | ⬜ |
-| `/apikey` | 输入 | 进入 API key 录入流 | auth | ⬜ |
-| `/login [provider]` | 输入 | OAuth 登录（带 provider 直登，否则选择器）| auth | ⬜ |
-| `/logout` | 输入 | OAuth 登出选择器 | auth | ⬜ |
-| `/mcp [args]` | 输入 | 列/启停 MCP server | slash-dispatcher（经 facade，UI03）| ⬜ |
-| `/export [path]` | 输入 | 导出会话 HTML | slash-dispatcher | ⬜ |
-| `/share` | 输入 | 上传/生成分享链接 | slash-dispatcher | ⬜ |
-| `/copy` | 输入 | 复制最后 assistant 文本 | slash-dispatcher | ⬜ |
-| `/status` | 输入 | 显示会话/系统状态 | slash-dispatcher | ⬜ |
-| `/usage` | 输入 | 显示 token/费用用量 | slash-dispatcher | ⬜ |
-| `/name [text]` | 输入 | 设会话名 | slash-dispatcher | ⬜ |
-| `/session` | 输入 | 会话信息/操作 | slash-dispatcher | ⬜ |
-| `/resume` | 输入 | 打开会话恢复选择器 | tree-overlay | ⬜ |
-| `/new` | 输入 | 新建会话（清空）| tree-overlay/lifecycle | ⬜ |
-| `/fork` | 输入 | 从用户消息分叉 | tree-overlay | ⬜ |
-| `/tree` | 输入 | 打开分支树选择器 | tree-overlay | ⬜ |
-| `/changelog` | 输入 | 显示变更日志 | slash-dispatcher | ⬜ |
-| `/hotkeys` | 输入 | 显示键位表 | slash-dispatcher | ⬜ |
-| `/resources` | 输入 | 显示已加载资源(扩展/技能/主题) | slash-dispatcher | ⬜ |
-| `/reload` | 输入 | 重载配置/资源 | slash-dispatcher（runtime reload）| ⬜ |
-| `/compact [instr]` | 输入 | 手动压缩上下文(可带指令) | slash-dispatcher（经 AgentSession）| ⬜ |
-| `/soul` | 输入 | 显示 soul 状态 | slash-dispatcher | ⬜ |
-| `/persona [text]` | 输入 | 切换/显示 persona | slash-dispatcher | ⬜ |
-| `/memory` | 输入 | 显示 memory 状态 | slash-dispatcher | ⬜ |
-| `/language [lang]` | 输入 | 切换界面语言 | slash-dispatcher | ⬜ |
-| `/update` | 输入 | 检查并更新版本 | self-update | ⬜ |
-| `/reinstall` | 输入 | 重装 | self-update | ⬜ |
-| `/quit` | 输入 | 退出 | _shell/cancellation | ⬜ |
-| `/arminsayshi` | 输入 | 彩蛋 | slash-dispatcher | ⬜ |
+| Command | Trigger | Expected behavior (acceptance criterion) | owner | verify |
+|---------|---------|-------------------------------------------|-------|--------|
+| `/model [term]` | Input | Open model picker overlay; with term, pre-filter | model-overlay | ⬜ |
+| `/scoped-models` | Input | Open scoped-models picker | model-overlay | ⬜ |
+| `/thinking [lvl]` | Input | Cycle / set thinking level | model-overlay | ⬜ |
+| `/agent-loop` | Input | Cycle agent-loop framework | slash-dispatcher | ⬜ |
+| `/settings` | Input | Open settings picker | settings-overlay / mount | ⬜ |
+| `/apikey` | Input | Enter API key entry flow | auth | ⬜ |
+| `/login [provider]` | Input | OAuth login (direct if provider given, else picker) | auth | ⬜ |
+| `/logout` | Input | OAuth logout picker | auth | ⬜ |
+| `/mcp [args]` | Input | List / enable / disable MCP server | slash-dispatcher (via facade, UI03) | ⬜ |
+| `/export [path]` | Input | Export session as HTML | slash-dispatcher | ⬜ |
+| `/share` | Input | Upload / generate share link | slash-dispatcher | ⬜ |
+| `/copy` | Input | Copy last assistant text | slash-dispatcher | ⬜ |
+| `/status` | Input | Show session / system status | slash-dispatcher | ⬜ |
+| `/usage` | Input | Show token / cost usage | slash-dispatcher | ⬜ |
+| `/name [text]` | Input | Set session name | slash-dispatcher | ⬜ |
+| `/session` | Input | Session info / actions | slash-dispatcher | ⬜ |
+| `/resume` | Input | Open session-resume picker | tree-overlay | ⬜ |
+| `/new` | Input | New session (clear) | tree-overlay / lifecycle | ⬜ |
+| `/fork` | Input | Fork from a user message | tree-overlay | ⬜ |
+| `/tree` | Input | Open branch-tree picker | tree-overlay | ⬜ |
+| `/changelog` | Input | Show changelog | slash-dispatcher | ⬜ |
+| `/hotkeys` | Input | Show keybinding table | slash-dispatcher | ⬜ |
+| `/resources` | Input | Show loaded resources (extensions / skills / themes) | slash-dispatcher | ⬜ |
+| `/reload` | Input | Reload config / resources | slash-dispatcher (runtime reload) | ⬜ |
+| `/compact [instr]` | Input | Manual context compaction (may include instruction) | slash-dispatcher (via AgentSession) | ⬜ |
+| `/soul` | Input | Show soul state | slash-dispatcher | ⬜ |
+| `/persona [text]` | Input | Cycle / show persona | slash-dispatcher | ⬜ |
+| `/memory` | Input | Show memory state | slash-dispatcher | ⬜ |
+| `/language [lang]` | Input | Cycle interface language | slash-dispatcher | ⬜ |
+| `/update` | Input | Check and update version | self-update | ⬜ |
+| `/reinstall` | Input | Reinstall | self-update | ⬜ |
+| `/quit` | Input | Quit | _shell/cancellation | ⬜ |
+| `/arminsayshi` | Input | Easter egg | slash-dispatcher | ⬜ |
 
-> 另：扩展注册的 `/command` 经 `isExtensionCommand` 路由到 ExtensionRunner（owner: extension-ui + slash-dispatcher 协作，统一 dispatch 表是 F02/UI02 的 seam 目标）。bash 模式（`!` 前缀）由 `handleBashCommand` 处理（owner: slash-dispatcher）。
-
----
-
-## B. 键位动作（22 个 AppAction，owner 见注）
-
-| 动作 | 默认键 | 预期行为 | owner | verify |
-|------|--------|---------|-------|--------|
-| interrupt | `esc` | 中断当前 agent 运行；双击 esc 可触发 tree/配置动作 | _shell/cancellation | ⬜ |
-| clear | `ctrl+c` | 清空/退出确认（双击退出）| _shell/cancellation | ⬜ |
-| exit | `ctrl+d` | 退出 | _shell/cancellation | ⬜ |
-| suspend | `ctrl+z` | 挂起进程 | _shell/cancellation | ⬜ |
-| showResources | `ctrl+h` | 显示已加载资源 | slash-dispatcher | ⬜ |
-| cycleThinkingLevel | `shift+tab` | 循环 thinking level | model-overlay | ⬜ |
-| cycleModelForward | `ctrl+p` | 下一个模型 | model-overlay | ⬜ |
-| cycleModelBackward | `shift+ctrl+p` | 上一个模型 | model-overlay | ⬜ |
-| selectModel | `ctrl+l` | 打开模型选择器 | model-overlay | ⬜ |
-| selectProviderThenModel | `ctrl+shift+l` | provider→模型选择 | model-overlay | ⬜ |
-| expandTools | `ctrl+o` | 展开/折叠工具输出 | mount(render) | ⬜ |
-| toggleThinking | `ctrl+t` | 显隐 thinking block | mount(render) | ⬜ |
-| toggleSessionNamedFilter | `ctrl+n` | 切换会话命名过滤 | tree-overlay | ⬜ |
-| externalEditor | `ctrl+g` | 打开外部编辑器 | mount | ⬜ |
-| followUp | `alt+enter` | 追加 follow-up 消息 | mount(queue) | ⬜ |
-| dequeue | `alt+up` | 取回排队消息 | mount(queue) | ⬜ |
-| pasteImage | `ctrl+v` | 粘贴剪贴板图像 | image-pipeline | ⬜ |
-| newSession | (无默认) | 新建会话 | tree-overlay/lifecycle | ⬜ |
-| tree | (无默认) | 分支树 | tree-overlay | ⬜ |
-| fork | (无默认) | 分叉 | tree-overlay | ⬜ |
-| resume | (无默认) | 恢复会话 | tree-overlay | ⬜ |
-| 附件导航 | 方向键(附件态) | 在附件条上移动/删除 | image-pipeline | ⬜ |
-
-### B-editor. 编辑器层键位（EditorAction，39 个 — 多数属 TUI 库，非 P5 范围）
-
-> `@pencil-agent/tui` 的 `EditorComponent` 自带 39 个 `EditorAction`（光标/删除/选择/翻页/undo/yank…）。
-> **绝大多数是纯文本编辑，owner = tui 库，P5 不动、不验收**。只有下面几个与 interactive-mode 行为交叉，需纳入验收：
-
-| EditorAction | 默认键 | 预期 | owner | verify |
-|------|--------|------|-------|--------|
-| submit | `enter` | 触发输入提交管线（→ F 表）| input-submit | ⬜ |
-| newLine | `shift+enter` | 多行换行(不提交) | tui/editor | ⬜ |
-| expandTools | `ctrl+o` | 展开工具输出（与 AppAction 同名，确认单一路径）| mount(render) | ⬜ |
-| toggleSessionPath | `ctrl+p`(选择器内) | session 选择器:切路径显示 | tree-overlay | ⬜ |
-| toggleSessionSort | `ctrl+s`(选择器内) | session 选择器:切排序 | tree-overlay | ⬜ |
-| renameSession | `ctrl+r`(选择器内) | session 选择器:重命名 | tree-overlay | ⬜ |
-| deleteSession / ...Noninvasive | `ctrl+d`/`ctrl+backspace`(选择器内) | session 选择器:删除 | tree-overlay | ⬜ |
-| selectConfirm / selectCancel | `enter` / `esc`,`ctrl+c` | overlay 确认/取消导航 | 各 overlay controller | ⬜ |
-
-> 其余 30 个(cursor*/delete*/page*/copy/yank/undo/jump*)= 纯编辑器,不列入 P5 验收。
+> Additional: extension-registered `/command` routes via `isExtensionCommand` to ExtensionRunner (owner: extension-ui + slash-dispatcher cooperation; a unified dispatch table is the seam target for F02 / UI02). Bash mode (`!` prefix) is handled by `handleBashCommand` (owner: slash-dispatcher).
 
 ---
 
-## C. Overlay / 选择器（owner 见注）
+## B. Key bindings (22 AppActions; owner noted)
 
-| Overlay | 触发 | 预期行为 | owner | verify |
-|---------|------|---------|-------|--------|
-| 模型选择器 | `/model` `ctrl+l` | 列模型、选中切换 | model-overlay | ⬜ |
-| provider→模型 | `ctrl+shift+l` | 先选 provider 再选模型 | model-overlay | ⬜ |
-| scoped-models | `/scoped-models` | 多模型作用域配置 | model-overlay | ⬜ |
-| 设置选择器 | `/settings` | 设置项浏览/修改 | settings-overlay/mount | ⬜ |
-| 会话恢复选择器 | `/resume` | 列历史会话、恢复 | tree-overlay | ⬜ |
-| 分支树选择器 | `/tree` | 树导航、选叶子 | tree-overlay | ⬜ |
-| 用户消息选择器 | `/fork` | 选分叉点 | tree-overlay | ⬜ |
-| OAuth 选择器 | `/login` `/logout` | 选 provider 登录/登出 | auth | ⬜ |
-| 登录对话框 | login 流 | 输入凭据/OAuth 跳转 | auth | ⬜ |
-| Provider 配置 | 模型选择或 provider 选择触发 | API key/base URL/custom model 配置归 auth/provider-config；model-overlay 只在配置成功后切换模型并写默认模型，取消配置不得切换或持久化默认模型 | auth/provider-config + model-overlay | ⬜ |
-| 更新选项 | `/update` | 选更新方式 | self-update | ⬜ |
-| 重试选项 | 更新失败 | 重试/放弃 | self-update | ⬜ |
-| 扩展选择器/输入/编辑器/确认/通知/错误 | 扩展 API | 扩展驱动的 prompt/overlay 表面；select/input/editor 为单活动 prompt，custom overlay 保留 handle 语义，notify 不进入 overlay stack | extension-ui | ⬜ |
+| Action | Default key | Expected behavior | owner | verify |
+|--------|-------------|-------------------|-------|--------|
+| interrupt | `esc` | Interrupt current agent run; double-tap esc can trigger tree / config action | _shell/cancellation | ⬜ |
+| clear | `ctrl+c` | Clear / quit confirm (double-tap to quit) | _shell/cancellation | ⬜ |
+| exit | `ctrl+d` | Quit | _shell/cancellation | ⬜ |
+| suspend | `ctrl+z` | Suspend process | _shell/cancellation | ⬜ |
+| showResources | `ctrl+h` | Show loaded resources | slash-dispatcher | ⬜ |
+| cycleThinkingLevel | `shift+tab` | Cycle thinking level | model-overlay | ⬜ |
+| cycleModelForward | `ctrl+p` | Next model | model-overlay | ⬜ |
+| cycleModelBackward | `shift+ctrl+p` | Previous model | model-overlay | ⬜ |
+| selectModel | `ctrl+l` | Open model picker | model-overlay | ⬜ |
+| selectProviderThenModel | `ctrl+shift+l` | Provider → model picker | model-overlay | ⬜ |
+| expandTools | `ctrl+o` | Expand / collapse tool output | mount (render) | ⬜ |
+| toggleThinking | `ctrl+t` | Show / hide thinking block | mount (render) | ⬜ |
+| toggleSessionNamedFilter | `ctrl+n` | Toggle session named-filter | tree-overlay | ⬜ |
+| externalEditor | `ctrl+g` | Open external editor | mount | ⬜ |
+| followUp | `alt+enter` | Append follow-up message | mount (queue) | ⬜ |
+| dequeue | `alt+up` | Pop queued message | mount (queue) | ⬜ |
+| pasteImage | `ctrl+v` | Paste clipboard image | image-pipeline | ⬜ |
+| newSession | (no default) | New session | tree-overlay / lifecycle | ⬜ |
+| tree | (no default) | Branch tree | tree-overlay | ⬜ |
+| fork | (no default) | Fork | tree-overlay | ⬜ |
+| resume | (no default) | Resume session | tree-overlay | ⬜ |
+| Attachment navigation | Arrow keys (attachment state) | Move / delete on the attachment bar | image-pipeline | ⬜ |
 
----
+### B-editor. Editor-layer keys (EditorAction, 39 entries — mostly the TUI library, not P5 scope)
 
-## D. 流式渲染特性（handleEvent，13 事件，owner: mount/render — UI04 deferred）
+> `@pencil-agent/tui`'s `EditorComponent` has its own 39 `EditorAction` (cursor / delete / select / page / undo / yank / ...).
+> **Most are pure text editing; owner = tui library; P5 does not touch or accept them.** Only the few that intersect with interactive-mode behavior need acceptance:
 
-> **验收粒度(已定)**：本轮 P5 **不动** handleEvent(UI04 deferred)，故 D 用**粗粒度功能验收**——每事件确认"渲染发生且形态对"(如 message_update 增量刷文本、tool_execution_end 出可展开结果)，**不做逐帧/逐态字节比对**。
-> 逐态精验(工具展开↔折叠、thinking 显隐、loader 帧)**推迟到 UI04 真正重写 render 层时**再做；那时这些事件才是被改对象，才需要细粒度验收。本轮它们是"保持不变"的旁观者，粗验足够。
+| EditorAction | Default key | Expected | owner | verify |
+|--------------|-------------|----------|-------|--------|
+| submit | `enter` | Trigger input-submit pipeline (→ F table) | input-submit | ⬜ |
+| newLine | `shift+enter` | Multi-line break (no submit) | tui / editor | ⬜ |
+| expandTools | `ctrl+o` | Expand tool output (same name as AppAction; confirm single path) | mount (render) | ⬜ |
+| toggleSessionPath | `ctrl+p` (in selector) | Session selector: toggle path display | tree-overlay | ⬜ |
+| toggleSessionSort | `ctrl+s` (in selector) | Session selector: toggle sort | tree-overlay | ⬜ |
+| renameSession | `ctrl+r` (in selector) | Session selector: rename | tree-overlay | ⬜ |
+| deleteSession / ...Noninvasive | `ctrl+d` / `ctrl+backspace` (in selector) | Session selector: delete | tree-overlay | ⬜ |
+| selectConfirm / selectCancel | `enter` / `esc`, `ctrl+c` | Overlay confirm / cancel nav | each overlay controller | ⬜ |
 
-| 事件 | 预期渲染 | verify |
-|------|---------|--------|
-| agent_start | 起 loading/working 动画 + 计时 | ⬜ |
-| message_start | 起 streaming assistant 组件 | ⬜ |
-| message_update | 增量刷 assistant 文本/thinking/toolCall | ⬜ |
-| message_end | 定稿 assistant 消息 | ⬜ |
-| tool_execution_start | 起工具执行组件 | ⬜ |
-| tool_execution_update | 刷工具进度 | ⬜ |
-| tool_execution_end | 定稿工具结果(可展开) | ⬜ |
-| agent_end | 停动画/计时，回到 idle | ⬜ |
-| auto_compaction_start/end | 压缩 loader + 排队消息提示 | ⬜ |
-| auto_retry_start/end | 重试 loader + esc 处理 | ⬜ |
-
----
-
-## E. 其它特性（owner 见注）
-
-| 特性 | 触发 | 预期 | owner | verify |
-|------|------|------|-------|--------|
-| 附件/图像管线 | 粘贴/拖入/`ctrl+v` | 加入附件条、随消息发送 | image-pipeline | ⬜ |
-| 文本中图像提取 | 含路径文本 | 解析为附件 | image-pipeline | ⬜ |
-| 自动补全 | 输入 `/` `@` 等 | 候选提示 | mount(setupAutocomplete) | ⬜ |
-| 消息排队/取回 | 运行中输入 | 排队、agent 结束后处理 | mount(queue) | ⬜ |
-| 启动版本检查 | 启动 | 后台检查、有新版提示 | self-update | ⬜ |
-| buddy pet | 状态变化 | 宠物动画随状态 | mount(buddyPet) | ⬜ |
-| 扩展 widget/footer/header | 扩展 API | 注入区域渲染 | extension-ui | ⬜ |
-| 会话导航 banner | switch/fork/tree | 顶部提示 | tree-overlay | ⬜ |
-| 启动横幅/资源加载展示 | 启动/`/resources` | 欢迎+诊断 | mount | ⬜ |
+> The other 30 (cursor* / delete* / page* / copy / yank / undo / jump*) are pure editor and not in P5 acceptance.
 
 ---
 
-## F. 输入提交管线（owner: `input-submit-controller`（UI06）；slash-dispatcher 只处理内置 `/command` dispatch）
+## C. Overlay / Pickers (owner noted)
 
-| 特性 | 触发 | 预期 | owner | verify |
-|------|------|------|-------|--------|
-| 内置 slash 优先处理 | 输入 `/model` 等内置命令 | 命中内置命令后不继续走普通消息提交 | slash-dispatcher + input-submit | ⬜ |
-| 嵌入式 persona | 输入 `文本 /persona ...` | 执行 persona 切换，并把前置文本继续作为用户消息提交 | input-submit/persona | ⬜ |
-| bash 命令 | 输入 `!cmd` | 执行 bash，不作为普通消息；运行中已有 bash 时保留 editor 文本并提示 | input-submit/bash | ⬜ |
-| bash 排除上下文 | 输入 `!!cmd` | 执行 bash 且标记 excludeFromContext | input-submit/bash | ⬜ |
-| compaction 期间输入 | compaction 运行中输入普通文本 | 普通文本进入 compaction queue；extension command 仍立即执行 | input-submit/queue | ⬜ |
-| streaming steer | agent streaming 时输入文本 | 先乐观渲染用户消息，再以 steer 行为提交 | input-submit/queue | ⬜ |
-| streaming 附件 | streaming 时带附件/图片路径输入 | 处理图片；模型不支持图片时丢弃并提示 | input-submit + image-pipeline | ⬜ |
-| 普通附件提交 | idle 时带附件/图片路径输入 | 图片进入消息内容；提交后清空附件条并清理临时文件 | input-submit + image-pipeline | ⬜ |
-| 外部输入回调 | `onInputCallback` 存在时提交 | 调用 callback，不走 agent prompt | mount/input-submit | ⬜ |
-| 提交失败回滚 | 普通消息 prompt 抛错 | 移除对应 optimistic user message 并显示错误 | input-submit/render | ⬜ |
-
-> **⚠️ 已发现冗余坏味(给 slash 重写的证据)**：`/memory`、`/arminsayshi`、`/resume`、`/quit` 在 `executeBuiltinSlashCommand`(L165-180) **和** submit handler(L2808-2827)**两处都有分支**。submit handler 先调 `executeBuiltinSlashCommand` 并在命中时 return(L2782-2784)，故后者那 4 个分支**大概率是不可达死分支**。**slash 重写(UI02)须消除该重复**，验收时确认这 4 条仍只走一条路径(dispatch 表)、行为不变。
+| Overlay | Trigger | Expected behavior | owner | verify |
+|---------|---------|-------------------|-------|--------|
+| Model picker | `/model` `ctrl+l` | List models, select to switch | model-overlay | ⬜ |
+| Provider → model | `ctrl+shift+l` | Pick provider first, then model | model-overlay | ⬜ |
+| scoped-models | `/scoped-models` | Multi-model scope config | model-overlay | ⬜ |
+| Settings picker | `/settings` | Browse / modify settings | settings-overlay / mount | ⬜ |
+| Session resume picker | `/resume` | List past sessions, resume | tree-overlay | ⬜ |
+| Branch tree picker | `/tree` | Tree navigation, pick leaf | tree-overlay | ⬜ |
+| User message picker | `/fork` | Pick fork point | tree-overlay | ⬜ |
+| OAuth picker | `/login` `/logout` | Pick provider for login / logout | auth | ⬜ |
+| Login dialog | Login flow | Enter credentials / OAuth redirect | auth | ⬜ |
+| Provider config | Triggered by model picker or provider picker | API key / base URL / custom model config belongs to auth / provider-config; model-overlay only switches model and writes default model after config succeeds; cancelled config must not switch or persist a default model | auth / provider-config + model-overlay | ⬜ |
+| Update options | `/update` | Pick update method | self-update | ⬜ |
+| Retry options | On update failure | Retry / give up | self-update | ⬜ |
+| Extension picker / input / editor / confirm / notify / error | Extension API | Extension-driven prompt / overlay surface; select / input / editor are single-active-prompt; custom overlay preserves handle semantics; notify does not enter the overlay stack | extension-ui | ⬜ |
 
 ---
 
-## 代码已扫全 vs 待 maintainer 主观判断
+## D. Streaming render features (handleEvent, 13 events; owner: mount / render — UI04 deferred)
 
-**v0.5 已从代码确定**（无需你逐行翻 7960 行）：
-- ✅ A 的 33 条 = `executeBuiltinSlashCommand` 全分支(标准命令集完整;扩展命令走 `isExtensionCommand`)
-- ✅ B 的 22 个 AppAction + B-editor 的相关 EditorAction(其余 30 个纯编辑器已排除)
-- ✅ F 的 submit 管线 = `setupEditorSubmitHandler` 实读(persona 嵌入/bash/compaction queue/steer/附件/回滚)
-- ✅ 冗余坏味(4 条命令双处理)已标
+> **Acceptance granularity (settled)**: this P5 round **does not touch** handleEvent (UI04 deferred), so D uses **coarse functional acceptance** — for each event, confirm "render happens and shape is right" (e.g. message_update incrementally refreshes text, tool_execution_end produces an expandable result); **no per-frame / per-state byte comparison**.
+> Per-state fine-grained verification (tool expand ↔ collapse, thinking show / hide, loader frames) **deferred until UI04 actually rewrites the render layer**; only then are these events the subject of change and require fine-grained acceptance. This round they are "unchanged" bystanders; coarse is enough.
 
-**已定（2026-06-02）**：
+| Event | Expected render | verify |
+|-------|-----------------|--------|
+| agent_start | Start loading / working animation + timer | ⬜ |
+| message_start | Start streaming assistant component | ⬜ |
+| message_update | Incremental refresh of assistant text / thinking / toolCall | ⬜ |
+| message_end | Finalize assistant message | ⬜ |
+| tool_execution_start | Start tool-execution component | ⬜ |
+| tool_execution_update | Refresh tool progress | ⬜ |
+| tool_execution_end | Finalize tool result (expandable) | ⬜ |
+| agent_end | Stop animation / timer, return to idle | ⬜ |
+| auto_compaction_start / end | Compaction loader + queued-message hint | ⬜ |
+| auto_retry_start / end | Retry loader + esc handling | ⬜ |
 
-- [x] **per-feature hybrid 决策**：不逐条标，**继承 owner 簇**的决策（见 [refactor-plan §纯搬 vs 重写](./refactor-plan.md)）。
-- [x] **D 渲染验收粒度**：本轮**粗粒度功能验收**；逐态精验推迟到 UI04（见 D 段说明）。
-- [x] **input-submit 单独立卡**：→ [UI06](./findings/UI06-input-submit-pipeline.md)，抽 `input-submit-controller`；UI07 增补 `settings-overlay-controller` 后 controller 集 = 9。
-- [x] **双击 esc / esc 分派归属**：`onEscape` 是单键多目标分派 —— **mount 接线**(判状态后转发)，分支委托 owner(abort→cancellation、空闲双击→tree-overlay、queue 恢复→queue)。见 [gates.md esc 键分派行](./gates.md)。
+---
 
-**仍需你拍板（第 4 点，给你 3 选 1）—— 扩展动态命令/键位/widget 怎么验收**：
+## E. Other features (owner noted)
 
-| 选项 | 做法 | 优 | 劣 |
-|------|------|----|----|
-| **A 契约验收(推荐)** | 验 `ExtensionUIContext` **契约**:host 能正确路由"任意注册的命令/widget/overlay",测分派机制而非具体扩展 | 与装了啥扩展无关、稳定、可复现 | 不验具体扩展的端到端 |
-| **B fixture 扩展** | 造一个最小**测试扩展**,注册已知 `/cmd` + widget + prompt,对它验收 | 端到端、隔离、可复现 | 要维护 fixture |
-| **C 内置扩展手测** | 对随包的内置扩展(interview/loop/plan/team/security-audit/soul…)逐个手跑,确认其命令+UI | 验真实扩展 | 不可自动化、依赖人 |
+| Feature | Trigger | Expected | owner | verify |
+|---------|---------|----------|-------|--------|
+| Attachment / image pipeline | Paste / drag-in / `ctrl+v` | Add to attachment bar, send with message | image-pipeline | ⬜ |
+| Image extraction from text | Text containing paths | Parse as attachments | image-pipeline | ⬜ |
+| Autocomplete | Input `/` `@` etc. | Candidate hints | mount (setupAutocomplete) | ⬜ |
+| Message queue / dequeue | Input during run | Queue, processed after agent ends | mount (queue) | ⬜ |
+| Startup version check | Startup | Background check, prompt on new version | self-update | ⬜ |
+| Buddy pet | State change | Pet animation follows state | mount (buddyPet) | ⬜ |
+| Extension widget / footer / header | Extension API | Injection-zone render | extension-ui | ⬜ |
+| Session-nav banner | switch / fork / tree | Top hint | tree-overlay | ⬜ |
+| Startup banner / resource-load display | Startup / `/resources` | Welcome + diagnostics | mount | ⬜ |
 
-> **已定:A + C**(2026-06-02)—— A 验"分派契约不破"(自动、稳)+ C 对真实内置扩展(interview/loop/plan/team/security-audit/soul…)手测兜底;B(fixture)等以后要自动化回归再上。
+---
 
-> 校全后此表即 P5 验收门 + 维护者特性目录；每抽一个 controller，回填该 owner 名下功能的 verify 列。
+## F. Input-submit pipeline (owner: `input-submit-controller` (UI06); slash-dispatcher only handles built-in `/command` dispatch)
+
+| Feature | Trigger | Expected | owner | verify |
+|---------|---------|----------|-------|--------|
+| Built-in slash handled first | Input `/model` etc. built-in command | Matches built-in command, does not continue as plain message | slash-dispatcher + input-submit | ⬜ |
+| Embedded persona | Input `text /persona ...` | Execute persona switch, and submit pre-text as a user message | input-submit / persona | ⬜ |
+| Bash command | Input `!cmd` | Execute bash, not as a normal message; if a bash is already running, preserve editor text and hint | input-submit / bash | ⬜ |
+| Bash exclude-from-context | Input `!!cmd` | Execute bash and mark excludeFromContext | input-submit / bash | ⬜ |
+| Input during compaction | Plain text input while compaction runs | Plain text goes to compaction queue; extension commands still execute immediately | input-submit / queue | ⬜ |
+| Streaming steer | Text input while agent is streaming | Optimistic render the user message first, then submit as steer | input-submit / queue | ⬜ |
+| Streaming attachment | Attachment / image-path input during streaming | Process images; drop with hint if the model doesn't support images | input-submit + image-pipeline | ⬜ |
+| Normal attachment submit | Attachment / image-path input when idle | Image goes into message content; after submit, clear attachment bar and clean up temp files | input-submit + image-pipeline | ⬜ |
+| External-input callback | Submit while `onInputCallback` exists | Call the callback, do not go through agent prompt | mount / input-submit | ⬜ |
+| Submit failure rollback | Plain message prompt throws | Remove the corresponding optimistic user message and show an error | input-submit / render | ⬜ |
+
+> **Warning — duplicate handler smell (evidence for slash rewrite)**: `/memory`, `/arminsayshi`, `/resume`, `/quit` are branched in **both** `executeBuiltinSlashCommand` (L165-180) **and** the submit handler (L2808-2827). The submit handler calls `executeBuiltinSlashCommand` first and returns on hit (L2782-2784), so those 4 branches in the submit handler are **likely unreachable dead code**. **Slash rewrite (UI02) must eliminate this duplication**; on acceptance, confirm these 4 commands still go through only one path (dispatch table) with unchanged behavior.
+
+---
+
+## Code fully scanned vs awaiting maintainer judgement
+
+**v0.5 settled from code** (no need to read 7960 lines row by row):
+- A's 33 entries = all branches in `executeBuiltinSlashCommand` (standard command set complete; extension commands go through `isExtensionCommand`)
+- B's 22 AppActions + relevant EditorActions in B-editor (the other 30 pure editor ones excluded)
+- F's submit pipeline = `setupEditorSubmitHandler` read in full (embedded persona / bash / compaction queue / steer / attachment / rollback)
+- Duplicate-handler smell (4 commands double-handled) flagged
+
+**Already decided (2026-06-02)**:
+
+- [x] **Per-feature hybrid decision**: don't mark per-row; **inherit the cluster decision** of the owner (see [refactor-plan §pure-move vs rewrite](./refactor-plan.md)).
+- [x] **D render acceptance granularity**: this round uses **coarse functional acceptance**; per-state fine-grained verification deferred to UI04 (see D section).
+- [x] **input-submit as a separate card**: → [UI06](./findings/UI06-input-submit-pipeline.md), extract `input-submit-controller`; after UI07 adds `settings-overlay-controller` the controller set is 9.
+- [x] **Double-tap esc / esc dispatch ownership**: `onEscape` is single-key multi-target dispatch — **mount wires it** (check state, then forward), branches delegate to owner (abort → cancellation, empty double-tap → tree-overlay, queue restore → queue). See [gates.md esc-dispatch row](./gates.md).
+
+**Still needs your call (point 4, 3 choices) — how to accept extension dynamic commands / keybindings / widgets**:
+
+| Option | Approach | Pro | Con |
+|--------|----------|-----|-----|
+| **A. Contract acceptance (recommended)** | Accept the `ExtensionUIContext` **contract**: the host correctly routes "any registered command / widget / overlay"; test the dispatch mechanism, not specific extensions | Decoupled from which extensions are installed; stable; reproducible | Does not verify specific extensions end-to-end |
+| **B. Fixture extension** | Build a minimal **test extension**, register known `/cmd` + widget + prompt, accept against it | End-to-end; isolated; reproducible | Need to maintain the fixture |
+| **C. Built-in extension manual tests** | For each shipped built-in extension (interview / loop / plan / team / security-audit / soul / …), manually run its commands + UI | Verifies real extensions | Not automatable; depends on humans |
+
+> **Already decided: A + C** (2026-06-02) — A verifies "dispatch contract unbroken" (automated, stable) + C manually tests the real built-in extensions (interview / loop / plan / team / security-audit / soul / …) as a fallback; B (fixture) waits until we want automated regression later.
+
+> After your review, this table becomes P5's acceptance gate + maintainer feature catalog. After extracting each controller, fill in the verify column for the entries under that owner.

@@ -33,5 +33,6 @@ If a type is only shared inside the host, keep it in the owning host module. If 
 consumer needs a richer shape, extend the protocol contract locally rather than
 writing host-specific requirements back into protocol.
 
-[COVENANT]: Keep this member list aligned with `src/` and
-`.dev-docs/architecture-review/sdk-surface-review/protocol-inventory.md`.
+[COVENANT]: Keep this member list aligned with `src/`. The historical
+SDK-surface review notes are no longer in the repo; consult git history if
+you need to recover the rationale.

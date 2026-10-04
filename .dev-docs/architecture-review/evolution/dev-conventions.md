@@ -1,90 +1,91 @@
-# Dev Conventions — 重构后未来开发约规（演进组 · 骨架）
+# Dev Conventions — Post-refactor development discipline (Evolution Group · Skeleton)
 
 ```yaml
 group: evolution
 status: skeleton
 purpose: |
-  把候选 D 重构沉淀下来的边界与纪律，固化成长期开发约规，
-  使"可长期维护 + 具备扩展"在日常开发中可持续，而非一次性达成后再次劣化。
+  Codify the boundaries and discipline crystallized by the Candidate-D refactor into long-lived development
+  conventions, so "maintainable + extensible" stays enforced in everyday development instead of regressing
+  after a one-off achievement.
 based_on:
-  - ../target-architecture.md   # 候选 D 端态边界
-  - ./PARP.md                    # 接缝与生长面纪律
-audience: pencil maintainer · 未来贡献者 · arch agent
+  - ../target-architecture.md   # Candidate-D target-state boundaries
+  - ./PARP.md                    # seam and growth-surface discipline
+audience: pencil maintainer · future contributors · arch agent
 ```
 
-> **文档职责**：维护重构后的长期开发规约。与 F08（quality rule 可执行化）联动——F08 是 CI 守门的实现，本文是规约的"为什么 + 怎么做"。
+> **Document role**: maintain the long-lived development conventions after the refactor. Couples with F08 (quality-rule executability) — F08 is the CI gate's implementation; this document is the "why + how" of the conventions.
 
 ---
 
-## 1. 顶层目录归属判据（新增代码放哪）
+## 1. Top-level directory placement criteria (where does new code go)
 
-| 放哪 | 判据 | 反例（不要放这里）|
-|------|------|------------------|
-| `core/<域>/` | nano-pencil 业务核心 | 横切原语（→ platform）、可发布库（→ packages）|
-| `core/lib/<lib>/` | 内部库，**当前 0 外部消费者**，不发布 | 有外部消费者（→ packages）|
-| `core/platform/` | 横切原语，**无业务知识** | 含业务逻辑 |
-| `packages/<pkg>/` | **独立可发布身份**（有外部消费者 或 maintainer 明确战略发布）| 0 消费者的内部库（→ core/lib）|
-| `extensions/{builtin,optional}/` | 第一方/可选能力实现 | 稳定第三方协议类型（→ protocol）|
+| Where to put it | Criterion | Anti-example (do NOT put here) |
+|-----------------|-----------|---------------------------------|
+| `core/<domain>/` | nano-pencil business core | cross-cutting primitives (→ platform); publishable libraries (→ packages) |
+| `core/lib/<lib>/` | Internal library, **currently 0 outside consumers**, not published | Has outside consumers (→ packages) |
+| `core/platform/` | Cross-cutting primitive, **no business knowledge** | Contains business logic |
+| `packages/<pkg>/` | **Independently publishable identity** (has outside consumers OR maintainer has a clear publishing strategy) | Internal lib with 0 consumers (→ core/lib) |
+| `extensions/{builtin,optional}/` | First-party / opt-in capability implementations | Stable third-party protocol types (→ protocol) |
 
-> **packages/ 入场券**（grilling 决议）：独立可发布身份是唯一入场券。进入 `packages/` 的第一方包必须按真实 npm 包维护；若尚未发布，先发布该包，再让 host 依赖公网版本。发布期禁止用脚本临时剥离或改写依赖来掩盖未发布状态。
+> **Entry ticket to `packages/`** (grilling resolution): independently publishable identity is the only entry ticket. First-party packages entering `packages/` must be maintained as real npm packages; if not yet published, publish that package first and have the host depend on the public version. Don't use scripts to temporarily strip or rewrite dependencies during the publish phase to hide an unpublished state.
 
-## 2. 依赖方向（单向，CI 守门）
+## 2. Dependency direction (one-way; CI-gated)
 
 ```
-modes/ ──► core/ ──► core/platform/        （platform 不依赖业务，反向禁止）
-core/ ──► core/lib/                          （lib 不反依赖业务）
-packages/mem-core, soul-core ──► packages/protocol   （禁止反向 import host，修 U3）
-extensions/ ──► packages/protocol            （扩展只依赖稳定协议，不依赖 host 内部）
+modes/ ──► core/ ──► core/platform/         (platform does not depend on business; reverse is forbidden)
+core/ ──► core/lib/                          (lib does not reverse-depend on business)
+packages/mem-core, soul-core ──► packages/protocol   (forbidden to reverse-import host; fix U3)
+extensions/ ──► packages/protocol            (extensions depend only on stable protocols, not host internals)
 ```
 
-## 3. 协议生长面纪律（防 PARP 二次重构）
+## 3. Protocol growth-surface discipline (prevent a second PARP refactor)
 
-> **改名（决议 2026-06-12，随 Phase B/P8 落地）**：`@pencil-agent/extension-sdk` → **`@pencil-agent/protocol`**。
-> 理由：它不只服务"扩展"——mem-core/soul-core 也实现它的契约；它是**整个 Agent 能力协议**(tool/lifecycle/memory/soul/agent-profile…)。对位 ACP(`@agentclientprotocol/sdk`)的 protocol 框架；它是**纯类型契约**，不是运行时 SDK。first-party + pre-2.0，改名安全。下文 `protocol` 即指该包。
+> **Rename** (resolution 2026-06-12, landed with Phase B / P8): `@pencil-agent/extension-sdk` → **`@pencil-agent/protocol`**.
+> Reason: it doesn't only serve "extensions" — mem-core / soul-core also implement its contracts; it is **the entire Agent capability protocol** (tool / lifecycle / memory / soul / agent-profile / ...). It is the counterpart to ACP (`@agentclientprotocol/sdk`) as a protocol framework; it is **pure type contracts**, not a runtime SDK. First-party + pre-2.0, so the rename is safe. Below, `protocol` refers to this package.
 
-- **`packages/protocol/` 是唯一只增不改的协议生长面**：未来所有 PARP 协议类型（agent-profile / host-adapter / tool-runtime / a2a-bridge / memory-* / soul-* / cognitive-*）只进 protocol。
-- **host `index.ts` 永不增长协议类型**：一次收窄到位后，对外只暴露 stable SDK 接口。
-- **协议优先 re-export 业界标准**：`host-adapter.ts ← @agentclientprotocol/sdk`（ACP）；`tool-runtime.ts ← MCP`；`a2a-bridge.ts ← A2A`（占位）。**有 wire 标准就直接依赖并 re-export，不自造**。当某域接 wire 标准时，protocol 才新增对应依赖（如 host-adapter 化时 protocol 依赖 ACP；眼下 ACP 仅 `modes/acp/` 实现侧用）。仅 Continuity 与 Agent Profile schema 为 pencil 自定义。
-- **按协议域分文件**（一文件一"大类"，对位 ACP 的 acp/jsonrpc/stream 分法）：`tools.ts` / `lifecycle.ts` / `host-adapter.ts` / `tool-runtime.ts` / `memory-store.ts` / `soul-facet.ts` / `agent-profile.ts` / `a2a-bridge.ts`。零/极小依赖、纯类型、有 wire 的对位 schema。
+- **`packages/protocol/` is the only additive-only protocol growth surface**: all future PARP protocol types (agent-profile / host-adapter / tool-runtime / a2a-bridge / memory-* / soul-* / cognitive-*) only go into protocol.
+- **Host `index.ts` never grows protocol types**: after one-time narrowing, the host exposes only stable SDK surface.
+- **Protocols prefer re-exporting industry standards**: `host-adapter.ts ← @agentclientprotocol/sdk` (ACP); `tool-runtime.ts ← MCP`; `a2a-bridge.ts ← A2A` (placeholder). **When a wire standard exists, depend on and re-export it; don't reinvent.** When a domain adopts a wire standard, only then does protocol add the corresponding dependency (e.g. when host-adapter lands, protocol depends on ACP; for now ACP is only used on the implementation side in `modes/acp/`). Only Continuity and Agent Profile schemas are pencil-defined.
+- **One file per protocol domain** (mirroring ACP's acp/jsonrpc/stream split): `tools.ts` / `lifecycle.ts` / `host-adapter.ts` / `tool-runtime.ts` / `memory-store.ts` / `soul-facet.ts` / `agent-profile.ts` / `a2a-bridge.ts`. Zero/minimal deps, pure types, counterpart schema where a wire standard exists.
 
-## 3b. 类型/协议放置约规（日常开发铁律）
+## 3b. Type / protocol placement convention (everyday-development iron rule)
 
-> 回答两个高频问题：**一个类型该写哪？怎么发现已有的、避免重复定义？**
+> Answers two high-frequency questions: **where should this type go? how do I find what already exists so I don't redefine it?**
 
-**亮线 —— 什么才算"公共协议"**：
-> 一个类型成为公共协议（进 `packages/protocol/`），**当且仅当一个【已发布包(mem/soul)或外部扩展作者】需要它**——即它**跨过了 publish 边界**。仅被 host 内部多文件用 ≠ 协议（那只是模块导出）。
+**Bright line — what counts as a "public protocol"**:
+> A type becomes a public protocol (lands in `packages/protocol/`) **if and only if an [already-published package (mem/soul) or an external extension author] needs it** — i.e. **it has crossed the publish boundary**. Being used by multiple files inside the host is NOT a protocol (that's just a module export).
 
-**放置阶梯（类型住"覆盖其消费者的最窄作用域"）**：
+**Placement ladder (a type lives in the narrowest scope that covers its consumers)**:
 
-| 消费者范围 | 家 | 发包 |
-|-----------|----|----|
-| 1 文件 | 文件内，不导出 | 否 |
-| 1 模块内多文件 | `<模块>/types.ts` 或拥有该概念的文件 | 否 |
-| 1 层内多模块 | **由"概念归属的模块"导出**（不建层级大 types.ts，避免层级版 barrel）| 否 |
-| host 内部、跨 core↔modes | `*-contract.ts`（范例 `theme-contract.ts`），生产方持有 | 否 |
-| **跨 publish 边界**（mem/soul/外部）| `packages/protocol/`（按域分文件）| **是（改契约才发）** |
+| Consumer scope | Home | Published? |
+|----------------|------|------------|
+| 1 file | Inside the file, not exported | No |
+| Multiple files within one module | `<module>/types.ts` or the file that owns the concept | No |
+| Multiple modules within one layer | **Exported by the module that owns the concept** (no layer-level big types.ts, no layer barrel) | No |
+| Inside the host, across core↔modes | `*-contract.ts` (e.g. `theme-contract.ts`), producer-side ownership | No |
+| **Across the publish boundary** (mem/soul/external) | `packages/protocol/` (one file per domain) | **Yes (only ship when the contract changes)** |
 
-**涌现式抽取**：从最窄起步，**只在更宽作用域真出现消费者时提升一级**。**永不预先往 protocol 放**——单写功能时它不是协议；多处用了再抽取。
+**Emergent extraction**: start at the narrowest, **only widen when a wider consumer actually appears**. **Never pre-place in protocol** — when you write a single feature, it's not a protocol; extract when multiple consumers show up.
 
-**本地扩展、不写回（Open/Closed）**：消费者要特化某契约，就在**自己内部 `extends` 基契约**（`interface MyMemStore extends MemoryStore {…}` / 泛型 / 组合），**不改 protocol**。只有当某特化被**多个消费者**都需要时才提升进 protocol 基契约。基契约对修改封闭、对扩展开放。
+**Local extension, no write-back (Open/Closed)**: when a consumer needs to specialize a contract, **extend the base contract locally inside that consumer** (`interface MyMemStore extends MemoryStore {...}` / generics / composition), **do not modify protocol**. Only when a specialization is needed by **multiple consumers** do you promote it into protocol's base contract. Base contracts are closed to modification, open to extension.
 
-**发现机制（避免重复定义）**：不靠记忆、不靠层级大 types.ts——**读该目录的 DIP P2 `AGENT.md` Member List**（已逐文件列出每个文件定义/导出什么）；类型住"概念归属文件"或模块 `types.ts`，位置可预测；protocol 按域分文件，找契约看域文件。
+**Discovery mechanism (avoid redefining)**: don't rely on memory or layer-level big types.ts — **read that directory's DIP P2 `AGENT.md` Member List** (each file already lists what it defines / exports). Types live at "the file that owns the concept" or in the module `types.ts`; the location is predictable; protocol is split by domain, so finding a contract is finding its domain file.
 
-## 4. 新增可发布包流程（promote）
+## 4. Promote-to-package flow (promoting a lib)
 
-- 默认放 `core/lib/`；出现真实外部消费者后再 promote。
-- 用 `scripts/promote-to-package.ts <name>`：mv 目录 + 生成 package.json/tsconfig.build.json + 改 import；本地开发可走 workspace 解析，但 host 发布依赖必须是 npm 可解析的 semver。
-- 发布顺序：`protocol` → `mem-core`/`soul-core` → `nano-pencil`。其中任何未在 npm 上可解析的 first-party 包，都必须先独立发布，不能通过 host 发布脚本绕过。
+- Default placement is `core/lib/`; only promote when real external consumers appear.
+- Use `scripts/promote-to-package.ts <name>`: mv the directory + generate `package.json` / `tsconfig.build.json` + rewrite imports; local development can resolve via workspace, but host's published dependency must be a semver-resolvable npm package.
+- Publish order: `protocol` → `mem-core` / `soul-core` → `nano-pencil`. Any first-party package that is not semver-resolvable on npm must be independently published first; do not bypass via the host's publish scripts.
 
-## 5. quality rule（与 F08 联动，CI 可执行）
+## 5. Quality rules (couples with F08, CI-executable)
 
-- ≤400 行/文件、≤15 文件/目录、无循环依赖、公共 API 有 JSDoc。
-- 例外白名单需带 due date（Q8 决议待定，见 refactor-plan）。
-- `scripts/verify-quality.ts` 实现；`.github/workflows/quality.yml` PR 守门。
+- ≤ 400 lines / file, ≤ 15 files / directory, no cycles, public APIs carry JSDoc.
+- Exemptions need a due date (Q8 resolution pending — see refactor-plan).
+- `scripts/verify-quality.ts` implements; `.github/workflows/quality.yml` enforces on PR.
 
-## 6. 状态
+## 6. Status
 
-- [x] 约规骨架
-- [ ] 与 F08 verify-quality.ts 实现对齐
-- [ ] 依赖方向 CI 规则落地
-- [ ] promote 流程随 scripts/promote-to-package.ts 落地补全
+- [x] Convention skeleton
+- [ ] Aligned with F08 (`verify-quality.ts`) implementation
+- [ ] Dependency-direction CI rule enforced
+- [ ] Promote flow completed with `scripts/promote-to-package.ts`
