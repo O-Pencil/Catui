@@ -19,7 +19,7 @@
  *   --allow-grow       permit that rewrite to add entries (refused by default)
  */
 
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync, type Dirent } from "node:fs";
 import { join, relative, dirname } from "node:path";
 import { argv, cwd } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -376,7 +376,7 @@ function verifyP2DocCoverage(): { checked: number; undoced: number } {
   const dirsHoldingTs = new Map<string, number>();
 
   function scan(currentDir: string) {
-    let entries: ReturnType<typeof readdirSync>;
+    let entries: Dirent[];
     try {
       entries = readdirSync(currentDir, { withFileTypes: true });
     } catch {
@@ -470,7 +470,7 @@ function verifyP1ExtensionTable(): { declared: number; onDisk: number } {
 
   const onDisk: string[] = [];
   for (const tier of ["builtin", "optional"]) {
-    let entries: ReturnType<typeof readdirSync>;
+    let entries: Dirent[];
     try {
       entries = readdirSync(join(ROOT, "extensions", tier), { withFileTypes: true });
     } catch {
