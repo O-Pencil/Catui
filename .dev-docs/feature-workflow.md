@@ -52,10 +52,10 @@ This document = turning architecture review from a "one-off refactor handbook" i
 
 | Axis | What | Values | Answers |
 |------|------|--------|---------|
-| **Concept axis** (product cognition) | What **kind** of capability | 🧠 Cognition · 🔧 Tool · 🎨 Interface | Helps you think through dependencies and surface |
+| **Concept axis** (product cognition) | What **kind** of capability | 🧠 Cognition ·  Tool · 🎨 Interface | Helps you think through dependencies and surface |
 | **Structure axis** (code ownership) | Where the code **lives** + dependency rules | `packages/` · `core/` (including `lib/` `platform/`) · `modes/` · `extensions/` | **Determines file placement** |
 
-> ⚠️ **The two axes are completely orthogonal** (conclusion from top-level review candidate D): a feature has both a concept layer **and** a directory home; they are **not 1:1**.
+> **Warning:** **The two axes are completely orthogonal** (conclusion from top-level review candidate D): a feature has both a concept layer **and** a directory home; they are **not 1:1**.
 > Example: `teach` is conceptually 🧠 Cognition, but structurally lives in `extensions/`. **Don't stuff it into `core/` just because it is "a cognitive capability."**
 
 ### Structure-axis decision tree (determines file placement)
@@ -74,21 +74,21 @@ Ask in order; the first "yes" is the answer:
 
 | Layer | MUST | CAN | MUST-NOT |
 |-------|------|-----|----------|
-| **`packages/`** | Independent version + files; npm-semver-resolvable; no host-reverse dependency | Stable protocols (protocol), reusable domain engines (mem-core / soul-core) | ❌ App features; ❌ things only the host uses (that's `core/lib/`); ❌ depends on host-internal symbols |
-| **`core/`** | Runtime primitive reused by multiple modes / extensions, with a clear owner | Add a clearly-defined runtime subdomain | ❌ Single-feature business logic; ❌ UI; ❌ logic serving only one extension |
-| **`core/lib/`** | Only ai / agent-core / tui — three forked internal libraries | — | ❌ Non-forked new code; ❌ remove `private:true` / publish |
-| **`core/platform/`** | Cross-cutting primitives with zero business knowledge | config / i18n / telemetry / exec / utils | ❌ Any business knowledge; ❌ reverse dependencies from business layers |
-| **`modes/`** | A new I/O paradigm, or mode-specific adaptation / rendering | Mode-internal controllers (capability-context) | ❌ Cross-mode features (→ core / extension); ❌ business capabilities |
-| **`extensions/`** | Consume core via `ExtensionContext` / protocol; `builtin/`=default-loaded, `optional/`=opt-in | Register tools / slash / keybindings / lifecycle hooks / message renderers | ❌ Direct imports of host-internal symbols; ❌ cross-extension dependencies; ❌ default-loaded without GB-2 declaration |
+| **`packages/`** | Independent version + files; npm-semver-resolvable; no host-reverse dependency | Stable protocols (protocol), reusable domain engines (mem-core / soul-core) | [ ] App features; [ ] things only the host uses (that's `core/lib/`); [ ] depends on host-internal symbols |
+| **`core/`** | Runtime primitive reused by multiple modes / extensions, with a clear owner | Add a clearly-defined runtime subdomain | [ ] Single-feature business logic; [ ] UI; [ ] logic serving only one extension |
+| **`core/lib/`** | Only ai / agent-core / tui — three forked internal libraries | — | [ ] Non-forked new code; [ ] remove `private:true` / publish |
+| **`core/platform/`** | Cross-cutting primitives with zero business knowledge | config / i18n / telemetry / exec / utils | [ ] Any business knowledge; [ ] reverse dependencies from business layers |
+| **`modes/`** | A new I/O paradigm, or mode-specific adaptation / rendering | Mode-internal controllers (capability-context) | [ ] Cross-mode features (→ core / extension); [ ] business capabilities |
+| **`extensions/`** | Consume core via `ExtensionContext` / protocol; `builtin/`=default-loaded, `optional/`=opt-in | Register tools / slash / keybindings / lifecycle hooks / message renderers | [ ] Direct imports of host-internal symbols; [ ] cross-extension dependencies; [ ] default-loaded without GB-2 declaration |
 
 ### Walkthrough: `teach` (users learn code etc. with it)
 
 | Step | Judgment |
 |------|----------|
-| Concept axis | Primarily 🧠 Cognition (learning / cognition) + 🎨 Interface surface (`/teach` UX) + possibly 🔧 Tool (read code / run examples) |
+| Concept axis | Primarily 🧠 Cognition (learning / cognition) + 🎨 Interface surface (`/teach` UX) + possibly  Tool (read code / run examples) |
 | Structure-axis decision tree | ① Independently publishable library? No ② Zero-business primitive? No ③ Runtime primitive reused by multiple modes / extensions? **No** (it is one specific feature) ④ New I/O paradigm? No ⑤ User-perceivable capability? **Yes** → **`extensions/builtin/teach/`** (or `optional/` if you don't want it default-on) |
 | Placement | `extensions/builtin/teach/index.ts`: register `/teach` command + teaching state machine + renderer; reuse core's session / tools / model via `ExtensionContext`; if you need new tools, register them as extension tools; UX is rendered naturally by the current mode |
-| Constraint self-check | ✅ MUST: add P3 header, register in `extensions/AGENT.md` P2; ✅ MUST-NOT: no reverse imports of host-internals, **don't stuff teach business into `core/`**, no cross-extension dependencies; ⚠️ If default-loaded → it counts as a "default-enabled extension" = user-perceivable change, **must declare per GB-2** (see browser opt-in EV03) |
+| Constraint self-check | [x] MUST: add P3 header, register in `extensions/AGENT.md` P2; [x] MUST-NOT: no reverse imports of host-internals, **don't stuff teach business into `core/`**, no cross-extension dependencies; **Warning:** If default-loaded → it counts as a "default-enabled extension" = user-perceivable change, **must declare per GB-2** (see browser opt-in EV03) |
 
 > **Counter-example**: writing `teach` logic into `core/runtime/` or creating `core/teach/` — this violates `core/`'s MUST-NOT (no single-feature business) and lets god-coupling grow back into the runtime. Conceptually cognitive ≠ structurally into `core/`.
 
@@ -137,10 +137,10 @@ See per-review subdirectories for the WHY (historical decision files): [runtime-
 
 | Gate | Purpose | Command | CI status |
 |------|---------|---------|-----------|
-| **DIP** | map-terrain isomorphism | `npm run verify:dip` | ✅ `ci.yml` |
-| **Quality** | No cycles + no boundary pollution | `npm run verify:quality` | ✅ `quality.yml` |
-| **Build / Type** | Compilable | `npm run build && npx tsc --noEmit` | ✅ `ci.yml` |
-| **Package boundary** | Public-package vs internal-library boundary (BR01) | `npm run verify:package-boundary` (`:dist` verifies embedded libs resolve) | ✅ static→`quality.yml`; `:dist`→`ci.yml` (post-build) |
+| **DIP** | map-terrain isomorphism | `npm run verify:dip` | [x] `ci.yml` |
+| **Quality** | No cycles + no boundary pollution | `npm run verify:quality` | [x] `quality.yml` |
+| **Build / Type** | Compilable | `npm run build && npx tsc --noEmit` | [x] `ci.yml` |
+| **Package boundary** | Public-package vs internal-library boundary (BR01) | `npm run verify:package-boundary` (`:dist` verifies embedded libs resolve) | [x] static→`quality.yml`; `:dist`→`ci.yml` (post-build) |
 | **Public API** | Compatibility explicit | Symbol diff against `architecture-review/baseline/public-api-symbols-main.txt` | Manual; **don't break by default; intentional API diffs require an intentional-diff declaration (major window)** |
 | **Token / perf** | No silent cost growth | Manual review: LLM call chain / provider laziness / prompt injection neutral? | Manual |
 | **UX smoke** | User paths still usable | Per [`beta-smoke-checklist.md`](./architecture-review/beta-smoke-checklist.md) | Manual, focused on default paths + error fallbacks |

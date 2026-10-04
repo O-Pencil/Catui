@@ -75,6 +75,6 @@ Replay prerequisites:
 | **GB-2** (phase-2 per-domain) | That domain's replay is all green, unless the review explicitly declares an intentional change (`--update` + reason) |
 | **V5-1** (P5 zero regression) | Print goldens cover core; UI-specific flows supplemented with local snapshots |
 
-## ⚠️ Status
+## **Warning:** Status
 
 This harness **cannot be run/verified in the restricted sandbox** (tsx/vitest cold-start takes several minutes, performance is insufficient). The code is written against the real interfaces I've read (`createAgentSession` / `runPrintMode` / fetch-override); **you need to run `RECORD=1` once on your dev machine to lock it down**. The top of `run-case.ts` lists the 2 assumptions you need to confirm (apiKey env injection, `createAgentSession` option names).

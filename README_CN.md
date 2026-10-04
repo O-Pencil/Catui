@@ -5,7 +5,7 @@
 以终端为主要界面的 AI 编程 Agent，支持项目记忆、persona、可扩展工具和多模型。
 使用 TypeScript 与 Node.js 开发，npm 包名为 `catui-agent`。
 
-[English](README.md) · [SDK](docs/sdk.md)
+[English](README.md) · [日本語](README_JA.md) · [Русский](README_RU.md) · [SDK](docs/sdk.md)
 
 ## 开始使用
 

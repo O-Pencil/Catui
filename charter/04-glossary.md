@@ -16,10 +16,10 @@
 | Term | Canonical definition | Common confusion |
 |------|----------------------|------------------|
 | **Catui** | Ecosystem brand name; generic reference to Agent capability. "Call Catui" = "call some CatuiAgent". Not a single project | OK in marketing copy; technical docs prefer CatuiAgent |
-| **Catui** | Engine project; repo name (PascalCase). Contains `@catui/agent` SDK + `catui` CLI | ❌ Catui ≠ "an Agent"; it is an engine |
+| **Catui** | Engine project; repo name (PascalCase). Contains `@catui/agent` SDK + `catui` CLI | [ ] Catui ≠ "an Agent"; it is an engine |
 | **catui-agent** | npm package name (kebab-case): `@catui/agent` | "The SDK imported by Gateway" refers to this term |
 | **catui** | CLI command name (all lowercase): `catui` | Command-line entry after global install |
-| **CatuiAgent** | Configured runtime unit: `engine + Soul + memory + model + personality`. Has identity, identified by `catui/<agent-id>` | ❌ CatuiAgent ≠ the Catui project |
+| **CatuiAgent** | Configured runtime unit: `engine + Soul + memory + model + personality`. Has identity, identified by `catui/<agent-id>` | [ ] CatuiAgent ≠ the Catui project |
 | **Catui-Agent-Gateway** | HTTP middleware project / repo / service name | Old name `catui-gateway` deprecated |
 | **Asgard Platform** | Multi-Agent platform project (includes Asgard-api + Asgard-web) | "asgard" / "Asgard" are equivalent |
 | **catui-editor** | Writing client project / repo | Alias "editor" |
@@ -67,5 +67,5 @@
 
 | Term | Status | Replacement |
 |------|--------|-------------|
-| `catui-gateway` | ❌ Deprecated | Catui-Agent-Gateway |
-| `catui-agent` (as project name) | ⚠️ Confusing | `catui-agent` refers only to the npm package name; use Catui for the project |
+| `catui-gateway` | [ ] Deprecated | Catui-Agent-Gateway |
+| `catui-agent` (as project name) | **Warning:** Confusing | `catui-agent` refers only to the npm package name; use Catui for the project |

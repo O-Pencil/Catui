@@ -164,20 +164,20 @@ Add common commands to the allowlist:
 
 ### Current version (v1 — Light Audit)
 
-- ✅ Audit-log recording
-- ✅ Dangerous-command detection
-- ✅ Sensitive-file detection
-- ⚠️ Warning prompts
+- [x] Audit-log recording
+- [x] Dangerous-command detection
+- [x] Sensitive-file detection
+- **Warning:** Warning prompts
 
 ### Planned: v2 — Med Secure
 
-- ✅ All v1 features
+- [x] All v1 features
 - 🔄 User-confirmation mechanism
 - 🔄 Configurable interception level
 
 ### Planned: v3 — Heavy Guard
 
-- ✅ All v2 features
+- [x] All v2 features
 - 🔄 Sandbox execution environment
 - 🔄 AI semantic analysis
 - 🔄 Full-operation interception

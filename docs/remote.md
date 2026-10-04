@@ -70,9 +70,9 @@ The web UI is the same one served over HTTP, so you can also just keep using the
 
 The mobile app distinguishes network reachability from token validity automatically. When pairing fails it probes every advertised endpoint via `/healthz` (CORS-open, token check included) and shows a red banner with a diagnostics panel:
 
-- ⚠️ Network reachable, token invalid — the serve process restarted after the QR was shown. Re-run `catui --serve` and scan the fresh QR.
-- ❌ Unreachable — phone and PC are not reachable: different WiFi / guest network, router AP isolation, or Windows Firewall blocking the port (allow Node.js on private networks when prompted).
-- ✅ Network reachable, token valid — transient WebSocket failure; the client keeps retrying on its own.
+- **Warning:** Network reachable, token invalid — the serve process restarted after the QR was shown. Re-run `catui --serve` and scan the fresh QR.
+- [ ] Unreachable — phone and PC are not reachable: different WiFi / guest network, router AP isolation, or Windows Firewall blocking the port (allow Node.js on private networks when prompted).
+- [x] Network reachable, token valid — transient WebSocket failure; the client keeps retrying on its own.
 
 The panel's "copy diagnostics" button copies a plain-text report (time, target, per-endpoint results, user agent) for bug reports.
 

@@ -15,32 +15,32 @@
 
 | Phase | Theme | Main projects | Status |
 |-------|-------|---------------|--------|
-| 1 | Local ACP integration | editor + catui-agent | ✅ Done |
-| 2 | Agent-service-ification prototype (Rust PCP Server) | editor + catui-agent | ✅ Done |
-| 3 | Gateway standalone + Asgard integration + editor three modes | 4 core projects | ✅ Done (2026-05) |
-| 3.5 | Channel phase 1 + Multi-Catui isolation | Gateway + ops | ✅ Done (2026-05) |
+| 1 | Local ACP integration | editor + catui-agent | [x] Done |
+| 2 | Agent-service-ification prototype (Rust PCP Server) | editor + catui-agent | [x] Done |
+| 3 | Gateway standalone + Asgard integration + editor three modes | 4 core projects | [x] Done (2026-05) |
+| 3.5 | Channel phase 1 + Multi-Catui isolation | Gateway + ops | [x] Done (2026-05) |
 | 4 | Platform-ification and multi-tenancy | All projects | 🟡 **Current** |
 | 5 | Ecosystem-ification and social evolution | All projects | ⚪ Planned |
 
 ## 6.2 Phase details
 
-### Phase 1 — Local ACP integration ✅
+### Phase 1 — Local ACP integration [x]
 - Editor introduces the `agent-client-protocol` crate, implements ACP client
 - Connects to `catui-agent --acp` as an external Agent
 - Frontend event-model adaptation: streaming render, tool calls, permission confirmation available
 
-### Phase 2 — Rust prototype verification ✅
+### Phase 2 — Rust prototype verification [x]
 - Define PCP v1 (WebSocket internal protocol)
 - Editor main repo builds Rust prototype `src/apps/server/`
 - **Key judgment**: the prototype proved the "Agent on the server, tools on the client" architecture feasible, but the Rust server is not the ecosystem mainline — handed off to Catui-Agent-Gateway (Node.js + Hono)
 
-### Phase 3 — Gateway standalone + Asgard integration ✅
+### Phase 3 — Gateway standalone + Asgard integration [x]
 - **Gateway**: standalone repo, v0.1 full API surface, Docker image, Multi-Catui isolation
 - **Asgard**: CatuiAgentBackend service, CatuiAgent CRUD + Gateway sync + usage logging
 - **Editor**: HttpChatProvider landed, three-mode routing (local / service / remote-http)
 - **catui-agent**: imported by Gateway as an SDK
 
-### Phase 3.5 — Channel + Multi-Catui ✅
+### Phase 3.5 — Channel + Multi-Catui [x]
 - Gateway incubates Channel adapters (DingTalk Stream / WeChat / Feishu)
 - Multi-Catui architecture: `~/.catui/<id>/` independent directory
 - Channel long-term belongs to standalone repo `catui-channel-gateway`; currently incubated inside Gateway
@@ -67,7 +67,7 @@ Six work-lines (A–F), see §6.3 below.
 
 | Repo | Milestone | Status |
 |------|-----------|--------|
-| Gateway | M-tools-1 (wire protocol + correlation table) | ✅ Done |
+| Gateway | M-tools-1 (wire protocol + correlation table) | [x] Done |
 | Catui | N-tools-1 (types + RemoteToolSource skeleton) | ⏳ Pending start |
 | Catui | N-tools-2 (SDK `remoteTools` integration) | ⏳ Pending N-tools-1 |
 | Catui | N-tools-3 (real agent-loop e2e) | ⏳ Pending N-tools-2 |

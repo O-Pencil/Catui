@@ -8,7 +8,7 @@ Copy this to your AI Agent:
 Install link-world: https://raw.githubusercontent.com/Panniantong/agent-reach/main/docs/install.md
 ```
 
-> 🛡️ **Security-conscious?** Use safe mode — it won't auto-install system packages:
+> **Security:** **Security-conscious?** Use safe mode — it won't auto-install system packages:
 > ```
 > Install link-world (safe mode): https://raw.githubusercontent.com/Panniantong/agent-reach/main/docs/install.md
 > Pass the --safe flag during installation.
@@ -22,7 +22,7 @@ Install link-world: https://raw.githubusercontent.com/Panniantong/agent-reach/ma
 
 Install link-world and all upstream tools so your user's agent has full internet access. After installation, you'll use the upstream tools directly (xreach CLI, yt-dlp, mcporter, gh CLI, etc.) — link-world is just the installer and health checker.
 
-### ⚠️ Boundaries
+### **Warning:** Boundaries
 
 When fixing issues, stay within these limits:
 
@@ -86,7 +86,7 @@ agent-reach doctor
 
 `agent-reach doctor` shows you which channels are active and which aren't.
 
-Try to get as many channels to ✅ as possible. If something failed during install or shows as ❌/⚠️ in doctor, diagnose the problem and try to fix it — but stay within the boundaries above. If a fix requires elevated permissions or system changes, ask the user first.
+Try to get as many channels to [x] as possible. If something failed during install or shows as [ ]/**Warning:** in doctor, diagnose the problem and try to fix it — but stay within the boundaries above. If a fix requires elevated permissions or system changes, ask the user first.
 
 Only ask the user when you genuinely need their input (credentials, permissions, etc.).
 
@@ -94,11 +94,11 @@ Only ask the user when you genuinely need their input (credentials, permissions,
 
 Some channels need credentials only the user can provide. Based on the doctor output, ask for what's missing:
 
-> 🔒 **Security tip:** For platforms that need cookies (Twitter, XiaoHongShu), we recommend using a **dedicated/secondary account** rather than your main account. Cookie-based auth carries two risks:
+> **Security:** **Security tip:** For platforms that need cookies (Twitter, XiaoHongShu), we recommend using a **dedicated/secondary account** rather than your main account. Cookie-based auth carries two risks:
 > 1. **Account ban** — platforms may detect non-browser API calls and restrict or ban the account
 > 2. **Credential exposure** — cookies grant full account access; using a secondary account limits the blast radius if credentials are ever compromised
 
-> 🍪 **Cookie import (universal for all platforms that need login):**
+> Cookie **Cookie import (universal for all platforms that need login):**
 >
 > For every platform that needs cookies (Twitter, XiaoHongShu, etc.), **prefer the Cookie-Editor import** — it is the simplest and most reliable approach:
 > 1. User logs into the platform in their own browser
@@ -274,7 +274,7 @@ If the user agrees, create a **cron job** (daily, `sessionTarget: "isolated"`, `
 ```
 Run the `agent-reach watch` command.
 If the output contains "all healthy", do not notify the user — exit silently.
-If the output contains problems (❌ ⚠️) or a new version (🆕), send the full report to the user with a suggested fix.
+If the output contains problems ([ ] **Warning:**) or a new version (new), send the full report to the user with a suggested fix.
 If a new version is available, ask the user whether to upgrade (upgrade command: `pip install --upgrade https://github.com/Panniantong/agent-reach/archive/main.zip`).
 ```
 

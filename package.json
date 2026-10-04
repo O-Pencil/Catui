@@ -56,7 +56,10 @@
     "assets",
     "docs",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "README_CN.md",
+    "README_JA.md",
+    "README_RU.md"
   ],
   "scripts": {
     "dev": "tsx cli.ts",

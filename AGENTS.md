@@ -38,7 +38,7 @@ Before developing any **new feature / refactor / non-trivial change**, you **MUS
 - When §3 trigger conditions fire (load-bearing area / >400 lines / ≥8 ports / rewrite / public-API · deps · default-extension · CLI · TUI change / no clear owner) you **MUST** first create a `<topic>-review/` and complete that review before writing code.
 - After completion you **MUST** run the §5 five acceptance gates (`verify:dip` / `verify:quality` / `verify:package-boundary` / `build` / `tsc --noEmit`) plus the §6 PR self-check and report results; changes go in via PR to main so CI enforces them again.
 
-> ⚠️ **CI only enforces structural rules (cycles / DIP / boundaries / compilation); it cannot catch "wrong placement"** — stuffing an `extensions` feature into `core/` still passes CI. **Placement correctness is enforced by this rule, not by CI.**
+> **Warning:** **CI only enforces structural rules (cycles / DIP / boundaries / compilation); it cannot catch "wrong placement"** — stuffing an `extensions` feature into `core/` still passes CI. **Placement correctness is enforced by this rule, not by CI.**
 
 Refactor outcomes, open issues, and outstanding items (P7/P8) live in [`REFACTOR-LEDGER.md`](.dev-docs/architecture-review/REFACTOR-LEDGER.md).
 

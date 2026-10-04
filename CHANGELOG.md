@@ -10,6 +10,8 @@
 - Translate AGENTS.md mandatory workflow section (FEATURE WORKFLOW block), `.dev-docs/feature-workflow.md`, the entire `charter/` directory (9 files), and `extensions/builtin/{link-world,security-audit}/README.md` from Chinese to English.
 - Translate persona files (`assets/personas/{aria,lucy,rem,sage,vex,pencil}/CATUI.md` plus 6 `SKILL.md` files) from Chinese to English; persona voices preserved.
 - Translate `issues/0013-cron-tasks-path-mismatch.md` and `tests/characterization/README.md` from Chinese to English.
+- Add Japanese (`README_JA.md`) and Russian (`README_RU.md`) README translations; add Japanese / Russian links to the README / README_CN nav; add all three localized READMEs to `package.json` `files` so they ship in the npm package.
+- Strip emojis from the docs translated in this batch (AGENTS.md, charter/*, feature-workflow.md, link-world, security-audit, etc.) and from persona / charter tables — prefer text labels over pictographs.
 
 ### Fixed
 - Replace 74 fork-residue references from `O-Catui/Catui` / `O-Catui/catui` to `O-Pencil/Catui` across docs, source code comments, test fixtures, package metadata, theme JSON `$schema` fields, and user-visible download URLs in `config.ts`.

@@ -5,7 +5,7 @@
 A terminal-first AI coding agent with persistent project memory, selectable personas,
 and extensible tools. Built with TypeScript and Node.js; published as `catui-agent`.
 
-[中文](README_CN.md) · [SDK](docs/sdk.md)
+[中文](README_CN.md) · [日本語](README_JA.md) · [Русский](README_RU.md) · [SDK](docs/sdk.md)
 
 ## Start
 
