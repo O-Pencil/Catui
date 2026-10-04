@@ -1,12 +1,10 @@
 /**
  * Proxy stream function for apps that route LLM calls through a server.
  * The server manages auth and proxies requests to LLM providers.
- */
-/**
- * [WHO]: ProxyStreamOptions, streamProxy
- * [FROM]: No external dependencies
+ * [WHO]: ProxyAssistantMessageEvent, ProxyStreamOptions, streamProxy
+ * [FROM]: @catui/ai
  * [TO]: Consumed by core/lib/agent-core/src/index.ts
- * [HERE]: core/lib/agent-core/src/proxy.ts -
+ * [HERE]: core/lib/agent-core/src/proxy.ts - owned by core/lib/agent-core/AGENT.md
  */
 
 

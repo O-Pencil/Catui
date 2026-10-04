@@ -1,15 +1,12 @@
 /**
  * Antigravity OAuth flow (Gemini 3, Claude, GPT-OSS via Google Cloud)
  * Uses different OAuth credentials than google-gemini-cli for access to additional models.
- *
  * NOTE: This module uses Node.js http.createServer for the OAuth callback.
  * It is only intended for CLI use, not browser environments.
- */
-/**
- * [WHO]: antigravityOAuthProvider
- * [FROM]: Depends on ./pkce.js
- * [TO]: Consumed by core/lib/ai/src/index.ts
- * [HERE]: core/lib/ai/src/utils/oauth/google-antigravity.ts -
+ * [WHO]: refreshAntigravityToken, loginAntigravity, antigravityOAuthProvider
+ * [FROM]: node:http
+ * [TO]: Consumed by core/lib/ai/src/utils/oauth/index.ts
+ * [HERE]: core/lib/ai/src/utils/oauth/google-antigravity.ts - owned by core/lib/ai/AGENT.md
  */
 
 

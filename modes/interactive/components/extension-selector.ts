@@ -1,12 +1,10 @@
 /**
  * Generic selector component for extensions.
  * Displays a list of string options with keyboard navigation.
- */
-/**
  * [WHO]: ExtensionSelectorOptions, ExtensionSelectorComponent
- * [FROM]: Depends on @catui/tui, ../theme/theme.js, ./countdown-timer.js, ./dynamic-border.js, ./keybinding-hints.js
- * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/extension-selector.ts - extension selector component
+ * [FROM]: @catui/tui
+ * [TO]: Consumed by modes/interactive/components/index.ts, modes/interactive/controllers/extension-ui/prompt-host.ts
+ * [HERE]: modes/interactive/components/extension-selector.ts - owned by modes/interactive/AGENT.md
  */
 
 

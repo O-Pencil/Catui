@@ -1,12 +1,10 @@
 /**
  * Shared utility for truncating text to visual lines (accounting for line wrapping).
  * Used by both tool-execution.ts and bash-execution.ts for consistent behavior.
- */
-/**
  * [WHO]: VisualTruncateResult, truncateToVisualLines
- * [FROM]: Depends on @catui/tui
- * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/visual-truncate.ts -
+ * [FROM]: @catui/tui
+ * [TO]: Consumed by modes/interactive/components/bash-execution.ts, modes/interactive/components/index.ts, modes/interactive/components/tool-execution.ts
+ * [HERE]: modes/interactive/components/visual-truncate.ts - owned by modes/interactive/AGENT.md
  */
 
 

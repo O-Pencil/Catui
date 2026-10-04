@@ -1,11 +1,9 @@
 /**
  * Utilities for formatting keybinding hints in the UI.
- */
-/**
  * [WHO]: editorKey, appKey, keyHint, appKeyHint, rawKeyHint
- * [FROM]: Depends on @catui/tui, ../theme/theme.js
- * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/keybinding-hints.ts -
+ * [FROM]: @catui/tui
+ * [TO]: Consumed by modes/interactive/components/bash-execution.ts, modes/interactive/components/bordered-loader.ts, modes/interactive/components/branch-summary-message.ts, modes/interactive/components/compaction-summary-message.ts, modes/interactive/components/config-selector.ts
+ * [HERE]: modes/interactive/components/keybinding-hints.ts - owned by modes/interactive/AGENT.md
  */
 
 

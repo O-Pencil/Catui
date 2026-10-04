@@ -1,12 +1,10 @@
 /**
  * Agent class that uses the agent-loop directly.
  * No transport abstraction - calls streamSimple via the loop.
- */
-/**
- * [WHO]: AgentOptions, Agent, loop policy plumbing, committed prepareContext, and predicate-scoped follow-up cancellation
- * [FROM]: Depends on ./agent-loop.js and ./structured-adaptive-agent-loop.js
+ * [WHO]: AgentOptions, AgentLoopPolicyOptions, Agent
+ * [FROM]: @catui/ai
  * [TO]: Consumed by core/lib/agent-core/src/index.ts
- * [HERE]: core/lib/agent-core/src/agent.ts -
+ * [HERE]: core/lib/agent-core/src/agent.ts - owned by core/lib/agent-core/AGENT.md
  */
 
 

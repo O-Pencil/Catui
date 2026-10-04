@@ -1,12 +1,10 @@
 /**
  * Agent loop that works with AgentMessage throughout.
  * Transforms to Message[] only at the LLM call boundary.
- */
-/**
- * [WHO]: Provides agentLoop(), agentLoopContinue(), standard loop/trace emission, continuation recovery, recovered-error tombstoning, and serial tool execution.; committed context preparation before provider requests
- * [FROM]: Depends on @catui/ai streams/messages, ./types contracts, ./errors, and shared loop helpers.
- * [TO]: Consumed by agent.ts and package exports as the default agent execution loop.
- * [HERE]: core/lib/agent-core/src/agent-loop.ts within agent-core; standard counterpart to structured-adaptive-agent-loop.ts.
+ * [WHO]: agentLoop, agentLoopContinue
+ * [FROM]: @catui/ai
+ * [TO]: Consumed by core/lib/agent-core/src/agent.ts, core/lib/agent-core/src/index.ts, core/lib/agent-core/src/structured-adaptive-agent-loop.ts
+ * [HERE]: core/lib/agent-core/src/agent-loop.ts - owned by core/lib/agent-core/AGENT.md
  */
 
 

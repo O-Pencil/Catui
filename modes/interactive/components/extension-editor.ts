@@ -1,12 +1,10 @@
 /**
  * Multi-line editor component for extensions.
  * Supports Ctrl+G for external editor.
- */
-/**
  * [WHO]: ExtensionEditorComponent
- * [FROM]: Depends on node:child_process, node:fs, node:os, node:path, ../theme/theme.js
- * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/extension-editor.ts -
+ * [FROM]: @catui/tui, node:child_process, node:fs, node:os, node:path
+ * [TO]: Consumed by modes/interactive/components/index.ts, modes/interactive/controllers/extension-ui/prompt-host.ts
+ * [HERE]: modes/interactive/components/extension-editor.ts - owned by modes/interactive/AGENT.md
  */
 
 

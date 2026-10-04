@@ -2,13 +2,12 @@
  * Structured-adaptive streaming tool executor.
  * Starts complete streamed tool calls before the assistant response finishes,
  * while preserving ordered tool_result emission for the next model turn.
+ * [WHO]: StructuredAdaptiveStreamingToolExecutor
+ * [FROM]: @catui/ai
+ * [TO]: Consumed by core/lib/agent-core/src/index.ts
+ * [HERE]: core/lib/agent-core/src/structured-adaptive-streaming-tool-executor.ts - owned by core/lib/agent-core/AGENT.md
  */
-/**
- * [WHO]: StructuredAdaptiveStreamingToolExecutor — compatibility-only export, no in-tree consumer
- * [FROM]: Depends on @catui/ai, ./types, ./structured-adaptive-tool-orchestration
- * [TO]: No in-tree consumer after the structured-adaptive loop converged into the standard loop. Exported via index.ts for public API compatibility only.
- * [HERE]: core/lib/agent-core/src/structured-adaptive-streaming-tool-executor.ts - deprecated streaming tool scheduling shim
- */
+
 
 import type { ToolResultMessage } from "@catui/ai/types";
 import { EventStream } from "@catui/ai/events";

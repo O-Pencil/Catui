@@ -1,14 +1,11 @@
 /**
  * OpenAI Codex (ChatGPT OAuth) flow
- *
  * NOTE: This module uses Node.js crypto and http for the OAuth callback.
  * It is only intended for CLI use, not browser environments.
- */
-/**
- * [WHO]: openaiCodexOAuthProvider
- * [FROM]: Depends on ./pkce.js
- * [TO]: Consumed by core/lib/ai/src/index.ts
- * [HERE]: core/lib/ai/src/utils/oauth/openai-codex.ts -
+ * [WHO]: loginOpenAICodex, refreshOpenAICodexToken, openaiCodexOAuthProvider
+ * [FROM]: no external imports
+ * [TO]: Consumed by core/lib/ai/src/utils/oauth/index.ts
+ * [HERE]: core/lib/ai/src/utils/oauth/openai-codex.ts - owned by core/lib/ai/AGENT.md
  */
 
 

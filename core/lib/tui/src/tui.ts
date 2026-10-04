@@ -1,11 +1,9 @@
 /**
  * Minimal TUI implementation with differential rendering
- */
-/**
- * [WHO]: Component, Focusable, isFocusable, CURSOR_MARKER, visibleWidth
- * [FROM]: Depends on node:fs, node:os, node:path, ./keys.js, ./terminal-image.js
- * [TO]: Consumed by core/lib/tui/src/index.ts
- * [HERE]: core/lib/tui/src/tui.ts -
+ * [WHO]: Component, Focusable, isFocusable, CURSOR_MARKER, OverlayAnchor, OverlayMargin, SizeValue, OverlayOptions, OverlayHandle, Container, TUI, visibleWidth
+ * [FROM]: node:fs, node:os, node:path
+ * [TO]: Consumed by core/lib/tui/src/components/box.ts, core/lib/tui/src/components/cached-container.ts, core/lib/tui/src/components/editor.ts, core/lib/tui/src/components/image.ts, core/lib/tui/src/components/input.ts
+ * [HERE]: core/lib/tui/src/tui.ts - owned by core/lib/tui/AGENT.md
  */
 
 

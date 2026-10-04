@@ -1,11 +1,9 @@
 /**
  * Component for displaying bash command execution with streaming output.
- */
-/**
  * [WHO]: BashExecutionComponent
- * [FROM]: Depends on @catui/tui, strip-ansi, ../theme/theme.js, ./dynamic-border.js, ./keybinding-hints.js
- * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/bash-execution.ts - bash command execution display
+ * [FROM]: @catui/tui, strip-ansi
+ * [TO]: Consumed by modes/interactive/components/index.ts, modes/interactive/controllers/chat-renderer.ts, modes/interactive/controllers/session-command-handlers.ts, modes/interactive/interactive-mode.ts
+ * [HERE]: modes/interactive/components/bash-execution.ts - owned by modes/interactive/AGENT.md
  */
 
 

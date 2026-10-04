@@ -1,16 +1,14 @@
 /**
  * NotificationQueue - Priority-based notification system with auto-dismiss and dedup.
- *
  * Renders up to 3 visible notifications at a time, newest first.
  * Each notification has a priority level that controls its auto-dismiss timeout.
  * Notifications with the same key replace each other (dedup).
+ * [WHO]: NotificationPriority, NotificationType, NotificationOptions, NotificationQueue
+ * [FROM]: @catui/tui
+ * [TO]: Consumed by modes/interactive/components/index.ts, modes/interactive/controllers/status-display-controller.ts, modes/interactive/interactive-mode.ts
+ * [HERE]: modes/interactive/components/notification-queue.ts - owned by modes/interactive/AGENT.md
  */
-/**
- * [WHO]: NotificationQueue
- * [FROM]: Depends on @catui/tui
- * [TO]: Consumed by modes/interactive/interactive-mode.ts
- * [HERE]: modes/interactive/components/notification-queue.ts -
- */
+
 
 import { Container, Spacer, Text, type TUI } from "@catui/tui";
 import type { Theme } from "../theme/theme.js";

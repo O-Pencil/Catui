@@ -18,4 +18,10 @@ jobs:
       - run: npm ci
       - run: npm run verify:quality
       - run: npm run verify:package-boundary   # BR01 package-boundary guard (static)
-      - run: npm run verify:structure          # AGENTS.md file-size + P3-header invariant (advisory)
+      - run: npm run verify:dip                # P1/P2/P3 isomorphism, ratcheted
+      - run: npm run verify:structure          # AGENTS.md file-size rule, ratcheted
+
+  # Deliberately not wired into CI: verify-dip and verify-structure share a
+  # one-way ratchet in .dev-docs/structure-baseline.json and both fail on any
+  # violation outside it, so a green run means "no new structural debt" rather
+  # than "the repo is clean". Shrink the baseline as files get fixed.

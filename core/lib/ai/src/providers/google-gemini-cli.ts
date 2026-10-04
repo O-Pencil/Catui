@@ -2,12 +2,10 @@
  * Google Gemini CLI / Antigravity provider.
  * Shared implementation for both google-gemini-cli and google-antigravity providers.
  * Uses the Cloud Code Assist API endpoint to access Gemini and Claude models.
- */
-/**
- * [WHO]: GoogleGeminiCliOptions, extractRetryDelay, streamGoogleGeminiCli, streamSimpleGoogleGeminiCli, buildRequest
- * [FROM]: Depends on ../models.js, ../utils/event-stream.js, ../utils/sanitize-unicode.js, ./simple-options.js
- * [TO]: Consumed by core/lib/ai/src/index.ts
- * [HERE]: core/lib/ai/src/providers/google-gemini-cli.ts -
+ * [WHO]: GoogleThinkingLevel, GoogleGeminiCliOptions, extractRetryDelay, streamGoogleGeminiCli, streamSimpleGoogleGeminiCli, buildRequest
+ * [FROM]: @google/genai
+ * [TO]: Consumed by core/lib/ai/src/providers/google-vertex.ts, core/lib/ai/src/providers/google.ts, core/lib/ai/src/utils/oauth/index.ts
+ * [HERE]: core/lib/ai/src/providers/google-gemini-cli.ts - owned by core/lib/ai/AGENT.md
  */
 
 

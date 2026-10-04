@@ -2,13 +2,12 @@
  * Structured-adaptive tool orchestration for the selectable structured loop.
  * Batches concurrency-safe tools, keeps stateful tools serial, and returns
  * ordered tool_result messages matching assistant tool_use order.
+ * [WHO]: StructuredAdaptiveToolCall, StructuredAdaptiveToolRunResult, runStructuredAdaptiveTools, runToolBatch, resolveMaxToolConcurrency, buildToolMap, partitionStructuredAdaptiveToolCalls, isStructuredAdaptiveToolCallConcurrencySafe, resolveStructuredAdaptiveToolInterruptBehavior, runStructuredAdaptiveToolUse, extractApprovalRequired
+ * [FROM]: @catui/ai
+ * [TO]: Consumed by core/lib/agent-core/src/agent-loop.ts, core/lib/agent-core/src/index.ts, core/lib/agent-core/src/structured-adaptive-streaming-tool-executor.ts
+ * [HERE]: core/lib/agent-core/src/structured-adaptive-tool-orchestration.ts - owned by core/lib/agent-core/AGENT.md
  */
-/**
- * [WHO]: runStructuredAdaptiveTools, partitionStructuredAdaptiveToolCalls, StructuredAdaptiveToolCall
- * [FROM]: Depends on @catui/ai, ./types, ./errors
- * [TO]: Consumed by ./structured-adaptive-agent-loop.ts and agent-core tests
- * [HERE]: core/lib/agent-core/src/structured-adaptive-tool-orchestration.ts - tool batching/execution layer for structured-adaptive loop
- */
+
 
 import {
 	type AssistantMessage,

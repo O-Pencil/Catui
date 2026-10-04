@@ -100,12 +100,36 @@ Single responses must complete the "evidence -> conclusion -> actionable next st
 
 ## Quality Metrics
 
-| Metric | Limit |
-|--------|-------|
-| Single file lines | ~800 max (split or justify exceptions) |
-| Single directory files | ~8 max (split into subdirectories if exceeded) |
-| Core orientation | Branches that can be deleted beat branches that can be written correctly |
-| Document isomorphism | Breaking document isomorphism equals introducing unverifiable technical debt |
+| Metric | Limit | Enforced by |
+|--------|-------|-------------|
+| Single file lines | ~800 max (split or justify exceptions) | `verify:structure` |
+| Single directory files | ~8 max (split into subdirectories if exceeded) | review; not yet gated |
+| Core orientation | Branches that can be deleted beat branches that can be written correctly | review |
+| Document isomorphism | Breaking document isomorphism equals introducing unverifiable technical debt | `verify:dip` |
+
+### The structural ratchet
+
+Two gates enforce the file-size and DIP invariants:
+`verify:structure` (file size) and `verify:dip` (P1 extension table, P2 member
+lists and doc coverage, P3 headers). Both fail on any violation **outside**
+`.dev-docs/structure-baseline.json` and neither will rewrite that file to accept
+new entries.
+
+This matters more than the individual rules. A gate that reports but always exits
+0 teaches the team that green means nothing, and a team that has learned that
+stops reading. The baseline is the honest compromise: existing debt is recorded
+instead of blocking, new debt fails the build.
+
+- **Shrink it** by fixing entries. Once a violation stops being reported, its key
+  stops matching and the entry becomes dead weight.
+- **Grow it** only via `npm run verify:baseline:update`, which passes
+  `--allow-grow` for the size gate. Treat that as a written decision, not a
+  convenience — the commit message is the record.
+- **Never** delete the baseline to reset the ratchet. The bootstrap path
+  re-records current debt, it does not clear it.
+
+A green `verify:dip` therefore means *"no new structural debt"*, not *"clean"*.
+Read the baseline count in the output; it is the real number.
 
 ---
 
@@ -309,42 +333,50 @@ Extensions can:
 - Add UI components (dialogs, selectors, widgets)
 - Modify prompts and context
 
-### Built-in Extensions (`extensions/builtin/`)
+### Extensions
 
-| Extension | Purpose |
-|-----------|---------|
-| `interview` | Requirement clarification through guided Q&A |
-| `grub` | `/grub` autonomous long-running task harness with feature-list validation |
-| `context-management` | Default budget hints, branch-history retrieval, working notes, and safe same-session context handoffs |
-| `loop` | `/loop` session-scoped scheduled prompts |
-| `link-world` | Internet access via agent-reach |
-| `browser` | Opt-in direct browser automation via vendored Browser Harness CDP bridge |
-| `discipline` | Built-in engineering workflow skills, `skill` tool, and lightweight skill-use bootstrap |
-| `catpaw` | Evidence-led UI/UX design craft workflow skill |
-| `catail` | Research-to-publication Skill from framing through human-gated submission readiness |
-| `typesafe` | Default decision/tool/evaluation guidance and vendored TypeSafe integration skill |
-| `humanizer` | Vendored writing-quality skill: removes AI-writing tells from prose without changing meaning or inventing facts |
-| `mcp` | MCP protocol support |
-| `security-audit` | Security vulnerability detection |
-| `ask-user-question` | Structured ask-the-user prompts that route through a single shared slot |
-| `btw` | "By the way" interjections to surface tangential context without losing the main thread |
-| `debug` | Runtime debugging helpers and diagnostics overlays |
-| `diagnostics` | Self-diagnostic event capture + structured log surface |
-| `goal` | `/goal` long-running autonomous goal pursuit (codex-goal lineage) |
-| `idle-think` | Idle-turn "thinking" hooks — fills silent pauses with background reasoning |
-| `insights` | Per-session / cross-session insights, dashboards, and HTML report export |
-| `lsp` | Language-server integration for symbol / definition / refactor tools |
-| `next-step` | Suggestion-of-next-step nudges after the agent settles |
-| `notebook` | Notebook-edit tool wrapper |
-| `plan` | `/plan` mode and plan-mode-aware command dispatch |
-| `presence` | Persona / soul / memory presence rendering in the TUI footer and idle lines |
-| `recap` | Session recap: summarize prior turns on session resume |
-| `sal` | Structural Anchor Localization: experience-driven cognitive-map primitives that boost memory recall quality |
-| `skill-tool` | Direct `Skill` tool exposure for callers that need explicit invocation |
-| `subagent` | CC-style Agent tool: spawn isolated sub-sessions with their own context |
-| `task` | Task-list / todo management and progress display |
-| `teach` | Structured teaching mode — walk a user through a topic step by step |
-| `team` | Multi-agent team orchestration with shared scratchpad |
+`extensions/builtin/` loads by default. `extensions/optional/` loads on demand or when
+explicitly enabled. Every directory under either tier has a row below. The `verify:dip`
+P1 check fails in both directions: a directory with no row, and a row pointing at a
+directory that no longer exists.
+
+| Extension | Tier | Purpose |
+|-----------|------|---------|
+| `ask-user-question` | builtin | Structured ask-the-user prompts that route through a single shared slot |
+| `browser` | builtin | Opt-in direct browser automation via vendored Browser Harness CDP bridge |
+| `btw` | builtin | "By the way" interjections to surface tangential context without losing the main thread |
+| `catail` | builtin | Research-to-publication Skill from framing through human-gated submission readiness |
+| `catpaw` | builtin | Evidence-led UI/UX design craft workflow skill |
+| `context-management` | builtin | Default budget hints, branch-history retrieval, working notes, and safe same-session context handoffs |
+| `debug` | builtin | Runtime debugging helpers and diagnostics overlays |
+| `diagnostics` | builtin | Self-diagnostic event capture + structured log surface |
+| `discipline` | builtin | Built-in engineering workflow skills, `skill` tool, lightweight skill-use bootstrap. Also the home of the `interview` skill. |
+| `goal` | builtin | `/goal` long-running autonomous goal pursuit (codex-goal lineage) |
+| `grub` | builtin | `/grub` autonomous long-running task harness with feature-list validation |
+| `humanizer` | builtin | Vendored writing-quality skill: removes AI-writing tells from prose without changing meaning or inventing facts |
+| `idle-think` | builtin | Idle-turn "thinking" hooks — fills silent pauses with background reasoning |
+| `insights` | builtin | Per-session / cross-session insights, dashboards, and HTML report export |
+| `link-world` | builtin | Internet access via agent-reach |
+| `loop` | builtin | `/loop` session-scoped scheduled prompts |
+| `lsp` | builtin | Language-server integration for symbol / definition / refactor tools |
+| `mcp` | builtin | MCP protocol support |
+| `next-step` | builtin | Suggestion-of-next-step nudges after the agent settles |
+| `notebook` | builtin | Notebook-edit tool wrapper |
+| `plan` | builtin | `/plan` mode and plan-mode-aware command dispatch |
+| `presence` | builtin | Persona / soul / memory presence rendering in the TUI footer and idle lines |
+| `recap` | builtin | Session recap: summarize prior turns on session resume |
+| `sal` | builtin | Structural Anchor Localization: experience-driven cognitive-map primitives that boost memory recall quality |
+| `security-audit` | builtin | Security vulnerability detection |
+| `skill-tool` | builtin | Direct `Skill` tool exposure for callers that need explicit invocation |
+| `subagent` | builtin | CC-style Agent tool: spawn isolated sub-sessions with their own context |
+| `task` | builtin | Task-list / todo management and progress display |
+| `teach` | builtin | Structured teaching mode — walk a user through a topic step by step |
+| `team` | builtin | Multi-agent team orchestration with shared scratchpad |
+| `typesafe` | builtin | Default decision/tool/evaluation guidance and vendored TypeSafe integration skill |
+| `evolution` | optional | Source evolution: independent review, verified repair, scheduled PR delivery. See below. |
+| `export-html` | optional | Session export to standalone HTML |
+| `session-bridge` | optional | `/bridge` — connect Codex to the current session; inactive until `/bridge start` |
+| `simplify` | optional | Opt-in review pass that flags redundant code and unused surface |
 
 ### Tools (`core/tools/`)
 

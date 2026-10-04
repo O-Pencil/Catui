@@ -1,17 +1,15 @@
 /**
  * Structured-adaptive agent loop for Catui — compatibility shim.
- *
  * The weak-model-compatible loop has converged into the standard loop
  * (core/lib/agent-core/src/agent-loop.ts). These exports remain as thin
  * wrappers so external importers keep working unchanged; `weak-model-compatible`
  * is now a capability alias of the standard loop, not a separate implementation.
+ * [WHO]: structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue
+ * [FROM]: @catui/ai
+ * [TO]: Consumed by core/lib/agent-core/src/index.ts
+ * [HERE]: core/lib/agent-core/src/structured-adaptive-agent-loop.ts - owned by core/lib/agent-core/AGENT.md
  */
-/**
- * [WHO]: structuredAdaptiveAgentLoop, structuredAdaptiveAgentLoopContinue — thin wrappers delegating to the unified standard loop
- * [FROM]: Depends on ./agent-loop (agentLoop, agentLoopContinue) and ./types for the public loop contract.
- * [TO]: Consumed by external importers through index.ts; kept for public API compatibility.
- * [HERE]: core/lib/agent-core/src/structured-adaptive-agent-loop.ts - legacy entry name, same behavior as standard loop
- */
+
 
 import type { AgentContext, AgentEvent, AgentLoopConfig, AgentMessage, StreamFn } from "./types.js";
 import { EventStream } from "@catui/ai/events";

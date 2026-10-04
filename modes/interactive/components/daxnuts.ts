@@ -1,13 +1,10 @@
 /**
  * POWERED BY DAXNUTS - Easter egg for OpenCode + Kimi K2.5
- *
  * A heartfelt tribute to dax (@thdxr) for providing free Kimi K2.5 access via OpenCode.
- */
-/**
  * [WHO]: DaxnutsComponent
- * [FROM]: Depends on ../theme/theme.js
- * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/daxnuts.ts - easter egg animation
+ * [FROM]: @catui/tui
+ * [TO]: Consumed by modes/interactive/components/index.ts, modes/interactive/controllers/info-command-handlers.ts
+ * [HERE]: modes/interactive/components/daxnuts.ts - owned by modes/interactive/AGENT.md
  */
 
 

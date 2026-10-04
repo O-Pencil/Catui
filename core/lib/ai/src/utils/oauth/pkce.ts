@@ -1,12 +1,10 @@
 /**
  * PKCE utilities using Web Crypto API.
  * Works in both Node.js 20+ and browsers.
- */
-/**
- * [WHO]: Extension interface
- * [FROM]: No external dependencies
- * [TO]: Consumed by core/lib/ai/src/index.ts
- * [HERE]: core/lib/ai/src/utils/oauth/pkce.ts -
+ * [WHO]: generatePKCE
+ * [FROM]: no external imports
+ * [TO]: Consumed by core/lib/ai/src/utils/oauth/anthropic.ts, core/lib/ai/src/utils/oauth/google-antigravity.ts, core/lib/ai/src/utils/oauth/google-gemini-cli.ts, core/lib/ai/src/utils/oauth/openai-codex.ts
+ * [HERE]: core/lib/ai/src/utils/oauth/pkce.ts - owned by core/lib/ai/AGENT.md
  */
 
 

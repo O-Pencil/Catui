@@ -1,11 +1,9 @@
 /**
  * Anthropic OAuth flow (Claude Pro/Max)
- */
-/**
- * [WHO]: anthropicOAuthProvider
- * [FROM]: Depends on ./pkce.js
- * [TO]: Consumed by core/lib/ai/src/index.ts
- * [HERE]: core/lib/ai/src/utils/oauth/anthropic.ts -
+ * [WHO]: loginAnthropic, refreshAnthropicToken, anthropicOAuthProvider
+ * [FROM]: no external imports
+ * [TO]: Consumed by core/lib/ai/src/utils/oauth/index.ts
+ * [HERE]: core/lib/ai/src/utils/oauth/anthropic.ts - owned by core/lib/ai/AGENT.md
  */
 
 

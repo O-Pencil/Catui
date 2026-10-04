@@ -111,8 +111,32 @@ By default, agent configuration lives under `~/.catui/agents/<id>/` (ID `default
 `--agent <id>` selects an agent; `CATUI_CODING_AGENT_DIR` overrides its config root.
 See `/model` and `/persona` for inline configuration; `docs/sdk.md` documents
 programmatic embedders.
-Local persistence does not mean every feature is offline: configured providers,
-MCP servers and enabled external integrations may make network requests.
+
+## Network and data egress
+
+Sessions, settings and memory are stored locally, and Catui sends no usage
+telemetry. That is a statement about the core product, not a claim that every
+shipped feature is offline:
+
+| What leaves your machine | Trigger | What is sent |
+| --- | --- | --- |
+| Model providers | Every turn, once a provider is configured | Your prompts, tool results and attachments, to that provider |
+| `link-world` | Using internet search or fetch | The query, to the search or fetch backend |
+| `mcp` | Calling a configured MCP server | Whatever you and the tool exchange with that server |
+| `sal` evaluation upload | Only when both an endpoint and an API key are configured, or `CATUI_EVAL_ENABLED=true` | Run metadata: tool names and sequences, intent labels, error counts, durations, and your prompt reduced to a character count. Prompt text and conversation content are not sent. |
+
+`sal` is the row worth reading twice. It activates on the *presence of
+credentials* rather than on a separate opt-in, so if you have pointed
+`CATUI_EVAL_ENDPOINT` / `CATUI_EVAL_API_KEY` (or written an endpoint into
+`settings.json`) at a real service, that data is already being sent.
+`CATUI_EVAL_ENABLED=false` disables it regardless of configuration.
+
+`session-bridge` and `--serve` are not in this table: the bridge is a local Codex
+plugin, and `--serve` is an explicit, token-gated choice you make when you start
+it.
+
+Extensions you install yourself are outside this table and outside any guarantee
+Catui makes about them.
 
 ## Develop
 

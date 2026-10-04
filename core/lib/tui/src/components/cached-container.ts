@@ -1,30 +1,25 @@
 /**
  * CachedContainer - A Container that caches each child's render output.
- *
  * On each render call, only re-renders children that have been explicitly
  * marked dirty via `markDirty()` or newly added via `addChild()`.  All
  * other children reuse their cached output from the previous frame.
- *
  * This avoids the O(children × lines) cost when most children are static —
  * the common case for chat transcripts where only the latest streaming
  * message and active tool executions change.
- *
  * IMPORTANT: Because child components (AssistantMessageComponent,
  * ToolExecutionComponent, etc.) mutate their internal state without
  * notifying the parent, callers MUST call `markDirty(component)` whenever
  * a child's content changes.  Failure to do so will result in stale
  * render output being displayed.
- *
  * NOTE: Viewport culling is NOT done here — the TUI's own doRender() already
  * handles terminal-level viewport management. Adding a second layer of
  * culling causes double-truncation bugs.
- */
-/**
  * [WHO]: CachedContainer
- * [FROM]: Extends ./tui.js Container
- * [TO]: Consumed by modes/interactive for chatContainer
- * [HERE]: core/lib/tui/src/components/cached-container.ts -
+ * [FROM]: no external imports
+ * [TO]: Consumed by core/lib/tui/src/index.ts
+ * [HERE]: core/lib/tui/src/components/cached-container.ts - owned by core/lib/tui/AGENT.md
  */
+
 
 import { Container, type Component } from "../tui.js";
 

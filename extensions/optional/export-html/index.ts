@@ -1,14 +1,11 @@
 /**
  * export-html Extension
- *
  * Provides HTML export functionality for sessions.
  * This extension registers the /export command.
- */
-/**
- * [WHO]: exportSessionToHtml, exportFromFile, type ToolHtmlRenderer, type ExportOptions, ExtExportOptions
- * [FROM]: Depends on node:path, node:url, ../../../core/session/session-manager.js, ../../../config.js, ../../../modes/interactive/theme/theme.js
- * [TO]: Loaded by core/extensions-host/loader.ts as extension entry point
- * [HERE]: extensions/optional/export-html/index.ts -
+ * [WHO]: ExtExportOptions, extExportSessionToHtml, extExportFromFile, exportHtmlExtension (default export), exportSessionToHtml, exportFromFile
+ * [FROM]: @catui/agent-core, node:fs, node:path, node:url
+ * [TO]: Loaded as an extension entry point by core/extensions-host/loader.ts
+ * [HERE]: extensions/optional/export-html/index.ts - owned by extensions/optional/AGENT.md
  */
 
 

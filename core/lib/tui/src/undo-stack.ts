@@ -1,15 +1,13 @@
 /**
  * Generic undo stack with clone-on-push semantics.
- *
  * Stores deep clones of state snapshots. Popped snapshots are returned
  * directly (no re-cloning) since they are already detached.
- */
-/**
  * [WHO]: UndoStack
- * [FROM]: No external dependencies
- * [TO]: Consumed by core/lib/tui/src/index.ts
- * [HERE]: core/lib/tui/src/undo-stack.ts -
+ * [FROM]: no external imports
+ * [TO]: Consumed by core/lib/tui/src/components/editor.ts, core/lib/tui/src/components/input.ts
+ * [HERE]: core/lib/tui/src/undo-stack.ts - owned by core/lib/tui/AGENT.md
  */
+
 
 export class UndoStack<S> {
 	private stack: S[] = [];

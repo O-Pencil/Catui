@@ -29,6 +29,14 @@
       "timeoutMs": 120000
     },
     {
+      "id": "structure",
+      "label": "File-size and DIP structural ratchet",
+      "command": "npm run verify:structure",
+      "required": true,
+      "category": "quality",
+      "timeoutMs": 120000
+    },
+    {
       "id": "package-boundary",
       "label": "Package boundary (static)",
       "command": "npm run verify:package-boundary",

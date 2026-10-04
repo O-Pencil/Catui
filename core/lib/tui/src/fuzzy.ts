@@ -2,12 +2,10 @@
  * Fuzzy matching utilities.
  * Matches if all query characters appear in order (not necessarily consecutive).
  * Lower score = better match.
- */
-/**
- * [WHO]: FuzzyMatch, fuzzyMatch, fuzzyFilter
- * [FROM]: No external dependencies
- * [TO]: Consumed by core/lib/tui/src/index.ts
- * [HERE]: core/lib/tui/src/fuzzy.ts -
+ * [WHO]: FuzzyMatch, fuzzyMatch, fuzzyFilter, WeightedField, weightedFuzzyFilter
+ * [FROM]: no external imports
+ * [TO]: Consumed by core/lib/tui/src/autocomplete.ts, core/lib/tui/src/components/settings-list.ts, core/lib/tui/src/index.ts
+ * [HERE]: core/lib/tui/src/fuzzy.ts - owned by core/lib/tui/AGENT.md
  */
 
 

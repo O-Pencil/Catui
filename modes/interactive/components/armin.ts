@@ -1,11 +1,9 @@
 /**
  * Armin says hi! A fun easter egg with animated XBM art.
- */
-/**
  * [WHO]: ArminComponent
- * [FROM]: Depends on ../theme/theme.js
- * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/armin.ts -
+ * [FROM]: @catui/tui
+ * [TO]: Consumed by modes/interactive/components/index.ts, modes/interactive/controllers/info-command-handlers.ts
+ * [HERE]: modes/interactive/components/armin.ts - owned by modes/interactive/AGENT.md
  */
 
 

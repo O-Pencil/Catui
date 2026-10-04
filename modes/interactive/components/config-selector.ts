@@ -1,11 +1,9 @@
 /**
  * TUI component for managing package resources (enable/disable)
- */
-/**
  * [WHO]: ConfigSelectorComponent
- * [FROM]: Depends on node:path, ../../../config.js, ../theme/theme.js, ./dynamic-border.js, ./keybinding-hints.js
- * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/config-selector.ts -
+ * [FROM]: @catui/tui, node:path
+ * [TO]: Consumed by cli/config-selector.ts, cli/subcommands.ts
+ * [HERE]: modes/interactive/components/config-selector.ts - owned by modes/interactive/AGENT.md
  */
 
 

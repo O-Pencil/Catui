@@ -1,11 +1,9 @@
 /**
  * Shared utilities for Google Generative AI and Google Cloud Code Assist providers.
- */
-/**
- * [WHO]: isThinkingPart, retainThoughtSignature, requiresToolCallId, convertMessages, convertTools
- * [FROM]: Depends on @google/genai, ../utils/sanitize-unicode.js, ./transform-messages.js
- * [TO]: Consumed by core/lib/ai/src/index.ts
- * [HERE]: core/lib/ai/src/providers/google-shared.ts -
+ * [WHO]: isThinkingPart, retainThoughtSignature, requiresToolCallId, convertMessages, convertTools, mapToolChoice, mapStopReason, mapStopReasonString
+ * [FROM]: @google/genai
+ * [TO]: Consumed by core/lib/ai/src/providers/google-gemini-cli.ts, core/lib/ai/src/providers/google-vertex.ts, core/lib/ai/src/providers/google.ts
+ * [HERE]: core/lib/ai/src/providers/google-shared.ts - owned by core/lib/ai/AGENT.md
  */
 
 

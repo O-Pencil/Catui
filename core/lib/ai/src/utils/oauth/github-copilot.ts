@@ -1,11 +1,9 @@
 /**
  * GitHub Copilot OAuth flow
- */
-/**
- * [WHO]: normalizeDomain, getGitHubCopilotBaseUrl, githubCopilotOAuthProvider
- * [FROM]: Depends on ../../models.js
- * [TO]: Consumed by core/lib/ai/src/index.ts
- * [HERE]: core/lib/ai/src/utils/oauth/github-copilot.ts -
+ * [WHO]: normalizeDomain, getGitHubCopilotBaseUrl, refreshGitHubCopilotToken, loginGitHubCopilot, githubCopilotOAuthProvider
+ * [FROM]: no external imports
+ * [TO]: Consumed by core/lib/ai/src/utils/oauth/index.ts
+ * [HERE]: core/lib/ai/src/utils/oauth/github-copilot.ts - owned by core/lib/ai/AGENT.md
  */
 
 

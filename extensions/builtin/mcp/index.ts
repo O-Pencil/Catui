@@ -1,14 +1,11 @@
 /**
  * MCP Extension
- *
  * Provides MCP (Model Context Protocol) guidance resources.
  * Runtime MCP tool loading is handled by the AgentSession SDK.
- */
-/**
- * [WHO]: Extension interface
- * [FROM]: Depends on node:fs, node:path, node:url, ../../../config.js, ../../../core/platform/config/auth-storage.js
- * [TO]: Loaded by core/extensions-host/loader.ts as extension entry point
- * [HERE]: extensions/builtin/mcp/index.ts -
+ * [WHO]: mcpExtension (default export)
+ * [FROM]: node:fs, node:path, node:url
+ * [TO]: Loaded as an extension entry point by core/extensions-host/loader.ts
+ * [HERE]: extensions/builtin/mcp/index.ts - owned by extensions/builtin/AGENT.md
  */
 
 

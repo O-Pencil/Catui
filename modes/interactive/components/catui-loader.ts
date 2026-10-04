@@ -2,13 +2,12 @@
  * CatuiLoader - Custom loader with rotating diamond animation
  * Uses ◆◇◈ symbols for a smooth loading indicator
  * Supports stalled animation (color transition to red) and tips display
- */
-/**
  * [WHO]: CatuiLoader
- * [FROM]: Depends on @catui/tui
- * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/catui-loader.ts -
+ * [FROM]: @catui/tui
+ * [TO]: Consumed by modes/interactive/components/index.ts, modes/interactive/controllers/agent-run-timer-controller.ts, modes/interactive/controllers/session-command-handlers.ts, modes/interactive/controllers/stream-render-controller.ts, modes/interactive/controllers/tree-overlay-controller.ts
+ * [HERE]: modes/interactive/components/catui-loader.ts - owned by modes/interactive/AGENT.md
  */
+
 
 import { Container, Spacer, Text, type TUI } from "@catui/tui";
 import type { Theme } from "../theme/theme.js";

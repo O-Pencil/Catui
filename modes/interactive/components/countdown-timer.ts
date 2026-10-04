@@ -1,11 +1,9 @@
 /**
  * Reusable countdown timer for dialog components.
- */
-/**
  * [WHO]: CountdownTimer
- * [FROM]: No external dependencies
- * [TO]: Consumed by modes/interactive/components/index.ts
- * [HERE]: modes/interactive/components/countdown-timer.ts -
+ * [FROM]: @catui/tui
+ * [TO]: Consumed by modes/interactive/components/extension-input.ts, modes/interactive/components/extension-selector.ts
+ * [HERE]: modes/interactive/components/countdown-timer.ts - owned by modes/interactive/AGENT.md
  */
 
 

@@ -1,16 +1,14 @@
 /**
  * Ring buffer for Emacs-style kill/yank operations.
- *
  * Tracks killed (deleted) text entries. Consecutive kills can accumulate
  * into a single entry. Supports yank (paste most recent) and yank-pop
  * (cycle through older entries).
- */
-/**
  * [WHO]: KillRing
- * [FROM]: No external dependencies
- * [TO]: Consumed by core/lib/tui/src/index.ts
- * [HERE]: core/lib/tui/src/kill-ring.ts -
+ * [FROM]: no external imports
+ * [TO]: Consumed by core/lib/tui/src/components/editor.ts, core/lib/tui/src/components/input.ts
+ * [HERE]: core/lib/tui/src/kill-ring.ts - owned by core/lib/tui/AGENT.md
  */
+
 
 export class KillRing {
 	private ring: string[] = [];

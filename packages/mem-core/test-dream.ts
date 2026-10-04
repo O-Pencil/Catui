@@ -1,6 +1,14 @@
 #!/usr/bin/env tsx
 /**
- * Test script for dream (consolidate) functionality
+ * Ad-hoc manual driver for the dream (consolidate) path. Not part of `npm test`
+ * and not published as a library surface — it exists so a maintainer can
+ * exercise consolidation against real memory on disk without writing a throwaway
+ * script. The automated coverage lives in packages/mem-core/test/.
+ * [WHO]: side-effect module — top-level await drives NanoMemEngine.dream() and logs the result
+ * [FROM]: Depends on node:os, node:path and packages/mem-core/src/{engine,config}.js
+ * [TO]: Invoked directly by a maintainer: npx tsx packages/mem-core/test-dream.ts
+ * [HERE]: packages/mem-core/test-dream.ts - package-root manual script; the
+ *         automated equivalent is packages/mem-core/test/
  */
 
 import { homedir } from "node:os";
