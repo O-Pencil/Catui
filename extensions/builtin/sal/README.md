@@ -67,6 +67,4 @@ Deleting `extensions/builtin/sal/` and removing its registration in `builtin-ext
 
 ## See also
 
-- `docs/SAL结构锚点定位方案.md` — full design document
-- `docs/SAL对比试验设计.md` — A/B experiment protocol
-- `docs/认知地图架构草案.md` — broader cognitive map context
+The detailed design notes for SAL lived under `docs/` and were removed during the docs cleanup. Refer to the SAL `AGENT.md` and the extension's source under `extensions/builtin/sal/` for the current contract.

@@ -68,13 +68,15 @@ The web UI is the same one served over HTTP, so you can also just keep using the
 
 ## Pairing failures & diagnostics
 
-The mobile app tells network and token problems apart automatically. When pairing fails it probes every advertised endpoint via `/healthz` (CORS-open, token check included) and shows a red banner with a 诊断 (diagnostics) panel:
+The mobile app distinguishes network reachability from token validity automatically. When pairing fails it probes every advertised endpoint via `/healthz` (CORS-open, token check included) and shows a red banner with a diagnostics panel:
 
-- ⚠️ 网络可达，但令牌无效 — the serve process restarted since the QR was shown. Re-run `catui --serve` and scan the fresh QR.
-- ❌ 无法连通 — phone and PC are not reachable: different WiFi / guest network, router AP isolation, or Windows Firewall blocking the port (allow Node.js on private networks when prompted).
-- ✅ 网络可达，令牌有效 — transient WebSocket failure; the client keeps retrying on its own.
+- ⚠️ Network reachable, token invalid — the serve process restarted after the QR was shown. Re-run `catui --serve` and scan the fresh QR.
+- ❌ Unreachable — phone and PC are not reachable: different WiFi / guest network, router AP isolation, or Windows Firewall blocking the port (allow Node.js on private networks when prompted).
+- ✅ Network reachable, token valid — transient WebSocket failure; the client keeps retrying on its own.
 
-The panel's 复制诊断信息 (copy diagnostics) button copies a plain-text report (time, target, per-endpoint results, user agent) for bug reports. Note: the mobile app UI is intentionally Chinese; it is the one surface exempt from the repo's English-only string policy.
+The panel's "copy diagnostics" button copies a plain-text report (time, target, per-endpoint results, user agent) for bug reports.
+
+Note: the mobile app's own UI strings are intentionally Chinese — that surface is the one exception to the repo's English-only user-facing-string policy.
 
 ## Code map → DIP
 

@@ -5,13 +5,13 @@
 Copy this to your AI Agent:
 
 ```
-帮我安装 link-world：https://raw.githubusercontent.com/Panniantong/agent-reach/main/docs/install.md
+Install link-world: https://raw.githubusercontent.com/Panniantong/agent-reach/main/docs/install.md
 ```
 
 > 🛡️ **Security-conscious?** Use safe mode — it won't auto-install system packages:
 > ```
-> 帮我安装 link-world（安全模式）：https://raw.githubusercontent.com/Panniantong/agent-reach/main/docs/install.md
-> 安装时使用 --safe 参数
+> Install link-world (safe mode): https://raw.githubusercontent.com/Panniantong/agent-reach/main/docs/install.md
+> Pass the --safe flag during installation.
 > ```
 
 ---
@@ -272,10 +272,10 @@ If you are running inside **OpenClaw**, ask your user:
 If the user agrees, create a **cron job** (daily, `sessionTarget: "isolated"`, `delivery: "announce"`) with this task:
 
 ```
-运行 agent-reach watch 命令。
-如果输出包含"全部正常"，不需要通知用户，静默结束。
-如果输出包含问题（❌ ⚠️）或新版本（🆕），把完整报告发给用户，并建议修复方案。
-如果有新版本可用，问用户是否要升级（升级命令：pip install --upgrade https://github.com/Panniantong/agent-reach/archive/main.zip）。
+Run the `agent-reach watch` command.
+If the output contains "all healthy", do not notify the user — exit silently.
+If the output contains problems (❌ ⚠️) or a new version (🆕), send the full report to the user with a suggested fix.
+If a new version is available, ask the user whether to upgrade (upgrade command: `pip install --upgrade https://github.com/Panniantong/agent-reach/archive/main.zip`).
 ```
 
 If the user wants a different agent to handle it, let them choose.
