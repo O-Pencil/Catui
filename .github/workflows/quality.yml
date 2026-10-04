@@ -18,3 +18,4 @@ jobs:
       - run: npm ci
       - run: npm run verify:quality
       - run: npm run verify:package-boundary   # BR01 package-boundary guard (static)
+      - run: npm run verify:structure          # AGENTS.md file-size + P3-header invariant (advisory)

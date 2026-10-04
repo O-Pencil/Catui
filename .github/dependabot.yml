@@ -1,0 +1,47 @@
+# Dependabot configuration for Catui
+# Keeps runtime and dev dependencies current with weekly PRs. Major version
+# bumps and CI-mutating changes are grouped for human review so the team can
+# gate them consciously.
+#
+# To opt out of a particular PR, comment `@dependabot ignore` on the PR.
+# To pause all Dependabot PRs, apply the `dependencies` label as paused.
+
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    # Group major and CI-mutating changes so they don't auto-merge silently.
+    groups:
+      npm-major:
+        dependency-type: "production"
+        update-types:
+          - "major"
+        labels:
+          - "dependencies"
+          - "breaking-change"
+      npm-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+      github-actions-major:
+        dependency-type: "github-actions"
+        update-types:
+          - "major"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps"
+    # Surface changes that affect build/test so they get human eyes.
+    ignore:
+      - dependency-name: "*"
+        # Skip CI tooling patches by default (handled separately if needed).
+        update-types: ["version-update:semver-patch"]
+    # Auto-rebase PRs so they stay conflict-free.
+    rebase-strategy: "auto"
