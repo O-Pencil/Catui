@@ -1,51 +1,50 @@
-<!-- 目标采访向导规范。教学 Agent 用。不含学习者结果。 -->
+<!-- Goal-interview wizard specification. For use by teaching agents. Does not contain learner results. -->
 
-# wizard — 目标采访向导(裁剪个性化路径)
+# wizard — Goal interview (tailoring a personalized path)
 
-教学 Agent 在开课前用这个向导,把学习者的目标变成一条从 `catui-course-pack.md` 裁出来的个性化路径。复用 oh-my-wiki 的向导式交互,补「学一个代码库」专用问法。
+Teaching agents use this wizard before opening the first lesson, to turn the learner's goal into a personalized path trimmed from `catui-course-pack.md`. Reuses oh-my-wiki's guided-interaction style; adds "learning a codebase" specific questions.
 
-## 第一步:建/选个人 vault(oh-my-wiki)
+## Step 1 — Create or pick a personal vault (oh-my-wiki)
 
 ```
-/wiki init catui            # 在 HUB/topics/catui/ 建个人 vault(或 --local 建在某项目下 .wiki/)
+/wiki init catui            # creates a personal vault at HUB/topics/catui/  (or --local to create at <project>/.wiki/)
 ```
 
-向导会确认 HUB 路径(`~/.config/llm-wiki/config.json` 的 `hub_path`,默认 `~/wiki`)。一个学习者一份 vault;多人各建各的。
+The wizard confirms the HUB path (`hub_path` in `~/.config/llm-wiki/config.json`, default `~/wiki`). One learner, one vault; everyone creates their own.
 
-## 第二步:三问目标采访
+## Step 2 — Three-question goal interview
 
-只问三件,别多:
+Ask only three things; don't add more:
 
-1. **想达成什么(mission)**:你学 catui 是为了——改 bug?加功能?做集成(O-Pencil/Gateway)?还是整体掌握?
-2. **已知多少(level)**:对照判断学习者程度,决定深浅——
-   - L0 零基础:"完全不懂""这是什么" → 全程类比、少术语
-   - L1 入门:知道是个 CLI agent → 从已知概念搭桥
-   - L2 进阶:用过、知道核心概念 → 直接上真实代码
-   - L3 熟练:问细节/原理 → 直接讨论架构与取舍
-3. **成功标准(success)**:学完你希望能做到什么?(能复述 X 的数据流 / 能独立排查 Y / 能给 Z 加扩展)
+1. **What do you want to accomplish (mission)** — Why are you learning catui: fix bugs? add features? do an integration (O-Pencil / Gateway)? Or understand the whole thing?
+2. **How much do you already know (level)** — gauge the learner's depth and calibrate explanation density:
+   - L0 absolute beginner: "I know nothing" / "what is this?" → full analogies, few terms
+   - L1 newcomer: knows it's a CLI agent → bridge from what they already know
+   - L2 practitioner: has used it, knows the core concepts → go straight to real code
+   - L3 proficient: asks details / why → straight into architecture and trade-offs
+3. **Success criterion (success)** — after you're done, what should you be able to do? (Recite X's data flow / independently debug Y / add an extension Z)
 
-把这三条写进个人 vault 的 mission 区(见 `kb-integration.md`),作为裁路径与验收的依据。
+Write these three lines into the mission area of the personal vault (see `kb-integration.md`); they become the basis for trimming the path and the completion criteria.
 
-## 第三步:从 course-pack 裁路径
+## Step 3 — Trim a path from the course pack
 
-`catui-course-pack.md` 的基础分类是 C0–C10(定位 → 核心运行 → 扩展 → 呈现 → 生态/元层),有依赖边。按 mission 裁:
+The fundamentals in `catui-course-pack.md` are C0–C10 (orientation to core runtime to extensions to expression to ecosystem / meta-layer), with dependency edges. Trim by mission:
 
-| 学习者说 | 推荐路径 |
-|---|---|
-| "我想整体掌握" | 全程 C0→C10 按依赖顺序 |
-| "我要改 agent 行为 / loop" | C0(定位)→ C1(Agent Loop)→ C2(上下文)→ 按需 C4(工具) |
-| "我要加/调工具" | C0 → C1 → **C4 工具系统** → C5(扩展贡献工具) |
-| "我要写扩展" | C0 → C5(扩展系统)→ C4 → C8(prompt/skills) |
-| "我做 O-Pencil/Gateway 集成" | C0 → C1 → C3(模型/SDK)→ **C9 生态集成** |
-| "我要排查某类问题" | C0 → 直达相关概念,重点看其"排查入口" |
-| "只学一个具体的" | 跳过路径,直接教那一个概念 |
+| Learner says | Recommended path |
+|--------------|------------------|
+| "I want to understand the whole thing" | Full C0 to C10 in dependency order |
+| "I want to change agent behavior / loop" | C0 (orientation) to C1 (Agent Loop) to C2 (context) to C4 as needed (tools) |
+| "I want to add / adjust tools" | C0 to C1 to **C4 tool system** to C5 (extensions contributing tools) |
+| "I want to write extensions" | C0 to C5 (extension system) to C4 to C8 (prompt / skills) |
+| "I do O-Pencil / Gateway integration" | C0 to C1 to C3 (model / SDK) to **C9 ecosystem integration** |
+| "I want to debug some specific issue" | C0 to jump directly to the relevant concept; focus on its "debugging entry" |
+| "I only want to learn one specific thing" | Skip the path; teach that one concept directly |
 
-**裁剪原则**:
-- 永远先 C0(定位),哪怕学习者急——不会读 DIP 地图,后面每课都事倍功半。
-- 尊重依赖边:被依赖的概念先教(course-pack 每节有"依赖边"列)。
-- 路径是建议不是铁律:学得快就跳,卡住就在该概念多停、补类比。
+**Trimming principles**:
+- Always start with C0 (orientation). Even if the learner is in a hurry — without the DIP map, every later lesson takes twice as long.
+- Respect dependency edges: prerequisites are taught first (each lesson lists its "dependency edges" in the course pack).
+- The path is a suggestion, not a law: skim fast when you're comfortable, slow down and add analogies when you're stuck.
 
-## 第四步:交接给教学
+## Step 4 — Hand off to teaching
 
-把"已选 vault + mission + 裁好的路径(概念 id 列表)+ 第一个 cursor"交给 `teaching-method.md` 开课。
-之后每完成一个概念,回到这里取下一个 cursor,直到路径走完。
+Pass "chosen vault + mission + trimmed path (concept id list) + first cursor" to `teaching-method.md` to start the first lesson. After each concept is done, come back here for the next cursor, until the path is walked.

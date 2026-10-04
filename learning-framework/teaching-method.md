@@ -1,54 +1,55 @@
-<!-- 开一课的统一规范。任意教学 Agent 用。沿用 catui teach 方法,不改其代码。 -->
+<!-- Uniform specification for running one lesson. Used by any teaching agent. Follows catui's teach method, does not modify its code. -->
 
-# teaching-method — 怎么开一课
+# teaching-method — How to run one lesson
 
-任意支持 `teach` 方法的 Agent 都按这个规范教一个概念。catui 自带 `teach` 扩展(`/teach <topic>`,渐进式状态机);没有该扩展的 Agent 照本文手动执行同一流程即可。
+Any agent that supports the `teach` method follows this spec to teach one concept. Catui ships with the `teach` extension (`/teach <topic>`, progressive state machine); agents that don't have it can still run the same flow manually by following this document.
 
-## 渐进式结构(每概念一课)
+## Progressive structure (one lesson per concept)
 
-沿用 teach 的层次,从"为什么在乎"到"深入原理":
+Following the `teach` layer model, from "why does this matter" to "deep into the how":
 
-| 层 | 目标 | 做法 |
-|----|------|------|
-| **Hook**(L0) | 为什么该在乎这个概念 | 一句话点出它解决什么真实痛点 |
-| **L1** | 一句话版本 + 核心类比 | 用生活/已知概念搭桥 |
-| **L2** | 怎么运作 + 一个例子 | 画数据流;给一个最小真实例子 |
-| **L3** | 深入 + 真实场景 | 进真实代码,讨论"为什么这么写" |
-| **Bridge** | 对你意味着什么 | 联系学习者的 mission |
-| **Takeaways** | 3 条核心点 | 含至少 2 个"排查入口" |
+| Layer | Goal | How |
+|-------|------|-----|
+| **Hook** (L0) | Why this concept matters | One sentence on what real pain it solves |
+| **L1** | One-sentence version + core analogy | Bridge with everyday / already-known concepts |
+| **L2** | How it works + one example | Draw the data flow; give a minimal realistic example |
+| **L3** | Deep dive + real scenario | Go into real code; discuss "why it's written this way" |
+| **Bridge** | What this means for you | Connect back to the learner's mission |
+| **Takeaways** | Three core points | Include at least 2 "debugging entry points" |
 
-按学习者程度(wizard 判定的 L0–L3)调深浅:L0 多类比少术语,L3 直接进架构与取舍。
+Adjust depth by the learner's level (L0–L3 from the wizard): L0 gets more analogies and fewer terms; L3 jumps straight into architecture and trade-offs.
 
-## 三个硬规矩
+## Three hard rules
 
-1. **每个事实带来源**。讲实现必须给 `file:line`(如 `core/runtime/agent-session.ts:1117`),让学习者能自己点开核对。`catui-course-pack.md` 已给每个概念备好锚点;深入时现场再补。来源可信度分级见下。
-2. **聚焦三个问题**。每课都要回答:**为什么这么写 / 为什么这个能力在这 / 坏了先看哪**。这三问比"它做了什么"更重要——前者是理解与排查,后者读代码就有。
-3. **查理解,不灌输**。讲完一层停下来,让学习者复述/提问;复述不出来就换类比重讲,别往下冲。
+1. **Every claim carries a source.** When teaching implementation, give a `file:line` (e.g. `core/runtime/agent-session.ts:1117`) so the learner can open it and verify. `catui-course-pack.md` already prepares anchors for every concept; when going deeper, verify and add more live. The source-credibility ladder is below.
+2. **Focus on three questions.** Every lesson must answer: **why is it written this way / why does this capability live here / where to look when it breaks.** These three are more important than "what does it do" — the latter you can read from code.
+3. **Check understanding, don't lecture.** Pause after each layer and have the learner paraphrase or ask questions. If they can't paraphrase, switch analogy and re-teach the layer — don't push on.
 
-## 来源可信度(讲代码时)
+## Source credibility (when teaching code)
 
-| 级别 | 来源 |
-|------|------|
-| ⭐⭐⭐⭐⭐ | 直接读到的源码 `file:line`、P2 `AGENT.md` 成员表、P3 文件头 |
-| ⭐⭐⭐⭐ | 仓库内设计文档 `.dev-docs/`、`AGENTS.md`、`llm-wiki/` |
-| ⭐⭐⭐ | commit message / PR 描述 |
-| ⭐⭐ | 推断(必须标注"推断") |
+| Level | Source |
+|-------|--------|
+| 5 / 5 | Direct read of source `file:line`, P2 `AGENT.md` member list, P3 file header |
+| 4 / 5 | In-repo design docs: `.dev-docs/`, `AGENTS.md`, `llm-wiki/` |
+| 3 / 5 | commit message / PR description |
+| 2 / 5 | inference (must be marked "inference") |
 
-讲到不确定的实现,**先去读源码核对再讲**,不要凭印象——这正是 [[memory:feedback_audit_before_analysis|先审计后分析]] 的同一原则。
+When teaching an implementation you aren't sure about, **read the source first, then teach** — never go from memory. This is the same principle as "audit before you analyze".
 
-## 一课的"完成"判据
+## "Done" criteria for one lesson
 
-满足才算学完、可进下一概念:
+Only when these are met can the learner move to the next concept:
 
-- 学习者能**用自己的话复述该概念的数据流**;
-- 能说出**至少 2 个排查入口**(这个能力坏了先看哪);
-- 关联到 mission(知道这对 ta 的目标意味着什么)。
+- The learner can **paraphrase the concept's data flow in their own words**.
+- They can name **at least 2 debugging entry points** (where to look when this capability breaks).
+- Connected to the mission (they know what this means for their own goal).
 
-## 课末:沉淀(必做)
+## End of lesson — deposit (required)
 
-每课结束,把理解落进学习者个人 vault —— 见 `kb-integration.md`。最少:
-1. 写/更新一篇 `wiki/concepts/<Cx-concept>.md`(学习者视角的理解 + 来源 + 排查入口,双链到相邻概念)。
-2. `/wiki:ll` 抽取本次会话的卡点/纠正/发现,记进 vault。
-3. 在个人 vault 的进度区把该概念标 done,记录下一个 cursor。
+At the end of every lesson, deposit the understanding into the learner's personal vault — see `kb-integration.md`. Minimum:
 
-> 注意:沉淀写进**学习者的个人 vault**,不是 catui 仓库、也不是 `learning-framework/`。
+1. Write / update `wiki/concepts/<Cx-concept>.md` (learner-perspective understanding + sources + debugging entries, with backlinks to neighboring concepts).
+2. Run `/wiki:ll` to extract this session's stuck points / corrections / discoveries, into the vault's `log/lessons`.
+3. In the personal vault's progress area, mark the concept as done and record the next cursor.
+
+> Important: deposit into the **learner's personal vault**, not into the catui repo or `learning-framework/`.

@@ -1,49 +1,49 @@
-<!-- 便携学习框架方法论。不含学习者结果。 -->
+<!-- Portable learning framework methodology. Does not contain learner results. -->
 
-# framework — 「学一个代码库」方法论
+# framework — "Learn a codebase" methodology
 
-## 为什么需要这个框架
+## Why this framework is needed
 
-读一个不是自己写、且多人维护的代码库,常见困境:**知道有哪些能力,但不清楚具体实现、为什么这么写,出问题不知怎么排查**。两个现成工具各解决一半:
+When reading a codebase you didn't write and many people maintain, the common trap is: **you know what capabilities exist, but not how they're implemented, why they're written that way, or where to look when something breaks.** Two existing tools each solve half the problem:
 
-- `teach`(教学引擎)能把一个概念循序教会你,但它的产出扁平地倒进 `.catui/teach/`,无双链、无图谱、不成体系。
-- `oh-my-wiki`(知识库)能把知识组织成 Obsidian 式个人 wiki,但它本身**不"教"**——读 wiki ≠ 被教会。
+- `teach` (pedagogy engine) can walk you through a concept step by step, but its output is dumped flat into `.catui/teach/`: no backlinks, no graph, no system.
+- `oh-my-wiki` (knowledge base) can organize knowledge into an Obsidian-style personal wiki, but it doesn't *teach* — reading a wiki is not the same as being taught.
 
-本框架把两者接起来,并补上中间缺的一环:**怎么把一个代码库系统地拆成"可学的概念",并按依赖顺序教,把每一步的理解沉淀成你自己的、连成网的个人知识库**。
+This framework wires the two together and fills the missing middle: **how to systematically decompose a codebase into "learnable concepts", teach them in dependency order, and deposit each step's understanding into your own, networked personal knowledge base.**
 
-## 核心理念
+## Core ideas
 
-1. **概念横切,不按目录**。学习单元是维护者会问的问题(「整体怎么搭」「一次 turn 怎么跑」「工具怎么注册」),一条概念可贯穿多文件/多模块。目录结构是查地图的手段,不是学习单元。
-2. **定位先行**。先学会"怎么自己找路"(读 DIP 代码地图 P1/P2/P3),再进具体子系统。授人以渔。
-3. **来源可校验**。每个事实都带 `file:line`,学习者能自己点开核对——这也顺带训练了"出问题去哪看"的排查肌肉。
-4. **理解即排查地图**。每个概念都记一条"排查入口(坏了先看哪)",学完即获得 triage 能力。
-5. **结果归个人**。学习产物是**你对这个项目的理解**,属于你,存你自己的 vault;仓库保持干净,多人各学各的。
+1. **Concepts cross-cut, not by directory.** The unit of learning is a question a maintainer would ask ("how is this thing structured?" / "how does a turn run?" / "how are tools registered?"). One concept can span many files and modules. Directory structure is how you look up the map, not the unit of learning.
+2. **Wayfinding first.** Learn "how to find your own way" (read the DIP code map: P1 / P2 / P3) before diving into any specific subsystem. Teach a person to fish.
+3. **Sources are verifiable.** Every claim carries a `file:line`, so the learner can open it and check. This also trains the "where do I look when something breaks" muscle.
+4. **Understanding is the debugging map.** Every concept carries an entry point for "broken first, look here". Finishing a lesson leaves you with a triage ability.
+5. **Results belong to the person.** The output of learning is **your understanding of this project**; it belongs to you and lives in your vault. The repo stays clean; each learner keeps their own.
 
-## 运行时流程
+## Runtime flow
 
 ```
-学习者                教学 Agent                 oh-my-wiki(个人 vault)
-  |                       |                            |
-  |-- 我想学 catui ------>|                            |
-  |                       |-- /wiki init catui ------->|  建/选个人 topic vault
-  |<-- 目标采访(wizard)--|                            |
-  |-- 目标/已知/标准 ---->|                            |
-  |                       |  从 course-pack 裁个性化路径
-  |<== 开课(teaching) ===|  渐进式 + file:line 来源    |
-  |-- 我的理解/疑问 ----->|                            |
-  |                       |-- 写 concept 笔记 -------->|  wiki/concepts/<Cx>.md(双链+frontmatter)
-  |                       |-- /wiki:ll 抽 lessons ---->|  log.md / 卡点
-  |<-- 下一课 cursor -----|                            |
+Learner                Teaching agent               oh-my-wiki (personal vault)
+  |                       |                              |
+  |-- I want to learn ---->|                              |
+  |                       |-- /wiki init catui ---------->|  create / pick personal topic vault
+  |<-- goal interview ----|                              |
+  |-- goal / prior / std->|                              |
+  |                       |  trim path from course-pack  |
+  |<== run lesson =======|  progressive + file:line src |
+  |-- my Q's / thoughts ->|                              |
+  |                       |-- write concept note ------->|  wiki/concepts/<Cx>.md (backlinks + frontmatter)
+  |                       |-- /wiki:ll extract lessons ->|  log.md / stuck points
+  |<-- next cursor ------|                              |
 ```
 
-逐概念循环:**采访裁路径 → 开课 → 沉淀进个人 vault → 取下一概念**。进度只记在个人 vault 内(每人独立),框架本身无状态、只读被学对象。
+Per-concept loop: **interview to tailor path → run lesson → deposit into personal vault → take next concept.** Progress lives only in the personal vault (each person is independent). The framework itself is stateless and reads only the studied object.
 
-## 与三方的边界
+## Boundaries with the three parties
 
-- 复用 `teach` 的**方法**(不改其代码;见 [[teaching-method]] `teaching-method.md`)。
-- 复用 `oh-my-wiki` 的**存储与命令**(`/wiki:init`、`/wiki:ll`、`/wiki:query`;见 [[kb-integration]] `kb-integration.md`)。
-- 本框架只产**方法约定 + 课程目录**(`catui-course-pack.md`),三者都不含学习者结果。
+- Reuses `teach`'s **method** (does not modify its code; see [[teaching-method]] `teaching-method.md`).
+- Reuses `oh-my-wiki`'s **storage and commands** (`/wiki:init`, `/wiki:ll`, `/wiki:query`; see [[kb-integration]] `kb-integration.md`).
+- This framework only produces **method conventions + a course catalog** (`catui-course-pack.md`). None of the three contain learner results.
 
-## 用到别的仓库
+## Applying to another codebase
 
-`framework.md` / `wizard.md` / `teaching-method.md` / `kb-integration.md` 是**项目无关**的。换一个仓库,只需照 `catui-course-pack.md` 的字段格式,为新仓库写一份它的「基础分类」(最好能从该仓库的代码地图 / wiki 推导),其余原样复用。
+`framework.md` / `wizard.md` / `teaching-method.md` / `kb-integration.md` are **project-agnostic**. For a different codebase, you only need to write a "fundamentals catalog" for that codebase, following the field format of `catui-course-pack.md` (ideally derivable from that repo's code map / wiki); the rest is reused as-is.

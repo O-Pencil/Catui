@@ -1,83 +1,83 @@
-<!-- 把每课理解写进学习者 oh-my-wiki 个人 vault 的约定。基于 oh-my-wiki 实测结构。 -->
+<!-- Conventions for depositing each lesson's understanding into the learner's oh-my-wiki personal vault. Based on oh-my-wiki's measured structure. -->
 
-# kb-integration — 把理解沉淀进个人知识库
+# kb-integration — Depositing understanding into the personal knowledge base
 
-学习结果(你的理解/卡点/笔记)写进**学习者自己的 oh-my-wiki vault**,Obsidian 兼容、可视化成知识图谱。本文按 oh-my-wiki 实测结构给出映射约定。**绝不写进 catui 仓库或 `learning-framework/`。**
+Learning results (your understanding / stuck points / notes) go into **your own oh-my-wiki vault**, Obsidian-compatible, visualizable as a knowledge graph. This document maps the conventions onto oh-my-wiki's measured structure. **Do not write into the catui repo or `learning-framework/`.**
 
-## vault 在哪
+## Where the vault lives
 
-oh-my-wiki 的 HUB 由 `~/.config/llm-wiki/config.json` 的 `hub_path` 决定(默认 `~/wiki`)。内容住在 **topic 子 wiki**:`HUB/topics/catui/`。`/wiki init catui` 会建好下列结构(无需 Obsidian app,但带 `.obsidian/` 配置,可直接用 Obsidian 打开):
+The oh-my-wiki HUB is determined by `hub_path` in `~/.config/llm-wiki/config.json` (default `~/wiki`). Content lives in a **topic sub-wiki**: `HUB/topics/catui/`. Running `/wiki init catui` creates this structure (no Obsidian app required, but a `.obsidian/` config is included so you can open it in Obsidian directly):
 
 ```
 HUB/topics/catui/
-├── _index.md          # 仪表盘:统计 + 概念表 + 快速导航(= 学习进度首页)
-├── config.md          # frontmatter(title/description) + Scope/Conventions
-├── log.md             # 活动/学习日志(/wiki:ll 写这里)
-├── raw/repos/         # 被学对象的引用(catui 仓库指针,immutable)
+├── _index.md          # dashboard: stats + concept table + quick nav (= learning progress home)
+├── config.md          # frontmatter (title/description) + Scope/Conventions
+├── log.md             # activity / learning log (written by /wiki:ll)
+├── raw/repos/         # reference to the studied object (catui repo pointer, immutable)
 └── wiki/
-    ├── concepts/      # ★ 每个学到的概念一篇(你的理解单元)
-    ├── topics/        # C0–C10 大区(可选,把概念归类)
-    └── references/    # 速查表(命令/路径/排查清单)
+    ├── concepts/      # ★ one note per concept learned (your unit of understanding)
+    ├── topics/        # C0–C10 large sections (optional, groups concepts)
+    └── references/    # quick-reference (commands / paths / debug checklists)
 ```
 
-## 一个概念 = 一篇 concept 笔记
+## One concept = one concept note
 
-每教完一个概念,写 `wiki/concepts/<Cx-slug>.md`,**学习者视角**(我理解了什么),不是抄源码:
+After teaching each concept, write `wiki/concepts/<Cx-slug>.md`, **from the learner's perspective** (what I understood), not a copy of source:
 
 ```markdown
 ---
-title: "C1 Agent Loop 核心"
+title: "C1 Agent Loop Core"
 category: concept
 sources:
-  - raw/repos/catui.md            # 指向被学仓库
+  - raw/repos/catui.md            # pointer to the studied repo
 created: 2026-06-15
 updated: 2026-06-15
 tags: [catui, agent-loop, runtime]
-confidence: medium              # 自评:low/medium/high
+confidence: medium              # self-rated: low/medium/high
 volatility: warm
-summary: "一次 turn 怎么跑:AgentSession.prompt → agent-core Agent → 模型流式→工具→回灌→停。"
+summary: "How one turn runs: AgentSession.prompt to agent-core Agent to model streaming to tools to refill to stop."
 ---
 
-# C1 Agent Loop 核心
+# C1 Agent Loop Core
 
-> 我的理解(用我自己的话)…一次对话回合是怎么跑完的。
+> My understanding (in my own words)… how one conversational turn runs to completion.
 
-## 数据流
+## Data flow
 AgentSession.prompt() (`core/runtime/agent-session.ts:1117`)
-→ this.agent.prompt() (`:1270`) → agent-core 的 while 循环 (`core/lib/agent-core/src/agent-loop.ts:303`) …
+→ this.agent.prompt() (`:1270`) → agent-core while-loop (`core/lib/agent-core/src/agent-loop.ts:303`) …
 
-## 为什么这么写
-…(loop 放在 agent-core、session 只驱动的原因)
+## Why it's written this way
+…(why the loop lives in agent-core, why the session only drives)
 
-## 排查入口(坏了先看哪)
-- 回合不停/死循环 → `agent-loop.ts:303` while 的停止条件
-- 工具没被调用 → 工具编排 `core/tools/orchestrator.ts`
+## Debugging entry points (broken first, look here)
+- turn not stopping / infinite loop → stopping condition at `agent-loop.ts:303` while
+- tool not being called → tool orchestration at `core/tools/orchestrator.ts`
 
 ## See Also
-[[C0-framework|C0 整体设计]] ([C0](C0-framework.md)) · [[C2-session-context|C2 上下文]] ([C2](C2-session-context.md))
+[[C2-session-context|C2 Context]] ([C2](C2-session-context.md))
 ```
 
-**双链约定**(同时给 Obsidian 图谱和 Claude 导航,同一行):
-`[[C2-session-context|C2 上下文]] ([C2](C2-session-context.md))`。相邻概念互链,Obsidian 图谱里就长出你的"心智地图"。
+**Backlink convention** (single line that works in both Obsidian's graph and Claude's navigation):
+`[[C2-session-context|C2 Context]] ([C2](C2-session-context.md))`. Neighboring concepts link to each other; Obsidian's graph then grows your "mental map".
 
-**frontmatter** 必填 `title/category/sources/created/updated/tags/summary`;`confidence` 自评(还没懂透就标 low,提醒以后回看)。
+**Frontmatter** must include `title/category/sources/created/updated/tags/summary`; `confidence` is self-rated (mark it `low` if you don't fully understand yet — that reminds you to revisit).
 
-## 卡点与发现 → /wiki:ll
+## Stuck points and discoveries to /wiki:ll
 
-每课结束跑:
+After each lesson:
 
 ```
-/wiki:ll        # 扫本次会话的 error→fix、被纠正处、新发现,结构化写进 vault 的 log/lessons
+/wiki:ll        # scan this session for error→fix, corrections, new discoveries; structure into vault log/lessons
 ```
 
-这把"我哪里卡住了、为什么之前理解错了"也沉淀下来——正是未来排查的金矿。
+This deposits "where I got stuck, why my earlier understanding was wrong" — the future-debugging gold mine.
 
-## 进度与续课(只在个人 vault 内)
+## Progress and continuing (in the personal vault only)
 
-- `_index.md` 概念表的状态列 + `log.md` = 个人进度看板。
-- cursor = 还没 done 的第一个概念;下次任一 Agent `/wiki:query` 或读 `_index.md` 即知从哪续。
-- **每人一份 vault,进度互不影响**;框架与 catui 仓库都不记任何人的进度。
+- The status column of `_index.md`'s concept table + `log.md` = personal progress dashboard.
+- cursor = the first concept not yet marked done; next time, any agent `/wiki:query` or reading `_index.md` knows where to continue.
+- **Each learner has their own vault; progress is independent**. Neither the framework nor the catui repo tracks anyone's progress.
 
-## 可选:导入 teach 的原始记录
+## Optional — import raw `teach` records
 
-若学习者也用了 catui 的 `/teach`,其产物在 `<workspace>/.catui/teach/records/*.md`(已是 markdown)。可 `/wiki:ingest` 把它们并入个人 vault 的 `raw/notes/`,再 compile 成 concept 笔记。teach 代码不改,只是把它的输出当一个源。
+If the learner also used catui's `/teach`, its output lives at `<workspace>/.catui/teach/records/*.md` (already markdown). `/wiki:ingest` can merge these into `raw/notes/` in the personal vault, then you compile them into concept notes. The `teach` source code is unchanged; we just treat its output as one source.

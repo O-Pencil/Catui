@@ -1,124 +1,124 @@
 <!--
-catui 基础分类课程目录(C0–C10)。这是被学习对象的大纲,不是任何人的学习结果。
-锚点为本文撰写时(catui-agent 1.1.10)的事实;教学时应现场用 Read/Grep 核对再讲(file:line 会随代码漂移)。
-每个概念字段:为什么这么设计 | 横切关键文件 file:line | P2 DIP 节点 | 排查入口 | 依赖边 | 对应 docs。
+catui fundamentals catalog (C0-C10). This is the syllabus for the object being studied, not any learner's results.
+Anchors are accurate as of catui-agent 1.1.10; before teaching, verify live with Read/Grep (file:line drifts as code moves).
+Each concept field: why is it designed this way / cross-cut key file:line / P2 DIP node / debugging entry / dependency edge / matching docs.
 -->
 
-# catui 课程目录:基础分类 C0–C10
+# catui course catalog: fundamentals C0–C10
 
-按**维护者心智模型**横切(非目录)。顺序 = 依赖顺序,定位在前。教学 Agent 据此 + `wizard.md` 裁个性化路径。
+Cross-cut by **maintainer's mental model** (not by directory). Order = dependency order; orientation comes first. Teaching agents use this plus `wizard.md` to tailor a personalized path.
 
-> 用法:每节是一课的"大纲卡"。讲之前先 `Read`/`Grep` 核对锚点(代码会动);讲完按 `kb-integration.md` 沉淀进学习者个人 vault。
+> Usage: each section is a "syllabus card" for one lesson. Verify anchors with `Read` / `Grep` before teaching (code moves); after teaching, deposit into the learner's personal vault per `kb-integration.md`.
 
 ---
 
-## C0 · 整体设计与框架
+## C0 · Overall design and framework
 
-- **维护者问题**:这东西整体怎么搭的?我怎么自己找路?
-- **为什么这么设计**:四层拓扑(Entry→Core→Tool→Interface)把"入口/核心/能力/呈现"解耦;DIP 三相代码地图让任何人能自助导航,不靠口口相传。
-- **横切关键文件**:`cli.ts`(入口)→ `main.ts:5`(args→`CreateAgentSessionOptions`→mode 选择)→ `main.ts:30` `createAgentSession`;`AGENTS.md`(P1 拓扑/目录/子系统);`scripts/verify-dip.ts`(地图同构校验)。
-- **P2 DIP 节点**:`core/AGENT.md`、`AGENTS.md`(P1)。
-- **DIP 怎么用**:P1=`AGENTS.md` 全局地图;P2=每目录 `AGENT.md` 成员表;P3=每文件头 `[WHO]/[FROM]/[TO]/[HERE]`。从 P1 找子系统 → P2 找文件 → P3 头确认职责。
-- **排查入口**:启动行为异常先看 `main.ts` 的 mode 选择;"这能力在哪个目录"查 `AGENTS.md` Directory Structure / Key Subsystems。
-- **依赖边**:无(起点)。
-- **对应 docs**:`AGENTS.md`。
+- **Maintainer's question**: How is this thing structured overall? How do I find my own way?
+- **Why is it designed this way**: A four-layer topology (Entry to Core to Tool to Interface) decouples "entry / core / capability / presentation". The DIP three-tier code map lets anyone navigate themselves, instead of relying on tribal knowledge.
+- **Cross-cut key files**: `cli.ts` (entry) → `main.ts:5` (args to `CreateAgentSessionOptions` to mode selection) → `main.ts:30` `createAgentSession`; `AGENTS.md` (P1 topology / directory / subsystems); `scripts/verify-dip.ts` (map-isomorphism check).
+- **P2 DIP nodes**: `core/AGENT.md`, `AGENTS.md` (P1).
+- **How to use DIP**: P1 = `AGENTS.md` global map; P2 = each directory's `AGENT.md` member list; P3 = each file header `[WHO]/[FROM]/[TO]/[HERE]`. From P1 find subsystem → P2 find file → P3 header confirm responsibility.
+- **Debugging entry points**: Abnormal startup behavior, look at mode selection in `main.ts`; "where does this capability live", check `AGENTS.md` Directory Structure / Key Subsystems.
+- **Dependency edges**: none (entry point).
+- **Matching docs**: `AGENTS.md`.
 
-## C1 · Agent Loop 核心
+## C1 · Agent Loop core
 
-- **维护者问题**:一次对话回合(turn)到底怎么跑完?
-- **为什么这么设计**:把"会话编排"(AgentSession)与"循环本体"(agent-core 的 Agent)分离 —— session 管生命周期/事件/工具装配,agent-core 只跑 prompt→模型→工具→回灌的纯循环,便于复用与测试。
-- **横切关键文件**:`core/runtime/agent-session.ts:1117` `prompt()` → `:1270` `this.agent.prompt()`;`core/lib/agent-core/src/agent.ts:173` `class Agent`;循环 `core/lib/agent-core/src/agent-loop.ts:303`(`while(true)`)与 `structured-adaptive-agent-loop.ts:227`;工具编排 `structured-adaptive-tool-orchestration.ts`。
-- **P2 DIP 节点**:`core/runtime/AGENT.md`、`core/lib/agent-core/AGENT.md`、`core/lib/ai/AGENT.md`(模型流式)。
-- **排查入口**:回合不停/卡住 → `agent-loop.ts:303` 的停止条件;工具调用没触发 → 编排器 `core/tools/orchestrator.ts`;事件没发出 → AgentSession 的事件发射。
-- **依赖边**:C0。
-- **对应 docs**:`docs/sdk.md`(嵌入视角)。
+- **Maintainer's question**: How does one conversational turn actually run to completion?
+- **Why is it designed this way**: Separate "session orchestration" (`AgentSession`) from "the loop itself" (agent-core's `Agent`) — the session manages lifecycle / events / tool assembly; agent-core only runs the pure prompt to model to tool to refill loop, easy to reuse and test.
+- **Cross-cut key files**: `core/runtime/agent-session.ts:1117` `prompt()` → `:1270` `this.agent.prompt()`; `core/lib/agent-core/src/agent.ts:173` `class Agent`; loop at `core/lib/agent-core/src/agent-loop.ts:303` (`while(true)`) and `structured-adaptive-agent-loop.ts:227`; tool orchestration `structured-adaptive-tool-orchestration.ts`.
+- **P2 DIP nodes**: `core/runtime/AGENT.md`, `core/lib/agent-core/AGENT.md`, `core/lib/ai/AGENT.md` (model streaming).
+- **Debugging entry points**: turn not stopping / stuck → stopping condition at `agent-loop.ts:303`; tool call not triggered → orchestrator `core/tools/orchestrator.ts`; event not emitted → `AgentSession`'s event emission.
+- **Dependency edges**: C0.
+- **Matching docs**: `docs/sdk.md` (embedder view).
 
-## C2 · 会话生命周期与上下文
+## C2 · Session lifecycle and context
 
-- **维护者问题**:对话历史怎么存、怎么分支、上下文满了怎么办?
-- **为什么这么设计**:会话以 jsonl 持久化并支持 branch/fork,使"回到过去/并行尝试"可行;compaction 在上下文窗口将满时摘要历史,避免溢出且尽量不丢信息。
-- **横切关键文件**:`core/session/`(SessionManager,持久化/branching);`core/session/compaction/compaction.ts`(`CompactionController`/`compactSession`);`core/session/compaction/branch-summarization.ts`;持久化路径 `~/.catui/agents/<id>/sessions/*.jsonl`。
-- **P2 DIP 节点**:`core/session/AGENT.md`。
-- **排查入口**:历史丢失/串话 → SessionManager 的 branch 读取;上下文莫名被截 → `compaction.ts` 的触发阈值;fork 后摘要不对 → `branch-summarization.ts`。
-- **依赖边**:C1。
-- **对应 docs**:`docs/sdk.md`(`./session`、`./session/compaction` 子路径导出)。
+- **Maintainer's question**: How is conversation history stored? How does it branch? What happens when context fills up?
+- **Why is it designed this way**: Sessions persist as jsonl and support branch/fork, so "go back in time / try in parallel" is possible; compaction summarizes history when the context window is about to fill, avoiding overflow while losing as little information as possible.
+- **Cross-cut key files**: `core/session/` (SessionManager, persistence / branching); `core/session/compaction/compaction.ts` (`CompactionController` / `compactSession`); `core/session/compaction/branch-summarization.ts`; persistence path `~/.catui/agents/<id>/sessions/*.jsonl`.
+- **P2 DIP nodes**: `core/session/AGENT.md`.
+- **Debugging entry points**: history lost / cross-talk → SessionManager's branch read; context mysteriously truncated → `compaction.ts` trigger threshold; wrong summary after fork → `branch-summarization.ts`.
+- **Dependency edges**: C1.
+- **Matching docs**: `docs/sdk.md` (`./session`, `./session/compaction` subpath exports).
 
-## C3 · 模型与 provider
+## C3 · Models and providers
 
-- **维护者问题**:模型从哪来、怎么鉴权、怎么切换?启动链怎么走?
-- **为什么这么设计**:ModelRegistry 统一管理多 provider/自定义 provider 与鉴权(API key/OAuth),把"选模型"与"跑模型"解耦;启动时 MCP 改为异步预热以不阻塞 UI。
-- **横切关键文件**:`core/model-registry.ts`(ModelRegistry);`core/model-resolver.ts:27`(`resolveCliModel`/`resolveModelScope`);`core/model/custom-providers.ts`;`core/runtime/sdk.ts`(`createAgentSession`、`deferMcpInit`);MCP 异步预热见 `agent-session.ts` 的 `warmupMcpTools()`。
-- **P2 DIP 节点**:`core/model/AGENT.md`、`core/runtime/AGENT.md`。
-- **排查入口**:模型找不到/选错 → `model-resolver.ts`;鉴权失败 → `custom-providers.ts` / auth.json 读取;启动慢 → `sdk.ts` 的 MCP/soul 初始化(`NANOPENCIL_TIMING=1`/`CATUI_*` 计时)。
-- **依赖边**:C1。
-- **对应 docs**:`docs/models.md`、`docs/providers.md`、`docs/custom-provider.md`。
+- **Maintainer's question**: Where does the model come from? How is it authenticated? How do you switch? How does the startup chain go?
+- **Why is it designed this way**: ModelRegistry unifies multi-provider / custom-provider and auth (API key / OAuth), decoupling "pick a model" from "run a model"; MCP warms up asynchronously at startup so it doesn't block the UI.
+- **Cross-cut key files**: `core/model-registry.ts` (ModelRegistry); `core/model-resolver.ts:27` (`resolveCliModel` / `resolveModelScope`); `core/model/custom-providers.ts`; `core/runtime/sdk.ts` (`createAgentSession`, `deferMcpInit`); MCP async warmup via `warmupMcpTools()` in `agent-session.ts`.
+- **P2 DIP nodes**: `core/model/AGENT.md`, `core/runtime/AGENT.md`.
+- **Debugging entry points**: model not found / wrong one selected → `model-resolver.ts`; auth failure → `custom-providers.ts` / `auth.json` read; slow startup → MCP / soul init in `sdk.ts` (use `NANOPENCIL_TIMING=1` / `CATUI_*` for timing).
+- **Dependency edges**: C1.
+- **Matching docs**: `docs/models.md`, `docs/providers.md`, `docs/custom-provider.md`.
 
-## C4 · 工具系统
+## C4 · Tool system
 
-- **维护者问题**:有哪些工具?工具怎么定义/注册/校验/执行?扩展工具和 MCP 工具怎么并到一张表?
-- **为什么这么设计**:用统一 `ToolDefinition` + 编排器,使内置工具、扩展贡献工具、MCP 工具走同一注册/执行/权限路径;MCP 工具用 factory 延迟装配以支持异步与 `/reload`。
-- **横切关键文件**:内置工具 `core/tools/{bash,read,edit,write,grep,find,ls,source}.ts`;编排 `core/tools/orchestrator.ts`(`ToolOrchestrator`);装配 `core/runtime/agent-session.ts:280-417`(`customTools`/`mcpToolsFactory`/`_customTools`)、`:2370` `registerTool(AGENT_TOOL_NAME…)`;类型 `ToolDefinition`(来自 `core/extensions-host`)。
-- **P2 DIP 节点**:`core/tools/AGENT.md`、`core/mcp/AGENT.md`。
-- **排查入口**:工具没出现 → `agent-session` 的工具装配 + `mcpToolsFactory`;参数校验报错 → 该工具的 schema;权限被挡 → 编排器/工具的权限检查。
-- **依赖边**:C1。
-- **对应 docs**:(无独立手册;并入 `docs/sdk.md`/`docs/extensions.md`)。
+- **Maintainer's question**: What tools are there? How are tools defined / registered / validated / executed? How do extension tools and MCP tools merge into one table?
+- **Why is it designed this way**: A unified `ToolDefinition` + orchestrator makes built-in tools, extension-contributed tools, and MCP tools all go through the same registration / execution / permission path; MCP tools use a factory pattern for late assembly to support async and `/reload`.
+- **Cross-cut key files**: built-in tools `core/tools/{bash,read,edit,write,grep,find,ls,source}.ts`; orchestration `core/tools/orchestrator.ts` (`ToolOrchestrator`); assembly `core/runtime/agent-session.ts:280-417` (`customTools` / `mcpToolsFactory` / `_customTools`), `:2370` `registerTool(AGENT_TOOL_NAME…)`; type `ToolDefinition` (from `core/extensions-host`).
+- **P2 DIP nodes**: `core/tools/AGENT.md`, `core/mcp/AGENT.md`.
+- **Debugging entry points**: tool not appearing → tool assembly in `agent-session` + `mcpToolsFactory`; parameter validation error → that tool's schema; permission blocked → orchestrator / tool permission check.
+- **Dependency edges**: C1.
+- **Matching docs**: (no standalone manual; folded into `docs/sdk.md` / `docs/extensions.md`).
 
-## C5 · 扩展系统
+## C5 · Extension system
 
-- **维护者问题**:扩展怎么被发现/加载?能改什么?内置扩展有哪些?
-- **为什么这么设计**:extensions-host 用 loader/runner/wrapper 把第三方能力以受控钩子接入(注册工具/命令/键位/UI、改 prompt/context),不让扩展直接侵入核心。
-- **横切关键文件**:`core/extensions-host/{loader,runner,wrapper,types}.ts`;内置 `extensions/builtin/`(`interview/grub/loop/link-world/browser/discipline/mcp/security-audit/soul/token-save/teach`)。
-- **P2 DIP 节点**:`core/extensions-host/AGENT.md`、`extensions/AGENT.md`、`extensions/builtin/AGENT.md`。
-- **排查入口**:扩展没加载 → `loader.ts` 的发现逻辑;钩子没触发 → `runner.ts` 事件发射;工具被包装后行为异常 → `wrapper.ts`。
-- **依赖边**:C4。
-- **对应 docs**:`docs/extensions.md`。
+- **Maintainer's question**: How are extensions discovered / loaded? What can they change? Which built-in extensions exist?
+- **Why is it designed this way**: extensions-host uses loader/runner/wrapper to inject third-party capabilities via controlled hooks (register tools / commands / key bindings / UI, modify prompt/context), preventing extensions from invading the core directly.
+- **Cross-cut key files**: `core/extensions-host/{loader,runner,wrapper,types}.ts`; built-in `extensions/builtin/` (`interview/grub/loop/link-world/browser/discipline/mcp/security-audit/soul/token-save/teach`).
+- **P2 DIP nodes**: `core/extensions-host/AGENT.md`, `extensions/AGENT.md`, `extensions/builtin/AGENT.md`.
+- **Debugging entry points**: extension not loaded → discovery logic in `loader.ts`; hook not fired → event emission in `runner.ts`; tool behaves oddly after being wrapped → `wrapper.ts`.
+- **Dependency edges**: C4.
+- **Matching docs**: `docs/extensions.md`.
 
-## C6 · 子代理与隔离
+## C6 · Sub-agents and isolation
 
-- **维护者问题**:Agent 工具怎么派子代理?怎么做 git/工作区隔离?
-- **为什么这么设计**:子代理在独立 worktree 中跑,避免污染主工作区;registry 管理子代理类型与生命周期。
-- **横切关键文件**:`core/sub-agent/`(Agent 工具、registry、worktree 隔离);`core/workspace/`(worktree manager / git 隔离)。
-- **P2 DIP 节点**:`core/sub-agent/AGENT.md`、`core/workspace/AGENT.md`。
-- **排查入口**:子代理改动丢失/冲突 → `core/workspace/` 的 worktree 创建/清理;派不出子代理 → `core/sub-agent/` 的 registry。
-- **依赖边**:C4、C5。
-- **对应 docs**:(并入 `docs/sdk.md`)。
+- **Maintainer's question**: How does the Agent tool spawn sub-agents? How does it isolate git / workspace?
+- **Why is it designed this way**: Sub-agents run in their own worktree to avoid polluting the main workspace; registry manages sub-agent types and lifecycle.
+- **Cross-cut key files**: `core/sub-agent/` (Agent tool, registry, worktree isolation); `core/workspace/` (worktree manager / git isolation).
+- **P2 DIP nodes**: `core/sub-agent/AGENT.md`, `core/workspace/AGENT.md`.
+- **Debugging entry points**: sub-agent changes lost / conflicts → worktree create/cleanup in `core/workspace/`; can't spawn sub-agent → registry in `core/sub-agent/`.
+- **Dependency edges**: C4, C5.
+- **Matching docs**: (folded into `docs/sdk.md`).
 
-## C7 · 运行模式与 TUI
+## C7 · Run modes and TUI
 
-- **维护者问题**:interactive/print/rpc/acp 四模式差别?TUI 怎么渲染?
-- **为什么这么设计**:同一 AgentSession 之上挂不同前端(TUI 交互 / 流式 print / IDE 的 rpc / acp),按需懒加载模式以省启动开销;TUI 渲染器对每行宽度有不变量(刚修过窄终端崩溃)。
-- **横切关键文件**:`modes/interactive/interactive-mode.ts`、`modes/print/print-mode.ts`、`modes/rpc/rpc-mode.ts`、`modes/acp/acp-mode.ts`;渲染器 `core/lib/tui/src/tui.ts`(差分渲染 + 宽度不变量)。
-- **P2 DIP 节点**:`modes/AGENT.md`、`modes/interactive/AGENT.md`、`modes/rpc/AGENT.md`、`modes/acp/AGENT.md`、`core/lib/tui/AGENT.md`。
-- **排查入口**:某模式没起来 → `main.ts` mode 选择 + 对应 `*-mode.ts`;TUI 崩/错位 → `core/lib/tui/src/tui.ts` 渲染路径(`CATUI_STRICT_RENDER=1` 暴露超宽行);组件不截断 → 看该组件 render。
-- **依赖边**:C1。
-- **对应 docs**:`docs/tui.md`、`docs/themes.md`、`docs/keybindings.md`。
+- **Maintainer's question**: What's the difference between the four modes (interactive / print / rpc / acp)? How does TUI render?
+- **Why is it designed this way**: Different front-ends (TUI interaction / streaming print / IDE rpc / acp) hang off the same `AgentSession`, lazily loaded on demand to save startup cost; the TUI renderer has a per-line width invariant (recently fixed a narrow-terminal crash).
+- **Cross-cut key files**: `modes/interactive/interactive-mode.ts`, `modes/print/print-mode.ts`, `modes/rpc/rpc-mode.ts`, `modes/acp/acp-mode.ts`; renderer `core/lib/tui/src/tui.ts` (differential render + width invariant).
+- **P2 DIP nodes**: `modes/AGENT.md`, `modes/interactive/AGENT.md`, `modes/rpc/AGENT.md`, `modes/acp/AGENT.md`, `core/lib/tui/AGENT.md`.
+- **Debugging entry points**: mode didn't start → mode selection in `main.ts` + corresponding `*-mode.ts`; TUI crashes / mis-layout → render path in `core/lib/tui/src/tui.ts` (set `CATUI_STRICT_RENDER=1` to expose over-wide lines); component doesn't truncate → that component's render.
+- **Dependency edges**: C1.
+- **Matching docs**: `docs/tui.md`, `docs/themes.md`, `docs/keybindings.md`.
 
-## C8 · 提示词工程
+## C8 · Prompt engineering
 
-- **维护者问题**:system prompt 怎么拼?docs 怎么注入?skills 怎么接?
-- **为什么这么设计**:把系统提示组装集中,运行时按需注入项目文档(被问到某功能就指向 `docs/*.md`)与 skills,使能力可发现、可裁剪。
-- **横切关键文件**:`core/prompt/system-prompt.ts`(组装;`:308` 列出被引用的 `docs/*.md`);skills 经 `discipline` 扩展 + `skills.ts` 公共导出。
-- **P2 DIP 节点**:`core/prompt/AGENT.md`。
-- **排查入口**:提示里少了某段 → `system-prompt.ts` 组装顺序;Agent 找不到功能手册 → `docs/` 对应文件是否还是 stub;skill 没生效 → `discipline` 扩展。
-- **依赖边**:C1、C5。
-- **对应 docs**:`docs/skills.md`、`docs/prompt-templates.md`。
+- **Maintainer's question**: How is the system prompt assembled? How are docs injected? How do skills hook in?
+- **Why is it designed this way**: Centralize system-prompt assembly; at runtime inject project docs on demand (when asked about a feature, point to `docs/*.md`) and skills, so capabilities are discoverable and trimmable.
+- **Cross-cut key files**: `core/prompt/system-prompt.ts` (assembly; `:308` lists the referenced `docs/*.md`); skills via the `discipline` extension + `skills.ts` public exports.
+- **P2 DIP nodes**: `core/prompt/AGENT.md`.
+- **Debugging entry points**: missing section in prompt → assembly order in `system-prompt.ts`; agent can't find feature manual → corresponding `docs/` file is still a stub; skill not taking effect → `discipline` extension.
+- **Dependency edges**: C1, C5.
+- **Matching docs**: `docs/skills.md`, `docs/prompt-templates.md`.
 
-## C9 · 生态集成(只映射)
+## C9 · Ecosystem integration (mapping only)
 
-- **维护者问题**:O-Pencil(GUI)和 Gateway 怎么消费这个核心?有什么集成断点?
-- **为什么这么设计**:核心以 `@catui/agent` SDK 形式被 GUI 与网关复用,形成「核心引擎 → GUI 展现 → Gateway 触手」生态。
-- **横切关键**:见 `ecosystem-map.md`(三仓契约 + `@pencil-agent/nano-pencil → catui-agent` 漂移)。
-- **P2 DIP 节点**:`packages/protocol/AGENT.md`(公共契约);跨仓在 `O-Pencil/`、`Pencil-Agent-Gateway/`。
-- **排查入口**:GUI/网关跑不起来或类型对不上 → 下游仍依赖旧包 `@pencil-agent/nano-pencil`(漂移,见 ecosystem-map)。
-- **依赖边**:C1、C3。
-- **对应 docs**:`docs/sdk.md`、`docs/packages.md`。
+- **Maintainer's question**: How do O-Pencil (GUI) and Gateway consume this core? What integration breakpoints are there?
+- **Why is it designed this way**: The core is reused by GUI and gateway as the `@catui/agent` SDK, forming a "core engine to GUI presentation to Gateway touchpoints" ecosystem.
+- **Cross-cut key**: see `ecosystem-map.md` (three-repo contract + `@pencil-agent/nano-pencil` to `catui-agent` drift).
+- **P2 DIP nodes**: `packages/protocol/AGENT.md` (public contracts); cross-repo at `O-Pencil/`, `Pencil-Agent-Gateway/`.
+- **Debugging entry points**: GUI / gateway can't start or types don't line up → downstream still depends on the old package `@pencil-agent/nano-pencil` (drift, see ecosystem-map).
+- **Dependency edges**: C1, C3.
+- **Matching docs**: `docs/sdk.md`, `docs/packages.md`.
 
-## C10 · 平台 / 元层
+## C10 · Platform / meta-layer
 
-- **维护者问题**:packages 是什么?遥测/自诊断/wiki 这些"元能力"怎么运转?
-- **为什么这么设计**:把可独立演进的能力(协议契约、记忆、人格)抽成 `packages/`;平台层放遥测与诊断;DIP/llm-wiki/self-diagnosis 构成"项目自我认知"的元层。
-- **横切关键文件**:`packages/{protocol,mem-core,soul-core}/`;`core/platform/telemetry/`(insforge);`llm-wiki/`(可验证代码投影);`scripts/self-diagnosis/`(反身自学习骨架,尚未可运行)。
-- **P2 DIP 节点**:`packages/AGENT.md`、`packages/protocol/AGENT.md`、`packages/mem-core/AGENT.md`、`packages/soul-core/AGENT.md`、`core/platform/telemetry/AGENT.md`。
-- **排查入口**:遥测没上报 → `core/platform/telemetry/`;wiki 校验失败 → `npm run wiki:verify`;DIP 报错 → `npm run verify:dip`。
-- **依赖边**:C0(元层回到地图本身)。
-- **对应 docs**:`docs/packages.md`。
+- **Maintainer's question**: What are `packages`? How do "meta-capabilities" like telemetry / self-diagnosis / wiki run?
+- **Why is it designed this way**: Pull independently-evolving capabilities (protocol contracts, memory, persona) out into `packages/`; put telemetry and diagnosis at the platform layer; DIP / llm-wiki / self-diagnosis make up the "project self-awareness" meta-layer.
+- **Cross-cut key files**: `packages/{protocol,mem-core,soul-core}/`; `core/platform/telemetry/` (insforge); `llm-wiki/` (verifiable code projection); `scripts/self-diagnosis/` (reflexive self-learning scaffold, not yet runnable).
+- **P2 DIP nodes**: `packages/AGENT.md`, `packages/protocol/AGENT.md`, `packages/mem-core/AGENT.md`, `packages/soul-core/AGENT.md`, `core/platform/telemetry/AGENT.md`.
+- **Debugging entry points**: telemetry not reporting → `core/platform/telemetry/`; wiki verify failure → `npm run wiki:verify`; DIP error → `npm run verify:dip`.
+- **Dependency edges**: C0 (meta-layer returns to the map itself).
+- **Matching docs**: `docs/packages.md`.

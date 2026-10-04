@@ -1,56 +1,56 @@
 <!--
-课程 C9 配套:核心↔O-Pencil↔Gateway 集成映射 + SDK 漂移 finding。
-只映射、只记录,不在本次迁移下游代码。锚点为撰写时事实(catui-agent 1.1.10)。
+Companion to lesson C9: core to O-Pencil to Gateway integration map + SDK-drift finding.
+Map and record only; no downstream code migration in this scope. Anchors are accurate as of catui-agent 1.1.10.
 -->
 
-# ecosystem-map — 核心 ↔ O-Pencil ↔ Gateway 集成
+# ecosystem-map — Core to O-Pencil to Gateway integration
 
-「核心引擎 → GUI 展现 → Gateway 触手」。三仓都在 `/root/workspace/`。
+"Core engine to GUI expression to Gateway touchpoints." All three repos live under `/root/workspace/`.
 
 ```
-                       catui-agent(本仓,核心引擎)
-                       publish: catui-agent 1.1.10 / SDK 符号 AgentSession, AgentSessionEvent
+                       catui-agent (this repo, core engine)
+                       publish: catui-agent 1.1.10 / SDK symbols AgentSession, AgentSessionEvent
                               ▲                       ▲
         consume SDK          │                       │         consume SDK
         ┌─────────────────────┘                       └─────────────────────┐
-   O-Pencil(GUI)                                                   Pencil-Agent-Gateway(触手)
-   catgo-desktop · Electron                                        pencil-agent-gateway
-   src/main/lib/nanopencil/                                        src/engine/nano-adapter.ts
+   O-Pencil (GUI)                                                   Pencil-Agent-Gateway (touchpoints)
+   catgo-desktop / Electron                                          pencil-agent-gateway
+   src/main/lib/nanopencil/                                          src/engine/nano-adapter.ts
 ```
 
-## 各仓定位
+## Repo positioning
 
-| 仓库 | 包名 | 角色 | 怎么消费核心 |
-|------|------|------|------|
-| catui-agent | `catui-agent`(SDK 符号挂 `@catui/agent`) | 核心引擎 | 自身 |
-| O-Pencil | `catgo-desktop` | GUI 客户端(Electron) | 主进程封装层 `src/main/lib/nanopencil/{session,types}.ts` 引 `AgentSession`、`AgentSessionEvent` |
-| Pencil-Agent-Gateway | `pencil-agent-gateway` | 对外集成网关 | 适配器 `src/engine/nano-adapter.ts:43-44` 引 `AgentSession`、`AgentSessionEvent` |
+| Repo | Package name | Role | How it consumes the core |
+|------|--------------|------|--------------------------|
+| catui-agent | `catui-agent` (SDK symbols exposed via `@catui/agent`) | Core engine | itself |
+| O-Pencil | `catgo-desktop` | GUI client (Electron) | Main-process wrapper layer `src/main/lib/nanopencil/{session,types}.ts` imports `AgentSession`, `AgentSessionEvent` |
+| Pencil-Agent-Gateway | `pencil-agent-gateway` | Outward integration gateway | Adapter `src/engine/nano-adapter.ts:43-44` imports `AgentSession`, `AgentSessionEvent` |
 
-## 集成契约(两个下游消费的核心 SDK 面)
+## Integration contract (the core SDK surface both downstream consumers use)
 
-下游主要消费**同一组**公共符号(经 `@catui/agent` 根导出 / `packages/protocol` 契约):
-- `AgentSession` —— 会话句柄(prompt/事件/工具)。
-- `AgentSessionEvent`(O-Pencil 里 alias 成 `AgentEvent`)—— 会话事件流,GUI/网关据此渲染/转发。
+Downstream primarily consumes the **same set** of public symbols (via `@catui/agent` root exports / `packages/protocol` contracts):
+- `AgentSession` — session handle (prompt / events / tools).
+- `AgentSessionEvent` (aliased as `AgentEvent` in O-Pencil) — session event stream; GUI / gateway renders / forwards from it.
 
-对应核心侧:C1(Agent Loop)、C2(会话/事件)、C3(模型)。学到 C9 时,看下游如何把这组符号接成 GUI 事件 / 网关中继即可。
+On the core side: C1 (Agent Loop), C2 (session / events), C3 (model). When you reach C9, see how downstream wires this symbol set into GUI events / gateway relay.
 
-## ⚠ 漂移 finding(只记录,本次不迁移)
+## Warning — drift finding (record only, no migration in this scope)
 
-**核心已改名,下游仍绑旧包**:
+**The core has been renamed; downstream is still pinned to the old package**:
 
-| | 下游当前 import | 核心现况 |
+| | Downstream's current import | Core's current state |
 |---|---|---|
-| O-Pencil `src/main/lib/nanopencil/{session,types}.ts` | `@pencil-agent/nano-pencil` | 已发布为 `catui-agent` 1.1.10 |
-| Gateway `src/engine/nano-adapter.ts` | `@pencil-agent/nano-pencil` | 同上 |
+| O-Pencil `src/main/lib/nanopencil/{session,types}.ts` | `@pencil-agent/nano-pencil` | Already published as `catui-agent` 1.1.10 |
+| Gateway `src/engine/nano-adapter.ts` | `@pencil-agent/nano-pencil` | Same |
 
-- **影响**:下游 `npm install` 仍拉旧包 `@pencil-agent/nano-pencil`,与改名后的核心脱节;新核心的修复/能力进不到 GUI 与网关。
-- **后续迁移入口**(单独立项,不在本次):
-  1. 下游 `package.json` 依赖 `@pencil-agent/nano-pencil` → 核心新包名(确认核心发布 `name`:`catui-agent`,或如恢复 scoped 则 `@catui/agent`)。
-  2. 下游 import specifier 全量替换(O-Pencil `src/main/lib/nanopencil/`、Gateway `src/engine/nano-adapter.ts` 等,见各仓 `rg "@pencil-agent/nano-pencil"`)。
-  3. 校验 SDK 符号面未破(`AgentSession`/`AgentSessionEvent` 仍在新包根导出)。
-  4. 各仓自测(O-Pencil 起 Electron 跑一轮;Gateway 适配器 e2e)。
-- **本框架不改下游代码**——此处仅作为 C9 的学习材料 + 迁移待办登记。
+- **Impact**: downstream `npm install` still pulls the old package `@pencil-agent/nano-pencil` and is disconnected from the renamed core; fixes / capabilities in the new core do not reach the GUI or gateway.
+- **Migration entry points** (separate project, not in this scope):
+  1. Downstream `package.json` dependency `@pencil-agent/nano-pencil` to the core's new package name (confirm the core's published `name` is `catui-agent`, or if scoped is restored then `@catui/agent`).
+  2. Bulk-replace import specifiers in downstream (O-Pencil `src/main/lib/nanopencil/`, Gateway `src/engine/nano-adapter.ts`, etc.; see each repo's `rg "@pencil-agent/nano-pencil"`).
+  3. Verify the SDK symbol surface is unbroken (`AgentSession` / `AgentSessionEvent` still exported from the new package root).
+  4. Each repo's own self-test (O-Pencil starts Electron and runs one round; Gateway adapter e2e).
+- **This framework does not modify downstream code** — this is here as C9 learning material + a migration backlog entry only.
 
-## 给学习者的提示
+## Hint for the learner
 
-学 C9 时这是最好的"真实排查练习":一个改名导致的跨仓断点,顺着 import specifier → package.json 依赖 → 发布包名,正好把"核心 SDK 面、下游怎么消费、版本/品牌如何漂移"一次走通。
+C9 is the best "real debugging exercise": a rename-induced cross-repo breakpoint. Trace import specifier to package.json dependency to published package name — that's exactly one walk through "core SDK surface / how downstream consumes it / how versions and branding drift".
