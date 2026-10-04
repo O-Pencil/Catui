@@ -26,6 +26,8 @@
 - Add CI / npm / license / Node-version badges to `README.md` (was zero badges).
 - Rewrite `.dev-docs/README.md` to match the post-cleanup directory state (it still pointed at deleted `CLAUDE.md` / `.PENCIL.md` / `sal/` / `diagnosis/` / `self-awareness/` / `data/` / `scripts/self-diagnosis/` and the removed `extensions/defaults/` rule).
 - Delete `.dev-docs/OPEN-SOURCE-CLEANUP.md` (the working checklist that drove this round — its own header says "delete after cleanup; don't leave it in the published surface").
+- Translate the last two Chinese-in-prose files: `modes/interactive/AGENT.md` (20 P2 member-list annotations — `纯搬`→pure move, `重写`→rewrite, `合一`→merge, `mount 接线/分支委托`→mount wiring / branch delegation) and `llm-wiki/README.md` (bilingual Chinese-first headers and table flipped to English-first).
+- Add an explicit language note to `extensions/builtin/browser/agent-workspace/domain-skills/xiaohongshu/scraping.md`: its 27 Chinese strings are verbatim xiaohongshu.com UI labels and DOM selectors (`最新`, `筛选`, `排序依据`, `搜索小红书`, …) that the skill's selectors must match byte for byte. Deliberately left untranslated, with a header note so a later reader (or agent) does not "fix" it and break the skill.
 
 ### Fixed
 - Replace 74 fork-residue references from `O-Catui/Catui` / `O-Catui/catui` to `O-Pencil/Catui` across docs, source code comments, test fixtures, package metadata, theme JSON `$schema` fields, and user-visible download URLs in `config.ts`.

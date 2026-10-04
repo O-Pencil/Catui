@@ -60,9 +60,12 @@ llm-wiki/site/
 # InsForge & AI agent skills
 .insforge
 .agent
-.agent-workspace/
+# Root-anchored: extensions ship a source directory literally named
+# agent-workspace/ (browser domain-skills, link-world), so an unanchored
+# rule would also ignore tracked source and block `git add` on it.
+/.agent-workspace/
 .agents
-agent-workspace/
+/agent-workspace/
 .augment
 .claude
 .cline

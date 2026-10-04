@@ -1,5 +1,9 @@
 # Xiaohongshu — Search and Sort
 
+> **Note on language**: every Chinese string below is a verbatim xiaohongshu.com UI
+> label or DOM selector taken from the live page. They are intentionally untranslated —
+> the selectors only match if the text matches byte for byte.
+
 URL patterns:
 - Home / discovery: `https://www.xiaohongshu.com/explore`
 - Search results: `https://www.xiaohongshu.com/search_result?keyword=...`
