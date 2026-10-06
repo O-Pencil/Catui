@@ -351,6 +351,7 @@ class AgentSessionBase {
       checkCompaction: message => this._compactionCoordinator.check(message),
       debug: (level, source, message, data) => this._emitDebug(level, source, message, data),
       logError: (message, data) => this._logger.error(message, data),
+      abortAgent: () => this.agent.abort(),
     });
     this._modelController = new ModelController({
       getModel: () => this.model,
@@ -408,7 +409,7 @@ class AgentSessionBase {
       logInfo: (message, meta) => this._logger.info(message, meta),
       disconnectFromAgent: () => this._disconnectFromAgent(),
       reconnectToAgent: () => this._reconnectToAgent(),
-      abortAgent: () => this.abort(),
+      abortAgent: async () => { await this.abort(); await this._eventHandler.waitForCompletion(); },
       emitAutoCompactionStart: (reason) => {
         this._emit({ type: "auto_compaction_start", reason });
         this._emit({ type: "session_state_changed", state: "compacting", timestamp: Date.now() });
@@ -461,7 +462,7 @@ class AgentSessionBase {
       getExtensionRunner: () => this._extensionRunner,
       disconnectFromAgent: () => this._disconnectFromAgent(),
       reconnectToAgent: () => this._reconnectToAgent(),
-      abortAgent: () => this.abort(),
+      abortAgent: async () => { await this.abort(); await this._eventHandler.waitForCompletion(); },
       resetAgent: () => this.agent.reset(),
       syncAgentSessionId: () => {
         this.agent.sessionId = this.sessionManager.getSessionId();
@@ -601,7 +602,7 @@ class AgentSessionBase {
   }
 
   private readonly _runTrace = new SessionRunTrace();
-  private _handleAgentEvent = (event: AgentEvent): Promise<void> => this._eventHandler.handle(event);
+  private _handleAgentEvent = (event: AgentEvent): void => this._eventHandler.handle(event);
 
   /** Extract text content from a message */
   private _getUserMessageText(message: Message): string {
@@ -837,6 +838,7 @@ class AgentSessionBase {
    * @throws Error if no model selected or no API key available (when not streaming)
    */
   async prompt(text: string, options?: PromptOptions): Promise<void> {
+    if (!this.isStreaming) await this._eventHandler.waitForCompletion();
     if (!this._resourcesDiscovered) await this.extendResourcesFromExtensions("startup");
     const _promptStart = performance.now();
     const expandPromptTemplates = options?.expandPromptTemplates ?? true;
@@ -988,8 +990,12 @@ class AgentSessionBase {
     await this._runTrace.run(this._cwd, this.sessionId, recorder => this.agent.setRunTrace(recorder), async () => {
       this._dbg(`calling agent.prompt with ${messages.length} message(s)`);
       await this.agent.prompt(messages);
+      await this._eventHandler.waitForCompletion();
+      this._eventHandler.throwIfFailed();
       this._dbg(`agent.prompt returned (${(performance.now() - _promptStart).toFixed(0)}ms)`);
       await this.waitForRetry();
+      await this._eventHandler.waitForCompletion();
+      this._eventHandler.throwIfFailed();
     }, error => this._logger.warn("[run-trace] failed to finalize semantic trace", { error }));
   }
 
@@ -1188,7 +1194,10 @@ class AgentSessionBase {
         this.agent.steer(appMessage);
       }
     } else if (options?.triggerTurn) {
+      await this._eventHandler.waitForCompletion();
       await this.agent.prompt(appMessage);
+      await this._eventHandler.waitForCompletion();
+      this._eventHandler.throwIfFailed();
     } else {
       this.agent.appendMessage(appMessage);
       this.sessionManager.appendCustomMessageEntry(
@@ -1277,6 +1286,7 @@ class AgentSessionBase {
    * Abort current operation and wait for agent to become idle.
    */
   async abort(): Promise<void> {
+    this._eventHandler.cancelRecovery();
     this._contextWindowController.cancel();
     this.abortRetry();
     this.agent.abort();

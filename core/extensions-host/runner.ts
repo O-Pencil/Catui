@@ -1,5 +1,5 @@
 /**
- * [WHO]: ExtensionRunner class, lifecycle management, event emission, slash-command dispatch chokepoint (invokeCommand), telemetry sink wiring (setTelemetrySink); optional context-window capability forwarding
+ * [WHO]: ExtensionRunner class, ordered tool-call input composition, lifecycle events, command dispatch and telemetry; optional context-window capability forwarding
  * [FROM]: Depends on agent-core, ai, tui, modes/theme, session-manager, types.ts, core/platform/telemetry (ExtensionTelemetrySink + classifyArgsSignature for the P1 ext_command_events writer)
  * [TO]: Consumed by core/extensions-host/index.ts, core/extensions-host/wrapper.ts, core/runtime/agent-session.ts (delegates command dispatch via invokeCommand)
  * [HERE]: core/extensions-host/runner.ts - lifecycle, supervised command/dialog binding, scoped queues, command errors and telemetry
@@ -955,20 +955,23 @@ export class ExtensionRunner {
 		};
 	}
 
-	async emitToolCall(event: ToolCallEvent): Promise<ToolCallEventResult | undefined> {
+  async emitToolCall(event: ToolCallEvent): Promise<ToolCallEventResult | undefined> {
 		const ctx = this.createContext();
 		let result: ToolCallEventResult | undefined;
+		const currentEvent = { ...event };
 
 		for (const ext of this.extensions) {
 			const handlers = ext.handlers.get("tool_call");
 			if (!handlers || handlers.length === 0) continue;
 
 			for (const handler of handlers) {
-				const handlerResult = await this.invokeHookHandler(ext, "tool_call", () => handler(event, ctx));
+				const handlerResult = await this.invokeHookHandler(ext, "tool_call", () => handler(currentEvent, ctx));
 
 				if (handlerResult) {
-					result = handlerResult as ToolCallEventResult;
-					if (result.block) {
+					const next = handlerResult as ToolCallEventResult;
+					if (next.input !== undefined) currentEvent.input = next.input;
+					result = { ...next, input: currentEvent.input };
+					if (next.block) {
 						return result;
 					}
 				}

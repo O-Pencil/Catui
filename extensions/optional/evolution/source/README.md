@@ -11,6 +11,14 @@ rolls back a regressing managed version. New-version failures feed the next cycl
 
 Requirements: Git, GitHub CLI authenticated for repository push/merge/release,
 npm credentials allowing unattended publication, and an existing Catui model.
+Publication records an upload attempt before contacting npm. Accepted versions
+can remain unavailable while registry validation runs; the supervisor checks again
+without uploading twice. GitHub release and managed adoption wait for matching
+public artifact integrity. An interrupted upload with an unknown outcome retains
+its receipt and waits for reconciliation. If it never appears, inspect the npm
+maintainer status and resolve the receipt before another upload; the supervisor
+does not guess that a missing public version means the upload failed. Explicit
+authentication refusals permit retry after credentials are repaired.
 Generated tests and candidate verification run offline under macOS `sandbox-exec`
 or Linux `bubblewrap` (`bwrap`). Missing isolation fails verification, never falls
 back to unconstrained execution. Repository protection rules remain in force;

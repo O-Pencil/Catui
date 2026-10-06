@@ -1,5 +1,5 @@
 /**
- * [WHO]: Single durable supervisor coordinating live ingestion and autonomous delivery
+ * [WHO]: Durable supervisor coordinating ingestion, autonomous delivery and adapter-owned polling delays
  * [FROM]: Local observation, state and delivery adapters
  * [TO]: evolve daemon/run CLI; never runs in the interactive process
  * [HERE]: extensions/optional/evolution/source/runtime/daemon.ts - recursive lifecycle owner
@@ -66,10 +66,10 @@ export async function deliveryTick(root: string, state: SourceState, config: Sou
 		if (job.retryAfter && Date.parse(job.retryAfter) > Date.now()) continue;
 		if (["effective", "regressed", "rejected", "failed", "verified-local"].includes(job.stage)) continue;
 		const before = job.stage;
+		job.retryAfter = undefined;
 		try {
 			await advanceJob(run, root, config, state, job);
 			if (job.stage !== before) { job.attempts = 0; if (job.stage !== "prepared") job.error = undefined; }
-			job.retryAfter = undefined;
 		} catch (error) {
 			job.error = error instanceof Error ? error.message : String(error);
 			const budget = job.error.includes("budget exhausted");

@@ -36,7 +36,7 @@ session-events.ts: AgentSessionEvent, AgentSessionEventListener, mapSubAgentEven
 session-compaction-coordinator.ts: SessionCompactionCoordinator — loop-driven compaction decisions (overflow/threshold) + in-loop model-error recovery extracted from AgentSession (AS04/P6); reads session via narrow SessionCompactionCoordinatorContext, delegates the flow to compaction-controller.ts
 
 Additional members (runtime-skills-cleanup review):
-session-event-handler.ts: SessionEventHandler, SessionEventContext — owns pre-hook journaling, UI/extension event ordering, last assistant state and recovery/compaction ordering.
+session-event-handler.ts: SessionEventHandler, SessionEventContext — synchronous journaling/state commits, ordered background hooks, completion draining, cancellation and latched prompt failures; UI rendering remains immediate.
 session-message-queue.ts: SessionMessageQueue — owns pending steering/follow-up display state, predicate cancellation, and next-turn custom context.
 session-queries.ts: SessionStats, getSessionStats(), getContextUsage(), extractUserMessageText() — pure snapshot queries; facade preserves existing exports.
 session-run-trace.ts: SessionRunTrace — owns recorder lifetime, last snapshot and persistence path, with unconditional recorder detach.

@@ -1,5 +1,5 @@
 /**
- * [WHO]: AgentSessionEvent, AgentSessionEventListener, mapSubAgentEvent()
+ * [WHO]: AgentSessionEvent (including session processing failures), AgentSessionEventListener, mapSubAgentEvent()
  * [FROM]: Depends on agent-core (AgentEvent), session/compaction (CompactionResult), sub-agent (SubAgentEvent)
  * [TO]: Consumed by agent-session.ts (public re-export + _emit wiring), barrels core/index.ts and runtime.ts via re-export
  * [HERE]: core/runtime/session-events.ts - session event contract + SubAgentEvent mapping for TUI display
@@ -34,7 +34,7 @@ export type AgentSessionEvent =
     }
   | {
       type: "sdk:error";
-      source: "soul" | "mcp" | "eventbus";
+      source: "soul" | "mcp" | "eventbus" | "session";
       error: unknown;
     }
   | {
