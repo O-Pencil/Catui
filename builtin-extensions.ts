@@ -66,6 +66,7 @@ type BuiltinRegistration = BuiltinExtension & BuiltinActivation & {
  *   registration order). Reordering requires re-verifying test/next-step-injection.test.ts.
  */
 const REGISTRY: readonly BuiltinRegistration[] = [
+	{ id: "local-model-enhancement", entryRoot: "optional", category: "optional", defaultEnabled: false, riskLevel: "tool", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/local-model-enhancement.test.ts"] },
 	{ id: "session-bridge", entryRoot: "optional", category: "optional", defaultEnabled: true, riskLevel: "command", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: true, testContracts: ["lifecycle", "external-process"], testFiles: ["test/session-bridge.test.ts", "test/session-bridge-setup.test.ts"] },
 	{ id: "typesafe", entryRoot: "builtin", category: "default", defaultEnabled: true, riskLevel: "passive", requiresUI: false, startsTimers: false, writesWorkspace: false, externalProcess: false, resourceDiscovery: true, testContracts: ["resource-discovery"], testFiles: ["test/typesafe-extension.test.ts"] },
 	{ id: "diagnostics", entryRoot: "builtin", category: "default", defaultEnabled: true, riskLevel: "background", requiresUI: false, startsTimers: true, writesWorkspace: false, externalProcess: false, testContracts: ["lifecycle"], testFiles: ["test/diagnostic-buffer-throttle.test.ts", "test/diagnostics-runtime.test.ts"], note: "Subscribes to diagnostic:event before producer extensions publish failures." },

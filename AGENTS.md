@@ -375,6 +375,7 @@ directory that no longer exists.
 | `typesafe` | builtin | Default decision/tool/evaluation guidance and vendored TypeSafe integration skill |
 | `evolution` | optional | Source evolution: independent review, verified repair, scheduled PR delivery. See below. |
 | `export-html` | optional | Session export to standalone HTML |
+| `local-model-enhancement` | optional | Opt-in bounded reads, recoverable tool-result previews, and concise local-model execution guidance |
 | `session-bridge` | optional | `/bridge` — connect Codex to the current session; inactive until `/bridge start` |
 | `simplify` | optional | Opt-in review pass that flags redundant code and unused surface |
 
