@@ -1,12 +1,13 @@
 /**
- * [WHO]:
- * [FROM]:
+ * [WHO]: CustomEditor — framed composer with app keybindings and slash highlighting
+ * [FROM]: Depends on @catui/tui editor, app keybindings and interactive theme
  * [TO]: Consumed by modes/interactive/components/index.ts
  * [HERE]: modes/interactive/components/custom-editor.ts -
  */
-import { Editor, getEditorKeybindings, matchesKey, type EditorOptions, type EditorTheme, type TUI } from "@catui/tui";
+import { Editor, getEditorKeybindings, matchesKey, truncateToWidth, type EditorOptions, type EditorTheme, type TUI } from "@catui/tui";
 import type { AppAction, KeybindingsManager } from "../../../core/platform/keybindings.js";
 import type { Theme } from "../../../core/theme-contract.js";
+import { theme as colors } from "../theme/theme.js";
 
 /** Regex matching a slash command at start-of-string or after whitespace. */
 const SLASH_CMD_RE = /(^|[\s])(\/[a-zA-Z][a-zA-Z0-9:\-_]*)/g;
@@ -74,6 +75,31 @@ export class CustomEditor extends Editor {
 	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, options?: EditorOptions) {
 		super(tui, theme, options);
 		this.keybindings = keybindings;
+		this.placeholder = "Ask anything";
+	}
+
+	override render(width: number): string[] {
+		const innerWidth = width < 10 ? width : width - 6;
+		const placeholder = this.placeholder;
+		this.placeholder = truncateToWidth(placeholder, Math.max(1, innerWidth - this.getPaddingX() * 2), "");
+		let lines: string[];
+		try { lines = super.render(innerWidth); } finally { this.placeholder = placeholder; }
+		if (width < 10) return lines.map(line => truncateToWidth(line, width, ""));
+		let belowBox = false;
+		return lines.map((line, index) => {
+			const plain = line.replace(/\x1b\[[0-9;]*m/g, "");
+			if (index === 0 || /^─+(?: [↑↓] \d+ more )?─*$/.test(plain)) {
+				const top = index === 0;
+				if (!top) belowBox = true;
+				const scroll = plain.match(/[↑↓] \d+ more/);
+				const label = scroll ? `─ ${scroll[0]} `.slice(0, width - 3) : "";
+				return " " + this.borderColor((top ? "┌" : "└") + label + "─".repeat(Math.max(0, width - 3 - label.length)) + (top ? "┐" : "┘"));
+			}
+			if (belowBox) return `     ${line} `;
+			const arrow = index === 1 ? "→" : " ";
+			const content = this.getText() ? line : colors.fg("muted", line);
+			return ` ${this.borderColor("│")} ${colors.fg("muted", arrow)} ${content}${this.borderColor("│")}`;
+		});
 	}
 
 	/**

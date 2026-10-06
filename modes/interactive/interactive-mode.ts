@@ -475,7 +475,10 @@ export class InteractiveMode {
     this.attachmentsContainer = new Container();
     this.buddySlot = new Container();
     this.editorBuddyLayout = new EditorBuddyLayout(
-      () => this.editor as Component,
+      () => {
+        this.defaultEditor.placeholder = this.session.isStreaming ? "Add a follow-up" : "Ask anything";
+        return this.editor as Component;
+      },
       this.buddySlot,
     );
     this.editorContainer.addChild(this.attachmentsContainer);
@@ -1353,6 +1356,7 @@ export class InteractiveMode {
     // spawn/handshake can take many seconds (the npx-based default servers
     // measure ~20s); blocking the UI on it used to make startup feel frozen.
     // Tools merge into the live runtime when ready (sdk:mcp_ready → showStatus).
+    if (listMCPServers().some(server => server.enabled)) this.showStatus("◌ Connecting MCP · you can start typing");
     void this.session.warmupMcpTools();
   }
 
@@ -2164,7 +2168,7 @@ export class InteractiveMode {
     if (event.type === "sdk:mcp_ready") {
       // Deferred MCP loading finished in the background; surface a quiet status.
       if (event.toolCount > 0) {
-        this.showStatus(`MCP: ${event.toolCount} tool(s) ready`);
+        this.showStatus(`☻ MCP ready · ${event.toolCount} tools · /mcp status for details`);
       }
       return;
     }
@@ -2470,6 +2474,5 @@ export class InteractiveMode {
 
 
 }
-
 
 

@@ -1,7 +1,7 @@
 /**
  * [WHO]: Provides ModelSelectorComponent — model picker UI with scope/filter/add-OpenRouter/update-API-key affordances
  * [FROM]: Depends on @catui/ai, @catui/tui, model-registry types, theme,
- *         DynamicBorder, keybinding hints
+ *         DynamicBorder, keybinding hints, selected-row presentation
  * [TO]: Consumed by modes/interactive/interactive-mode.ts and components/index.ts; emits selected
  *       models only, while provider configuration is owned by the caller
  * [HERE]: modes/interactive/components/model-selector.ts — presentation component for model selection
@@ -22,6 +22,7 @@ import {
 } from "@catui/tui";
 import type { ModelRegistry } from "../../../core/model-registry.js";
 import { theme } from "../theme/theme.js";
+import { renderSelectedRows } from "./selected-row.js";
 import { DynamicBorder } from "./dynamic-border.js";
 import { keyHint } from "./keybinding-hints.js";
 
@@ -39,6 +40,7 @@ interface ScopedModelItem {
 type ModelScope = "all" | "scoped";
 
 export class ModelSelectorComponent extends Container implements Focusable {
+	override render(width: number): string[] { return renderSelectedRows(super.render(width), width); }
 	private searchInput: Input;
 	private _focused = false;
 	private listContainer: Container;
@@ -305,7 +307,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			const providerBadge = theme.fg("muted", `[${item.provider}]`);
 			const discoveredBadge =
 				item.model.source === "discovery" ? theme.fg("muted", " (remote)") : "";
-			const checkmark = isCurrent ? theme.fg("success", " [current]") : "";
+			const checkmark = isCurrent ? theme.fg("success", " current") : "";
 			const needsKeyHint = needsKey
 				? theme.fg("warning", " [needs API key]")
 				: "";

@@ -2,7 +2,7 @@
  * Generic selector component for extensions.
  * Displays a list of string options with keyboard navigation.
  * [WHO]: ExtensionSelectorOptions, ExtensionSelectorComponent
- * [FROM]: @catui/tui
+ * [FROM]: @catui/tui, theme and selected-row presentation
  * [TO]: Consumed by modes/interactive/components/index.ts, modes/interactive/controllers/extension-ui/prompt-host.ts
  * [HERE]: modes/interactive/components/extension-selector.ts - owned by modes/interactive/AGENT.md
  */
@@ -10,6 +10,7 @@
 
 import { Container, type Focusable, getEditorKeybindings, Spacer, Text, type TUI } from "@catui/tui";
 import { theme } from "../theme/theme.js";
+import { renderSelectedRows } from "./selected-row.js";
 import { CountdownTimer } from "./countdown-timer.js";
 import { DynamicBorder } from "./dynamic-border.js";
 import { keyHint, rawKeyHint } from "./keybinding-hints.js";
@@ -20,6 +21,7 @@ export interface ExtensionSelectorOptions {
 }
 
 export class ExtensionSelectorComponent extends Container implements Focusable {
+	override render(width: number): string[] { return renderSelectedRows(super.render(width), width); }
 	private options: string[];
 	private selectedIndex = 0;
 	private listContainer: Container;

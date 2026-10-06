@@ -1,6 +1,6 @@
 /**
- * CatuiLoader - Custom loader with rotating diamond animation
- * Uses ◆◇◈ symbols for a smooth loading indicator
+ * CatuiLoader - Custom loader with rotating circle animation
+ * Uses ◌◍○ symbols for a smooth loading indicator
  * Supports stalled animation (color transition to red) and tips display
  * [WHO]: CatuiLoader
  * [FROM]: @catui/tui
@@ -47,11 +47,11 @@ export class CatuiLoader extends Container {
 	// Stall thresholds (in ms)
 	private readonly STALL_THRESHOLD_MS = 3000;
 
-	// Rotating diamond animation frames
+	// Terminal-native activity frames
 	private readonly frames = [
-		"◆", // filled diamond
-		"◇", // outline diamond
-		"◈", // outlined diamond with dot
+		"◌",
+		"◍",
+		"○",
 	];
 
 	constructor(tui: TUI, theme: Theme, message: string, sessionId: string = "default") {

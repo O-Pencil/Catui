@@ -35,6 +35,7 @@ export class UserMessageComponent implements Component {
 		return [
 			...this.spacer.render(width),
 			...this.message.render(width),
+			...this.spacer.render(width),
 		];
 	}
 }

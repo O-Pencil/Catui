@@ -24,7 +24,7 @@ test("CatuiLoader constructor prepares first frame without requesting a render b
 
 		assert.equal(renderRequests, 0);
 		assert.ok(
-			loader.render(40).some((line) => line.includes("◆ Working...")),
+			loader.render(40).some((line) => line.includes("◌ Working...")),
 			"expected constructor to prepare the first spinner frame",
 		);
 		loader.stop();

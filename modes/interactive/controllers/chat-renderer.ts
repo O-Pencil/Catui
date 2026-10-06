@@ -3,7 +3,7 @@
  *        message→component mapping (addMessageToChat), session-context replay
  *        (renderSessionContext), initial transcript + welcome banner (renderInitialMessages),
  *        chat rebuild with optimistic-user dedupe (rebuildChatFromMessages), getUserMessageText
- * [FROM]: Depends on injected host capability closures + @catui/tui + message components;
+ * [FROM]: Depends on injected host capability closures + @catui/tui + message components + startup-wordmark;
  *         no InteractiveMode reference. Internal cross-calls go through ctx callbacks so
  *         host-side method patching (partial-mode tests) keeps intercepting them.
  * [TO]: Consumed by modes/interactive/interactive-mode.ts (held lazily as `this.chatRenderer`
@@ -22,7 +22,7 @@ import {
   type MarkdownTheme,
   type TUI,
 } from "@catui/tui";
-import { APP_NAME } from "../../../config.js";
+import { StartupWordmarkComponent } from "../components/startup-wordmark.js";
 import { type AgentSession, parseSkillBlock } from "../../../core/runtime/agent-session.js";
 import type { SessionContext, SessionManager } from "../../../core/session/session-manager.js";
 import type { SettingsManager } from "../../../core/platform/config/settings-manager.js";
@@ -304,111 +304,11 @@ export class ChatRendererController {
     // Show welcome when session has no messages
     if (context.messages.length === 0) {
       this.ctx.chatContainer.addChild(new Spacer(1));
-      if (APP_NAME === "catui" || APP_NAME === "catui") {
-        const cwd = this.ctx.session.cwd;
-        const model = this.ctx.session.model;
-        const modelLine =
-          model?.name ??
-          (model?.provider ? `${model.provider}` : "DashScope · Ollama");
-        const buildAsciiLines = (_frame: number) => {
-          const lines = [
-            "                               ,",
-            "              ,-.       _,---._ __  / \\",
-            "             /  )    .-'       `./ /   \\",
-            "            (  (   ,'            `/    /|",
-            "             \\  `\"-             \\'\\   / |",
-            "              `.              ,  \\ \\ /  |",
-            "               /`.          ,'-`----Y   |",
-            "              (            ;        |   '",
-            "              |  ,-.    ,-'         |  /",
-            "              |  | (   |CATUI@2026  | /",
-            "              )  |  \\  `.___________|/",
-            "              `--'   `--'",
-          ];
-          const width = Math.max(...lines.map((line) => line.length));
-          return lines.map((line) => line.padEnd(width));
-        };
-        const renderAscii = (frame: number) =>
-          buildAsciiLines(frame)
-            .map((line) =>
-              theme.fg(
-                "accent",
-                line.slice(0, Math.max(1, this.ctx.ui.terminal.columns || 80)),
-              ),
-            )
-            .join("\n");
-        const titleLine = theme.bold(
-          theme.fg("accent", `catui-agent v${this.ctx.version}`),
-        );
-        const subtitleLine = theme.fg("dim", modelLine);
-        const cwdLine = theme.fg("dim", cwd);
-        const hintLine = theme.fg("dim", "  /model to switch model");
-        const showResourcesKey = this.ctx.getAppKeyDisplay("showResources");
-        const resourcesHint = this.ctx.settingsManager.getQuietStartup()
-          ? theme.fg(
-              "dim",
-              `  ${showResourcesKey} to show context/skills/extensions`,
-            )
-          : "";
-        const sep = theme.fg(
-          "borderMuted",
-          "─".repeat(Math.max(40, this.ctx.ui.terminal.columns || 80)),
-        );
-        const tryLine = theme.fg(
-          "accent",
-          '❯ Try "refactor <filepath>" or type below',
-        );
-        const banner = [
-          renderAscii(0),
-          "",
-          `  ${titleLine}`,
-          `  ${subtitleLine}`,
-          `  ${cwdLine}`,
-          "",
-          hintLine,
-          ...(resourcesHint ? ["", resourcesHint] : []),
-          "",
-          sep,
-          tryLine,
-        ].join("\n");
-        const bannerText = new Text(banner, 0, 0);
-        this.ctx.chatContainer.addChild(bannerText);
-        let frame = 0;
-        this.ctx.state.welcomeBannerTimer = setInterval(() => {
-          frame += 1;
-          bannerText.setText(
-            [
-              renderAscii(frame),
-              "",
-              `  ${titleLine}`,
-              `  ${subtitleLine}`,
-              `  ${cwdLine}`,
-              "",
-              hintLine,
-              ...(resourcesHint ? ["", resourcesHint] : []),
-              "",
-              sep,
-              tryLine,
-            ].join("\n"),
-          );
-          this.ctx.ui.requestRender();
-          if (frame >= 16) {
-            this.ctx.stopWelcomeBannerTimer();
-          }
-        }, 220);
-      } else {
-        const boxName = APP_NAME.padEnd(14).slice(0, 14);
-        const asciiArt = [
-          "      ✎",
-          "  +---------------+",
-          `  |  ${boxName}  |`,
-          "  +---------------+",
-        ].join("\n");
-        const tagline = `  ${theme.fg("dim", "AI coding agent. Type below to start.")}`;
-        this.ctx.chatContainer.addChild(
-          new Text(`${theme.fg("accent", asciiArt)}\n${tagline}`, 0, 0),
-        );
-      }
+      const model = this.ctx.session.model;
+      this.ctx.chatContainer.addChild(new StartupWordmarkComponent(
+        this.ctx.version,
+        model?.name ?? model?.id ?? "No model selected",
+      ));
       this.ctx.chatContainer.addChild(new Spacer(1));
     }
 

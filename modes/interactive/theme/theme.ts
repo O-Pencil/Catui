@@ -414,9 +414,11 @@ function getBuiltinThemes(): Record<string, ThemeJson> {
 		const darkPath = path.join(themesDir, "dark.json");
 		const lightPath = path.join(themesDir, "light.json");
 		const warmPath = path.join(themesDir, "warm.json");
+		const catuiPath = path.join(themesDir, "catui.json");
 		BUILTIN_THEMES = {
 			dark: JSON.parse(fs.readFileSync(darkPath, "utf-8")) as ThemeJson,
 			light: JSON.parse(fs.readFileSync(lightPath, "utf-8")) as ThemeJson,
+			catui: JSON.parse(fs.readFileSync(catuiPath, "utf-8")) as ThemeJson,
 			warm: fs.existsSync(warmPath)
 				? (JSON.parse(fs.readFileSync(warmPath, "utf-8")) as ThemeJson)
 				: (JSON.parse(fs.readFileSync(darkPath, "utf-8")) as ThemeJson),
@@ -608,7 +610,7 @@ function detectTerminalBackground(): "dark" | "light" {
 }
 
 function getDefaultTheme(): string {
-	return detectTerminalBackground();
+	return detectTerminalBackground() === "light" ? "light" : "catui";
 }
 
 // ============================================================================
@@ -706,12 +708,7 @@ function startThemeWatcher(): void {
 	}
 
 	// Only watch if it's a custom theme (not built-in)
-	if (
-		!currentThemeName ||
-		currentThemeName === "dark" ||
-		currentThemeName === "light" ||
-		currentThemeName === "warm"
-	) {
+	if (!currentThemeName || currentThemeName in getBuiltinThemes()) {
 		return;
 	}
 
