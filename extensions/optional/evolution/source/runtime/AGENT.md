@@ -9,5 +9,5 @@ state.ts: Private atomic state, supervisor lease and model-call reservations
 process.ts: Bounded argv-only subprocess execution and Catui worker command discovery
 observer.ts: Sanitized event spool, ingestion and exposure-based finding selection
 bridge.ts: Nonblocking extension lifecycle event subscription
-daemon.ts: Persistent observer and resumable delivery scheduling
+daemon.ts: Persistent observer and resumable delivery scheduling, preserving adapter-owned pending-publication polling delays
 service.ts: Detached process and OS login-service installation

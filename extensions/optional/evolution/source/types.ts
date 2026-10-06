@@ -1,5 +1,5 @@
 /**
- * [WHO]: Source evolution configuration, observation, job and state contracts
+ * [WHO]: Source evolution configuration, observation, job/upload receipt and state contracts
  * [FROM]: Node primitive types only
  * [TO]: Source evolution runtime and delivery adapters
  * [HERE]: extensions/optional/evolution/source/types.ts - feature-local contracts
@@ -80,6 +80,8 @@ export interface SourceJob {
 	merge?: string;
 	artifact?: string;
 	integrity?: string;
+	/** Durable upload receipt; an unknown outcome is reconciled before any further upload. */
+	publication?: { attemptedAt: string; acceptedAt?: string };
 	baselineRate?: number;
 	baselineCount?: number;
 	metric?: "failure" | "inefficiency" | "quality";

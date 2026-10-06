@@ -1,5 +1,5 @@
 /**
- * [WHO]: Verified merged-commit artifact packaging and restart-safe npm/GitHub publication
+ * [WHO]: Verified artifact packaging and receipt-based npm availability/GitHub reconciliation
  * [FROM]: Local verifier, state and subprocess adapters
  * [TO]: Source evolution supervisor after confirmed merge
  * [HERE]: extensions/optional/evolution/source/delivery/release.ts - release authority
@@ -49,13 +49,40 @@ export async function publishCandidate(run: RunCommand, root: string, config: So
 	const lookup = await run("npm", ["view", spec, "dist.integrity", "--json"], { cwd });
 	if (lookup.code !== 0) {
 		if (!/E404/.test(lookup.stderr + lookup.stdout)) throw new Error("Cannot reconcile registry identity; publication deferred");
-		await checked(run, "npm", ["publish", job.artifact, "--ignore-scripts", "--access", "public"], { cwd, timeoutMs: 300000 });
+		if (!job.publication) {
+			job.publication = { attemptedAt: new Date().toISOString() };
+			await saveState(root, state);
+			const upload = await run("npm", ["publish", job.artifact, "--ignore-scripts", "--access", "public"], { cwd, timeoutMs: 300000 });
+			if (upload.code !== 0) {
+				// Authentication refusals have no upload side effect. Network/timeouts and
+				// conflicts are ambiguous: keep the receipt and reconcile, never resubmit.
+				if (/\b(?:E401|E403|ENEEDAUTH|EOTP)\b/.test(upload.stderr + upload.stdout)) {
+					job.publication = undefined;
+					await saveState(root, state);
+				}
+				throw new Error(`npm publish failed: ${upload.stderr || upload.stdout || upload.code}`);
+			}
+			job.publication.acceptedAt = new Date().toISOString();
+			await saveState(root, state);
+		}
 	}
-	const published = JSON.parse(await checked(run, "npm", ["view", spec, "dist.integrity", "--json"], { cwd }));
+	const visible = lookup.code === 0 ? lookup : await run("npm", ["view", spec, "dist.integrity", "--json"], { cwd });
+	if (visible.code !== 0) {
+		if (!/E404/.test(visible.stderr + visible.stdout)) throw new Error("Cannot reconcile registry identity; publication deferred");
+		job.lastResult = job.publication?.acceptedAt
+			? "npm accepted the artifact; waiting for public version availability"
+			: "Upload outcome is unknown; reconciling public availability without another upload";
+		job.retryAfter = new Date(Date.now() + 60000).toISOString();
+		await saveState(root, state);
+		return;
+	}
+	const published = JSON.parse(visible.stdout);
 	if (published !== job.integrity) throw new Error("Registry version belongs to a different artifact");
 	const release = await run("gh", ["release", "view", tag, "--repo", config.repository, "--json", "tagName"], { cwd });
 	if (release.code !== 0) {
 		await checked(run, "gh", ["release", "create", tag, "--repo", config.repository, "--target", job.merge, "--title", tag, "--notes", `Automated Catui improvement from PR #${job.pr}. Frozen baseline/candidate regression and repository gates passed. Real-world effectiveness is being measured.\n\nSource commit: ${job.merge}\nIntegrity: ${job.integrity}`], { cwd });
 	}
 	job.stage = "published";
+	job.retryAfter = undefined;
+	job.lastResult = "Registry artifact integrity verified; GitHub release ready";
 }

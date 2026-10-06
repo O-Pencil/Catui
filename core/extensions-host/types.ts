@@ -964,7 +964,7 @@ export interface ContextEventResult {
 export interface ToolCallEventResult {
 	block?: boolean;
 	reason?: string;
-	/** Optional replacement input for the tool call. Extensions must preserve tool semantics. */
+	/** Full replacement input, passed to subsequent hooks. No-op results preserve earlier replacements. */
 	input?: Record<string, unknown>;
 }
 

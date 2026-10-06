@@ -323,6 +323,112 @@ test("publication resumes after registry success without republishing the versio
 	await publishCandidate(run, root, config, state, j);
 	assert.equal(j.stage, "published"); assert.equal(publishCalls, 1); assert.equal(releaseAttempts, 2);
 });
+
+async function releaseFixture(t: test.TestContext) {
+  const f = await fixture(t);
+  const j = job(f.root); j.stage = "merged"; j.merge = "merge-commit"; j.testPath = "test/frozen.ts";
+  f.state.jobs.push(j);
+  const cwd = join(f.root, "releases", j.id);
+  await mkdir(join(cwd, ".git"), { recursive: true }); await mkdir(join(cwd, "test"));
+  await writeFile(join(cwd, "package.json"), JSON.stringify({ name: "catui-agent", version: j.version }));
+  await writeFile(join(cwd, j.testPath), "frozen"); j.testHash = createHash("sha256").update("frozen").digest("hex");
+  j.artifact = join(cwd, "verified.tgz"); await writeFile(j.artifact, "verified artifact");
+  j.integrity = "sha512-" + createHash("sha512").update("verified artifact").digest("base64");
+  return { ...f, j };
+}
+
+test("accepted upload waits across durable restarts, then verifies integrity before GitHub release", async t => {
+  const { root, config, state, j } = await releaseFixture(t);
+  let visible = false, uploads = 0, releases = 0;
+  const run: RunCommand = async (command, args) => {
+    if (command === "npm" && args[0] === "view") return visible
+      ? { code: 0, stdout: JSON.stringify(j.integrity), stderr: "" }
+      : { code: 1, stdout: "", stderr: "E404" };
+    if (command === "npm" && args[0] === "publish") {
+      assert.ok((await loadState(root)).jobs[0].publication?.attemptedAt, "receipt precedes upload");
+      uploads++;
+    }
+    if (command === "gh" && args[1] === "view") return { code: 1, stdout: "", stderr: "missing" };
+    if (command === "gh" && args[1] === "create") releases++;
+    return { code: 0, stdout: "", stderr: "" };
+  };
+  await publishCandidate(run, root, config, state, j);
+  assert.equal(j.stage, "merged"); assert.equal(uploads, 1); assert.equal(releases, 0);
+  assert.ok(j.publication?.acceptedAt); assert.ok(j.retryAfter);
+  const resumed = await loadState(root);
+  await publishCandidate(run, root, config, resumed, resumed.jobs[0]);
+  assert.equal(uploads, 1); assert.equal(releases, 0);
+  visible = true;
+  await publishCandidate(run, root, config, resumed, resumed.jobs[0]);
+  assert.equal(resumed.jobs[0].stage, "published");
+  assert.equal(uploads, 1); assert.equal(releases, 1);
+});
+
+test("ambiguous interrupted uploads are reconciled without duplicate publication", async t => {
+  const { root, config, state, j } = await releaseFixture(t);
+  let uploads = 0;
+  const run: RunCommand = async (command, args) => {
+    if (command === "npm" && args[0] === "view") return { code: 1, stdout: "", stderr: "E404" };
+    if (command === "npm" && args[0] === "publish") { uploads++; throw new Error("connection closed after upload"); }
+    assert.notEqual(command, "gh", "no GitHub release before integrity verification");
+    return { code: 0, stdout: "", stderr: "" };
+  };
+  await assert.rejects(publishCandidate(run, root, config, state, j), /connection closed/);
+  const resumed = await loadState(root);
+  assert.ok(resumed.jobs[0].publication?.attemptedAt);
+  assert.equal(resumed.jobs[0].publication?.acceptedAt, undefined);
+  await publishCandidate(run, root, config, resumed, resumed.jobs[0]);
+  assert.equal(uploads, 1); assert.match(resumed.jobs[0].lastResult!, /unknown/);
+});
+
+test("pending publication does not count as a failed delivery or discard its polling delay", async t => {
+  const { root, config, state, j } = await releaseFixture(t);
+  config.enabled = true; config.allowRemotePush = true;
+  j.publication = { attemptedAt: new Date().toISOString(), acceptedAt: new Date().toISOString() };
+  const run: RunCommand = async (command, args) => {
+    if (command === "npm" && args[0] === "view") return { code: 1, stdout: "", stderr: "E404" };
+    assert.ok(!(command === "npm" && args[0] === "publish"));
+    return { code: 0, stdout: "", stderr: "" };
+  };
+  await deliveryTick(root, state, config, run);
+  const persisted = (await loadState(root)).jobs[0];
+  assert.equal(persisted.stage, "merged"); assert.equal(persisted.attempts, 0);
+  assert.ok(Date.parse(persisted.retryAfter!) > Date.now());
+});
+
+test("registry outages cannot trigger publication and mismatched integrity cannot create a release", async t => {
+  const { root, config, state, j } = await releaseFixture(t);
+  for (const result of [{ code: 1, stdout: "", stderr: "E503" }, { code: 0, stdout: JSON.stringify("other-artifact"), stderr: "" }]) {
+    const run: RunCommand = async (command, args) => {
+      if (command === "npm" && args[0] === "view") return result;
+      assert.notEqual(command, "npm"); assert.notEqual(command, "gh");
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    await assert.rejects(publishCandidate(run, root, config, state, j), /reconcile registry|different artifact/);
+    assert.equal(j.publication, undefined);
+  }
+});
+
+test("definite authentication refusals allow retry after credentials are repaired", async t => {
+  const { root, config, state, j } = await releaseFixture(t);
+  let refused = true, uploads = 0, visible = false;
+  const run: RunCommand = async (command, args) => {
+    if (command === "npm" && args[0] === "view") return visible
+      ? { code: 0, stdout: JSON.stringify(j.integrity), stderr: "" }
+      : { code: 1, stdout: "", stderr: "E404" };
+    if (command === "npm" && args[0] === "publish") {
+      uploads++;
+      if (refused) return { code: 1, stdout: "", stderr: "npm error code E401" };
+      visible = true;
+    }
+    return { code: 0, stdout: "", stderr: "" };
+  };
+  await assert.rejects(publishCandidate(run, root, config, state, j), /E401/);
+  assert.equal((await loadState(root)).jobs[0].publication, undefined);
+  refused = false;
+  await publishCandidate(run, root, config, state, j);
+  assert.equal(uploads, 2); assert.equal(j.stage, "published");
+});
 test("adoption executes actual version and SDK smoke before switching the pointer", async t => {
 	const { root, config } = await fixture(t); const j = job(root); j.stage = "published"; j.merge = "merge"; j.integrity = "verified-integrity";
 	const run: RunCommand = async (command, args, options) => {

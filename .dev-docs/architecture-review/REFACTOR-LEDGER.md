@@ -9,7 +9,7 @@ branch: main                             # cutover 2026-06-09: main = refactored
 baseline_main: 0eea985 (frozen → v1.0)
 signoff: signed 2026-06-09 (scope = behavior-preserving structural refactor P0–P6; P7-code / P8 explicitly deferred)
 refactor_complete: complete              # P0–P8 all complete (P7 size line closed; P8 SDK narrowing implemented)
-updated_at: 2026-10-02
+updated_at: 2026-10-06
 ```
 
 ---
@@ -41,6 +41,12 @@ Subsequent development is on main.
 ---
 
 ## 1b. Outcome Conclusion (current framing)
+
+Runtime reliability follow-up (2026-10-06): synchronous session commit/error
+propagation, ordered lifecycle notification, compositional tool-call inputs, and
+restart-safe npm availability reconciliation are implemented and locally
+validated. See [runtime-reliability-review](./runtime-reliability-review/README.md)
+for ownership, compatibility, regressions and PR acceptance.
 
 The realized value of this refactor is not "rename directories", but breaking the highest-maintenance-cost coupling centers into a structure with owners, ports, and enforceable gate rules. External framing:
 

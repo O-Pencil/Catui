@@ -113,6 +113,34 @@ test("explicit arguments, aliases, invalid values, and unrelated tools are never
   assert.equal(defaultToolInput("bash", { command: "run tests" }), undefined);
 });
 
+test("local read defaults compose with later transforms, no-op returns and blocking hooks", async t => {
+  const f = await fixture(t);
+  const observed: Record<string, unknown>[] = [];
+  const runtime = createExtensionRuntime();
+  const later = await loadExtensionFromFactory(api => {
+    api.on("tool_call", event => {
+      observed.push({ ...event.input });
+      return { input: { ...event.input, offset: 5 } };
+    });
+    api.on("tool_call", event => { observed.push({ ...event.input }); return { block: false }; });
+    api.on("tool_call", () => undefined);
+  }, f.dir, f.dir, createEventBus(), runtime);
+  const runner = new ExtensionRunner([f.extension, later], runtime, f.dir, f.dir, f.session, {} as never);
+  const event = { type: "tool_call" as const, toolName: "read", toolCallId: "read", input: { path: "file" } };
+  const composed = await runner.emitToolCall(event);
+  assert.deepEqual(observed, [{ path: "file", limit: 120 }, { path: "file", limit: 120, offset: 5 }]);
+  assert.deepEqual(composed?.input, { path: "file", limit: 120, offset: 5 });
+  assert.deepEqual(event.input, { path: "file" }, "caller input is unchanged");
+  let afterBlock = false;
+  later.handlers.get("tool_call")!.push(() => ({ block: true, reason: "denied" }));
+  later.handlers.get("tool_call")!.push(() => { afterBlock = true; });
+  const denied = await runner.emitToolCall(event);
+  assert.equal(denied?.block, true);
+  assert.equal(denied?.reason, "denied");
+  assert.equal(denied?.input?.limit, 120);
+  assert.equal(afterBlock, false);
+});
+
 test("runner previews preserve original journal, error flags, pairing, non-text content, and middle evidence", async (t) => {
   const f = await fixture(t);
   const text = "H".repeat(12000) + "MIDDLE_FAILURE" + "T".repeat(12000);
