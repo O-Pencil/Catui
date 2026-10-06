@@ -1,6 +1,6 @@
 /**
  * [WHO]: Provides AuthProviderConfigController + AuthProviderConfigContext — interactive auth/provider configuration
- * [FROM]: Depends on @catui/ai OAuth helpers, core/model/custom-providers, config paths, TUI components
+ * [FROM]: Depends on @catui/ai OAuth helpers, core/model/custom-providers, URL-first setup prompts, config paths, TUI components
  * [TO]: Consumed by modes/interactive/interactive-mode.ts and model-overlay providerConfig port
  * [HERE]: modes/interactive/controllers/auth-provider-config-controller.ts — P5 auth/provider-config slice;
  * built-in provider selection shows a Browse models / API-key action menu so credential updates stay
@@ -17,6 +17,7 @@ import type { Component, Container, TUI } from "@catui/tui";
 import { getAuthPath, getModelsPath } from "../../../config.js";
 import {
   type CustomProtocolProviderId,
+  CUSTOM_OPENAI_PROVIDER,
   getCustomProtocolProviderBaseUrl,
   getCustomProtocolProviderDefinition,
   getCustomProtocolProviderModelLimits,
@@ -36,6 +37,7 @@ import {
   type ProviderSelectorItem,
 } from "../components/oauth-selector.js";
 import { ProviderSelectorComponent } from "../components/provider-selector.js";
+import { collectOpenAIProviderSetup } from "./openai-provider-setup.js";
 
 type AnyModel = Model<any>;
 
@@ -424,6 +426,22 @@ export class AuthProviderConfigController {
       currentBaseUrl.trim() &&
       currentModelName.trim()
     ) {
+      return true;
+    }
+
+    if (provider === CUSTOM_OPENAI_PROVIDER) {
+      const draft = await collectOpenAIProviderSetup(this.ctx.surface, {
+        baseUrl: currentBaseUrl,
+        apiKey: currentApiKey,
+        modelName: currentModelName,
+        limits: storedLimits,
+      });
+      if (!draft) return false;
+      await saveCustomProtocolProviderConfig(modelsPath, provider, draft);
+      saveCustomProtocolProviderApiKey(authStorage, provider, draft.apiKey);
+      this.ctx.modelRegistry.refresh();
+      await this.refreshCurrentModelForProvider(provider, draft.modelName);
+      this.ctx.surface.showStatus(`Saved OpenAI-compatible configuration for ${draft.modelName}.`);
       return true;
     }
 

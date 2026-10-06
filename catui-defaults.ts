@@ -1,5 +1,5 @@
 /**
- * [WHO]: Provider constants, ensureCatuiDefaultConfig(), ensureCatuiCodingPlanAuth()
+ * [WHO]: Provider constants, ensureCatuiDefaultConfig(), ensureCatuiCodingPlanAuth() with local-server first-run entry
  * [FROM]: Depends on node:fs, node:path, ai, config
  * [TO]: Consumed by main.ts
  * [HERE]: catui-defaults.ts - default configuration for Chinese AI providers
@@ -1356,10 +1356,15 @@ export async function ensureCatuiCodingPlanAuth(
 		const rl = createInterface({ input: process.stdin, output: process.stdout });
 		const choice = await new Promise<string>((resolve) => {
 			rl.question(
-				"Choose a Coding Plan provider to configure: 1) Alibaba DashScope 2) Baidu Qianfan 3) Volcano Ark 4) Alibaba Token Plan [1]: ",
+				"Choose setup: 1) Alibaba DashScope 2) Baidu Qianfan 3) Volcano Ark 4) Alibaba Token Plan 5) Local/custom server (configure with /model) [1]: ",
 				(line) => resolve((line ?? "1").trim() || "1"),
 			);
 		});
+		if (choice === "5") {
+			rl.close();
+			console.log("Use /model > OpenAI-compatible to configure your server URL.");
+			return;
+		}
 		const provider =
 			choice === "2"
 				? CATUI_QIANFAN_CODING_PROVIDER

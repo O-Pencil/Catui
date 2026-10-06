@@ -115,7 +115,7 @@
     "test:team": "node --test --import tsx test/team-parser.test.ts test/team-runtime.test.ts",
     "test:plan": "node --test --import tsx test/plan-mode.test.ts",
     "test:utils": "node --test --import tsx test/logger.test.ts",
-    "test:commands": "node --test --import tsx test/slash-command-catalog.test.ts test/extension-command-completions.test.ts test/interactive-slash-command-arguments.test.ts test/rpc-command-catalog.test.ts",
+    "test:commands": "node --test --import tsx test/slash-command-catalog.test.ts test/extension-command-completions.test.ts test/interactive-slash-command-arguments.test.ts test/rpc-command-catalog.test.ts test/local-model-setup.test.ts test/custom-provider-overrides.test.ts core/model/discovery.test.ts",
     "test:security": "node --test --import tsx test/security-audit.test.ts",
     "test:tools": "node --test --import tsx test/workspace-write-guard.test.ts test/default-runtime-tools.test.ts test/read-tool.test.ts test/tool-window-validation.test.ts test/bash-sandbox.test.ts test/task-status-panel.test.ts test/task-store-polling.test.ts test/stream-render-task-panel.test.ts test/session-bridge.test.ts test/session-bridge-setup.test.ts test/session-supervision.test.ts",
     "test:presence": "node --test --import tsx test/presence-opening.test.ts test/presence-locale.test.ts test/presence-persona-identity.test.ts test/presence-persona-memory.test.ts test/presence-prompt-dump.test.ts test/presence-prompt-priority.test.ts test/presence-end-to-end.test.ts test/presence-soul-cleanup.test.ts",

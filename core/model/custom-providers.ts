@@ -1,15 +1,19 @@
 /**
- * [WHO]: CUSTOM_ANTHROPIC_PROVIDER, CUSTOM_OPENAI_PROVIDER, registerCustomProvider()
- * [FROM]: Depends on config/auth-storage, node:fs
- * [TO]: Consumed by core/model-registry.ts
+ * [WHO]: Custom protocol provider configuration/persistence helpers, provider IDs, NO_AUTH_API_KEY
+ * [FROM]: Depends on config/auth-storage, model discovery, @catui/ai types, node:fs
+ * [TO]: Consumed by catui-defaults and interactive auth/provider setup
  * [HERE]: core/model/custom-providers.ts - custom provider registration
  */
 import type { AuthStorage } from "../platform/config/auth-storage.js";
+import type { OpenAICompletionsCompat } from "@catui/ai/types";
+import { inspectOpenAIModels, normalizeOpenAIBaseUrl } from "./discovery.js";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname } from "node:path";
 
 export const CUSTOM_ANTHROPIC_PROVIDER = "custom-anthropic";
 export const CUSTOM_OPENAI_PROVIDER = "custom-openai";
+/** Nonsecret compatibility credential for SDKs requiring a nonempty key. */
+export const NO_AUTH_API_KEY = "catui-no-auth";
 const DEFAULT_CUSTOM_MODEL_NAME = "custom-model";
 const CUSTOM_PROVIDER_CONFIG_VERSION = 2;
 
@@ -59,6 +63,7 @@ type CustomProviderModelDefinition = {
 	input: ("text" | "image")[];
 	contextWindow: number;
 	maxTokens: number;
+	compat?: OpenAICompletionsCompat;
 };
 
 function readModelsConfig(modelsPath: string): ModelsConfigFile {
@@ -79,7 +84,7 @@ function writeModelsConfig(modelsPath: string, config: ModelsConfigFile): void {
 function createCustomModelDefinition(
 	provider: CustomProtocolProviderId,
 	modelName: string,
-	overrides?: { contextWindow?: number; maxTokens?: number },
+	overrides?: { contextWindow?: number; maxTokens?: number; compat?: OpenAICompletionsCompat },
 ): CustomProviderModelDefinition {
 	const definition = getCustomProtocolProviderDefinition(provider);
 	const normalizedModelName = modelName.trim() || DEFAULT_CUSTOM_MODEL_NAME;
@@ -91,6 +96,7 @@ function createCustomModelDefinition(
 		input: definition.defaultInput,
 		contextWindow: overrides?.contextWindow ?? 256000,
 		maxTokens: overrides?.maxTokens ?? 32768,
+		...(overrides?.compat ? { compat: overrides.compat } : {}),
 	};
 }
 
@@ -117,7 +123,6 @@ async function probeModelContextWindow(
 		}
 
 		// OpenAI-compatible: GET /v1/models
-		if (!apiKey) return null;
 		return await probeOpenAICompatibleModels(baseUrl, apiKey, modelName);
 	} catch {
 		return null;
@@ -156,53 +161,18 @@ async function probeOllamaModelInfo(
 /** Probe OpenAI-compatible /v1/models for model metadata. */
 async function probeOpenAICompatibleModels(
 	baseUrl: string,
-	apiKey: string,
+	apiKey: string | undefined,
 	modelName: string,
 ): Promise<{ contextWindow?: number; maxTokens?: number } | null> {
 	try {
-		// Normalize: strip trailing path beyond /v1 to get /v1/models endpoint
-		const modelsUrl = buildModelsEndpoint(baseUrl);
-		const resp = await fetch(modelsUrl, {
-			headers: { Authorization: `Bearer ${apiKey}` },
-			signal: AbortSignal.timeout(5000),
-		});
-		if (!resp.ok) return null;
-
-		const data = await resp.json() as Record<string, unknown>;
-		const models = data.data as Array<Record<string, unknown>> | undefined;
-		if (!Array.isArray(models)) return null;
-
-		const match = models.find((m) => m.id === modelName);
+		const result = await inspectOpenAIModels(normalizeOpenAIBaseUrl(baseUrl),
+			apiKey === NO_AUTH_API_KEY ? undefined : apiKey);
+		const match = result.models.find((m) => m.id === modelName);
 		if (!match) return null;
-
-		// Extract context_length — different providers use different fields
-		const contextLength =
-			(match.context_length as number | undefined) ??
-			(match.max_context_length as number | undefined) ??
-			((match.top_provider as Record<string, unknown> | undefined)?.context_length as number | undefined);
-
-		if (typeof contextLength === "number" && contextLength > 0) {
-			return { contextWindow: contextLength };
-		}
-		return null;
+		return { contextWindow: match.contextWindow, maxTokens: match.maxTokens };
 	} catch {
 		return null;
 	}
-}
-
-/** Build /v1/models URL from a baseUrl that may point to chat/completions. */
-function buildModelsEndpoint(baseUrl: string): string {
-	const url = baseUrl.replace(/\/+$/, "");
-	// If URL ends with /chat/completions, strip it
-	if (url.endsWith("/chat/completions")) {
-		return url.slice(0, -"/chat/completions".length) + "/models";
-	}
-	// If URL ends with /v1, append /models
-	if (url.endsWith("/v1")) {
-		return url + "/models";
-	}
-	// Otherwise assume it's already a /v1-compatible base
-	return url + "/models";
 }
 
 function getStoredProviderConfig(
@@ -327,9 +297,10 @@ export function ensureCustomProtocolProvidersInModels(modelsPath: string): void 
 			if (!Array.isArray(models) || models.length === 0) return undefined;
 			const first = models[0];
 			if (typeof first !== "object" || first === null) return undefined;
-			return first as { contextWindow?: unknown; maxTokens?: unknown };
+			return first as { contextWindow?: unknown; maxTokens?: unknown; compat?: OpenAICompletionsCompat };
 		})();
-		const preservedOverrides: { contextWindow?: number; maxTokens?: number } = {};
+		const preservedOverrides: { contextWindow?: number; maxTokens?: number; compat?: OpenAICompletionsCompat } = {};
+		if (existingLimits?.compat) preservedOverrides.compat = existingLimits.compat;
 		if (
 			existingLimits &&
 			typeof existingLimits.contextWindow === "number" &&
@@ -387,6 +358,7 @@ export async function saveCustomProtocolProviderConfig(
 		baseUrl: string;
 		modelName: string;
 		apiKey?: string;
+		compat?: OpenAICompletionsCompat;
 		overrides?: { contextWindow?: number; maxTokens?: number };
 	},
 ): Promise<{ contextWindow?: number; maxTokens?: number } | null> {
@@ -434,8 +406,11 @@ export async function saveCustomProtocolProviderConfig(
 		...(config.providers[provider] ?? {}),
 		baseUrl: trimmedBaseUrl,
 		customProviderVersion: CUSTOM_PROVIDER_CONFIG_VERSION,
-		models: [createCustomModelDefinition(provider, trimmedModelName, effective)],
+		models: [createCustomModelDefinition(provider, trimmedModelName, { ...effective, compat: configUpdate.compat })],
 	};
+	// Explicit credential updates are owned by auth.json. Do not retain a stale
+	// models.json fallback that could later be sent to a changed endpoint.
+	if (configUpdate.apiKey !== undefined) delete config.providers[provider].apiKey;
 	writeModelsConfig(modelsPath, config);
 	return effective;
 }
