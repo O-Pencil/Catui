@@ -103,11 +103,13 @@ export async function collectOpenAIProviderSetup(
   maxTokens = Math.min(maxTokens, contextWindow - 1);
   const contextSource = model.contextWindow ? "reported by server" : sameModel && previous.limits.contextWindow ? "saved setting" : "conservative default; server did not report a limit";
   const outputSource = model.maxTokens ? "reported by server, capped below context" : sameModel && previous.limits.maxTokens ? "saved setting, capped below context" : "conservative default";
+  let contextOrigin = model.contextWindow && model.contextWindow >= 2 ? "server" : sameModel && previous.limits.contextWindow ? "saved" : "default";
+  let outputOrigin = model.maxTokens ? "server, capped" : sameModel && previous.limits.maxTokens ? "saved, capped" : "default";
   surface.showStatus(`Context: ${contextWindow} (${contextSource}); max output: ${maxTokens} (${outputSource}).`);
 
   while (true) {
     const choice = await surface.pickOption(
-      `Save ${model.id}? Context ${contextWindow}, max output ${maxTokens}. ${apiKey ? "API key configured" : "No authentication selected"}.`,
+      `Save ${model.id}? Context ${contextWindow} (${contextOrigin}), output ${maxTokens} (${outputOrigin}). ${apiKey ? "API key configured" : "No authentication selected"}.`,
       ["Save configuration", "Adjust limits", "Change authentication"],
     );
     if (choice === undefined) return undefined;
@@ -140,6 +142,8 @@ export async function collectOpenAIProviderSetup(
     }
     contextWindow = nextContext;
     maxTokens = nextOutput;
+    contextOrigin = "manual";
+    outputOrigin = "manual";
   }
 
   return {

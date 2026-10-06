@@ -35,6 +35,7 @@ function ui(inputs: Array<string | undefined>, choices: Array<string | undefined
   const statuses: string[] = [];
   const errors: string[] = [];
   const menus: string[][] = [];
+  const menuTitles: string[] = [];
   const surface = {
     async promptInput(title: string) {
       prompts.push(title);
@@ -43,6 +44,7 @@ function ui(inputs: Array<string | undefined>, choices: Array<string | undefined
     },
     async pickOption(_title: string, options: string[]) {
       menus.push(options);
+      menuTitles.push(_title);
       assert.ok(choices.length, `Unexpected picker: ${_title}`);
       const choice = choices.shift();
       assert.ok(choice === undefined || options.includes(choice), `Missing choice: ${choice}`);
@@ -52,7 +54,7 @@ function ui(inputs: Array<string | undefined>, choices: Array<string | undefined
     showError(message: string) { errors.push(message); },
     requestRender() {},
   };
-  return { surface, prompts, statuses, errors, menus };
+  return { surface, prompts, statuses, errors, menus, menuTitles };
 }
 
 const previous = { baseUrl: "https://api.openai.com/v1", limits: {} };
@@ -173,6 +175,7 @@ test("multiple models use endpoint IDs and absent metadata is labeled as default
   assert.deepEqual(draft?.overrides, { contextWindow: 8192, maxTokens: 2048 });
   assert.equal(flow.menus[0].filter((item) => item === "Model: b").length, 1);
   assert.ok(flow.statuses.some((message) => message.includes("conservative default")));
+  assert.ok(flow.menuTitles.some((title) => title.includes("Context 8192 (default)")));
 });
 
 test("an authentication challenge prompts for the real key and retries discovery", async (t) => {
@@ -229,6 +232,7 @@ test("limits can be adjusted; invalid output limits cannot be saved", async (t) 
   const draft = await collectOpenAIProviderSetup(flow.surface, previous);
   assert.deepEqual(draft?.overrides, { contextWindow: 4096, maxTokens: 512 });
   assert.equal(flow.errors.length, 1);
+  assert.match(flow.menuTitles.at(-1) ?? "", /Context 4096 \(manual\)/);
 });
 
 test("public model discovery still lets users configure an inference API key", async (t) => {
