@@ -1,6 +1,6 @@
 /**
  * [WHO]: SettingsConfig, SettingsCallbacks, SettingsSelectorComponent
- * [FROM]: Depends on ../theme/theme.js, ./dynamic-border.js
+ * [FROM]: Depends on ../theme/theme.js, ./dynamic-border.js, ./selected-row.js
  * [TO]: Consumed by modes/interactive/components/index.ts
  * [HERE]: modes/interactive/components/settings-selector.ts -
  */
@@ -18,6 +18,7 @@ import {
 	Text,
 } from "@catui/tui";
 import { getSelectListTheme, getSettingsListTheme, theme } from "../theme/theme.js";
+import { renderSelectedRows } from "./selected-row.js";
 import { ALL_SPRITES } from "./buddy/pet-sprites.js";
 import { DynamicBorder } from "./dynamic-border.js";
 
@@ -100,6 +101,7 @@ export interface SettingsCallbacks {
  * A submenu component for selecting from a list of options.
  */
 class SelectSubmenu extends Container {
+	override render(width: number): string[] { return renderSelectedRows(super.render(width), width); }
 	private selectList: SelectList;
 
 	constructor(
@@ -162,6 +164,7 @@ class SelectSubmenu extends Container {
  * Main settings selector component.
  */
 export class SettingsSelectorComponent extends Container {
+	override render(width: number): string[] { return renderSelectedRows(super.render(width), width); }
 	private settingsList: SettingsList;
 
 	constructor(config: SettingsConfig, callbacks: SettingsCallbacks) {

@@ -88,7 +88,8 @@ interactive/
     ├── theme-schema.json    # Theme type schema
     ├── dark.json            # Dark theme
     ├── light.json           # Light theme
-    └── warm.json            # Warm/amber theme
+    ├── warm.json            # Warm/amber theme
+    └── catui.json           # Preview-approved graphite/cream/green theme
 ```
 
 **P3 Contract:**

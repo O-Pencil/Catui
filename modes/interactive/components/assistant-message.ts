@@ -1,5 +1,5 @@
 /**
- * [WHO]: AssistantMessageComponent
+ * [WHO]: AssistantMessageComponent — visible responses with a standalone quote marker
  * [FROM]: Depends on @catui/tui, ../theme/theme.js
  * [TO]: Consumed by modes/interactive/components/index.ts
  * [HERE]: modes/interactive/components/assistant-message.ts - assistant message display
@@ -72,6 +72,7 @@ export class AssistantMessageComponent implements Component {
 
 		if (hasVisibleContent) {
 			this.contentContainer.addChild(new Spacer(1));
+			this.contentContainer.addChild(new Text(theme.fg("accent", "❝"), 1, 0));
 		}
 
 		// Render content in order

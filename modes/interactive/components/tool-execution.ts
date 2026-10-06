@@ -496,6 +496,11 @@ export class ToolExecutionComponent extends Container {
 		}
 	}
 
+	private statusMarker(): string {
+		return this.result?.isError ? theme.fg("error", "× ") : this.result && !this.isPartial
+			? theme.fg("success", "☻ ") : theme.fg("accent", "◌ ");
+	}
+
 	/**
 	 * Render bash content using visual line truncation (like bash-execution.ts)
 	 */
@@ -508,7 +513,7 @@ export class ToolExecutionComponent extends Container {
 		const commandDisplay =
 			command === null ? theme.fg("error", "[invalid arg]") : command ? command : theme.fg("toolOutput", "...");
 		this.contentBox.addChild(
-			new Text(theme.fg("toolTitle", theme.bold(`$ ${commandDisplay}`)) + timeoutSuffix, 0, 0),
+			new Text(this.statusMarker() + theme.fg("toolTitle", theme.bold(`$ ${commandDisplay}`)) + timeoutSuffix, 0, 0),
 		);
 
 		if (this.result) {
@@ -904,6 +909,6 @@ export class ToolExecutionComponent extends Container {
 			}
 		}
 
-		return text;
+		return this.statusMarker() + text;
 	}
 }

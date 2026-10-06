@@ -3,6 +3,11 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
+Cat theme presentation: startup dot-grid wordmark, framed CustomEditor, standalone assistant quote, selected-row background and estimated update bar live in this mode. Real Footer width rules and buddy sprites are preserved. Review: `.dev-docs/architecture-review/cat-theme-review/`.
+components/startup-wordmark.ts: StartupWordmarkComponent, renderStartupWordmark — resizable Braille wordmark with rotated cat A and minimal version/model metadata
+components/selected-row.ts: renderSelectedRows — full-width mode-selector highlight with a compact cursor
+components/update-progress.ts: UpdateProgressComponent — timer-backed estimated install progress capped at 90%, success/failure completion and disposal
+theme/catui.json: Preview-approved graphite/cream/green palette; default for dark terminals, selectable alongside existing built-in themes
 interactive-mode.ts: TUI orchestration hub, coordinates AgentSession with terminal UI, handles input/output loop
 controllers/image-pipeline-controller.ts: ImagePipelineController, ImagePipelineContext, Attachment — clipboard image paste, attachments bar, attachment key navigation, text→image extraction; narrow ImagePipelineContext, no InteractiveMode reference; extracted from interactive-mode.ts (P5 UI02, pure move)
 controllers/self-update-controller.ts: SelfUpdateController, SelfUpdateContext — npm-based update/reinstall workflow + startup version check; narrow SelfUpdateContext, no InteractiveMode reference; P5 keeps it inside modes/interactive until a second mode consumer appears (pure move)
@@ -52,7 +57,7 @@ components/assistant-message.ts: Assistant message display, Markdown with code b
 components/login-dialog.ts: Login UI dialog, OAuth flow initiation
 components/footer.ts: Status bar footer, displays model/session/branch info, token stats including cache hit rate, and clamp-safe context progress bars; first low-risk tui-next-backed surface via @catui/tui bridge
 components/show-images-selector.ts: Image toggle selector, enables/disables image display
-components/catui-loader.ts: Brand animation loader, rotating diamond animation
+components/catui-loader.ts: Brand animation loader, rotating circle activity indicator
 components/countdown-timer.ts: Countdown timer, reusable timer for dialogs
 components/visual-truncate.ts: Smart text truncation, accounts for line wrapping
 components/extension-editor.ts: Multi-line editor for extensions, Ctrl+G for external editor

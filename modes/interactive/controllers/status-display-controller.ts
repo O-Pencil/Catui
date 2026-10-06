@@ -53,6 +53,7 @@ export class StatusDisplayController {
       secondLast === this.ctx.state.lastStatusSpacer
     ) {
       this.ctx.state.lastStatusText.setText(theme.fg("dim", message));
+      this.ctx.chatContainer.markDirty(this.ctx.state.lastStatusText);
       this.scheduleStatusDismiss(this.ctx.state.lastStatusSpacer!, this.ctx.state.lastStatusText);
       this.ctx.ui.requestRender();
       return;
@@ -71,7 +72,7 @@ export class StatusDisplayController {
   showError(errorMessage: string): void {
     this.ctx.chatContainer.addChild(new Spacer(1));
     this.ctx.chatContainer.addChild(
-      new Text(theme.fg("error", `Error: ${errorMessage}`), 1, 0),
+      new Text(theme.fg("error", `× Error: ${errorMessage}`), 1, 0),
     );
     this.ctx.setBuddyPetState("error", "Oops...", {
       resetTo: "idle",
@@ -82,7 +83,7 @@ export class StatusDisplayController {
 
   showWarning(warningMessage: string): void {
     const spacer = new Spacer(1);
-    const text = new Text(theme.fg("warning", `Warning: ${warningMessage}`), 1, 0);
+    const text = new Text(theme.fg("warning", `△ Warning: ${warningMessage}`), 1, 0);
     this.ctx.chatContainer.addChild(spacer);
     this.ctx.chatContainer.addChild(text);
     this.scheduleStatusDismiss(spacer, text);
