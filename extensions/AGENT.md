@@ -243,6 +243,10 @@ The complete file-level member list for defaults lives in `extensions/builtin/AG
 
 ### Optional Extensions (`extensions/optional/`)
 
+- `local-model-enhancement/`: explicitly loaded constrained-model profile; bounds default reads and
+  model-visible tool text, preserves original evidence for paginated readback, and provides
+  `/local-model-enhancement on|off|status`. See its P2 map and README.
+
 - `session-bridge/`: default-loaded `/bridge` command; explicit `/bridge start` grants revocable local
   access to the current session through an authenticated loopback API. Its
   companion MCP client installs through a first-use confirmation or `/bridge setup`. See its P2 map

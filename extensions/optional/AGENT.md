@@ -3,6 +3,7 @@
 > P2 | Parent: ../AGENT.md
 
 Member List
+local-model-enhancement/: Opt-in bounded tool reads, transient recoverable result previews, and branch-local activation; see local-model-enhancement/AGENT.md
 session-bridge/: Default-loaded /bridge command, explicitly activated same-session control, guided Codex plugin setup, private discovery; see session-bridge/AGENT.md
 export-html/index.ts: HTML export extension, exportSessionToHtml/exportFromFile, /export command
 simplify/index.ts: Simplification extension, /simplify style refactoring tool

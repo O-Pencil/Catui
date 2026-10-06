@@ -1,5 +1,5 @@
 /**
- * [WHO]: createPlanModeCanUseTool() — SDK-level plan mode permission enforcement; session-local continuity allowance
+ * [WHO]: createPlanModeCanUseTool() — SDK-level plan mode permission enforcement; session-local continuity and stored-result readback allowance
  * [FROM]: Permission logic derived from extensions/builtin/plan/plan-permissions.ts
  * [TO]: Consumed by core/runtime/sdk.ts when permissionMode === 'plan'
  * [HERE]: core/runtime/plan-mode-permissions.ts — standalone plan mode tool gating for SDK consumers
@@ -25,6 +25,7 @@ const READ_ONLY_TOOLS = new Set([
   "WebFetch",
   "GetGoal",
   "session_history",
+  "local_model_read_result",
 ]);
 
 const PLAN_SAFE_AGENT_TYPES = new Set(["Explore", "Plan", "explore", "plan"]);
