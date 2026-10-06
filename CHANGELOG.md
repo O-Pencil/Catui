@@ -55,6 +55,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.34] - 2026-10-06
+
+### Added
+- feat(tui): apply cat theme to interactive terminal (#29)
+
+### Fixed
+- fix: harden session events and npm publication (#28)
+
+
 ## [1.2.33] - 2026-10-06
 
 ### Added
