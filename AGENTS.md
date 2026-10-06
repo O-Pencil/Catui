@@ -436,7 +436,7 @@ Built-in commands (`core/slash-commands.ts`):
 
 | Command | Purpose |
 |---------|---------|
-| `/model` | Select model |
+| `/model` | Select model or configure an OpenAI-compatible server from its URL; see docs/local-models.md |
 | `/agent-loop` | Select standard or weak-model-compatible loop adaptation for the current session |
 | `/thinking` | Set thinking level |
 | `/clear` | Clear conversation |

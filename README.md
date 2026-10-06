@@ -109,7 +109,8 @@ By default, agent configuration lives under `~/.catui/agents/<id>/` (ID `default
 | `extensions/` | User extensions |
 
 `--agent <id>` selects an agent; `CATUI_CODING_AGENT_DIR` overrides its config root.
-See `/model` and `/persona` for inline configuration; `docs/sdk.md` documents
+See `/model` and `/persona` for inline configuration. [Local model setup](docs/local-models.md)
+explains URL-first configuration for compatible servers; `docs/sdk.md` documents
 programmatic embedders.
 
 ## Network and data egress

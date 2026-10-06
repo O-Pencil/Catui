@@ -6,7 +6,7 @@
  */
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -113,5 +113,24 @@ describe("custom provider overrides", () => {
     const freshPath = join(dir, "fresh-models.json");
     const limits = getCustomProtocolProviderModelLimits(freshPath, CUSTOM_ANTHROPIC_PROVIDER);
     assert.deepEqual(limits, {});
+  });
+
+  it("an explicit credential update removes a stale models.json key fallback", async () => {
+    const path = join(dir, "legacy-key.json");
+    writeFileSync(path, JSON.stringify({ providers: {
+      [CUSTOM_OPENAI_PROVIDER]: { baseUrl: "https://old.invalid/v1", apiKey: "old-secret" },
+    } }));
+    await saveCustomProtocolProviderConfig(path, CUSTOM_OPENAI_PROVIDER, {
+      baseUrl: "http://127.0.0.1:1919/v1",
+      modelName: "local",
+      apiKey: "catui-no-auth",
+      compat: { maxTokensField: "max_tokens" },
+      overrides: { contextWindow: 8192, maxTokens: 2048 },
+    });
+    const raw = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(raw.providers[CUSTOM_OPENAI_PROVIDER].apiKey, undefined);
+    ensureCustomProtocolProvidersInModels(path);
+    const bootstrapped = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(bootstrapped.providers[CUSTOM_OPENAI_PROVIDER].models[0].compat.maxTokensField, "max_tokens");
   });
 });
