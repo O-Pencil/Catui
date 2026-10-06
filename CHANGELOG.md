@@ -55,6 +55,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.33] - 2026-10-06
+
+### Added
+- feat(local-model): add opt-in evidence-preserving enhancement
+- feat(models): simplify local server setup in the TUI
+- feat(evolution): serialize the budget reservation across processes
+- feat(evolution): reserve the model call against a daily budget before making it
+- feat(evolution): refuse a copied skill body and warn on a mere rewording
+- feat(evolution): update a skill in place and bound a refinement to four changes
+- feat(evolution): retrieve existing skills and require a usable skill body
+
+### Fixed
+- fix(structure): type the readdirSync results as Dirent[], not ReturnType
+- fix(structure): make the DIP and file-size gates able to fail, then pay them down
+- fix(docs): translate last 2 Chinese-in-prose files + unignore browser source dir
+- fix(docs): close P1 release-blocker leftovers + repair last 3 dead refs
+- fix(docs): translate remaining kept .dev-docs files and repair 23 dead links
+- fix(docs): repair leftover dead refs and partial Chinese in three files
+- fix(repo): replace fork residue O-Catui/Catui refs with O-Pencil/Catui
+- fix(evolution): never remove a budget lock this process did not take
+- fix(evolution): the budget lock is broken only for a provably dead owner
+- fix(evolution): make budget reporting read-only, and persist the turn cursor
+- fix(evolution): give the redaction test a real temp dir, not a synthetic path
+- fix(evolution): rate limit every turn-end branch that can create a candidate
+- fix(evolution): refuse a candidate whose scope contradicts its scope root
+- fix(evolution): close a dedup bypass and feed rejections back as untrusted history
+- fix(evolution): record turn-end provenance instead of a verified flag
+- fix(evolution): bind the benchmark CLI to the store-captured baseline
+- fix(evolution): capture the promotion baseline in the store, not the caller
+- fix(evolution): withdraw rolled-back revisions and bind the promotion baseline
+- fix(evolution): redact session evidence before it reaches the model
+
+### Changed
+- refactor(presence): drop the dead Soul reads and gate the awakening candidate
+- refactor(prompt): cut duplicated routing prose from the five default bootstraps
+- refactor(registry): derive metadata and load paths from one ordered list
+
+### Documentation
+- docs(learning-framework): translate the 7-file learning methodology to English
+- docs(i18n): add Japanese + Russian READMEs and drop emojis from new docs
+- docs: update P1 + CONTRIBUTING + CHANGELOG to reflect docs cleanup
+- docs(personas): translate Chinese-only persona files to English
+- docs: translate Chinese-only user-facing docs to English
+- docs(review): record final aggregate acceptance results
+- docs(review): close offline learning scope and record unrun experiments
+- docs(evolution): align the budget lock documentation with what it now does
+- docs(review): correct gate receipts to head fd46a3f only
+- docs(review): record the simplification and learning batch with its evidence
+
+### Maintenance
+- chore(ci): add verify-structure gate (file size + P3 header) and Dependabot
+- chore(docs): remove internal team process records from .dev-docs/
+- chore(github): correct CODEOWNERS paths and fix issue-template typo
+- chore(docs): remove process records and stub placeholders from docs/
+
+
 ## [1.2.32] - 2026-10-02
 
 ### Added

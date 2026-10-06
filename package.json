@@ -1,6 +1,6 @@
 {
   "name": "catui-agent",
-  "version": "1.2.32",
+  "version": "1.2.33",
   "description": "CLI coding agent with read, bash, edit, write tools and session management. Supports DashScope and Ali Token Plan. Persona-based identity and built-in decision skills.",
   "type": "module",
   "bin": {
