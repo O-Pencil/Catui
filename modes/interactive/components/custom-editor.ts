@@ -1,5 +1,5 @@
 /**
- * [WHO]: CustomEditor — framed composer with app keybindings and slash highlighting
+ * [WHO]: CustomEditor — full-width framed composer with app keybindings and slash highlighting
  * [FROM]: Depends on @catui/tui editor, app keybindings and interactive theme
  * [TO]: Consumed by modes/interactive/components/index.ts
  * [HERE]: modes/interactive/components/custom-editor.ts -
@@ -79,7 +79,7 @@ export class CustomEditor extends Editor {
 	}
 
 	override render(width: number): string[] {
-		const innerWidth = width < 10 ? width : width - 6;
+		const innerWidth = width < 10 ? width : width - 5;
 		const placeholder = this.placeholder;
 		this.placeholder = truncateToWidth(placeholder, Math.max(1, innerWidth - this.getPaddingX() * 2), "");
 		let lines: string[];
@@ -92,13 +92,13 @@ export class CustomEditor extends Editor {
 				const top = index === 0;
 				if (!top) belowBox = true;
 				const scroll = plain.match(/[↑↓] \d+ more/);
-				const label = scroll ? `─ ${scroll[0]} `.slice(0, width - 3) : "";
-				return " " + this.borderColor((top ? "┌" : "└") + label + "─".repeat(Math.max(0, width - 3 - label.length)) + (top ? "┐" : "┘"));
+				const label = scroll ? `─ ${scroll[0]} `.slice(0, width - 2) : "";
+				return this.borderColor((top ? "┌" : "└") + label + "─".repeat(Math.max(0, width - 2 - label.length)) + (top ? "┐" : "┘"));
 			}
-			if (belowBox) return `     ${line} `;
+			if (belowBox) return `    ${line} `;
 			const arrow = index === 1 ? "→" : " ";
 			const content = this.getText() ? line : colors.fg("muted", line);
-			return ` ${this.borderColor("│")} ${colors.fg("muted", arrow)} ${content}${this.borderColor("│")}`;
+			return `${this.borderColor("│")} ${colors.fg("muted", arrow)} ${content}${this.borderColor("│")}`;
 		});
 	}
 

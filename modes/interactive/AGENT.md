@@ -76,7 +76,7 @@ components/keybinding-hints.ts: Keyboard hints utilities, editorKey/appKey forma
 components/compaction-summary-message.ts: Compaction message display, context window summary; system transcript slice using tui-next legacy adapter for final width clamping
 components/branch-summary-message.ts: Branch summary display, git branch visualization; system transcript slice using tui-next legacy adapter for final width clamping
 components/extension-input.ts: Extension input component, timeout countdown support
-components/custom-editor.ts: Custom editor with app keybindings, actionHandlers map
+components/custom-editor.ts: Full-width framed editor aligned with message backgrounds; app keybindings and actionHandlers map
 components/model-selector.ts: Model picker UI, fuzzy filter with Ctrl+N append; emits selected model only, provider configuration and default-model persistence stay with caller
 components/session-selector.ts: Session picker UI, external editor for descriptions
 components/scoped-models-selector.ts: Scoped models selector, project-specific model config
