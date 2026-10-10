@@ -10,6 +10,7 @@ import { CURSOR_MARKER, TUI, visibleWidth } from "@catui/tui";
 import { VirtualTerminal } from "../core/lib/tui/test/virtual-terminal.js";
 import { KeybindingsManager } from "../core/platform/keybindings.js";
 import { CustomEditor } from "../modes/interactive/components/custom-editor.js";
+import { UserMessageComponent } from "../modes/interactive/components/user-message.js";
 import { UpdateProgressComponent } from "../modes/interactive/components/update-progress.js";
 import { StartupWordmarkComponent, renderStartupWordmark } from "../modes/interactive/components/startup-wordmark.js";
 import { renderSelectedRows } from "../modes/interactive/components/selected-row.js";
@@ -45,7 +46,7 @@ test("framed composer preserves cursor markers and narrow multiline widths", () 
       const lines=editor.render(width);
       assert.equal(lines.filter(line=>line.includes(CURSOR_MARKER)).length,1);
       for(const line of lines) assert.ok(visibleWidth(line)<=width, `${width}: ${JSON.stringify(line)}`);
-      if(width>=10) assert.ok(plain(lines[0]).startsWith(" ┌"));
+      if(width>=10) assert.ok(plain(lines[0]).startsWith("┌"));
     }
   }
 });
@@ -74,7 +75,7 @@ test("framed composer leaves autocomplete below the box and accepts completion",
   assert.equal(editor.isShowingAutocomplete(), true);
   for (const width of [20, 40, 80]) {
     const lines = editor.render(width).map(plain);
-    const bottom = lines.findIndex(line => line.startsWith(" └"));
+    const bottom = lines.findIndex(line => line.startsWith("└"));
     assert.ok(bottom > 0);
     assert.ok(lines.slice(bottom + 1).some(line => line.includes("dist/")));
     for (const line of lines) assert.ok(visibleWidth(line) <= width);
@@ -83,6 +84,30 @@ test("framed composer leaves autocomplete below the box and accepts completion",
   editor.handleInput("\t");
   assert.equal(editor.getText(), "dist/");
   assert.equal(editor.isShowingAutocomplete(), false);
+});
+
+test("composer box shares the message background's first and last columns", () => {
+  const editor = new CustomEditor(new TUI(new VirtualTerminal(120, 12)), getEditorTheme(), KeybindingsManager.create());
+  editor.focused = true;
+  for (const width of [10, 20, 40, 80, 100, 120]) {
+    const message = new UserMessageComponent("x".repeat(width));
+    const messageRows = message.render(width).filter(line => /\x1b\[48;/.test(line));
+    assert.ok(messageRows.length > 0);
+    assert.ok(messageRows.every(line => visibleWidth(line) === width));
+    for (const text of ["", "中".repeat(width), "x".repeat(width * 2)]) {
+      editor.setText(text);
+      const lines = editor.render(width).map(plain);
+      assert.equal(lines[0][0], "┌");
+      assert.equal(lines[0][width - 1], "┐");
+      assert.equal(lines.at(-1)![0], "└");
+      assert.equal(lines.at(-1)![width - 1], "┘");
+      for (const line of lines.slice(1, -1)) {
+        assert.ok(line.startsWith("│"));
+        assert.ok(line.endsWith("│"));
+        assert.equal(visibleWidth(line), width);
+      }
+    }
+  }
 });
 
 test("selected rows fit terminal width without rewriting other arrows", () => {
