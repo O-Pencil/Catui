@@ -41,3 +41,8 @@ self-check. Live read-only capacity verification uses the existing local endpoin
 No public export removals; additional internal helpers and optional discovery metadata
 are additive. Metadata/tokenizer calls add no generation calls; cache unchanged
 fixed prompts and bound metadata timeouts. See findings/LC01-capacity.md.
+
+Delivery scope adjustment: the native Windows pre-push gate exposed a separator
+normalization defect in `scripts/verify-structure.ts`. The existing build owner
+receives a local fix, reviewed in findings/LC02-windows-gate.md before editing;
+no baseline growth or hook bypass is permitted.

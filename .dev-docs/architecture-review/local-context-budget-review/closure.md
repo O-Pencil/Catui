@@ -13,7 +13,8 @@ default extensions, persisted model mutations, or additional generation calls.
 - `verify:dip`, `verify:quality`, `verify:package-boundary`, `build`, and `tsc --noEmit`: pass.
   DIP passes against the existing baseline; the baseline was not expanded.
 - Focused discovery/setup/context/recovery/runtime-owner tests: 62 pass.
-- `test:commands`: 75 pass, including all 10 new deployment-budget regressions.
+- `test:commands`: 76 pass, including all 10 new deployment-budget regressions
+  and the Windows path-portability fixture.
 - SDK loop-budget suite: 5 pass; the changed registry-isolation assertion also passes
   in a subsequent targeted run.
 - P3 headers and P2 maps updated; added the missing compaction module map.
@@ -28,6 +29,11 @@ default extensions, persisted model mutations, or additional generation calls.
   reported `running: false`, `lastExitReason: stopped`; the CLI reported connection
   error. Do not claim a completed native live inference check or restart the service.
 - Dedicated review completed before source edits; delivery is a PR to main.
+- Pre-push initially exposed a Windows separator defect in verify-structure.
+  LC02 reviewed the repair before editing. Forward-slash normalization now matches
+  the existing baseline and test-workspace exemptions: 39 known oversized files,
+  zero new violations. Isolated fixtures also prove new debt still exits 1.
+  The baseline and hooks remain unchanged.
 
 Reopen if another server exposes allocated capacity, or exact full-request accounting
 is needed. The fixed-content probe uses the optional Anthropic tokenizer interface
