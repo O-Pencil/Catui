@@ -1,5 +1,5 @@
 /**
- * [WHO]: createAgentSession(options) → AgentSession + load results, loop framework/policy override wiring; committed context preparation binding
+ * [WHO]: createAgentSession(options) → AgentSession + load results, loop policy wiring, committed context preparation and local deployment request validation
  * [FROM]: Depends on agent-core, ai, core/platform/config/*, core/tools/*, core/session/*, core/mcp-*, i18n/*
  * [TO]: Consumed by index.ts, main.ts, test/presence-opening.test.ts, extensions/builtin/team/index.ts
  * [HERE]: SDK factory; creates all services with DI, wires up extensions
@@ -17,6 +17,8 @@ import {
   type ThinkingLevel,
 } from "@catui/agent-core";
 import type { Message, Model } from "@catui/ai/types";
+import { streamSimple } from "@catui/ai/stream";
+import { createLocalModelStream } from "./local-model-budget.js";
 import { getAgentDir, getDocsPath } from "../../config.js";
 import { AgentSession } from "./agent-session.js";
 import type { Theme as ThemeContract } from "../theme-contract.js";
@@ -665,9 +667,10 @@ export async function createAgentSession(
   const extensionRunnerRef: { current?: ExtensionRunner } = {};
 
   agent = new Agent({
+    streamFn: createLocalModelStream(streamSimple),
     initialState: {
       systemPrompt: "",
-      model,
+      model: model ? { ...model } : undefined,
       thinkingLevel,
       tools: [],
     },

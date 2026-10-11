@@ -1,12 +1,13 @@
 /**
  * [WHO]: discoverModels(), discoverOpenAIModels(), inspectOpenAIModels(), normalizeOpenAIBaseUrl(), discovery types
- * [FROM]: Depends on platform URL, fetch and AbortController APIs
+ * [FROM]: Depends on platform URL, fetch, AbortController and optional FreeToken capacity adapter
  * [TO]: Consumed by core/model-registry.ts, core/model/discovery-cache.ts and interactive provider setup
  * [HERE]: core/model/discovery.ts - remote model discovery engine
  *
  * Fetches model lists from provider /models endpoints (OpenAI-compatible protocol).
  * All failures are graceful — returns empty results instead of throwing.
  */
+import { readFreeTokenCapacity } from "./freetoken-capacity.js";
 
 /**
  * A model discovered from a remote /models endpoint.
@@ -21,6 +22,8 @@ export interface DiscoveredModel {
 	/** Deployment limits, only when explicitly returned by the server. */
 	contextWindow?: number;
 	maxTokens?: number;
+	/** Present when allocated KV capacity bounds the advertised context. */
+	contextLimitSource?: "kv-cache";
 }
 
 export interface OpenAIModelInspection {
@@ -171,6 +174,15 @@ export async function inspectOpenAIModels(
 					...(maxTokens !== undefined ? { maxTokens } : {}),
 				};
 			});
+		// FreeToken's model-position limit can exceed its allocated GPU cache.
+		// Only identified single-model deployments can bind cache geometry to a model.
+		if (models.length === 1 && models[0].ownedBy?.toLowerCase() === "freetoken") {
+			const capacity = await readFreeTokenCapacity(baseUrl, headers, signal);
+			if (capacity !== undefined) {
+				models[0].contextWindow = Math.min(models[0].contextWindow ?? capacity, capacity);
+				Object.assign(models[0], { contextLimitSource: "kv-cache" });
+			}
+		}
 		return { models, status: res.status };
 	} catch (error) {
 		return { models: [], error: controller.signal.aborted ? "Model discovery timed out." :

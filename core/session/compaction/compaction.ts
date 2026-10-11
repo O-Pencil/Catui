@@ -1,5 +1,5 @@
 /**
- * [WHO]: CompactionController, compactSession, CompactionResult
+ * [WHO]: Compaction preparation, summary generation and CompactionResult with model-bounded summary output
  * [FROM]: Depends on agent-core, ai, messages.ts, session-manager.ts, utils.ts
  * [TO]: Consumed by core/session/compaction/index.ts
  * [HERE]: core/session/compaction/compaction.ts - context window management via summarization
@@ -525,7 +525,7 @@ export async function generateSummary(
 	customInstructions?: string,
 	previousSummary?: string,
 ): Promise<string> {
-	const maxTokens = Math.floor(0.8 * reserveTokens);
+	const maxTokens = Math.min(model.maxTokens, Math.max(1, Math.floor(0.8 * reserveTokens)));
 
 	// Use update prompt if we have a previous summary, otherwise initial prompt
 	let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
@@ -779,7 +779,7 @@ async function generateTurnPrefixSummary(
 	apiKey: string,
 	signal?: AbortSignal,
 ): Promise<string> {
-	const maxTokens = Math.floor(0.5 * reserveTokens); // Smaller budget for turn prefix
+	const maxTokens = Math.min(model.maxTokens, Math.max(1, Math.floor(0.5 * reserveTokens))); // Smaller turn-prefix budget
 	const llmMessages = convertToLlm(messages);
 	const conversationText = serializeConversation(llmMessages);
 	const promptText = `<conversation>\n${conversationText}\n</conversation>\n\n${TURN_PREFIX_SUMMARIZATION_PROMPT}`;
