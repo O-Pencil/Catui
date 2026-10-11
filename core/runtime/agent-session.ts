@@ -1,6 +1,6 @@
 /**
  * [WHO]: AgentSession class, session lifecycle, composes SessionRunTrace and SessionEventHandler, compaction decisions (SessionCompactionCoordinator), in-loop recovery adapter, pruneRecoverableErrorTail() re-export; safe context handoffs; delegates queues, queries and resource discovery
- * [FROM]: Depends on agent-core, ai, core/tools/*, core/session/*, core/platform/config/*
+ * [FROM]: Depends on agent-core, ai, core/tools/*, core/session/* (including per-model compaction budgets), core/platform/config/*
  * [TO]: Consumed by core/index.ts, core/runtime/sdk.ts, modes/interactive/interactive-mode.ts, modes/print-mode.ts, modes/rpc/rpc-mode.ts, modes/acp/acp-mode.ts, modes/rpc/rpc-types.ts, modes/rpc/rpc-client.ts, modes/interactive/components/footer.ts, modes/interactive/components/skill-invocation-message.ts
  * [HERE]: Central runtime hub; all modes delegate here; scoped cancellation keeps engine and UI queues consistent
  */
@@ -78,6 +78,7 @@ import { BashRunner } from "./bash-runner.js";
 import { Listeners } from "../platform/listeners.js";
 import { ModelController, type ModelCycleResult } from "./model-controller.js";
 import { CompactionController } from "./compaction-controller.js";
+import { resolveCompactionBudget } from "../session/compaction/budget.js";
 import { ContextWindowController } from "./context-window-controller.js";
 import { SessionCompactionCoordinator } from "./session-compaction-coordinator.js";
 import { mapSubAgentEvent } from "./session-events.js";
@@ -357,7 +358,7 @@ class AgentSessionBase {
       getModel: () => this.model,
       getThinkingLevel: () => this.thinkingLevel,
       getScopedModels: () => this._scopedModels,
-      setAgentModel: (model) => this.agent.setModel(model),
+      setAgentModel: (model) => this.agent.setModel({ ...model }),
       setAgentThinkingLevel: (level) => this.agent.setThinkingLevel(level),
       setAgentLoopFramework: (framework) => this.agent.setAgentLoopFramework(framework),
       setLoopPolicy: (options) => this.agent.setLoopPolicy(options),
@@ -398,7 +399,7 @@ class AgentSessionBase {
       getExtensionRunner: () => this._extensionRunner,
       getBranch: () => this.sessionManager.getBranch(),
       getEntries: () => this.sessionManager.getEntries(),
-      getCompactionSettings: () => this.settingsManager.getCompactionSettings(),
+      getCompactionSettings: () => resolveCompactionBudget(this.settingsManager.getCompactionSettings(), this.model),
       appendCompaction: (summary, firstKeptEntryId, tokensBefore, details, fromExtension) =>
         this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension),
       applyCompactedMessages: () => {
@@ -422,7 +423,7 @@ class AgentSessionBase {
       setAutoCompactionEnabled: (enabled) => this.settingsManager.setCompactionEnabled(enabled),
     });
     this._compactionCoordinator = new SessionCompactionCoordinator({
-      getCompactionSettings: () => this.settingsManager.getCompactionSettings(),
+      getCompactionSettings: () => resolveCompactionBudget(this.settingsManager.getCompactionSettings(), this.model),
       getModel: () => this.model,
       getBranch: () => this.sessionManager.getBranch(),
       getAgentMessages: () => this.agent.state.messages,

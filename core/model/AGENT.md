@@ -6,7 +6,8 @@ Member List
 switcher.ts: ModelCycleResult interface, ModelSwitcher class, model selection and cycling logic, handles API key resolution per provider, key methods: cycleModel(), setModel()
 index.ts: Model management barrel exports, re-exports ModelSwitcher and ModelCycleResult
 custom-providers.ts: Custom protocol provider IDs, NO_AUTH_API_KEY, configuration persistence/probing and compatible model bootstrap; preserves saved compatibility settings
-discovery.ts: discoverModels(), discoverOpenAIModels(), inspectOpenAIModels(), normalizeOpenAIBaseUrl(), discovery result types; remote model lists, HTTP diagnostics and explicit deployment limits
+discovery.ts: discoverModels(), discoverOpenAIModels(), inspectOpenAIModels(), normalizeOpenAIBaseUrl(), discovery result types; remote model lists, HTTP diagnostics and context bounded by allocated FreeToken KV capacity
+freetoken-capacity.ts: readFreeTokenCapacity(), countFreeTokenFixedTokens(); optional same-prefix KV metadata and fixed-prompt tokenization with validated numbers and bounded/cancellable reads
 discovery.test.ts: Tests for discoverModels(), discoverOpenAIModels(), getDiscoveryProtocol()
 known-models.ts: KNOWN_MODEL_METADATA, lookupKnownModel(), UNKNOWN_MODEL_DEFAULTS, KnownModelMetadata, known model metadata for discovery fallback
 known-models.generated.ts: Auto-generated known model metadata lookup table from models.generated.ts

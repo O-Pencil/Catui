@@ -1,5 +1,5 @@
 /**
- * [WHO]: Provides verify-structure CLI enforcing the AGENTS.md file-size rule
+ * [WHO]: Provides cross-platform verify-structure CLI enforcing the AGENTS.md file-size rule
  *        (single TypeScript file ≤ 800 lines), ratcheted against
  *        .dev-docs/structure-baseline.json so the limit can only tighten.
  * [FROM]: Depends on node:fs/path and scripts/lib/dip-baseline.ts.
@@ -98,7 +98,7 @@ function countLines(text: string): number {
 }
 
 function toRepoPath(abs: string): string {
-	return relative(REPO, abs).replace(/^[/\\]/, "");
+	return relative(REPO, abs).replace(/\\/g, "/").replace(/^\//, "");
 }
 
 function main(): void {

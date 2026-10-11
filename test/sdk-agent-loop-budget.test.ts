@@ -38,6 +38,7 @@ test("createAgentSession passes aggregate tool result budget into Agent", async 
 		maxToolResultBatchSizeChars?: number;
 	};
 	assert.equal(agentWithPrivateOptions.maxToolResultBatchSizeChars, 123_456);
+	assert.notEqual(session.model, model, "deployment caps must not mutate the registry/caller model");
 });
 
 test("createAgentSession accepts explicit loop framework and prompt limits", async () => {
